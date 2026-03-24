@@ -51,6 +51,16 @@ It:
 - `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
 
+## Agent Modes
+
+ONMC now has the first prompt-compiler layer for three agent modes:
+
+- `solve`: propose the next best engineering approach using repo brief, memory, failed attempts, and validation guidance
+- `review`: critique a proposed approach for assumptions, regressions, and missing checks
+- `teach`: explain the problem and solution shape in a staff-engineer-like way, including false leads and durable lessons
+
+These modes do not yet run an agent loop. ONMC compiles structured prompts so a configured provider or external coding agent can reason over the repo-aware memory spine.
+
 ### Supported P0 Memory Kinds
 
 - `doc_fact`
@@ -176,6 +186,7 @@ More detail:
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/memory-model.md](docs/memory-model.md)
+- [docs/prompt-compiler.md](docs/prompt-compiler.md)
 - [docs/task-lifecycle.md](docs/task-lifecycle.md)
 - [docs/roadmap.md](docs/roadmap.md)
 
@@ -237,6 +248,17 @@ onmc llm status
 ```
 
 Secrets are always read from environment variables. ONMC stores the provider name, model, and API key env var name in `.onmc/config.yaml`, but it does not write the secret value itself.
+
+Prompt compilation stays separate from provider calls. ONMC first builds a structured prompt from:
+
+- the task record
+- the deterministic repo brief
+- relevant repo memory
+- prior attempts
+- negative memory such as `did_not_work` and `design_conflict`
+- validation guidance and provenance
+
+That keeps the memory/context layer inspectable before any model is asked to reason.
 
 ## Publishing
 

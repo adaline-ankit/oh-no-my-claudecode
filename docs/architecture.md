@@ -49,6 +49,11 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - keeps secrets in environment variables instead of local config
    - prepares a minimal generation interface for future LLM-backed features
 
+7. prompt compilation
+   - loads task records, attempts, memory artifacts, and a fresh deterministic brief
+   - builds a structured prompt for `solve`, `review`, or `teach`
+   - injects negative memory and validation guidance before any model call
+
 ## Module Responsibilities
 
 ### `core/`
@@ -102,6 +107,12 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - optional Anthropic and OpenAI text generation
 - mock provider support for tests
 
+### `prompt/`
+
+- mode-specific prompt compilation
+- output contract generation
+- memory-aware prompt sectioning for `solve`, `review`, and `teach`
+
 ### `rendering/`
 
 - Rich terminal tables and panels for CLI output
@@ -154,6 +165,7 @@ Embeddings add infrastructure, tuning overhead, and a false sense of intelligenc
 The LLM layer is intentionally narrow in this step:
 
 - provider configuration is optional
-- generation is not wired into `brief`, `ingest`, or task execution yet
-- there is no orchestration, tool calling, or solve mode
+- generation is not wired into `ingest` or an autonomous task loop yet
+- prompt compilation is wired, but model execution is still an explicit later step
+- there is no orchestration, tool calling, or autonomous solve loop yet
 - secrets stay in environment variables

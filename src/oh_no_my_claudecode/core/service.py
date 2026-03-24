@@ -22,10 +22,12 @@ from oh_no_my_claudecode.memory.catalog import MemoryCatalog
 from oh_no_my_claudecode.models import (
     TERMINAL_ATTEMPT_STATUSES,
     TERMINAL_TASK_STATUSES,
+    AgentMode,
     AttemptKind,
     AttemptRecord,
     AttemptStatus,
     BriefArtifact,
+    CompiledPrompt,
     IngestResult,
     LLMProviderType,
     LLMSettings,
@@ -39,6 +41,7 @@ from oh_no_my_claudecode.models import (
     TaskRecord,
     TaskStatus,
 )
+from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
@@ -106,6 +109,21 @@ class OnmcService:
     def llm_provider(self) -> BaseLLMProvider:
         _, config, _ = self._load_context()
         return provider_from_settings(config.llm)
+
+    def compile_task_prompt(self, task_id: str, mode: AgentMode) -> CompiledPrompt:
+        repo_root, config, storage = self._load_context()
+        task = self._require_task(storage, task_id)
+        attempts = storage.list_attempts_for_task(task_id)
+        memory_artifacts = storage.list_memory_artifacts_for_task(task_id)
+        brief_task = f"{task.title}. {task.description}"
+        brief = compile_brief(repo_root, config, storage, brief_task)
+        return compile_prompt(
+            mode=mode,
+            task=task,
+            brief=brief,
+            attempts=attempts,
+            memory_artifacts=memory_artifacts,
+        )
 
     def add_memory_artifact(
         self,

@@ -24,6 +24,13 @@ from oh_no_my_claudecode.models.memory_artifact import (
     MemoryArtifactRecord,
     MemoryArtifactType,
 )
+from oh_no_my_claudecode.models.prompt import (
+    AgentMode,
+    CompiledPrompt,
+    ReviewModeOutput,
+    SolveModeOutput,
+    TeachModeOutput,
+)
 from oh_no_my_claudecode.models.task import (
     TERMINAL_TASK_STATUSES,
     TaskLifecycleError,
@@ -35,8 +42,10 @@ __all__ = [
     "AttemptKind",
     "AttemptRecord",
     "AttemptStatus",
+    "AgentMode",
     "BriefArtifact",
     "BriefSettings",
+    "CompiledPrompt",
     "FileStat",
     "IngestResult",
     "IngestSettings",
@@ -52,10 +61,13 @@ __all__ = [
     "ProjectConfig",
     "ProjectHints",
     "RepoFileRecord",
+    "ReviewModeOutput",
+    "SolveModeOutput",
     "SourceType",
     "StorageSettings",
     "TERMINAL_ATTEMPT_STATUSES",
     "TERMINAL_TASK_STATUSES",
+    "TeachModeOutput",
     "TaskLifecycleError",
     "TaskRecord",
     "TaskStatus",
