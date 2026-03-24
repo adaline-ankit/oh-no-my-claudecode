@@ -6,9 +6,19 @@ from typing import Annotated
 import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
-from oh_no_my_claudecode.models import MemoryKind, TaskLifecycleError, TaskStatus
+from oh_no_my_claudecode.models import (
+    AttemptKind,
+    AttemptStatus,
+    MemoryKind,
+    TaskLifecycleError,
+    TaskStatus,
+)
 from oh_no_my_claudecode.rendering.console import (
     console,
+    render_attempt_added,
+    render_attempt_detail,
+    render_attempt_list,
+    render_attempt_updated,
     render_brief,
     render_ingest_result,
     render_init_summary,
@@ -28,8 +38,10 @@ app = typer.Typer(
 )
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 task_app = typer.Typer(help="Manage task lifecycle state.", no_args_is_help=True)
+attempt_app = typer.Typer(help="Track task-scoped attempts.", no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
+app.add_typer(attempt_app, name="attempt")
 
 
 def main() -> None:
@@ -132,9 +144,10 @@ def task_list_command() -> None:
     """List tasks for the current repository."""
     try:
         tasks = _service().list_tasks()
+        attempt_counts = _service().attempt_counts_by_task()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-    render_task_list(tasks)
+    render_task_list(tasks, attempt_counts=attempt_counts)
 
 
 @task_app.command("show")
@@ -142,11 +155,12 @@ def task_show_command(task_id: str) -> None:
     """Show a stored task with lifecycle details."""
     try:
         task = _service().get_task(task_id)
-    except FileNotFoundError as exc:
+        attempts = _service().list_attempts_for_task(task_id)
+    except (FileNotFoundError, LookupError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     if task is None:
         raise typer.Exit(code=_fatal(f"Task not found: {task_id}"))
-    render_task_detail(task)
+    render_task_detail(task, attempts=attempts)
 
 
 @task_app.command("end")
@@ -180,6 +194,118 @@ def task_status_command(
     except (FileNotFoundError, LookupError, TaskLifecycleError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_task_updated(task, action="Task Updated")
+
+
+@attempt_app.command("add")
+def attempt_add_command(
+    task_id: str,
+    summary: Annotated[str, typer.Option("--summary", help="Short attempt summary.")],
+    kind: Annotated[
+        AttemptKind,
+        typer.Option("--kind", help="Attempt kind."),
+    ],
+    status: Annotated[
+        AttemptStatus,
+        typer.Option("--status", help="Attempt status."),
+    ],
+    reasoning_summary: Annotated[
+        str | None,
+        typer.Option("--reasoning-summary", help="Why this attempt seemed worth trying."),
+    ] = None,
+    evidence_for: Annotated[
+        str | None,
+        typer.Option("--evidence-for", help="Signals supporting the attempt."),
+    ] = None,
+    evidence_against: Annotated[
+        str | None,
+        typer.Option("--evidence-against", help="Signals against the attempt."),
+    ] = None,
+    files_touched: Annotated[
+        list[str] | None,
+        typer.Option("--file", help="Repeat to record touched file paths."),
+    ] = None,
+) -> None:
+    """Add an attempt record for a task."""
+    try:
+        attempt = _service().add_attempt(
+            task_id,
+            summary=summary,
+            kind=kind,
+            status=status,
+            reasoning_summary=reasoning_summary,
+            evidence_for=evidence_for,
+            evidence_against=evidence_against,
+            files_touched=files_touched or [],
+        )
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_attempt_added(attempt)
+
+
+@attempt_app.command("list")
+def attempt_list_command(task_id: str) -> None:
+    """List attempts attached to a task."""
+    try:
+        attempts = _service().list_attempts_for_task(task_id)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_attempt_list(task_id, attempts)
+
+
+@attempt_app.command("show")
+def attempt_show_command(attempt_id: str) -> None:
+    """Show one attempt record."""
+    try:
+        attempt = _service().get_attempt(attempt_id)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if attempt is None:
+        raise typer.Exit(code=_fatal(f"Attempt not found: {attempt_id}"))
+    render_attempt_detail(attempt)
+
+
+@attempt_app.command("update")
+def attempt_update_command(
+    attempt_id: str,
+    status: Annotated[
+        AttemptStatus,
+        typer.Option("--status", help="Updated attempt status."),
+    ],
+    summary: Annotated[
+        str | None,
+        typer.Option("--summary", help="Replace the attempt summary."),
+    ] = None,
+    reasoning_summary: Annotated[
+        str | None,
+        typer.Option("--reasoning-summary", help="Update reasoning notes."),
+    ] = None,
+    evidence_for: Annotated[
+        str | None,
+        typer.Option("--evidence-for", help="Update supporting evidence."),
+    ] = None,
+    evidence_against: Annotated[
+        str | None,
+        typer.Option("--evidence-against", help="Update counter-evidence."),
+    ] = None,
+    files_touched: Annotated[
+        list[str] | None,
+        typer.Option("--file", help="Replace touched file paths."),
+    ] = None,
+) -> None:
+    """Update an existing attempt."""
+    try:
+        attempt = _service().update_attempt(
+            attempt_id,
+            status=status,
+            summary=summary,
+            reasoning_summary=reasoning_summary,
+            evidence_for=evidence_for,
+            evidence_against=evidence_against,
+            files_touched=files_touched,
+        )
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_attempt_updated(attempt)
 
 
 def _fatal(message: str) -> int:

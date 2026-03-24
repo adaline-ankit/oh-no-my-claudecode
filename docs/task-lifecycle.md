@@ -74,3 +74,40 @@ onmc task end task-abc123def4 \
 - branch is captured when the task starts
 - terminal states set `ended_at`
 - `final_summary`, `final_outcome`, and `confidence` are schema-ready for richer task memory without requiring more workflow in P0
+
+## Attempts
+
+Tasks can also store attempt records so ONMC preserves what was tried, not just the final outcome.
+
+Each attempt stores:
+
+- `attempt_id`
+- `task_id`
+- `summary`
+- `kind`
+- `status`
+- `reasoning_summary`
+- `evidence_for`
+- `evidence_against`
+- `files_touched`
+- `created_at`
+- `closed_at`
+
+Common attempt commands:
+
+```bash
+onmc attempt add task-abc123def4 \
+  --summary "Try a narrower cache fix first" \
+  --kind fix_attempt \
+  --status tried \
+  --reasoning-summary "The cache module has the strongest churn signal." \
+  --file src/cache.py
+
+onmc attempt list task-abc123def4
+onmc attempt show attempt-abc123def4
+onmc attempt update attempt-abc123def4 \
+  --status rejected \
+  --evidence-against "The narrowed fix did not touch the failing path."
+```
+
+Task detail output includes a compact attempts summary when attempts exist, and task list output includes an attempt count so related attempts are discoverable quickly.

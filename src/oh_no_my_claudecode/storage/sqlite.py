@@ -6,6 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from oh_no_my_claudecode.models import (
+    AttemptKind,
+    AttemptRecord,
+    AttemptStatus,
     FileStat,
     MemoryEntry,
     MemoryKind,
@@ -71,6 +74,20 @@ class SQLiteStorage:
                     final_summary TEXT,
                     final_outcome TEXT,
                     confidence REAL
+                );
+                CREATE TABLE IF NOT EXISTS attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    reasoning_summary TEXT,
+                    evidence_for TEXT,
+                    evidence_against TEXT,
+                    files_touched_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    closed_at TEXT,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
                 );
                 """
             )
@@ -367,9 +384,99 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM tasks").fetchone()
         return int(row["count"])
 
+    def create_attempt(self, attempt: AttemptRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO attempts (
+                    attempt_id,
+                    task_id,
+                    summary,
+                    kind,
+                    status,
+                    reasoning_summary,
+                    evidence_for,
+                    evidence_against,
+                    files_touched_json,
+                    created_at,
+                    closed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._attempt_values(attempt),
+            )
+
+    def update_attempt(self, attempt: AttemptRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE attempts SET
+                    task_id = ?,
+                    summary = ?,
+                    kind = ?,
+                    status = ?,
+                    reasoning_summary = ?,
+                    evidence_for = ?,
+                    evidence_against = ?,
+                    files_touched_json = ?,
+                    created_at = ?,
+                    closed_at = ?
+                WHERE attempt_id = ?
+                """,
+                (
+                    attempt.task_id,
+                    attempt.summary,
+                    attempt.kind.value,
+                    attempt.status.value,
+                    attempt.reasoning_summary,
+                    attempt.evidence_for,
+                    attempt.evidence_against,
+                    json.dumps(attempt.files_touched),
+                    isoformat_utc(attempt.created_at),
+                    isoformat_utc(attempt.closed_at) if attempt.closed_at else None,
+                    attempt.attempt_id,
+                ),
+            )
+
+    def get_attempt(self, attempt_id: str) -> AttemptRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM attempts WHERE attempt_id = ?",
+                (attempt_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_attempt(row)
+
+    def list_attempts_for_task(self, task_id: str) -> list[AttemptRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM attempts
+                WHERE task_id = ?
+                ORDER BY created_at DESC, attempt_id DESC
+                """,
+                (task_id,),
+            ).fetchall()
+        return [self._row_to_attempt(row) for row in rows]
+
+    def list_attempt_counts_by_task(self) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT task_id, COUNT(*) AS count
+                FROM attempts
+                GROUP BY task_id
+                """
+            ).fetchall()
+        return {str(row["task_id"]): int(row["count"]) for row in rows}
+
+    def attempt_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM attempts").fetchone()
+        return int(row["count"])
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     @staticmethod
@@ -431,4 +538,40 @@ class SQLiteStorage:
             task.final_summary,
             task.final_outcome,
             task.confidence,
+        )
+
+    @staticmethod
+    def _row_to_attempt(row: sqlite3.Row) -> AttemptRecord:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Attempt row is missing created_at."
+            raise ValueError(msg)
+        return AttemptRecord(
+            attempt_id=row["attempt_id"],
+            task_id=row["task_id"],
+            summary=row["summary"],
+            kind=AttemptKind(row["kind"]),
+            status=AttemptStatus(row["status"]),
+            reasoning_summary=row["reasoning_summary"],
+            evidence_for=row["evidence_for"],
+            evidence_against=row["evidence_against"],
+            files_touched=json.loads(row["files_touched_json"]),
+            created_at=created_at,
+            closed_at=parse_datetime(row["closed_at"]),
+        )
+
+    @staticmethod
+    def _attempt_values(attempt: AttemptRecord) -> tuple[Any, ...]:
+        return (
+            attempt.attempt_id,
+            attempt.task_id,
+            attempt.summary,
+            attempt.kind.value,
+            attempt.status.value,
+            attempt.reasoning_summary,
+            attempt.evidence_for,
+            attempt.evidence_against,
+            json.dumps(attempt.files_touched),
+            isoformat_utc(attempt.created_at),
+            isoformat_utc(attempt.closed_at) if attempt.closed_at else None,
         )

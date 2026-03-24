@@ -32,7 +32,12 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - captures repo root and current branch
    - initializes lifecycle timestamps and labels
 
-4. `onmc brief --task "..."`
+4. `onmc attempt add`
+   - attaches an attempt record to an existing task
+   - stores status, reasoning notes, evidence, and touched files
+   - preserves failed or partial paths alongside successful ones
+
+5. `onmc brief --task "..."`
    - loads stored memory and repo metadata
    - tokenizes the task
    - ranks memory entries and file paths
@@ -49,13 +54,14 @@ The system compiles repo-specific context into a brief that a coding agent can c
 
 ### `models/`
 
-- typed Pydantic models for config, memory, tasks, ingest results, file stats, and brief artifacts
+- typed Pydantic models for config, memory, tasks, attempts, ingest results, file stats, and brief artifacts
 
 ### `storage/`
 
 - SQLite-backed persistence
 - memory catalog
 - task catalog
+- attempt catalog
 - repo file metadata
 - git-derived file stats
 - ingest metadata
@@ -101,6 +107,7 @@ P0 tables:
 
 - `memories`
 - `tasks`
+- `attempts`
 - `repo_files`
 - `file_stats`
 - `meta`
@@ -108,6 +115,8 @@ P0 tables:
 Manual memory is reserved in the schema through `source_type = manual`, even though P0 does not yet expose a write command for it.
 
 Tasks are stored as first-class records so branch, status, timestamps, labels, and final summaries can be recovered later without depending on prior chat transcripts.
+
+Attempts are stored as task-linked records so ONMC can preserve failed, partial, and successful approaches without requiring transcript recovery or model-based summarization.
 
 ## Design Tradeoffs
 

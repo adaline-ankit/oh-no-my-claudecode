@@ -1,3 +1,9 @@
+from oh_no_my_claudecode.models.attempt import (
+    TERMINAL_ATTEMPT_STATUSES,
+    AttemptKind,
+    AttemptRecord,
+    AttemptStatus,
+)
 from oh_no_my_claudecode.models.brief import BriefArtifact
 from oh_no_my_claudecode.models.config import (
     BriefSettings,
@@ -15,6 +21,9 @@ from oh_no_my_claudecode.models.task import (
 )
 
 __all__ = [
+    "AttemptKind",
+    "AttemptRecord",
+    "AttemptStatus",
     "BriefArtifact",
     "BriefSettings",
     "FileStat",
@@ -27,6 +36,7 @@ __all__ = [
     "RepoFileRecord",
     "SourceType",
     "StorageSettings",
+    "TERMINAL_ATTEMPT_STATUSES",
     "TERMINAL_TASK_STATUSES",
     "TaskLifecycleError",
     "TaskRecord",

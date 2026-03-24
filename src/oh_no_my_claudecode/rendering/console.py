@@ -6,6 +6,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from oh_no_my_claudecode.models import (
+    AttemptRecord,
+    AttemptStatus,
     BriefArtifact,
     IngestResult,
     MemoryEntry,
@@ -164,7 +166,11 @@ def render_task_started(task: TaskRecord) -> None:
     )
 
 
-def render_task_list(tasks: list[TaskRecord]) -> None:
+def render_task_list(
+    tasks: list[TaskRecord],
+    *,
+    attempt_counts: dict[str, int] | None = None,
+) -> None:
     if not tasks:
         console.print("[yellow]No tasks found for this repository.[/yellow]")
         return
@@ -172,14 +178,17 @@ def render_task_list(tasks: list[TaskRecord]) -> None:
     table.add_column("Task ID", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     table.add_column("Title", overflow="fold")
+    table.add_column("Attempts", no_wrap=True, justify="right")
     table.add_column("Branch", no_wrap=True)
     table.add_column("Labels", overflow="fold")
     table.add_column("Created", no_wrap=True)
+    counts = attempt_counts or {}
     for task in tasks:
         table.add_row(
             task.task_id,
             _task_status_label(task.status),
             shorten(task.title, max_length=32),
+            str(counts.get(task.task_id, 0)),
             task.branch,
             shorten(", ".join(task.labels) if task.labels else "-", max_length=18),
             task.created_at.strftime("%m-%d %H:%M"),
@@ -187,7 +196,12 @@ def render_task_list(tasks: list[TaskRecord]) -> None:
     console.print(table)
 
 
-def render_task_detail(task: TaskRecord, *, title: str = "Task Detail") -> None:
+def render_task_detail(
+    task: TaskRecord,
+    *,
+    title: str = "Task Detail",
+    attempts: list[AttemptRecord] | None = None,
+) -> None:
     lines = [
         f"[bold]{task.title}[/bold]",
         f"Task ID: {task.task_id}",
@@ -206,11 +220,81 @@ def render_task_detail(task: TaskRecord, *, title: str = "Task Detail") -> None:
     ]
     if task.final_summary:
         lines.extend(["", "Final summary:", task.final_summary])
+    if attempts:
+        lines.extend(["", "Attempts:"])
+        for attempt in attempts[:5]:
+            lines.append(
+                f"- {attempt.attempt_id} | {_attempt_status_label(attempt.status)} | "
+                f"{attempt.kind.value} | {shorten(attempt.summary, max_length=64)}"
+            )
     console.print(Panel.fit("\n".join(lines), title=title))
 
 
 def render_task_updated(task: TaskRecord, *, action: str) -> None:
     render_task_detail(task, title=action)
+
+
+def render_attempt_added(attempt: AttemptRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Attempt ID: [bold]{attempt.attempt_id}[/bold]",
+                    f"Task ID: {attempt.task_id}",
+                    f"Status: {_attempt_status_label(attempt.status)}",
+                    f"Kind: {attempt.kind.value}",
+                    "",
+                    attempt.summary,
+                ]
+            ),
+            title="Attempt Added",
+        )
+    )
+
+
+def render_attempt_list(task_id: str, attempts: list[AttemptRecord]) -> None:
+    if not attempts:
+        console.print(f"[yellow]No attempts found for task {task_id}.[/yellow]")
+        return
+    table = Table(title=f"Attempts For {task_id}")
+    table.add_column("Attempt ID", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Kind", no_wrap=True)
+    table.add_column("Summary", overflow="fold")
+    table.add_column("Created", no_wrap=True)
+    for attempt in attempts:
+        table.add_row(
+            attempt.attempt_id,
+            _attempt_status_label(attempt.status),
+            attempt.kind.value,
+            shorten(attempt.summary, max_length=48),
+            attempt.created_at.strftime("%m-%d %H:%M"),
+        )
+    console.print(table)
+
+
+def render_attempt_detail(attempt: AttemptRecord, *, title: str = "Attempt Detail") -> None:
+    lines = [
+        f"[bold]{attempt.summary}[/bold]",
+        f"Attempt ID: {attempt.attempt_id}",
+        f"Task ID: {attempt.task_id}",
+        f"Status: {_attempt_status_label(attempt.status)}",
+        f"Kind: {attempt.kind.value}",
+        f"Created: {attempt.created_at.isoformat()}",
+        f"Closed: {attempt.closed_at.isoformat() if attempt.closed_at else '-'}",
+        f"Files touched: {', '.join(attempt.files_touched) if attempt.files_touched else '-'}",
+    ]
+    if attempt.reasoning_summary:
+        lines.extend(["", "Reasoning summary:", attempt.reasoning_summary])
+    if attempt.evidence_for:
+        lines.extend(["", "Evidence for:", attempt.evidence_for])
+    if attempt.evidence_against:
+        lines.extend(["", "Evidence against:", attempt.evidence_against])
+    console.print(Panel.fit("\n".join(lines), title=title))
+
+
+def render_attempt_updated(attempt: AttemptRecord) -> None:
+    render_attempt_detail(attempt, title="Attempt Updated")
 
 
 def _task_status_label(status: TaskStatus) -> str:
@@ -220,5 +304,16 @@ def _task_status_label(status: TaskStatus) -> str:
         TaskStatus.BLOCKED: "[yellow]blocked[/yellow]",
         TaskStatus.SOLVED: "[blue]solved[/blue]",
         TaskStatus.ABANDONED: "[red]abandoned[/red]",
+    }
+    return styles[status]
+
+
+def _attempt_status_label(status: AttemptStatus) -> str:
+    styles = {
+        AttemptStatus.PROPOSED: "[white]proposed[/white]",
+        AttemptStatus.TRIED: "[yellow]tried[/yellow]",
+        AttemptStatus.REJECTED: "[red]rejected[/red]",
+        AttemptStatus.SUCCEEDED: "[green]succeeded[/green]",
+        AttemptStatus.PARTIAL: "[blue]partial[/blue]",
     }
     return styles[status]

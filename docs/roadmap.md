@@ -8,6 +8,7 @@ Shipped in this repo:
 - repo-local `.onmc/` state
 - SQLite memory store
 - task lifecycle foundation
+- task attempt logging
 - doc ingestion
 - git-history ingestion
 - hotspot and git-pattern extraction

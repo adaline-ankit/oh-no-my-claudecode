@@ -18,7 +18,11 @@ from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root
 from oh_no_my_claudecode.ingest.pipeline import run_ingest
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
 from oh_no_my_claudecode.models import (
+    TERMINAL_ATTEMPT_STATUSES,
     TERMINAL_TASK_STATUSES,
+    AttemptKind,
+    AttemptRecord,
+    AttemptStatus,
     BriefArtifact,
     IngestResult,
     MemoryEntry,
@@ -67,6 +71,71 @@ class OnmcService:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).get(memory_id)
 
+    def add_attempt(
+        self,
+        task_id: str,
+        *,
+        summary: str,
+        kind: AttemptKind,
+        status: AttemptStatus,
+        reasoning_summary: str | None,
+        evidence_for: str | None,
+        evidence_against: str | None,
+        files_touched: list[str],
+    ) -> AttemptRecord:
+        _, _, storage = self._load_context()
+        self._require_task(storage, task_id)
+        now = utc_now()
+        attempt = AttemptRecord(
+            attempt_id=f"attempt-{secrets.token_hex(5)}",
+            task_id=task_id,
+            summary=summary,
+            kind=kind,
+            status=status,
+            reasoning_summary=reasoning_summary,
+            evidence_for=evidence_for,
+            evidence_against=evidence_against,
+            files_touched=files_touched,
+            created_at=now,
+            closed_at=now if status in TERMINAL_ATTEMPT_STATUSES else None,
+        )
+        storage.create_attempt(attempt)
+        return attempt
+
+    def list_attempts_for_task(self, task_id: str) -> list[AttemptRecord]:
+        _, _, storage = self._load_context()
+        self._require_task(storage, task_id)
+        return storage.list_attempts_for_task(task_id)
+
+    def get_attempt(self, attempt_id: str) -> AttemptRecord | None:
+        _, _, storage = self._load_context()
+        return storage.get_attempt(attempt_id)
+
+    def update_attempt(
+        self,
+        attempt_id: str,
+        *,
+        status: AttemptStatus | None = None,
+        summary: str | None = None,
+        reasoning_summary: str | None = None,
+        evidence_for: str | None = None,
+        evidence_against: str | None = None,
+        files_touched: list[str] | None = None,
+    ) -> AttemptRecord:
+        _, _, storage = self._load_context()
+        attempt = self._require_attempt(storage, attempt_id)
+        updated = attempt.update(
+            changed_at=utc_now(),
+            status=status,
+            summary=summary,
+            reasoning_summary=reasoning_summary,
+            evidence_for=evidence_for,
+            evidence_against=evidence_against,
+            files_touched=files_touched,
+        )
+        storage.update_attempt(updated)
+        return updated
+
     def start_task(
         self,
         *,
@@ -101,6 +170,10 @@ class OnmcService:
     def get_task(self, task_id: str) -> TaskRecord | None:
         _, _, storage = self._load_context()
         return storage.get_task(task_id)
+
+    def attempt_counts_by_task(self) -> dict[str, int]:
+        _, _, storage = self._load_context()
+        return storage.list_attempt_counts_by_task()
 
     def update_task_status(self, task_id: str, status: TaskStatus) -> TaskRecord:
         if status == TaskStatus.OPEN:
@@ -142,6 +215,7 @@ class OnmcService:
             "repo_root": repo_root.as_posix(),
             "memories": str(storage.memory_count()),
             "tasks": str(storage.task_count()),
+            "attempts": str(storage.attempt_count()),
             "last_ingest_at": meta.get("last_ingest_at", "never"),
             "storage_path": database_path(config, repo_root).as_posix(),
             "state_dir": state_dir(config, repo_root).as_posix(),
@@ -167,3 +241,11 @@ class OnmcService:
             msg = f"Task not found: {task_id}"
             raise LookupError(msg)
         return task
+
+    @staticmethod
+    def _require_attempt(storage: SQLiteStorage, attempt_id: str) -> AttemptRecord:
+        attempt = storage.get_attempt(attempt_id)
+        if attempt is None:
+            msg = f"Attempt not found: {attempt_id}"
+            raise LookupError(msg)
+        return attempt

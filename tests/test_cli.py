@@ -56,6 +56,57 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
     assert task_show_result.exit_code == 0
     assert task_id in task_show_result.stdout
 
+    attempt_add_result = runner.invoke(
+        app,
+        [
+            "attempt",
+            "add",
+            task_id,
+            "--summary",
+            "Try a targeted cache fix and rerun the cache test.",
+            "--kind",
+            "fix_attempt",
+            "--status",
+            "tried",
+            "--evidence-for",
+            "The cache module has repeated churn.",
+            "--file",
+            "src/cache.py",
+        ],
+    )
+    assert attempt_add_result.exit_code == 0
+    assert "Attempt Added" in attempt_add_result.stdout
+    attempt_match = re.search(r"attempt-[0-9a-f]+", attempt_add_result.stdout)
+    assert attempt_match is not None
+    attempt_id = attempt_match.group(0)
+
+    attempt_list_result = runner.invoke(app, ["attempt", "list", task_id])
+    assert attempt_list_result.exit_code == 0
+    assert attempt_id in attempt_list_result.stdout
+
+    attempt_show_result = runner.invoke(app, ["attempt", "show", attempt_id])
+    assert attempt_show_result.exit_code == 0
+    assert attempt_id in attempt_show_result.stdout
+
+    attempt_update_result = runner.invoke(
+        app,
+        [
+            "attempt",
+            "update",
+            attempt_id,
+            "--status",
+            "rejected",
+            "--evidence-against",
+            "The targeted change did not address the failing path.",
+        ],
+    )
+    assert attempt_update_result.exit_code == 0
+    assert "Attempt Updated" in attempt_update_result.stdout
+
+    task_show_after_attempt_result = runner.invoke(app, ["task", "show", task_id])
+    assert task_show_after_attempt_result.exit_code == 0
+    assert attempt_id in task_show_after_attempt_result.stdout
+
     task_end_result = runner.invoke(
         app,
         [
