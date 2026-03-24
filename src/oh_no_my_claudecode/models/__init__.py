@@ -7,6 +7,12 @@ from oh_no_my_claudecode.models.config import (
 )
 from oh_no_my_claudecode.models.ingest import FileStat, IngestResult, ProjectHints, RepoFileRecord
 from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
+from oh_no_my_claudecode.models.task import (
+    TERMINAL_TASK_STATUSES,
+    TaskLifecycleError,
+    TaskRecord,
+    TaskStatus,
+)
 
 __all__ = [
     "BriefArtifact",
@@ -21,4 +27,8 @@ __all__ = [
     "RepoFileRecord",
     "SourceType",
     "StorageSettings",
+    "TERMINAL_TASK_STATUSES",
+    "TaskLifecycleError",
+    "TaskRecord",
+    "TaskStatus",
 ]

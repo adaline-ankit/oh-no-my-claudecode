@@ -28,6 +28,20 @@ def discover_repo_root(start_path: Path | None = None) -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
+def current_branch(repo_root: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+    return result.stdout.strip() or "unknown"
+
+
 def relative_path(repo_root: Path, path: Path) -> str:
     return path.resolve().relative_to(repo_root).as_posix()
 

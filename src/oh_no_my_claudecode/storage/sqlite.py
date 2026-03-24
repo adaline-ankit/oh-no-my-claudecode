@@ -5,7 +5,15 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from oh_no_my_claudecode.models import FileStat, MemoryEntry, MemoryKind, RepoFileRecord, SourceType
+from oh_no_my_claudecode.models import (
+    FileStat,
+    MemoryEntry,
+    MemoryKind,
+    RepoFileRecord,
+    SourceType,
+    TaskRecord,
+    TaskStatus,
+)
 from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime
 
 
@@ -48,6 +56,21 @@ class SQLiteStorage:
                 CREATE TABLE IF NOT EXISTS meta (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS tasks (
+                    task_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    ended_at TEXT,
+                    repo_root TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    labels_json TEXT NOT NULL,
+                    final_summary TEXT,
+                    final_outcome TEXT,
+                    confidence REAL
                 );
                 """
             )
@@ -257,6 +280,93 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM memories").fetchone()
         return int(row["count"])
 
+    def create_task(self, task: TaskRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO tasks (
+                    task_id,
+                    title,
+                    description,
+                    status,
+                    created_at,
+                    started_at,
+                    ended_at,
+                    repo_root,
+                    branch,
+                    labels_json,
+                    final_summary,
+                    final_outcome,
+                    confidence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._task_values(task),
+            )
+
+    def update_task(self, task: TaskRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE tasks SET
+                    title = ?,
+                    description = ?,
+                    status = ?,
+                    created_at = ?,
+                    started_at = ?,
+                    ended_at = ?,
+                    repo_root = ?,
+                    branch = ?,
+                    labels_json = ?,
+                    final_summary = ?,
+                    final_outcome = ?,
+                    confidence = ?
+                WHERE task_id = ?
+                """,
+                (
+                    task.title,
+                    task.description,
+                    task.status.value,
+                    isoformat_utc(task.created_at),
+                    isoformat_utc(task.started_at) if task.started_at else None,
+                    isoformat_utc(task.ended_at) if task.ended_at else None,
+                    task.repo_root,
+                    task.branch,
+                    json.dumps(task.labels),
+                    task.final_summary,
+                    task.final_outcome,
+                    task.confidence,
+                    task.task_id,
+                ),
+            )
+
+    def get_task(self, task_id: str) -> TaskRecord | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+        return None if row is None else self._row_to_task(row)
+
+    def list_tasks(self) -> list[TaskRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM tasks
+                ORDER BY
+                    CASE status
+                        WHEN 'active' THEN 0
+                        WHEN 'blocked' THEN 1
+                        WHEN 'open' THEN 2
+                        WHEN 'solved' THEN 3
+                        ELSE 4
+                    END,
+                    rowid DESC
+                """
+            ).fetchall()
+        return [self._row_to_task(row) for row in rows]
+
+    def task_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM tasks").fetchone()
+        return int(row["count"])
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -281,4 +391,44 @@ class SQLiteStorage:
             confidence=float(row["confidence"]),
             created_at=created_at,
             updated_at=updated_at,
+        )
+
+    @staticmethod
+    def _row_to_task(row: sqlite3.Row) -> TaskRecord:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Task row is missing created_at."
+            raise ValueError(msg)
+        return TaskRecord(
+            task_id=row["task_id"],
+            title=row["title"],
+            description=row["description"],
+            status=TaskStatus(row["status"]),
+            created_at=created_at,
+            started_at=parse_datetime(row["started_at"]),
+            ended_at=parse_datetime(row["ended_at"]),
+            repo_root=row["repo_root"],
+            branch=row["branch"],
+            labels=json.loads(row["labels_json"]),
+            final_summary=row["final_summary"],
+            final_outcome=row["final_outcome"],
+            confidence=float(row["confidence"]) if row["confidence"] is not None else None,
+        )
+
+    @staticmethod
+    def _task_values(task: TaskRecord) -> tuple[Any, ...]:
+        return (
+            task.task_id,
+            task.title,
+            task.description,
+            task.status.value,
+            isoformat_utc(task.created_at),
+            isoformat_utc(task.started_at) if task.started_at else None,
+            isoformat_utc(task.ended_at) if task.ended_at else None,
+            task.repo_root,
+            task.branch,
+            json.dumps(task.labels),
+            task.final_summary,
+            task.final_outcome,
+            task.confidence,
         )

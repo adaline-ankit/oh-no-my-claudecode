@@ -7,6 +7,7 @@ Shipped in this repo:
 - installable Python package
 - repo-local `.onmc/` state
 - SQLite memory store
+- task lifecycle foundation
 - doc ingestion
 - git-history ingestion
 - hotspot and git-pattern extraction
@@ -40,4 +41,3 @@ These are not planned for the MVP path:
 - vector database as a requirement
 - generic multi-agent orchestration runtime
 - autonomous patching engine
-

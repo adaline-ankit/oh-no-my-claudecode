@@ -27,7 +27,12 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - infers hotspots and validation hints
    - stores structured memory and repo metadata in SQLite
 
-3. `onmc brief --task "..."`
+3. `onmc task start`
+   - creates a durable task record
+   - captures repo root and current branch
+   - initializes lifecycle timestamps and labels
+
+4. `onmc brief --task "..."`
    - loads stored memory and repo metadata
    - tokenizes the task
    - ranks memory entries and file paths
@@ -44,12 +49,13 @@ The system compiles repo-specific context into a brief that a coding agent can c
 
 ### `models/`
 
-- typed Pydantic models for config, memory, ingest results, file stats, and brief artifacts
+- typed Pydantic models for config, memory, tasks, ingest results, file stats, and brief artifacts
 
 ### `storage/`
 
 - SQLite-backed persistence
 - memory catalog
+- task catalog
 - repo file metadata
 - git-derived file stats
 - ingest metadata
@@ -94,11 +100,14 @@ SQLite is used for P0 because it keeps the package dependency surface low while 
 P0 tables:
 
 - `memories`
+- `tasks`
 - `repo_files`
 - `file_stats`
 - `meta`
 
 Manual memory is reserved in the schema through `source_type = manual`, even though P0 does not yet expose a write command for it.
+
+Tasks are stored as first-class records so branch, status, timestamps, labels, and final summaries can be recovered later without depending on prior chat transcripts.
 
 ## Design Tradeoffs
 
@@ -118,4 +127,3 @@ Typed memory makes it easier to:
 ### Why no embeddings in P0
 
 Embeddings add infrastructure, tuning overhead, and a false sense of intelligence. Token/path overlap plus git churn is a credible first slice for a repo-local tool.
-

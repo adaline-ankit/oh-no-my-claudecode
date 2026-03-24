@@ -33,6 +33,7 @@ It:
 - scans a local git repository
 - extracts typed structured memory with provenance
 - stores that memory locally in `.onmc/memory.db`
+- stores durable task lifecycle records for active engineering work
 - compiles concise task briefs for coding agents
 - stays useful without paid model access
 
@@ -40,6 +41,7 @@ It:
 
 - `onmc init` bootstraps `.onmc/` state for the current repository.
 - `onmc ingest` indexes repo docs, file tree metadata, git history, hotspots, and validation hints.
+- `onmc task ...` tracks task-scoped engineering memory with status, branch, labels, and final summaries.
 - `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
@@ -76,6 +78,7 @@ Inside any git repository:
 ```bash
 onmc init
 onmc ingest
+onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate test churn around cache invalidation" --label bug
 onmc brief --task "fix flaky Redis cache invalidation bug"
 ```
 
@@ -95,6 +98,11 @@ This creates local state under:
 onmc --help
 onmc init
 onmc ingest
+onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate cache invalidation flow"
+onmc task list
+onmc task show task-abc123def4
+onmc task status task-abc123def4 --status blocked
+onmc task end task-abc123def4 --status solved --summary "Fixed cache churn and updated tests"
 onmc brief --task "fix flaky Redis cache invalidation bug"
 onmc memory list
 onmc memory list --kind hotspot
@@ -140,6 +148,7 @@ High-level modules:
 
 - `models/`: typed config, memory, ingest, and brief models
 - `storage/`: local SQLite-backed state
+- `task lifecycle`: durable task records stored alongside repo memory
 - `ingest/`: doc parsing, git parsing, repo scanning, and heuristic extraction
 - `brief/`: task-to-context compilation and ranking
 - `core/`: repo discovery and service orchestration
@@ -149,12 +158,14 @@ More detail:
 
 - [docs/architecture.md](docs/architecture.md)
 - [docs/memory-model.md](docs/memory-model.md)
+- [docs/task-lifecycle.md](docs/task-lifecycle.md)
 - [docs/roadmap.md](docs/roadmap.md)
 
 ## Limitations
 
 - P0 does not capture chat transcripts or editor state.
 - Memory extraction is heuristic and intentionally conservative.
+- Task lifecycle is local-only and intentionally lightweight.
 - Brief ranking is token-based, not embedding-based.
 - Git-derived patterns are suggestions, not guarantees.
 - Manual memory authoring is schema-ready but not yet exposed as a CLI workflow.
@@ -168,6 +179,7 @@ Short-term roadmap items live in [docs/roadmap.md](docs/roadmap.md). Near-term e
 - incremental ingest and richer stale-memory handling
 - optional LLM summarization behind a disabled-by-default interface
 - deeper diff-aware briefing for active branches
+- richer task-memory capture tied to briefs and outcomes
 
 ## Development
 
@@ -207,4 +219,3 @@ Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

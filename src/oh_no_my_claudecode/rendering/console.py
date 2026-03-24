@@ -5,7 +5,15 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from oh_no_my_claudecode.models import BriefArtifact, IngestResult, MemoryEntry, ProjectConfig
+from oh_no_my_claudecode.models import (
+    BriefArtifact,
+    IngestResult,
+    MemoryEntry,
+    ProjectConfig,
+    TaskRecord,
+    TaskStatus,
+)
+from oh_no_my_claudecode.utils.text import shorten
 
 console = Console()
 
@@ -135,3 +143,82 @@ def render_status(status: dict[str, str]) -> None:
     for key, value in status.items():
         table.add_row(key, value)
     console.print(table)
+
+
+def render_task_started(task: TaskRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Task ID: [bold]{task.task_id}[/bold]",
+                    f"Status: {_task_status_label(task.status)}",
+                    f"Repo: {task.repo_root}",
+                    f"Branch: {task.branch}",
+                    f"Labels: {', '.join(task.labels) if task.labels else '-'}",
+                    "",
+                    task.title,
+                ]
+            ),
+            title="Task Started",
+        )
+    )
+
+
+def render_task_list(tasks: list[TaskRecord]) -> None:
+    if not tasks:
+        console.print("[yellow]No tasks found for this repository.[/yellow]")
+        return
+    table = Table(title="Tasks")
+    table.add_column("Task ID", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Title", overflow="fold")
+    table.add_column("Branch", no_wrap=True)
+    table.add_column("Labels", overflow="fold")
+    table.add_column("Created", no_wrap=True)
+    for task in tasks:
+        table.add_row(
+            task.task_id,
+            _task_status_label(task.status),
+            shorten(task.title, max_length=32),
+            task.branch,
+            shorten(", ".join(task.labels) if task.labels else "-", max_length=18),
+            task.created_at.strftime("%m-%d %H:%M"),
+        )
+    console.print(table)
+
+
+def render_task_detail(task: TaskRecord, *, title: str = "Task Detail") -> None:
+    lines = [
+        f"[bold]{task.title}[/bold]",
+        f"Task ID: {task.task_id}",
+        f"Status: {_task_status_label(task.status)}",
+        f"Repo: {task.repo_root}",
+        f"Branch: {task.branch}",
+        f"Labels: {', '.join(task.labels) if task.labels else '-'}",
+        f"Created: {task.created_at.isoformat()}",
+        f"Started: {task.started_at.isoformat() if task.started_at else '-'}",
+        f"Ended: {task.ended_at.isoformat() if task.ended_at else '-'}",
+        f"Confidence: {task.confidence if task.confidence is not None else '-'}",
+        f"Final outcome: {task.final_outcome or '-'}",
+        "",
+        "Description:",
+        task.description,
+    ]
+    if task.final_summary:
+        lines.extend(["", "Final summary:", task.final_summary])
+    console.print(Panel.fit("\n".join(lines), title=title))
+
+
+def render_task_updated(task: TaskRecord, *, action: str) -> None:
+    render_task_detail(task, title=action)
+
+
+def _task_status_label(status: TaskStatus) -> str:
+    styles = {
+        TaskStatus.OPEN: "[white]open[/white]",
+        TaskStatus.ACTIVE: "[green]active[/green]",
+        TaskStatus.BLOCKED: "[yellow]blocked[/yellow]",
+        TaskStatus.SOLVED: "[blue]solved[/blue]",
+        TaskStatus.ABANDONED: "[red]abandoned[/red]",
+    }
+    return styles[status]
