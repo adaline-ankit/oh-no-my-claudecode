@@ -36,6 +36,7 @@ dev = [
   "mypy>=1.11,<2.0",
   "pre-commit>=3.8,<5.0",
   "pytest>=8.3,<9.0",
+  "ruff>=0.15,<1.0",
 ]
 
 [project.scripts]

@@ -473,7 +473,7 @@ class SQLiteStorage:
                 """
                 SELECT * FROM attempts
                 WHERE task_id = ?
-                ORDER BY created_at DESC, attempt_id DESC
+                ORDER BY created_at DESC, rowid DESC
                 """,
                 (task_id,),
             ).fetchall()
@@ -536,7 +536,7 @@ class SQLiteStorage:
         if artifact_type is not None:
             query += " WHERE type = ?"
             params = (artifact_type.value,)
-        query += " ORDER BY created_at DESC, memory_id DESC"
+        query += " ORDER BY created_at DESC, rowid DESC"
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_memory_artifact(row) for row in rows]
@@ -547,7 +547,7 @@ class SQLiteStorage:
                 """
                 SELECT * FROM memory_artifacts
                 WHERE task_id = ?
-                ORDER BY created_at DESC, memory_id DESC
+                ORDER BY created_at DESC, rowid DESC
                 """,
                 (task_id,),
             ).fetchall()

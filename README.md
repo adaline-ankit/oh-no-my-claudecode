@@ -228,7 +228,7 @@ Publishing still requires:
 
 - a real GitHub repository
 - PyPI project setup
-- trusted publishing configured on the PyPI side
+- trusted publishing configured on the PyPI side for the GitHub `pypi` environment used by the release workflow
 
 ## Contributing
 

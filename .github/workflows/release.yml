@@ -12,6 +12,7 @@ jobs:
       contents: read
       id-token: write
     environment:
+      # This environment name must match the trusted publisher configured on PyPI.
       name: pypi
     steps:
       - uses: actions/checkout@v4
@@ -30,4 +31,3 @@ jobs:
           path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-
