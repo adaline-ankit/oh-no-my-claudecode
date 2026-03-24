@@ -1,0 +1,121 @@
+# Architecture
+
+## Goals
+
+P0 is intentionally narrow:
+
+- local-first
+- useful without an LLM
+- deterministic where possible
+- provenance-driven
+- easy to publish as a small OSS package
+
+The system compiles repo-specific context into a brief that a coding agent can consume before editing.
+
+## Runtime Flow
+
+1. `onmc init`
+   - discovers the git repo root
+   - creates `.onmc/`
+   - writes `.onmc/config.yaml`
+   - initializes `.onmc/memory.db`
+
+2. `onmc ingest`
+   - scans repository files
+   - parses selected markdown docs
+   - walks git history
+   - infers hotspots and validation hints
+   - stores structured memory and repo metadata in SQLite
+
+3. `onmc brief --task "..."`
+   - loads stored memory and repo metadata
+   - tokenizes the task
+   - ranks memory entries and file paths
+   - builds a concise markdown brief
+   - writes `.onmc/compiled/<timestamp>-brief.md`
+
+## Module Responsibilities
+
+### `core/`
+
+- repo discovery
+- lifecycle orchestration
+- config + storage bootstrapping
+
+### `models/`
+
+- typed Pydantic models for config, memory, ingest results, file stats, and brief artifacts
+
+### `storage/`
+
+- SQLite-backed persistence
+- memory catalog
+- repo file metadata
+- git-derived file stats
+- ingest metadata
+
+### `ingest/`
+
+- `repo_tree.py`
+  - file-tree scanning
+  - repo-shape hints
+- `docs.py`
+  - markdown discovery
+  - heading/section extraction
+  - conservative section classification
+- `git_history.py`
+  - commit parsing
+  - hotspot detection
+  - co-change pattern extraction
+- `pipeline.py`
+  - end-to-end ingest orchestration
+
+### `brief/`
+
+- task tokenization and scoring
+- relevant memory selection
+- impacted-file ranking
+- risk and validation checklist generation
+- reading-list generation
+
+### `rendering/`
+
+- Rich terminal tables and panels for CLI output
+
+## Storage Model
+
+SQLite is used for P0 because it keeps the package dependency surface low while still supporting:
+
+- idempotent local state
+- memory queries
+- repo file metadata
+- ingest bookkeeping
+
+P0 tables:
+
+- `memories`
+- `repo_files`
+- `file_stats`
+- `meta`
+
+Manual memory is reserved in the schema through `source_type = manual`, even though P0 does not yet expose a write command for it.
+
+## Design Tradeoffs
+
+### Why deterministic heuristics first
+
+The tool should stay useful without paid inference. Heuristics are easier to inspect, test, and reason about for a first release.
+
+### Why typed memory instead of raw text dumps
+
+Typed memory makes it easier to:
+
+- rank memories by kind
+- show provenance clearly
+- keep the brief compact
+- avoid pretending raw transcripts are reliable project knowledge
+
+### Why no embeddings in P0
+
+Embeddings add infrastructure, tuning overhead, and a false sense of intelligence. Token/path overlap plus git churn is a credible first slice for a repo-local tool.
+
