@@ -107,6 +107,50 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
     assert task_show_after_attempt_result.exit_code == 0
     assert attempt_id in task_show_after_attempt_result.stdout
 
+    memory_add_result = runner.invoke(
+        app,
+        [
+            "memory",
+            "add",
+            task_id,
+            "--type",
+            "did_not_work",
+            "--title",
+            "Cache-only fix missed the worker path",
+            "--summary",
+            "Tried narrowing the change to src/cache.py only.",
+            "--why-it-matters",
+            "Future agents should not repeat a cache-only patch for this failure mode.",
+            "--avoid-when",
+            "The failing path crosses the worker refresh flow.",
+            "--evidence",
+            "The worker test still failed after the narrow change.",
+            "--file",
+            "src/cache.py",
+            "--module",
+            "worker",
+        ],
+    )
+    assert memory_add_result.exit_code == 0
+    assert "Memory Artifact Added" in memory_add_result.stdout
+    memory_match = re.search(r"artifact-[0-9a-f]+", memory_add_result.stdout)
+    assert memory_match is not None
+    memory_id = memory_match.group(0)
+
+    memory_type_list_result = runner.invoke(app, ["memory", "list", "--type", "did_not_work"])
+    assert memory_type_list_result.exit_code == 0
+    assert "Task-Derived Memory Artifacts" in memory_type_list_result.stdout
+    assert memory_id in memory_type_list_result.stdout
+
+    memory_show_result = runner.invoke(app, ["memory", "show", memory_id])
+    assert memory_show_result.exit_code == 0
+    assert f"Task ID: {task_id}" in memory_show_result.stdout
+    assert "Provenance: task-derived" in memory_show_result.stdout
+
+    task_show_after_memory_result = runner.invoke(app, ["task", "show", task_id])
+    assert task_show_after_memory_result.exit_code == 0
+    assert memory_id in task_show_after_memory_result.stdout
+
     task_end_result = runner.invoke(
         app,
         [

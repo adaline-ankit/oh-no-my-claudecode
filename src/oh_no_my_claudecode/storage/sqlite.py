@@ -10,6 +10,8 @@ from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
     FileStat,
+    MemoryArtifactRecord,
+    MemoryArtifactType,
     MemoryEntry,
     MemoryKind,
     RepoFileRecord,
@@ -89,6 +91,26 @@ class SQLiteStorage:
                     closed_at TEXT,
                     FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
                 );
+                CREATE TABLE IF NOT EXISTS memory_artifacts (
+                    memory_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    why_it_matters TEXT NOT NULL,
+                    apply_when TEXT,
+                    avoid_when TEXT,
+                    evidence TEXT NOT NULL,
+                    related_files_json TEXT NOT NULL,
+                    related_modules_json TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_memory_artifacts_task_id
+                    ON memory_artifacts(task_id);
+                CREATE INDEX IF NOT EXISTS idx_memory_artifacts_type
+                    ON memory_artifacts(type);
                 """
             )
 
@@ -473,6 +495,80 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM attempts").fetchone()
         return int(row["count"])
 
+    def create_memory_artifact(self, artifact: MemoryArtifactRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_artifacts (
+                    memory_id,
+                    task_id,
+                    type,
+                    title,
+                    summary,
+                    why_it_matters,
+                    apply_when,
+                    avoid_when,
+                    evidence,
+                    related_files_json,
+                    related_modules_json,
+                    confidence,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._memory_artifact_values(artifact),
+            )
+
+    def get_memory_artifact(self, memory_id: str) -> MemoryArtifactRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM memory_artifacts WHERE memory_id = ?",
+                (memory_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_memory_artifact(row)
+
+    def list_memory_artifacts(
+        self,
+        *,
+        artifact_type: MemoryArtifactType | None = None,
+    ) -> list[MemoryArtifactRecord]:
+        query = "SELECT * FROM memory_artifacts"
+        params: tuple[Any, ...] = ()
+        if artifact_type is not None:
+            query += " WHERE type = ?"
+            params = (artifact_type.value,)
+        query += " ORDER BY created_at DESC, memory_id DESC"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_memory_artifact(row) for row in rows]
+
+    def list_memory_artifacts_for_task(self, task_id: str) -> list[MemoryArtifactRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM memory_artifacts
+                WHERE task_id = ?
+                ORDER BY created_at DESC, memory_id DESC
+                """,
+                (task_id,),
+            ).fetchall()
+        return [self._row_to_memory_artifact(row) for row in rows]
+
+    def list_memory_artifact_counts_by_task(self) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT task_id, COUNT(*) AS count
+                FROM memory_artifacts
+                GROUP BY task_id
+                """
+            ).fetchall()
+        return {str(row["task_id"]): int(row["count"]) for row in rows}
+
+    def memory_artifact_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM memory_artifacts").fetchone()
+        return int(row["count"])
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -574,4 +670,44 @@ class SQLiteStorage:
             json.dumps(attempt.files_touched),
             isoformat_utc(attempt.created_at),
             isoformat_utc(attempt.closed_at) if attempt.closed_at else None,
+        )
+
+    @staticmethod
+    def _row_to_memory_artifact(row: sqlite3.Row) -> MemoryArtifactRecord:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Memory artifact row is missing created_at."
+            raise ValueError(msg)
+        return MemoryArtifactRecord(
+            memory_id=row["memory_id"],
+            task_id=row["task_id"],
+            type=MemoryArtifactType(row["type"]),
+            title=row["title"],
+            summary=row["summary"],
+            why_it_matters=row["why_it_matters"],
+            apply_when=row["apply_when"],
+            avoid_when=row["avoid_when"],
+            evidence=row["evidence"],
+            related_files=json.loads(row["related_files_json"]),
+            related_modules=json.loads(row["related_modules_json"]),
+            confidence=float(row["confidence"]),
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _memory_artifact_values(artifact: MemoryArtifactRecord) -> tuple[Any, ...]:
+        return (
+            artifact.memory_id,
+            artifact.task_id,
+            artifact.type.value,
+            artifact.title,
+            artifact.summary,
+            artifact.why_it_matters,
+            artifact.apply_when,
+            artifact.avoid_when,
+            artifact.evidence,
+            json.dumps(artifact.related_files),
+            json.dumps(artifact.related_modules),
+            artifact.confidence,
+            isoformat_utc(artifact.created_at),
         )

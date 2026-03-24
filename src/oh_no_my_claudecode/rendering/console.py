@@ -10,6 +10,8 @@ from oh_no_my_claudecode.models import (
     AttemptStatus,
     BriefArtifact,
     IngestResult,
+    MemoryArtifactRecord,
+    MemoryArtifactType,
     MemoryEntry,
     ProjectConfig,
     TaskRecord,
@@ -99,7 +101,35 @@ def render_brief(artifact: BriefArtifact) -> None:
         console.print(f"1. `{item}`")
 
 
-def render_memory_list(memories: list[MemoryEntry]) -> None:
+def render_memory_list(
+    memories: list[MemoryEntry],
+    *,
+    artifacts: list[MemoryArtifactRecord] | None = None,
+) -> None:
+    artifact_rows = artifacts or []
+    if not memories and not artifact_rows:
+        console.print("[yellow]No stored memory found for this repository.[/yellow]")
+        return
+    if artifact_rows:
+        artifact_table = Table(title="Task-Derived Memory Artifacts")
+        artifact_table.add_column("Memory ID", no_wrap=True)
+        artifact_table.add_column("Type", no_wrap=True)
+        artifact_table.add_column("Task", no_wrap=True)
+        artifact_table.add_column("Title", overflow="fold")
+        artifact_table.add_column("Confidence", justify="right", no_wrap=True)
+        for artifact in artifact_rows:
+            artifact_table.add_row(
+                artifact.memory_id,
+                _memory_artifact_type_label(artifact.type),
+                artifact.task_id,
+                shorten(artifact.title, max_length=42),
+                f"{artifact.confidence:.2f}",
+            )
+        console.print(artifact_table)
+
+    if not memories:
+        return
+
     table = Table(title="Stored Memory")
     table.add_column("ID")
     table.add_column("Kind")
@@ -117,7 +147,10 @@ def render_memory_list(memories: list[MemoryEntry]) -> None:
     console.print(table)
 
 
-def render_memory_detail(memory: MemoryEntry) -> None:
+def render_memory_detail(memory: MemoryEntry | MemoryArtifactRecord) -> None:
+    if isinstance(memory, MemoryArtifactRecord):
+        render_memory_artifact_detail(memory)
+        return
     console.print(
         Panel.fit(
             "\n".join(
@@ -136,6 +169,94 @@ def render_memory_detail(memory: MemoryEntry) -> None:
             title="Memory Detail",
         )
     )
+
+
+def render_memory_artifact_added(artifact: MemoryArtifactRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Memory ID: [bold]{artifact.memory_id}[/bold]",
+                    f"Task ID: {artifact.task_id}",
+                    f"Type: {_memory_artifact_type_label(artifact.type)}",
+                    f"Confidence: {artifact.confidence:.2f}",
+                    "",
+                    artifact.title,
+                ]
+            ),
+            title="Memory Artifact Added",
+        )
+    )
+
+
+def render_memory_artifact_detail(
+    artifact: MemoryArtifactRecord,
+    *,
+    title: str = "Memory Artifact Detail",
+) -> None:
+    lines = [
+        f"[bold]{artifact.title}[/bold]",
+        f"Memory ID: {artifact.memory_id}",
+        f"Type: {_memory_artifact_type_label(artifact.type)}",
+        f"Task ID: {artifact.task_id}",
+        "Provenance: task-derived",
+        f"Confidence: {artifact.confidence:.2f}",
+        f"Created: {artifact.created_at.isoformat()}",
+    ]
+
+    if artifact.type == MemoryArtifactType.DID_NOT_WORK:
+        lines.extend(
+            [
+                "",
+                "What was tried:",
+                artifact.summary,
+                "",
+                "Why it failed:",
+                artifact.evidence,
+                "",
+                "Why future agents should avoid repeating it:",
+                artifact.why_it_matters,
+            ]
+        )
+    elif artifact.type == MemoryArtifactType.DESIGN_CONFLICT:
+        lines.extend(
+            [
+                "",
+                "Incompatible solution:",
+                artifact.summary,
+                "",
+                "Constraint or principle it violated:",
+                artifact.evidence,
+                "",
+                "Why it matters:",
+                artifact.why_it_matters,
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "Summary:",
+                artifact.summary,
+                "",
+                "Why it matters:",
+                artifact.why_it_matters,
+                "",
+                "Evidence:",
+                artifact.evidence,
+            ]
+        )
+
+    if artifact.apply_when:
+        lines.extend(["", "Apply when:", artifact.apply_when])
+    if artifact.avoid_when:
+        lines.extend(["", "Avoid when:", artifact.avoid_when])
+    if artifact.related_files:
+        lines.extend(["", f"Related files: {', '.join(artifact.related_files)}"])
+    if artifact.related_modules:
+        lines.extend(["", f"Related modules: {', '.join(artifact.related_modules)}"])
+
+    console.print(Panel.fit("\n".join(lines), title=title))
 
 
 def render_status(status: dict[str, str]) -> None:
@@ -170,6 +291,7 @@ def render_task_list(
     tasks: list[TaskRecord],
     *,
     attempt_counts: dict[str, int] | None = None,
+    memory_artifact_counts: dict[str, int] | None = None,
 ) -> None:
     if not tasks:
         console.print("[yellow]No tasks found for this repository.[/yellow]")
@@ -179,16 +301,19 @@ def render_task_list(
     table.add_column("Status", no_wrap=True)
     table.add_column("Title", overflow="fold")
     table.add_column("Attempts", no_wrap=True, justify="right")
+    table.add_column("Memories", no_wrap=True, justify="right")
     table.add_column("Branch", no_wrap=True)
     table.add_column("Labels", overflow="fold")
     table.add_column("Created", no_wrap=True)
     counts = attempt_counts or {}
+    artifact_counts = memory_artifact_counts or {}
     for task in tasks:
         table.add_row(
             task.task_id,
             _task_status_label(task.status),
             shorten(task.title, max_length=32),
             str(counts.get(task.task_id, 0)),
+            str(artifact_counts.get(task.task_id, 0)),
             task.branch,
             shorten(", ".join(task.labels) if task.labels else "-", max_length=18),
             task.created_at.strftime("%m-%d %H:%M"),
@@ -201,6 +326,7 @@ def render_task_detail(
     *,
     title: str = "Task Detail",
     attempts: list[AttemptRecord] | None = None,
+    artifacts: list[MemoryArtifactRecord] | None = None,
 ) -> None:
     lines = [
         f"[bold]{task.title}[/bold]",
@@ -226,6 +352,13 @@ def render_task_detail(
             lines.append(
                 f"- {attempt.attempt_id} | {_attempt_status_label(attempt.status)} | "
                 f"{attempt.kind.value} | {shorten(attempt.summary, max_length=64)}"
+            )
+    if artifacts:
+        lines.extend(["", "Memory artifacts:"])
+        for artifact in artifacts[:5]:
+            lines.append(
+                f"- {artifact.memory_id} | {_memory_artifact_type_label(artifact.type)} | "
+                f"{shorten(artifact.title, max_length=40)}"
             )
     console.print(Panel.fit("\n".join(lines), title=title))
 
@@ -317,3 +450,15 @@ def _attempt_status_label(status: AttemptStatus) -> str:
         AttemptStatus.PARTIAL: "[blue]partial[/blue]",
     }
     return styles[status]
+
+
+def _memory_artifact_type_label(artifact_type: MemoryArtifactType) -> str:
+    styles = {
+        MemoryArtifactType.FIX: "[green]fix[/green]",
+        MemoryArtifactType.DID_NOT_WORK: "[red]did_not_work[/red]",
+        MemoryArtifactType.DESIGN_CONFLICT: "[yellow]design_conflict[/yellow]",
+        MemoryArtifactType.GOTCHA: "[magenta]gotcha[/magenta]",
+        MemoryArtifactType.INVARIANT: "[blue]invariant[/blue]",
+        MemoryArtifactType.VALIDATION: "[cyan]validation[/cyan]",
+    }
+    return styles[artifact_type]

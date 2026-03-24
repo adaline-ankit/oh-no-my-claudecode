@@ -9,6 +9,7 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptStatus,
+    MemoryArtifactType,
     MemoryKind,
     TaskLifecycleError,
     TaskStatus,
@@ -22,6 +23,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_brief,
     render_ingest_result,
     render_init_summary,
+    render_memory_artifact_added,
     render_memory_detail,
     render_memory_list,
     render_status,
@@ -97,22 +99,101 @@ def memory_list_command(
         MemoryKind | None,
         typer.Option("--kind", help="Filter by memory kind."),
     ] = None,
+    artifact_type: Annotated[
+        MemoryArtifactType | None,
+        typer.Option("--type", help="Filter task-derived memory artifacts by type."),
+    ] = None,
 ) -> None:
     """List stored memory entries."""
+    if kind is not None and artifact_type is not None:
+        raise typer.Exit(code=_fatal("Use either --kind or --type, not both."))
     try:
         memories = _service().list_memories(kind=kind)
+        artifacts = _service().list_memory_artifacts(artifact_type=artifact_type)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-    render_memory_list(memories)
+    if kind is not None:
+        artifacts = []
+    if artifact_type is not None:
+        memories = []
+    render_memory_list(memories, artifacts=artifacts)
+
+
+@memory_app.command("add")
+def memory_add_command(
+    task_id: str,
+    artifact_type: Annotated[
+        MemoryArtifactType,
+        typer.Option("--type", help="Task-derived memory artifact type."),
+    ],
+    title: Annotated[str, typer.Option("--title", help="Short artifact title.")],
+    summary: Annotated[
+        str,
+        typer.Option("--summary", help="What worked, failed, or conflicted."),
+    ],
+    why_it_matters: Annotated[
+        str,
+        typer.Option(
+            "--why-it-matters",
+            help="Why a future agent or engineer should keep this in mind.",
+        ),
+    ] = "Preserve this task outcome so future work starts from a known result.",
+    apply_when: Annotated[
+        str | None,
+        typer.Option("--apply-when", help="When this guidance should be used."),
+    ] = None,
+    avoid_when: Annotated[
+        str | None,
+        typer.Option("--avoid-when", help="When this guidance should not be applied."),
+    ] = None,
+    evidence: Annotated[
+        str,
+        typer.Option("--evidence", help="Evidence from the task or attempts."),
+    ] = "Recorded from task-scoped work.",
+    related_files: Annotated[
+        list[str] | None,
+        typer.Option("--file", help="Repeat to record related file paths."),
+    ] = None,
+    related_modules: Annotated[
+        list[str] | None,
+        typer.Option("--module", help="Repeat to record related module names."),
+    ] = None,
+    confidence: Annotated[
+        float,
+        typer.Option("--confidence", min=0.0, max=1.0, help="Confidence from 0.0 to 1.0."),
+    ] = 0.7,
+) -> None:
+    """Add a task-derived memory artifact."""
+    try:
+        artifact = _service().add_memory_artifact(
+            task_id,
+            artifact_type=artifact_type,
+            title=title,
+            summary=summary,
+            why_it_matters=why_it_matters,
+            apply_when=apply_when,
+            avoid_when=avoid_when,
+            evidence=evidence,
+            related_files=related_files or [],
+            related_modules=related_modules or [],
+            confidence=confidence,
+        )
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_memory_artifact_added(artifact)
 
 
 @memory_app.command("show")
 def memory_show_command(memory_id: str) -> None:
     """Show a single memory entry with provenance."""
     try:
-        memory = _service().get_memory(memory_id)
+        artifact = _service().get_memory_artifact(memory_id)
+        memory = _service().get_memory(memory_id) if artifact is None else None
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+    if artifact is not None:
+        render_memory_detail(artifact)
+        return
     if memory is None:
         raise typer.Exit(code=_fatal(f"Memory not found: {memory_id}"))
     render_memory_detail(memory)
@@ -145,9 +226,14 @@ def task_list_command() -> None:
     try:
         tasks = _service().list_tasks()
         attempt_counts = _service().attempt_counts_by_task()
+        memory_artifact_counts = _service().memory_artifact_counts_by_task()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-    render_task_list(tasks, attempt_counts=attempt_counts)
+    render_task_list(
+        tasks,
+        attempt_counts=attempt_counts,
+        memory_artifact_counts=memory_artifact_counts,
+    )
 
 
 @task_app.command("show")
@@ -156,11 +242,12 @@ def task_show_command(task_id: str) -> None:
     try:
         task = _service().get_task(task_id)
         attempts = _service().list_attempts_for_task(task_id)
+        artifacts = _service().list_memory_artifacts_for_task(task_id)
     except (FileNotFoundError, LookupError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     if task is None:
         raise typer.Exit(code=_fatal(f"Task not found: {task_id}"))
-    render_task_detail(task, attempts=attempts)
+    render_task_detail(task, attempts=attempts, artifacts=artifacts)
 
 
 @task_app.command("end")

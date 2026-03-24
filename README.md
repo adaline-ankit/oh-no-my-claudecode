@@ -35,6 +35,7 @@ It:
 - stores that memory locally in `.onmc/memory.db`
 - stores durable task lifecycle records for active engineering work
 - stores task-scoped attempt logs, including failed or partial approaches
+- stores task-derived memory artifacts that preserve what worked, what did not, and what conflicted with design constraints
 - compiles concise task briefs for coding agents
 - stays useful without paid model access
 
@@ -44,8 +45,9 @@ It:
 - `onmc ingest` indexes repo docs, file tree metadata, git history, hotspots, and validation hints.
 - `onmc task ...` tracks task-scoped engineering memory with status, branch, labels, and final summaries.
 - `onmc attempt ...` records what was tried during a task, including evidence and touched files.
-- `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
+- `onmc memory add ...` captures durable task-derived artifacts such as fixes, failed approaches, and design conflicts.
 - `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
+- `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
 
 ### Supported P0 Memory Kinds
@@ -82,6 +84,7 @@ onmc init
 onmc ingest
 onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate test churn around cache invalidation" --label bug
 onmc attempt add task-abc123def4 --summary "Try a narrower cache fix first" --kind fix_attempt --status tried --file src/cache.py
+onmc memory add task-abc123def4 --type did_not_work --title "Cache-only patch missed the worker path" --summary "Tried a narrower change in src/cache.py only"
 onmc brief --task "fix flaky Redis cache invalidation bug"
 ```
 
@@ -112,7 +115,10 @@ onmc task status task-abc123def4 --status blocked
 onmc task end task-abc123def4 --status solved --summary "Fixed cache churn and updated tests"
 onmc brief --task "fix flaky Redis cache invalidation bug"
 onmc memory list
+onmc memory add task-abc123def4 --type fix --title "Route worker refresh through the cache boundary" --summary "The shared cache boundary fixed the flaky path"
+onmc memory list --type did_not_work
 onmc memory list --kind hotspot
+onmc memory show artifact-123abc
 onmc memory show hotspot-123abc
 onmc status
 ```
@@ -157,6 +163,7 @@ High-level modules:
 - `storage/`: local SQLite-backed state
 - `task lifecycle`: durable task records stored alongside repo memory
 - `attempt logging`: task-linked records of tried, rejected, partial, or successful approaches
+- `memory artifacts`: durable task-derived findings that preserve fixes, failures, conflicts, gotchas, invariants, and validation guidance
 - `ingest/`: doc parsing, git parsing, repo scanning, and heuristic extraction
 - `brief/`: task-to-context compilation and ranking
 - `core/`: repo discovery and service orchestration
@@ -175,9 +182,9 @@ More detail:
 - Memory extraction is heuristic and intentionally conservative.
 - Task lifecycle is local-only and intentionally lightweight.
 - Attempt logging is structured but intentionally manual in P0.
+- Task-derived memory artifacts are manually authored in P0 rather than auto-summarized.
 - Brief ranking is token-based, not embedding-based.
 - Git-derived patterns are suggestions, not guarantees.
-- Manual memory authoring is schema-ready but not yet exposed as a CLI workflow.
 - Optional LLM enhancement hooks are not implemented in P0.
 
 ## Roadmap
@@ -190,6 +197,7 @@ Short-term roadmap items live in [docs/roadmap.md](docs/roadmap.md). Near-term e
 - deeper diff-aware briefing for active branches
 - richer task-memory capture tied to briefs and outcomes
 - linking briefs and outcomes back to recorded attempts
+- artifact-assisted brief compilation that can surface prior failed approaches before a task starts
 
 ## Development
 

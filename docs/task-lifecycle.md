@@ -111,3 +111,33 @@ onmc attempt update attempt-abc123def4 \
 ```
 
 Task detail output includes a compact attempts summary when attempts exist, and task list output includes an attempt count so related attempts are discoverable quickly.
+
+## Memory Artifacts
+
+Tasks can also produce durable memory artifacts when the work reveals something future agents should reuse or avoid.
+
+Common memory artifact commands:
+
+```bash
+onmc memory add task-abc123def4 \
+  --type fix \
+  --title "Route worker refresh through the cache boundary" \
+  --summary "The shared cache boundary fixed the flaky path." \
+  --why-it-matters "This was the change that actually stabilized the worker refresh flow." \
+  --apply-when "A task touches cache invalidation behavior from worker code." \
+  --evidence "The paired worker test passed only after the shared boundary was restored."
+
+onmc memory add task-abc123def4 \
+  --type did_not_work \
+  --title "Cache-only patch missed the worker path" \
+  --summary "Tried narrowing the change to src/cache.py only." \
+  --why-it-matters "Future agents should not repeat a cache-only patch for this failure mode." \
+  --avoid-when "The failing path crosses worker refresh logic." \
+  --evidence "The worker test still failed after the narrow change."
+
+onmc memory list
+onmc memory list --type did_not_work
+onmc memory show artifact-abc123def4
+```
+
+Task detail output includes a compact memory artifact summary so it is easy to see what a task produced beyond raw attempts.

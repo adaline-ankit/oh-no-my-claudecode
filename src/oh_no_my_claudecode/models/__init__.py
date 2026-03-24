@@ -13,6 +13,10 @@ from oh_no_my_claudecode.models.config import (
 )
 from oh_no_my_claudecode.models.ingest import FileStat, IngestResult, ProjectHints, RepoFileRecord
 from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
+from oh_no_my_claudecode.models.memory_artifact import (
+    MemoryArtifactRecord,
+    MemoryArtifactType,
+)
 from oh_no_my_claudecode.models.task import (
     TERMINAL_TASK_STATUSES,
     TaskLifecycleError,
@@ -30,6 +34,8 @@ __all__ = [
     "IngestResult",
     "IngestSettings",
     "MemoryEntry",
+    "MemoryArtifactRecord",
+    "MemoryArtifactType",
     "MemoryKind",
     "ProjectConfig",
     "ProjectHints",

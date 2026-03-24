@@ -25,6 +25,8 @@ from oh_no_my_claudecode.models import (
     AttemptStatus,
     BriefArtifact,
     IngestResult,
+    MemoryArtifactRecord,
+    MemoryArtifactType,
     MemoryEntry,
     MemoryKind,
     ProjectConfig,
@@ -70,6 +72,58 @@ class OnmcService:
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).get(memory_id)
+
+    def add_memory_artifact(
+        self,
+        task_id: str,
+        *,
+        artifact_type: MemoryArtifactType,
+        title: str,
+        summary: str,
+        why_it_matters: str,
+        apply_when: str | None,
+        avoid_when: str | None,
+        evidence: str,
+        related_files: list[str],
+        related_modules: list[str],
+        confidence: float,
+    ) -> MemoryArtifactRecord:
+        _, _, storage = self._load_context()
+        self._require_task(storage, task_id)
+        artifact = MemoryArtifactRecord(
+            memory_id=f"artifact-{secrets.token_hex(5)}",
+            task_id=task_id,
+            type=artifact_type,
+            title=title,
+            summary=summary,
+            why_it_matters=why_it_matters,
+            apply_when=apply_when,
+            avoid_when=avoid_when,
+            evidence=evidence,
+            related_files=related_files,
+            related_modules=related_modules,
+            confidence=confidence,
+            created_at=utc_now(),
+        )
+        storage.create_memory_artifact(artifact)
+        return artifact
+
+    def list_memory_artifacts(
+        self,
+        *,
+        artifact_type: MemoryArtifactType | None = None,
+    ) -> list[MemoryArtifactRecord]:
+        _, _, storage = self._load_context()
+        return storage.list_memory_artifacts(artifact_type=artifact_type)
+
+    def list_memory_artifacts_for_task(self, task_id: str) -> list[MemoryArtifactRecord]:
+        _, _, storage = self._load_context()
+        self._require_task(storage, task_id)
+        return storage.list_memory_artifacts_for_task(task_id)
+
+    def get_memory_artifact(self, memory_id: str) -> MemoryArtifactRecord | None:
+        _, _, storage = self._load_context()
+        return storage.get_memory_artifact(memory_id)
 
     def add_attempt(
         self,
@@ -175,6 +229,10 @@ class OnmcService:
         _, _, storage = self._load_context()
         return storage.list_attempt_counts_by_task()
 
+    def memory_artifact_counts_by_task(self) -> dict[str, int]:
+        _, _, storage = self._load_context()
+        return storage.list_memory_artifact_counts_by_task()
+
     def update_task_status(self, task_id: str, status: TaskStatus) -> TaskRecord:
         if status == TaskStatus.OPEN:
             msg = (
@@ -216,6 +274,7 @@ class OnmcService:
             "memories": str(storage.memory_count()),
             "tasks": str(storage.task_count()),
             "attempts": str(storage.attempt_count()),
+            "memory_artifacts": str(storage.memory_artifact_count()),
             "last_ingest_at": meta.get("last_ingest_at", "never"),
             "storage_path": database_path(config, repo_root).as_posix(),
             "state_dir": state_dir(config, repo_root).as_posix(),
