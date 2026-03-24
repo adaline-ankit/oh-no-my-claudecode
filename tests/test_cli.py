@@ -37,7 +37,7 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
             "--provider",
             "anthropic",
             "--model",
-            "claude-3-5-haiku-latest",
+            "claude-3-7-sonnet-20250219",
         ],
     )
     assert llm_configure_result.exit_code == 0

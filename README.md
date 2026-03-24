@@ -98,7 +98,7 @@ onmc task start --title "Fix flaky Redis cache invalidation bug" --description "
 onmc attempt add task-abc123def4 --summary "Try a narrower cache fix first" --kind fix_attempt --status tried --file src/cache.py
 onmc memory add task-abc123def4 --type did_not_work --title "Cache-only patch missed the worker path" --summary "Tried a narrower change in src/cache.py only"
 onmc brief --task "fix flaky Redis cache invalidation bug"
-onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 ```
 
@@ -135,7 +135,7 @@ onmc memory list --kind hotspot
 onmc memory show artifact-123abc
 onmc memory show hotspot-123abc
 onmc llm status
-onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 onmc review --task "review the proposed cache invalidation fix" --input-file notes.md
 onmc teach --task "explain the cache invalidation bug" --task-id task-abc123def4
@@ -258,10 +258,20 @@ Supported providers today:
 Configure one locally:
 
 ```bash
-onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
 export ANTHROPIC_API_KEY=...
 onmc llm status
 ```
+
+If Anthropic returns `model not found`, the configured model ID is stale or unavailable to your key. Run:
+
+```bash
+curl https://api.anthropic.com/v1/models \
+  --header "x-api-key: $ANTHROPIC_API_KEY" \
+  --header "anthropic-version: 2023-06-01"
+```
+
+Then re-run `onmc llm configure --model ...` with one of the returned IDs.
 
 Secrets are always read from environment variables. ONMC stores the provider name, model, and API key env var name in `.onmc/config.yaml`, but it does not write the secret value itself.
 
@@ -279,7 +289,7 @@ Then the configured provider is asked for structured JSON output, and ONMC store
 Example:
 
 ```bash
-onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
 export ANTHROPIC_API_KEY=...
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 onmc review --task "review the proposed cache fix" --input-file plan.md

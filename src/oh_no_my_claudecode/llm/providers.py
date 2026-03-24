@@ -43,6 +43,8 @@ class AnthropicProvider(BaseLLMProvider):
                 "x-api-key": self.api_key,
                 "anthropic-version": "2023-06-01",
             },
+            provider=LLMProviderType.ANTHROPIC,
+            model=model,
         )
         content = raw.get("content", [])
         text = "".join(
@@ -93,6 +95,8 @@ class OpenAIProvider(BaseLLMProvider):
                 "messages": messages,
             },
             headers={"Authorization": f"Bearer {self.api_key}"},
+            provider=LLMProviderType.OPENAI,
+            model=model,
         )
         choices = raw.get("choices", [])
         message = choices[0].get("message", {}) if choices else {}
@@ -139,6 +143,8 @@ def _post_json(
     payload: dict[str, Any],
     *,
     headers: Mapping[str, str],
+    provider: LLMProviderType | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     request = urllib.request.Request(  # noqa: S310 - provider URLs are fixed https endpoints.
         url,
@@ -157,7 +163,12 @@ def _post_json(
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
-        msg = f"Provider request failed with HTTP {exc.code}: {details}"
+        msg = _provider_http_error_message(
+            status_code=exc.code,
+            details=details,
+            provider=provider,
+            model=model,
+        )
         raise LLMProviderError(msg) from exc
     except urllib.error.URLError as exc:
         msg = f"Provider request failed: {exc.reason}"
@@ -172,6 +183,50 @@ def _post_json(
         msg = "Provider response root was not a JSON object."
         raise LLMProviderError(msg)
     return payload_obj
+
+
+def _provider_http_error_message(
+    *,
+    status_code: int,
+    details: str,
+    provider: LLMProviderType | None,
+    model: str | None,
+) -> str:
+    parsed_details = _parse_error_payload(details)
+    if (
+        provider == LLMProviderType.ANTHROPIC
+        and status_code == 404
+        and parsed_details.get("error_type") == "not_found_error"
+        and parsed_details.get("error_message", "").startswith("model:")
+    ):
+        requested_model = model or parsed_details["error_message"].split("model:", 1)[1].strip()
+        return (
+            "Anthropic model not found: "
+            f"{requested_model}. Configure a current model such as "
+            "`claude-sonnet-4-20250514` or `claude-3-7-sonnet-20250219`, "
+            "or list models available to your key with "
+            "`curl https://api.anthropic.com/v1/models --header \"x-api-key: $ANTHROPIC_API_KEY\" "
+            "--header \"anthropic-version: 2023-06-01\"`."
+        )
+    return f"Provider request failed with HTTP {status_code}: {details}"
+
+
+def _parse_error_payload(details: str) -> dict[str, str]:
+    try:
+        payload = json.loads(details)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        return {}
+    error_type = error.get("type")
+    error_message = error.get("message")
+    return {
+        "error_type": error_type if isinstance(error_type, str) else "",
+        "error_message": error_message if isinstance(error_message, str) else "",
+    }
 
 
 def _default_mock_response(prompt: str) -> str:
