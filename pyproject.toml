@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oh-no-my-claudecode"
+version = "0.1.0"
+description = "Repo-native memory and context compiler for coding agents."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+authors = [
+  { name = "ONMC Contributors" }
+]
+keywords = ["coding-agents", "developer-tools", "cli", "context", "memory"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Version Control :: Git",
+  "Topic :: Utilities",
+]
+dependencies = [
+  "pydantic>=2.8,<3.0",
+  "pyyaml>=6.0,<7.0",
+  "rich>=13.7,<15.0",
+  "typer>=0.12,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "mypy>=1.11,<2.0",
+  "pre-commit>=3.8,<5.0",
+  "pytest>=8.3,<9.0",
+]
+
+[project.scripts]
+onmc = "oh_no_my_claudecode.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oh_no_my_claudecode"]
+
+[tool.pytest.ini_options]
+addopts = "-q -p no:capture"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "S", "C4", "SIM"]
+ignore = ["S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["oh_no_my_claudecode"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true
