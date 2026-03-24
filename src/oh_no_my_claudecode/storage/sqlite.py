@@ -16,6 +16,8 @@ from oh_no_my_claudecode.models import (
     MemoryKind,
     RepoFileRecord,
     SourceType,
+    TaskOutputRecord,
+    TaskOutputType,
     TaskRecord,
     TaskStatus,
 )
@@ -111,6 +113,23 @@ class SQLiteStorage:
                     ON memory_artifacts(task_id);
                 CREATE INDEX IF NOT EXISTS idx_memory_artifacts_type
                     ON memory_artifacts(type);
+                CREATE TABLE IF NOT EXISTS task_outputs (
+                    output_id TEXT PRIMARY KEY,
+                    task_id TEXT,
+                    type TEXT NOT NULL,
+                    task_text TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    content_json TEXT NOT NULL,
+                    markdown_path TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_task_outputs_task_id
+                    ON task_outputs(task_id);
+                CREATE INDEX IF NOT EXISTS idx_task_outputs_type
+                    ON task_outputs(type);
                 """
             )
 
@@ -569,6 +588,63 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM memory_artifacts").fetchone()
         return int(row["count"])
 
+    def create_task_output(self, output: TaskOutputRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO task_outputs (
+                    output_id,
+                    task_id,
+                    type,
+                    task_text,
+                    provider,
+                    model,
+                    summary,
+                    content_json,
+                    markdown_path,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._task_output_values(output),
+            )
+
+    def get_task_output(self, output_id: str) -> TaskOutputRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM task_outputs WHERE output_id = ?",
+                (output_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_task_output(row)
+
+    def list_task_outputs_for_task(self, task_id: str) -> list[TaskOutputRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM task_outputs
+                WHERE task_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                """,
+                (task_id,),
+            ).fetchall()
+        return [self._row_to_task_output(row) for row in rows]
+
+    def task_output_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM task_outputs").fetchone()
+        return int(row["count"])
+
+    def list_task_output_counts_by_task(self) -> dict[str, int]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT task_id, COUNT(*) AS count
+                FROM task_outputs
+                WHERE task_id IS NOT NULL
+                GROUP BY task_id
+                """
+            ).fetchall()
+        return {str(row["task_id"]): int(row["count"]) for row in rows}
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -710,4 +786,38 @@ class SQLiteStorage:
             json.dumps(artifact.related_modules),
             artifact.confidence,
             isoformat_utc(artifact.created_at),
+        )
+
+    @staticmethod
+    def _row_to_task_output(row: sqlite3.Row) -> TaskOutputRecord:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Task output row is missing created_at."
+            raise ValueError(msg)
+        return TaskOutputRecord(
+            output_id=row["output_id"],
+            task_id=row["task_id"],
+            type=TaskOutputType(row["type"]),
+            task_text=row["task_text"],
+            provider=row["provider"],
+            model=row["model"],
+            summary=row["summary"],
+            content_json=row["content_json"],
+            markdown_path=row["markdown_path"],
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _task_output_values(output: TaskOutputRecord) -> tuple[Any, ...]:
+        return (
+            output.output_id,
+            output.task_id,
+            output.type.value,
+            output.task_text,
+            output.provider,
+            output.model,
+            output.summary,
+            output.content_json,
+            output.markdown_path,
+            isoformat_utc(output.created_at),
         )

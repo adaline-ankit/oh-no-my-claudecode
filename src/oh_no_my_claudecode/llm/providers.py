@@ -120,10 +120,13 @@ class MockProvider(BaseLLMProvider):
         self.response_text = response_text
 
     def generate(self, request: LLMGenerationRequest) -> LLMGenerationResponse:
+        text = self.response_text
+        if text == "mock response":
+            text = _default_mock_response(request.prompt)
         return LLMGenerationResponse(
             provider=LLMProviderType.MOCK,
             model=self.settings.model or "mock-model",
-            text=self.response_text,
+            text=text,
             raw={
                 "prompt": request.prompt,
                 "system_prompt": request.system_prompt,
@@ -169,3 +172,40 @@ def _post_json(
         msg = "Provider response root was not a JSON object."
         raise LLMProviderError(msg)
     return payload_obj
+
+
+def _default_mock_response(prompt: str) -> str:
+    if '"approach_summary"' in prompt:
+        return json.dumps(
+            {
+                "approach_summary": (
+                    "Inspect the highest-signal repo files first and preserve "
+                    "recorded constraints."
+                ),
+                "files_to_inspect": ["src/cache.py", "tests/test_cache.py"],
+                "risks": ["Repeated churn in the cache path may hide coupling."],
+                "validations": ["pytest", "ruff check ."],
+                "confidence": "medium",
+            }
+        )
+    if '"required_tests"' in prompt:
+        return json.dumps(
+            {
+                "concerns": ["The proposed change may miss the caller path."],
+                "assumptions": ["Existing tests cover the failing path."],
+                "likely_regressions": ["Worker refresh behavior."],
+                "required_tests": ["tests/test_cache.py"],
+            }
+        )
+    if '"mental_model_upgrade"' in prompt:
+        return json.dumps(
+            {
+                "reasoning_map": ["Trace the execution boundary", "Check prior failed paths"],
+                "system_lesson": "Shared boundaries should be treated as system constraints.",
+                "false_lead_analysis": ["Do not overfit to a single high-churn file."],
+                "mental_model_upgrade": (
+                    "Start from execution flow and invariants before narrowing to local edits."
+                ),
+            }
+        )
+    return json.dumps({"summary": "mocked"})

@@ -37,6 +37,7 @@ from oh_no_my_claudecode.models.task import (
     TaskRecord,
     TaskStatus,
 )
+from oh_no_my_claudecode.models.task_output import TaskOutputRecord, TaskOutputType
 
 __all__ = [
     "AttemptKind",
@@ -70,5 +71,7 @@ __all__ = [
     "TeachModeOutput",
     "TaskLifecycleError",
     "TaskRecord",
+    "TaskOutputRecord",
+    "TaskOutputType",
     "TaskStatus",
 ]

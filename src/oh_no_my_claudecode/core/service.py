@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import secrets
 from pathlib import Path
+from typing import TypeVar
 
 from oh_no_my_claudecode.brief.compiler import compile_brief
 from oh_no_my_claudecode.config import (
@@ -37,13 +39,27 @@ from oh_no_my_claudecode.models import (
     MemoryEntry,
     MemoryKind,
     ProjectConfig,
+    ReviewModeOutput,
+    SolveModeOutput,
     TaskLifecycleError,
+    TaskOutputRecord,
+    TaskOutputType,
     TaskRecord,
     TaskStatus,
+    TeachModeOutput,
 )
 from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.utils.text import shorten, tokenize
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
+
+StructuredOutputT = TypeVar(
+    "StructuredOutputT",
+    SolveModeOutput,
+    ReviewModeOutput,
+    TeachModeOutput,
+)
+MAX_PROMPT_CHARS = 24_000
 
 
 class OnmcService:
@@ -124,6 +140,55 @@ class OnmcService:
             attempts=attempts,
             memory_artifacts=memory_artifacts,
         )
+
+    def solve(
+        self,
+        *,
+        task: str,
+        task_id: str | None = None,
+    ) -> tuple[Path, TaskOutputRecord, SolveModeOutput]:
+        return self._run_llm_mode(
+            mode=AgentMode.SOLVE,
+            task=task,
+            task_id=task_id,
+            response_model=SolveModeOutput,
+        )
+
+    def review(
+        self,
+        *,
+        task: str,
+        external_input: str | None = None,
+    ) -> tuple[Path, TaskOutputRecord, ReviewModeOutput]:
+        return self._run_llm_mode(
+            mode=AgentMode.REVIEW,
+            task=task,
+            task_id=None,
+            response_model=ReviewModeOutput,
+            external_input=external_input,
+        )
+
+    def teach(
+        self,
+        *,
+        task: str,
+        task_id: str | None = None,
+    ) -> tuple[Path, TaskOutputRecord, TeachModeOutput]:
+        return self._run_llm_mode(
+            mode=AgentMode.TEACH,
+            task=task,
+            task_id=task_id,
+            response_model=TeachModeOutput,
+        )
+
+    def get_task_output(self, output_id: str) -> TaskOutputRecord | None:
+        _, _, storage = self._load_context()
+        return storage.get_task_output(output_id)
+
+    def list_task_outputs_for_task(self, task_id: str) -> list[TaskOutputRecord]:
+        _, _, storage = self._load_context()
+        self._require_task(storage, task_id)
+        return storage.list_task_outputs_for_task(task_id)
 
     def add_memory_artifact(
         self,
@@ -285,6 +350,10 @@ class OnmcService:
         _, _, storage = self._load_context()
         return storage.list_memory_artifact_counts_by_task()
 
+    def task_output_counts_by_task(self) -> dict[str, int]:
+        _, _, storage = self._load_context()
+        return storage.list_task_output_counts_by_task()
+
     def update_task_status(self, task_id: str, status: TaskStatus) -> TaskRecord:
         if status == TaskStatus.OPEN:
             msg = (
@@ -327,12 +396,167 @@ class OnmcService:
             "tasks": str(storage.task_count()),
             "attempts": str(storage.attempt_count()),
             "memory_artifacts": str(storage.memory_artifact_count()),
+            "task_outputs": str(storage.task_output_count()),
             "last_ingest_at": meta.get("last_ingest_at", "never"),
             "storage_path": database_path(config, repo_root).as_posix(),
             "state_dir": state_dir(config, repo_root).as_posix(),
             "doc_globs": ", ".join(config.ingest.doc_globs),
             "max_brief_memories": str(config.brief.max_memories),
         }
+
+    def _run_llm_mode(
+        self,
+        *,
+        mode: AgentMode,
+        task: str,
+        task_id: str | None,
+        response_model: type[StructuredOutputT],
+        external_input: str | None = None,
+    ) -> tuple[Path, TaskOutputRecord, StructuredOutputT]:
+        repo_root, config, storage = self._load_context()
+        provider = provider_from_settings(config.llm)
+        task_record = self._resolve_task_context(
+            repo_root=repo_root,
+            storage=storage,
+            task_text=task,
+            task_id=task_id,
+        )
+        attempts = storage.list_attempts_for_task(task_id) if task_id else []
+        memory_artifacts = storage.list_memory_artifacts_for_task(task_id) if task_id else []
+        brief = compile_brief(repo_root, config, storage, task)
+        prompt = compile_prompt(
+            mode=mode,
+            task=task_record,
+            brief=brief,
+            attempts=attempts,
+            memory_artifacts=memory_artifacts,
+            supplemental_input=external_input,
+        )
+        self._ensure_prompt_size(prompt)
+        structured = provider.generate_structured(
+            prompt.to_generation_request(),
+            response_model,
+        )
+        output_path = self._write_llm_output_markdown(
+            repo_root=repo_root,
+            config=config,
+            mode=mode,
+            task=task,
+            prompt=prompt,
+            brief=brief,
+            structured=structured,
+            provider=provider,
+        )
+        output = TaskOutputRecord(
+            output_id=f"output-{secrets.token_hex(5)}",
+            task_id=task_id,
+            type=_output_type_for_mode(mode),
+            task_text=task,
+            provider=config.llm.provider.value if config.llm.provider else "unconfigured",
+            model=config.llm.model or "unknown",
+            summary=_summary_for_structured_output(mode, structured),
+            content_json=json.dumps(structured.model_dump(mode="json"), sort_keys=True),
+            markdown_path=output_path.as_posix(),
+            created_at=utc_now(),
+        )
+        storage.create_task_output(output)
+        return repo_root, output, structured
+
+    @staticmethod
+    def _resolve_task_context(
+        *,
+        repo_root: Path,
+        storage: SQLiteStorage,
+        task_text: str,
+        task_id: str | None,
+    ) -> TaskRecord:
+        if task_id is None:
+            now = utc_now()
+            return TaskRecord(
+                task_id="adhoc-task",
+                title=shorten(task_text, max_length=80),
+                description=task_text,
+                status=TaskStatus.OPEN,
+                created_at=now,
+                started_at=None,
+                ended_at=None,
+                repo_root=repo_root.as_posix(),
+                branch=current_branch(repo_root),
+                labels=[],
+                final_summary=None,
+                final_outcome=None,
+                confidence=None,
+            )
+        task = OnmcService._require_task(storage, task_id)
+        if not _task_matches_text(task, task_text):
+            msg = (
+                f"Provided task text does not appear to match task {task_id}. "
+                "Use matching task text or omit --task-id."
+            )
+            raise ValueError(msg)
+        return task
+
+    @staticmethod
+    def _ensure_prompt_size(prompt: CompiledPrompt) -> None:
+        total_length = len(prompt.system_prompt) + len(prompt.prompt)
+        if total_length > MAX_PROMPT_CHARS:
+            msg = (
+                "Compiled prompt is too large for the current P0 flow. "
+                "Reduce the task scope or input file size."
+            )
+            raise ValueError(msg)
+
+    def _write_llm_output_markdown(
+        self,
+        *,
+        repo_root: Path,
+        config: ProjectConfig,
+        mode: AgentMode,
+        task: str,
+        prompt: CompiledPrompt,
+        brief: BriefArtifact,
+        structured: StructuredOutputT,
+        provider: BaseLLMProvider,
+    ) -> Path:
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-{mode.value}.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        markdown = "\n".join(
+            [
+                f"# ONMC {mode.value.title()} Output",
+                "",
+                f"- Task: {task}",
+                (
+                    "- Provider: "
+                    f"{config.llm.provider.value if config.llm.provider else 'unconfigured'}"
+                ),
+                f"- Model: {config.llm.model or 'unknown'}",
+                f"- Repo: `{repo_root.as_posix()}`",
+                "",
+                "## Summary",
+                "",
+                _summary_for_structured_output(mode, structured),
+                "",
+                "## Structured Output",
+                "",
+                "```json",
+                json.dumps(structured.model_dump(mode="json"), indent=2, sort_keys=True),
+                "```",
+                "",
+                "## Files To Inspect",
+                "",
+                *[f"1. `{path}`" for path in brief.files_to_inspect[:8]],
+                "",
+                "## Validation Checklist",
+                "",
+                *[f"- {item}" for item in brief.validation_checklist[:6]],
+                "",
+                "## Prompt Sections",
+                "",
+                *[f"- {title}" for title in prompt.section_titles],
+            ]
+        ).strip() + "\n"
+        output_path.write_text(markdown, encoding="utf-8")
+        return output_path
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)
@@ -360,3 +584,33 @@ class OnmcService:
             msg = f"Attempt not found: {attempt_id}"
             raise LookupError(msg)
         return attempt
+
+
+def _task_matches_text(task: TaskRecord, task_text: str) -> bool:
+    candidate_tokens = set(tokenize(task_text))
+    if not candidate_tokens:
+        return False
+    task_tokens = set(tokenize(f"{task.title} {task.description}"))
+    overlap = candidate_tokens & task_tokens
+    return len(overlap) >= min(3, len(candidate_tokens))
+
+
+def _output_type_for_mode(mode: AgentMode) -> TaskOutputType:
+    if mode == AgentMode.SOLVE:
+        return TaskOutputType.SOLVE_OUTPUT
+    if mode == AgentMode.REVIEW:
+        return TaskOutputType.REVIEW_OUTPUT
+    return TaskOutputType.TEACHING_OUTPUT
+
+
+def _summary_for_structured_output(mode: AgentMode, structured: StructuredOutputT) -> str:
+    if mode == AgentMode.SOLVE and isinstance(structured, SolveModeOutput):
+        return shorten(structured.approach_summary, max_length=180)
+    if mode == AgentMode.REVIEW and isinstance(structured, ReviewModeOutput):
+        if structured.concerns:
+            return shorten(structured.concerns[0], max_length=180)
+        return "Review completed with no major concerns recorded."
+    if isinstance(structured, TeachModeOutput):
+        return shorten(structured.system_lesson, max_length=180)
+    msg = f"Unsupported structured output for mode {mode.value}."
+    raise TypeError(msg)

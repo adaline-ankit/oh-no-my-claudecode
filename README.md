@@ -47,6 +47,7 @@ It:
 - `onmc attempt ...` records what was tried during a task, including evidence and touched files.
 - `onmc memory add ...` captures durable task-derived artifacts such as fixes, failed approaches, and design conflicts.
 - `onmc llm ...` configures optional Anthropic or OpenAI provider settings without requiring secrets in config files.
+- `onmc solve`, `onmc review`, and `onmc teach` execute optional LLM-backed modes against ONMC's deterministic memory spine.
 - `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
 - `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
@@ -97,6 +98,8 @@ onmc task start --title "Fix flaky Redis cache invalidation bug" --description "
 onmc attempt add task-abc123def4 --summary "Try a narrower cache fix first" --kind fix_attempt --status tried --file src/cache.py
 onmc memory add task-abc123def4 --type did_not_work --title "Cache-only patch missed the worker path" --summary "Tried a narrower change in src/cache.py only"
 onmc brief --task "fix flaky Redis cache invalidation bug"
+onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 ```
 
 This creates local state under:
@@ -133,6 +136,9 @@ onmc memory show artifact-123abc
 onmc memory show hotspot-123abc
 onmc llm status
 onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
+onmc review --task "review the proposed cache invalidation fix" --input-file notes.md
+onmc teach --task "explain the cache invalidation bug" --task-id task-abc123def4
 onmc status
 ```
 
@@ -168,6 +174,16 @@ Given a task string, `onmc brief` ranks:
 
 The output is written to `.onmc/compiled/<timestamp>-brief.md`.
 
+### Optional LLM-Backed Modes
+
+When an optional provider is configured, ONMC can execute three end-to-end modes:
+
+- `onmc solve`: compile the deterministic brief plus task memory, then ask the model for the next best approach
+- `onmc review`: critique a proposed fix or plan, optionally with external notes from `--input-file`
+- `onmc teach`: turn the same memory spine into a staff-style reasoning and learning artifact
+
+These commands still follow the ONMC design: memory and provenance are compiled first, model reasoning happens second, and outputs are stored locally under `.onmc/compiled/`. Task-linked runs are also persisted in SQLite so they remain visible from `onmc task show`.
+
 ## Architecture Overview
 
 High-level modules:
@@ -199,7 +215,7 @@ More detail:
 - Task-derived memory artifacts are manually authored in P0 rather than auto-summarized.
 - Brief ranking is token-based, not embedding-based.
 - Git-derived patterns are suggestions, not guarantees.
-- Optional LLM enhancement hooks are not implemented in P0.
+- LLM-backed solve/review/teach commands are explicit and single-shot; there is still no autonomous loop or tool orchestration.
 
 ## Roadmap
 
@@ -232,7 +248,7 @@ pre-commit install
 
 ## Optional LLM Providers
 
-The core ONMC workflow stays useful without a model API. The LLM layer is optional and currently limited to provider configuration plus a small generation interface for future features.
+The core ONMC workflow stays useful without a model API. The LLM layer is optional and currently limited to provider configuration, prompt compilation, and single-shot `solve` / `review` / `teach` generation.
 
 Supported providers today:
 
@@ -257,6 +273,18 @@ Prompt compilation stays separate from provider calls. ONMC first builds a struc
 - prior attempts
 - negative memory such as `did_not_work` and `design_conflict`
 - validation guidance and provenance
+
+Then the configured provider is asked for structured JSON output, and ONMC stores the rendered result under `.onmc/compiled/` plus a task-linked output record when `--task-id` is provided.
+
+Example:
+
+```bash
+onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+export ANTHROPIC_API_KEY=...
+onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
+onmc review --task "review the proposed cache fix" --input-file plan.md
+onmc teach --task "teach the cache invalidation reasoning" --task-id task-abc123def4
+```
 
 That keeps the memory/context layer inspectable before any model is asked to reason.
 

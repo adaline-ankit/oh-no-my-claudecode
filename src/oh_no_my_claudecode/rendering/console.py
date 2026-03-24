@@ -16,8 +16,12 @@ from oh_no_my_claudecode.models import (
     MemoryArtifactType,
     MemoryEntry,
     ProjectConfig,
+    ReviewModeOutput,
+    SolveModeOutput,
+    TaskOutputRecord,
     TaskRecord,
     TaskStatus,
+    TeachModeOutput,
 )
 from oh_no_my_claudecode.utils.text import shorten
 
@@ -302,6 +306,67 @@ def render_llm_configured(settings: LLMSettings) -> None:
     )
 
 
+def render_solve_output(output: SolveModeOutput, record: TaskOutputRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    output.approach_summary,
+                    "",
+                    f"Output ID: {record.output_id}",
+                    f"Task ID: {record.task_id or '-'}",
+                    f"Model: {record.provider}/{record.model}",
+                ]
+            ),
+            title="Solve",
+        )
+    )
+    _render_output_list("Inspect First", output.files_to_inspect)
+    _render_output_list("Risks", output.risks, ordered=False)
+    _render_output_list("Validations", output.validations, ordered=False)
+    console.print(f"[cyan]Confidence:[/cyan] {output.confidence}")
+
+
+def render_review_output(output: ReviewModeOutput, record: TaskOutputRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Output ID: {record.output_id}",
+                    f"Task ID: {record.task_id or '-'}",
+                    f"Model: {record.provider}/{record.model}",
+                ]
+            ),
+            title="Review",
+        )
+    )
+    _render_output_list("Concerns", output.concerns, ordered=False)
+    _render_output_list("Assumptions", output.assumptions, ordered=False)
+    _render_output_list("Likely Regressions", output.likely_regressions, ordered=False)
+    _render_output_list("Required Tests", output.required_tests, ordered=False)
+
+
+def render_teach_output(output: TeachModeOutput, record: TaskOutputRecord) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    output.system_lesson,
+                    "",
+                    f"Output ID: {record.output_id}",
+                    f"Task ID: {record.task_id or '-'}",
+                    f"Model: {record.provider}/{record.model}",
+                ]
+            ),
+            title="Teach",
+        )
+    )
+    _render_output_list("Reasoning Map", output.reasoning_map, ordered=False)
+    _render_output_list("False Leads", output.false_lead_analysis, ordered=False)
+    console.print("[cyan]Mental Model Upgrade:[/cyan]")
+    console.print(output.mental_model_upgrade)
+
+
 def render_task_started(task: TaskRecord) -> None:
     console.print(
         Panel.fit(
@@ -326,6 +391,7 @@ def render_task_list(
     *,
     attempt_counts: dict[str, int] | None = None,
     memory_artifact_counts: dict[str, int] | None = None,
+    task_output_counts: dict[str, int] | None = None,
 ) -> None:
     if not tasks:
         console.print("[yellow]No tasks found for this repository.[/yellow]")
@@ -334,23 +400,22 @@ def render_task_list(
     table.add_column("Task ID", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     table.add_column("Title", overflow="fold")
-    table.add_column("Attempts", no_wrap=True, justify="right")
-    table.add_column("Memories", no_wrap=True, justify="right")
+    table.add_column("A/M/O", no_wrap=True, justify="right")
     table.add_column("Branch", no_wrap=True)
-    table.add_column("Labels", overflow="fold")
-    table.add_column("Created", no_wrap=True)
     counts = attempt_counts or {}
     artifact_counts = memory_artifact_counts or {}
+    output_counts = task_output_counts or {}
     for task in tasks:
         table.add_row(
             task.task_id,
             _task_status_label(task.status),
-            shorten(task.title, max_length=32),
-            str(counts.get(task.task_id, 0)),
-            str(artifact_counts.get(task.task_id, 0)),
+            shorten(task.title, max_length=40),
+            (
+                f"{counts.get(task.task_id, 0)}/"
+                f"{artifact_counts.get(task.task_id, 0)}/"
+                f"{output_counts.get(task.task_id, 0)}"
+            ),
             task.branch,
-            shorten(", ".join(task.labels) if task.labels else "-", max_length=18),
-            task.created_at.strftime("%m-%d %H:%M"),
         )
     console.print(table)
 
@@ -361,6 +426,7 @@ def render_task_detail(
     title: str = "Task Detail",
     attempts: list[AttemptRecord] | None = None,
     artifacts: list[MemoryArtifactRecord] | None = None,
+    outputs: list[TaskOutputRecord] | None = None,
 ) -> None:
     lines = [
         f"[bold]{task.title}[/bold]",
@@ -393,6 +459,13 @@ def render_task_detail(
             lines.append(
                 f"- {artifact.memory_id} | {_memory_artifact_type_label(artifact.type)} | "
                 f"{shorten(artifact.title, max_length=40)}"
+            )
+    if outputs:
+        lines.extend(["", "LLM outputs:"])
+        for output in outputs[:5]:
+            lines.append(
+                f"- {output.output_id} | {output.type.value} | "
+                f"{shorten(output.summary, max_length=56)}"
             )
     console.print(Panel.fit("\n".join(lines), title=title))
 
@@ -484,6 +557,16 @@ def _attempt_status_label(status: AttemptStatus) -> str:
         AttemptStatus.PARTIAL: "[blue]partial[/blue]",
     }
     return styles[status]
+
+
+def _render_output_list(title: str, items: list[str], *, ordered: bool = True) -> None:
+    console.print(Markdown(f"## {title}"))
+    if not items:
+        console.print("[yellow]- none[/yellow]")
+        return
+    for item in items:
+        prefix = "1." if ordered else "-"
+        console.print(f"{prefix} {item}")
 
 
 def _memory_artifact_type_label(artifact_type: MemoryArtifactType) -> str:

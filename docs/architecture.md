@@ -54,6 +54,14 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - builds a structured prompt for `solve`, `review`, or `teach`
    - injects negative memory and validation guidance before any model call
 
+8. `onmc solve`, `onmc review`, `onmc teach`
+   - resolve the configured provider from `.onmc/config.yaml` plus environment variables
+   - compile the mode-specific prompt from ONMC memory and brief context
+   - request structured JSON output from the provider
+   - render a concise terminal view
+   - write `.onmc/compiled/<timestamp>-<mode>.md`
+   - persist a task-linked output record when a task context is provided
+
 ## Module Responsibilities
 
 ### `core/`
@@ -72,6 +80,7 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - memory catalog
 - task catalog
 - attempt catalog
+- task output catalog
 - repo file metadata
 - git-derived file stats
 - ingest metadata
@@ -168,4 +177,5 @@ The LLM layer is intentionally narrow in this step:
 - generation is not wired into `ingest` or an autonomous task loop yet
 - prompt compilation is wired, but model execution is still an explicit later step
 - there is no orchestration, tool calling, or autonomous solve loop yet
+- solve/review/teach are explicit single-shot commands, not a background agent runtime
 - secrets stay in environment variables

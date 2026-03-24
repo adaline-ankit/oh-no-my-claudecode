@@ -34,6 +34,7 @@ def compile_prompt(
     brief: BriefArtifact,
     attempts: list[AttemptRecord],
     memory_artifacts: list[MemoryArtifactRecord],
+    supplemental_input: str | None = None,
 ) -> CompiledPrompt:
     section_map = _build_section_map(
         mode=mode,
@@ -41,6 +42,7 @@ def compile_prompt(
         brief=brief,
         attempts=attempts,
         memory_artifacts=memory_artifacts,
+        supplemental_input=supplemental_input,
     )
     output_contract = _output_contract(mode)
     sections = [f"## {title}\n{content}".rstrip() for title, content in section_map]
@@ -72,8 +74,9 @@ def _build_section_map(
     brief: BriefArtifact,
     attempts: list[AttemptRecord],
     memory_artifacts: list[MemoryArtifactRecord],
+    supplemental_input: str | None,
 ) -> list[tuple[str, str]]:
-    return [
+    sections = [
         ("Mode", _mode_goal(mode)),
         ("Instructions", _shared_instructions(mode)),
         ("Task", _task_block(task)),
@@ -84,6 +87,9 @@ def _build_section_map(
         ("Validation Guidance", _validation_block(brief, memory_artifacts)),
         ("Provenance", _provenance_block(brief, memory_artifacts)),
     ]
+    if supplemental_input:
+        sections.insert(6, ("External Input", _external_input_block(supplemental_input)))
+    return sections
 
 
 def _system_prompt(mode: AgentMode) -> str:
@@ -267,6 +273,10 @@ def _provenance_block(
     for artifact in memory_artifacts[:3]:
         lines.append(f"- Task artifact: {artifact.type.value}:{artifact.memory_id}")
     return "\n".join(lines)
+
+
+def _external_input_block(supplemental_input: str) -> str:
+    return shorten(supplemental_input.strip(), max_length=2200)
 
 
 def _output_contract(mode: AgentMode) -> str:

@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
 from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptStatus,
@@ -29,11 +30,14 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_artifact_added,
     render_memory_detail,
     render_memory_list,
+    render_review_output,
+    render_solve_output,
     render_status,
     render_task_detail,
     render_task_list,
     render_task_started,
     render_task_updated,
+    render_teach_output,
 )
 
 app = typer.Typer(
@@ -96,6 +100,76 @@ def status_command() -> None:
         render_status(_service().status())
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+
+@app.command("solve")
+def solve_command(
+    task: Annotated[str, typer.Option("--task", help="Engineering task to solve.")],
+    task_id: Annotated[
+        str | None,
+        typer.Option("--task-id", help="Optional existing task to link this output to."),
+    ] = None,
+) -> None:
+    """Compile repo-aware context and ask the configured LLM for the next best approach."""
+    try:
+        _, record, output = _service().solve(task=task, task_id=task_id)
+    except (
+        FileNotFoundError,
+        LookupError,
+        ValueError,
+        LLMConfigurationError,
+        LLMProviderError,
+    ) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_solve_output(output, record)
+    console.print(f"[green]Wrote output:[/green] {record.markdown_path}")
+
+
+@app.command("review")
+def review_command(
+    task: Annotated[str, typer.Option("--task", help="Task or proposed change to review.")],
+    input_file: Annotated[
+        Path | None,
+        typer.Option("--input-file", help="Optional file containing plan, diff, or notes."),
+    ] = None,
+) -> None:
+    """Compile repo-aware review context and critique the proposed approach."""
+    try:
+        external_input = input_file.read_text(encoding="utf-8") if input_file else None
+        _, record, output = _service().review(task=task, external_input=external_input)
+    except (
+        FileNotFoundError,
+        OSError,
+        ValueError,
+        LLMConfigurationError,
+        LLMProviderError,
+    ) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_review_output(output, record)
+    console.print(f"[green]Wrote output:[/green] {record.markdown_path}")
+
+
+@app.command("teach")
+def teach_command(
+    task: Annotated[str, typer.Option("--task", help="Task to explain and teach from.")],
+    task_id: Annotated[
+        str | None,
+        typer.Option("--task-id", help="Optional existing task to link this output to."),
+    ] = None,
+) -> None:
+    """Compile repo-aware teaching context and generate a learning artifact."""
+    try:
+        _, record, output = _service().teach(task=task, task_id=task_id)
+    except (
+        FileNotFoundError,
+        LookupError,
+        ValueError,
+        LLMConfigurationError,
+        LLMProviderError,
+    ) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_teach_output(output, record)
+    console.print(f"[green]Wrote output:[/green] {record.markdown_path}")
 
 
 @llm_app.command("status")
@@ -279,12 +353,14 @@ def task_list_command() -> None:
         tasks = _service().list_tasks()
         attempt_counts = _service().attempt_counts_by_task()
         memory_artifact_counts = _service().memory_artifact_counts_by_task()
+        task_output_counts = _service().task_output_counts_by_task()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_task_list(
         tasks,
         attempt_counts=attempt_counts,
         memory_artifact_counts=memory_artifact_counts,
+        task_output_counts=task_output_counts,
     )
 
 
@@ -295,11 +371,12 @@ def task_show_command(task_id: str) -> None:
         task = _service().get_task(task_id)
         attempts = _service().list_attempts_for_task(task_id)
         artifacts = _service().list_memory_artifacts_for_task(task_id)
+        outputs = _service().list_task_outputs_for_task(task_id)
     except (FileNotFoundError, LookupError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     if task is None:
         raise typer.Exit(code=_fatal(f"Task not found: {task_id}"))
-    render_task_detail(task, attempts=attempts, artifacts=artifacts)
+    render_task_detail(task, attempts=attempts, artifacts=artifacts, outputs=outputs)
 
 
 @task_app.command("end")
