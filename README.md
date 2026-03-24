@@ -46,6 +46,7 @@ It:
 - `onmc task ...` tracks task-scoped engineering memory with status, branch, labels, and final summaries.
 - `onmc attempt ...` records what was tried during a task, including evidence and touched files.
 - `onmc memory add ...` captures durable task-derived artifacts such as fixes, failed approaches, and design conflicts.
+- `onmc llm ...` configures optional Anthropic or OpenAI provider settings without requiring secrets in config files.
 - `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
 - `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
@@ -120,6 +121,8 @@ onmc memory list --type did_not_work
 onmc memory list --kind hotspot
 onmc memory show artifact-123abc
 onmc memory show hotspot-123abc
+onmc llm status
+onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
 onmc status
 ```
 
@@ -215,6 +218,25 @@ Optional pre-commit hooks:
 ```bash
 pre-commit install
 ```
+
+## Optional LLM Providers
+
+The core ONMC workflow stays useful without a model API. The LLM layer is optional and currently limited to provider configuration plus a small generation interface for future features.
+
+Supported providers today:
+
+- `anthropic`
+- `openai`
+
+Configure one locally:
+
+```bash
+onmc llm configure --provider anthropic --model claude-3-5-haiku-latest
+export ANTHROPIC_API_KEY=...
+onmc llm status
+```
+
+Secrets are always read from environment variables. ONMC stores the provider name, model, and API key env var name in `.onmc/config.yaml`, but it does not write the secret value itself.
 
 ## Publishing
 

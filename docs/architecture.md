@@ -44,6 +44,11 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - builds a concise markdown brief
    - writes `.onmc/compiled/<timestamp>-brief.md`
 
+6. `onmc llm configure`
+   - persists optional provider settings in `.onmc/config.yaml`
+   - keeps secrets in environment variables instead of local config
+   - prepares a minimal generation interface for future LLM-backed features
+
 ## Module Responsibilities
 
 ### `core/`
@@ -89,6 +94,13 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - impacted-file ranking
 - risk and validation checklist generation
 - reading-list generation
+
+### `llm/`
+
+- provider abstraction
+- config-to-provider resolution
+- optional Anthropic and OpenAI text generation
+- mock provider support for tests
 
 ### `rendering/`
 
@@ -136,3 +148,12 @@ Typed memory makes it easier to:
 ### Why no embeddings in P0
 
 Embeddings add infrastructure, tuning overhead, and a false sense of intelligence. Token/path overlap plus git churn is a credible first slice for a repo-local tool.
+
+## Current LLM Boundary
+
+The LLM layer is intentionally narrow in this step:
+
+- provider configuration is optional
+- generation is not wired into `brief`, `ingest`, or task execution yet
+- there is no orchestration, tool calling, or solve mode
+- secrets stay in environment variables

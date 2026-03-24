@@ -16,6 +16,8 @@ from oh_no_my_claudecode.config import (
 )
 from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root
 from oh_no_my_claudecode.ingest.pipeline import run_ingest
+from oh_no_my_claudecode.llm import default_api_key_env_var, llm_status, provider_from_settings
+from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
 from oh_no_my_claudecode.models import (
     TERMINAL_ATTEMPT_STATUSES,
@@ -25,6 +27,9 @@ from oh_no_my_claudecode.models import (
     AttemptStatus,
     BriefArtifact,
     IngestResult,
+    LLMProviderType,
+    LLMSettings,
+    LLMStatus,
     MemoryArtifactRecord,
     MemoryArtifactType,
     MemoryEntry,
@@ -72,6 +77,35 @@ class OnmcService:
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).get(memory_id)
+
+    def configure_llm(
+        self,
+        *,
+        provider: LLMProviderType,
+        model: str,
+        api_key_env_var: str | None,
+        temperature: float,
+        max_tokens: int,
+    ) -> tuple[Path, LLMSettings]:
+        repo_root, config, _ = self._load_context()
+        settings = LLMSettings(
+            provider=provider,
+            model=model,
+            api_key_env_var=api_key_env_var or default_api_key_env_var(provider),
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        updated_config = config.model_copy(update={"llm": settings})
+        write_config(updated_config, repo_root)
+        return repo_root, settings
+
+    def llm_status(self) -> tuple[Path, LLMStatus]:
+        repo_root, config, _ = self._load_context()
+        return repo_root, llm_status(config.llm)
+
+    def llm_provider(self) -> BaseLLMProvider:
+        _, config, _ = self._load_context()
+        return provider_from_settings(config.llm)
 
     def add_memory_artifact(
         self,

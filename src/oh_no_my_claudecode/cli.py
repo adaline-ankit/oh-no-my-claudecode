@@ -9,6 +9,7 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptStatus,
+    LLMProviderType,
     MemoryArtifactType,
     MemoryKind,
     TaskLifecycleError,
@@ -23,6 +24,8 @@ from oh_no_my_claudecode.rendering.console import (
     render_brief,
     render_ingest_result,
     render_init_summary,
+    render_llm_configured,
+    render_llm_status,
     render_memory_artifact_added,
     render_memory_detail,
     render_memory_list,
@@ -41,9 +44,11 @@ app = typer.Typer(
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 task_app = typer.Typer(help="Manage task lifecycle state.", no_args_is_help=True)
 attempt_app = typer.Typer(help="Track task-scoped attempts.", no_args_is_help=True)
+llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
+app.add_typer(llm_app, name="llm")
 
 
 def main() -> None:
@@ -91,6 +96,53 @@ def status_command() -> None:
         render_status(_service().status())
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+
+@llm_app.command("status")
+def llm_status_command() -> None:
+    """Show optional LLM provider configuration status."""
+    try:
+        _, status = _service().llm_status()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_llm_status(status)
+
+
+@llm_app.command("configure")
+def llm_configure_command(
+    provider: Annotated[
+        LLMProviderType,
+        typer.Option("--provider", help="LLM provider to configure."),
+    ],
+    model: Annotated[str, typer.Option("--model", help="Default model name.")],
+    api_key_env_var: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key-env-var",
+            help="Environment variable to read the provider API key from.",
+        ),
+    ] = None,
+    temperature: Annotated[
+        float,
+        typer.Option("--temperature", min=0.0, max=2.0, help="Default temperature."),
+    ] = 0.0,
+    max_tokens: Annotated[
+        int,
+        typer.Option("--max-tokens", min=1, help="Default maximum output tokens."),
+    ] = 1024,
+) -> None:
+    """Persist optional LLM provider settings to the local ONMC config."""
+    try:
+        _, settings = _service().configure_llm(
+            provider=provider,
+            model=model,
+            api_key_env_var=api_key_env_var,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_llm_configured(settings)
 
 
 @memory_app.command("list")

@@ -12,6 +12,13 @@ from oh_no_my_claudecode.models.config import (
     StorageSettings,
 )
 from oh_no_my_claudecode.models.ingest import FileStat, IngestResult, ProjectHints, RepoFileRecord
+from oh_no_my_claudecode.models.llm import (
+    LLMGenerationRequest,
+    LLMGenerationResponse,
+    LLMProviderType,
+    LLMSettings,
+    LLMStatus,
+)
 from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.models.memory_artifact import (
     MemoryArtifactRecord,
@@ -33,6 +40,11 @@ __all__ = [
     "FileStat",
     "IngestResult",
     "IngestSettings",
+    "LLMGenerationRequest",
+    "LLMGenerationResponse",
+    "LLMProviderType",
+    "LLMSettings",
+    "LLMStatus",
     "MemoryEntry",
     "MemoryArtifactRecord",
     "MemoryArtifactType",

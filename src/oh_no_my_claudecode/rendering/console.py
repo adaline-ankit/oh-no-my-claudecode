@@ -10,6 +10,8 @@ from oh_no_my_claudecode.models import (
     AttemptStatus,
     BriefArtifact,
     IngestResult,
+    LLMSettings,
+    LLMStatus,
     MemoryArtifactRecord,
     MemoryArtifactType,
     MemoryEntry,
@@ -266,6 +268,38 @@ def render_status(status: dict[str, str]) -> None:
     for key, value in status.items():
         table.add_row(key, value)
     console.print(table)
+
+
+def render_llm_status(status: LLMStatus) -> None:
+    table = Table(title="LLM Status")
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("configured", "yes" if status.configured else "no")
+    table.add_row("provider", status.provider.value if status.provider else "unconfigured")
+    table.add_row("model", status.model or "-")
+    table.add_row("api_key_env_var", status.api_key_env_var or "-")
+    table.add_row("credentials_present", "yes" if status.credentials_present else "no")
+    console.print(table)
+
+
+def render_llm_configured(settings: LLMSettings) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    (
+                        "Provider: "
+                        f"[bold]{settings.provider.value if settings.provider else '-'}[/bold]"
+                    ),
+                    f"Model: {settings.model or '-'}",
+                    f"API key env var: {settings.api_key_env_var or '-'}",
+                    f"Temperature: {settings.temperature:.2f}",
+                    f"Max tokens: {settings.max_tokens}",
+                ]
+            ),
+            title="LLM Configuration Saved",
+        )
+    )
 
 
 def render_task_started(task: TaskRecord) -> None:

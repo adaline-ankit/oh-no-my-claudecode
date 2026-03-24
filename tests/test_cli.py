@@ -24,6 +24,30 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
     assert status_result.exit_code == 0
     assert "repo_root" in status_result.stdout
 
+    llm_status_result = runner.invoke(app, ["llm", "status"])
+    assert llm_status_result.exit_code == 0
+    assert "LLM Status" in llm_status_result.stdout
+    assert "unconfigured" in llm_status_result.stdout
+
+    llm_configure_result = runner.invoke(
+        app,
+        [
+            "llm",
+            "configure",
+            "--provider",
+            "anthropic",
+            "--model",
+            "claude-3-5-haiku-latest",
+        ],
+    )
+    assert llm_configure_result.exit_code == 0
+    assert "LLM Configuration Saved" in llm_configure_result.stdout
+
+    llm_status_after_configure_result = runner.invoke(app, ["llm", "status"])
+    assert llm_status_after_configure_result.exit_code == 0
+    assert "anthropic" in llm_status_after_configure_result.stdout
+    assert "ANTHROPIC_API_KEY" in llm_status_after_configure_result.stdout
+
     memory_result = runner.invoke(app, ["memory", "list"])
     assert memory_result.exit_code == 0
     assert "Stored Memory" in memory_result.stdout

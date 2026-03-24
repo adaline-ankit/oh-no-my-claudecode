@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from oh_no_my_claudecode.models.llm import LLMSettings
+
 
 class StorageSettings(BaseModel):
     state_dir: str = ".onmc"
@@ -66,3 +68,4 @@ class ProjectConfig(BaseModel):
     storage: StorageSettings = Field(default_factory=StorageSettings)
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     brief: BriefSettings = Field(default_factory=BriefSettings)
+    llm: LLMSettings = Field(default_factory=LLMSettings)
