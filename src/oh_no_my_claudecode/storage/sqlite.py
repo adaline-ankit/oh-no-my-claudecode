@@ -236,6 +236,19 @@ class SQLiteStorage:
             )
         return new_count, updated_count
 
+    def delete_generated_memories_by_source_refs(self, source_refs: list[str]) -> int:
+        if not source_refs:
+            return 0
+        with self._connect() as conn:
+            deleted = 0
+            for source_ref in dict.fromkeys(source_refs):
+                cursor = conn.execute(
+                    "DELETE FROM memories WHERE source_type != ? AND source_ref = ?",
+                    (SourceType.MANUAL.value, source_ref),
+                )
+                deleted += int(cursor.rowcount)
+        return deleted
+
     def list_memories(self, *, kind: MemoryKind | None = None) -> list[MemoryEntry]:
         query = "SELECT * FROM memories"
         params: tuple[Any, ...] = ()
@@ -259,6 +272,30 @@ class SQLiteStorage:
                 """
                 INSERT INTO repo_files (path, extension, is_test, size_bytes)
                 VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        record.path,
+                        record.extension,
+                        int(record.is_test),
+                        record.size_bytes,
+                    )
+                    for record in records
+                ],
+            )
+
+    def upsert_repo_files(self, records: list[RepoFileRecord]) -> None:
+        if not records:
+            return
+        with self._connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO repo_files (path, extension, is_test, size_bytes)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    extension=excluded.extension,
+                    is_test=excluded.is_test,
+                    size_bytes=excluded.size_bytes
                 """,
                 [
                     (
@@ -297,6 +334,40 @@ class SQLiteStorage:
                     is_test,
                     top_level_dir
                 ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        stat.path,
+                        stat.change_count,
+                        stat.recent_change_count,
+                        isoformat_utc(stat.last_modified_at) if stat.last_modified_at else None,
+                        int(stat.is_test),
+                        stat.top_level_dir,
+                    )
+                    for stat in stats
+                ],
+            )
+
+    def upsert_file_stats(self, stats: list[FileStat]) -> None:
+        if not stats:
+            return
+        with self._connect() as conn:
+            conn.executemany(
+                """
+                INSERT INTO file_stats (
+                    path,
+                    change_count,
+                    recent_change_count,
+                    last_modified_at,
+                    is_test,
+                    top_level_dir
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    change_count=excluded.change_count,
+                    recent_change_count=excluded.recent_change_count,
+                    last_modified_at=excluded.last_modified_at,
+                    is_test=excluded.is_test,
+                    top_level_dir=excluded.top_level_dir
                 """,
                 [
                     (

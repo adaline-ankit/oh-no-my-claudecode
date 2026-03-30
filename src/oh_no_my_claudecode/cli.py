@@ -75,11 +75,35 @@ def init_command() -> None:
     render_init_summary(repo_root.as_posix(), config)
 
 
-@app.command("ingest")
-def ingest_command() -> None:
+@app.command("ingest", context_settings={"allow_extra_args": True, "ignore_unknown_options": False})
+def ingest_command(
+    ctx: typer.Context,
+    files: Annotated[
+        bool,
+        typer.Option("--files", help="Ingest only the file paths passed after this flag."),
+    ] = False,
+    install_hook: Annotated[
+        bool,
+        typer.Option("--install-hook", help="Install the ONMC incremental post-commit hook."),
+    ] = False,
+) -> None:
     """Ingest repo knowledge into local structured memory."""
     try:
-        _, result = _service().ingest()
+        if files and install_hook:
+            raise typer.Exit(code=_fatal("Choose either --files or --install-hook, not both."))
+        if install_hook:
+            _, hook_path = _service().install_ingest_hook()
+            console.print("[green]Incremental ingest hook installed.[/green]")
+            console.print(f"[green]Hook path:[/green] {hook_path}")
+            return
+        if files:
+            if not ctx.args:
+                raise typer.Exit(code=_fatal("Provide one or more file paths after --files."))
+            _, result = _service().ingest_files(list(ctx.args))
+        else:
+            if ctx.args:
+                raise typer.Exit(code=_fatal("Unexpected trailing arguments."))
+            _, result = _service().ingest()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_ingest_result(result)

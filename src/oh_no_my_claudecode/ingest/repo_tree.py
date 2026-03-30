@@ -45,6 +45,50 @@ def scan_repository_files(repo_root: Path, *, exclude_dirs: list[str]) -> list[R
     return records
 
 
+def scan_selected_files(
+    repo_root: Path,
+    *,
+    paths: list[str],
+    exclude_dirs: list[str],
+) -> tuple[list[RepoFileRecord], list[str]]:
+    records: list[RepoFileRecord] = []
+    warnings: list[str] = []
+    excluded = set(exclude_dirs)
+    seen: set[str] = set()
+
+    for raw_path in paths:
+        candidate = Path(raw_path)
+        file_path = candidate if candidate.is_absolute() else repo_root / candidate
+        try:
+            relative = relative_path(repo_root, file_path)
+        except ValueError:
+            warnings.append(f"Skipped path outside repo: {raw_path}")
+            continue
+        if relative in seen:
+            continue
+        seen.add(relative)
+        if any(part in excluded for part in Path(relative).parts):
+            warnings.append(f"Skipped excluded path: {relative}")
+            continue
+        if not file_path.exists() or not file_path.is_file():
+            warnings.append(f"Skipped missing file: {relative}")
+            continue
+        if relative.startswith(".onmc/"):
+            warnings.append(f"Skipped ONMC state file: {relative}")
+            continue
+        records.append(
+            RepoFileRecord(
+                path=relative,
+                extension=file_path.suffix.lower() or None,
+                is_test=is_test_path(relative),
+                size_bytes=file_path.stat().st_size,
+            )
+        )
+
+    records.sort(key=lambda item: item.path)
+    return records, warnings
+
+
 def detect_project_hints(repo_root: Path, repo_files: list[RepoFileRecord]) -> ProjectHints:
     file_paths = {record.path for record in repo_files}
     hints = ProjectHints()

@@ -26,7 +26,7 @@ from oh_no_my_claudecode.hooks import (
     uninstall_claude_hooks,
     write_continuation_brief,
 )
-from oh_no_my_claudecode.ingest.pipeline import run_ingest
+from oh_no_my_claudecode.ingest.pipeline import run_ingest, run_ingest_files
 from oh_no_my_claudecode.llm import default_api_key_env_var, llm_status, provider_from_settings
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
@@ -93,6 +93,11 @@ class OnmcService:
     def ingest(self) -> tuple[Path, IngestResult]:
         repo_root, config, storage = self._load_context()
         return repo_root, run_ingest(repo_root, config, storage)
+
+    def ingest_files(self, paths: list[str]) -> tuple[Path, IngestResult]:
+        """Ingest only the specified repo-relative files."""
+        repo_root, config, storage = self._load_context()
+        return repo_root, run_ingest_files(repo_root, config, storage, paths)
 
     def compile_brief(self, task: str) -> tuple[Path, BriefArtifact]:
         repo_root, config, storage = self._load_context()
@@ -229,6 +234,33 @@ class OnmcService:
             if "onmc sync --commit" not in existing:
                 updated = existing.rstrip() + "\n" + snippet
                 hook_path.write_text(updated, encoding="utf-8")
+        else:
+            hook_path.write_text(snippet, encoding="utf-8")
+        hook_path.chmod(0o755)
+        return repo_root, hook_path
+
+    def install_ingest_hook(self) -> tuple[Path, Path]:
+        """Install a post-commit hook that re-ingests changed files and exports sync state."""
+        repo_root = discover_repo_root(self.cwd)
+        hook_path = repo_root / ".git" / "hooks" / "post-commit"
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        snippet = "\n".join(
+            [
+                "#!/bin/sh",
+                "# ONMC incremental ingest hook",
+                "# Re-ingests only files changed in the last commit",
+                'CHANGED=$(git diff HEAD~1 --name-only 2>/dev/null || echo "")',
+                'if [ -n "$CHANGED" ]; then',
+                "  echo \"$CHANGED\" | tr '\\n' '\\0' | xargs -0 onmc ingest --files",
+                "fi",
+                "onmc sync --commit 2>/dev/null || true",
+                "",
+            ]
+        )
+        if hook_path.exists():
+            existing = hook_path.read_text(encoding="utf-8")
+            if "# ONMC incremental ingest hook" not in existing:
+                hook_path.write_text(existing.rstrip() + "\n" + snippet, encoding="utf-8")
         else:
             hook_path.write_text(snippet, encoding="utf-8")
         hook_path.chmod(0o755)
