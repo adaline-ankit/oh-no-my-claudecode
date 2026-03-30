@@ -7,6 +7,7 @@ import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
+from oh_no_my_claudecode.mcp_server import run_mcp_server
 from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptStatus,
@@ -154,6 +155,22 @@ def sync_command(
         "post-commit hook installed. Memory will export to .agent-memory/ on every commit."
     )
     console.print(f"[green]Hook path:[/green] {hook_path}")
+
+
+@app.command("serve")
+def serve_command(
+    mcp: Annotated[
+        bool,
+        typer.Option("--mcp", help="Run the read-only ONMC MCP server over stdio."),
+    ] = False,
+) -> None:
+    """Serve ONMC over the requested runtime protocol."""
+    if not mcp:
+        raise typer.Exit(code=_fatal("Use `onmc serve --mcp` to run the MCP server."))
+    try:
+        run_mcp_server(Path.cwd())
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
 
 
 @app.command("solve")
