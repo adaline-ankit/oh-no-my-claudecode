@@ -5,7 +5,7 @@ import secrets
 from pathlib import Path
 from typing import TypeVar
 
-from oh_no_my_claudecode.brief.compiler import compile_brief
+from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
 from oh_no_my_claudecode.config import (
     compiled_dir,
     config_exists,
@@ -52,6 +52,7 @@ from oh_no_my_claudecode.models import (
     ProjectConfig,
     ReviewModeOutput,
     SolveModeOutput,
+    SourceType,
     TaskLifecycleError,
     TaskOutputRecord,
     TaskOutputType,
@@ -63,7 +64,7 @@ from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync import export_agent_memory, restore_agent_memory
 from oh_no_my_claudecode.sync.schema import SyncResult
-from oh_no_my_claudecode.utils.text import shorten, tokenize
+from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 StructuredOutputT = TypeVar(
@@ -237,9 +238,61 @@ class OnmcService:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).list(kind=kind)
 
+    def add_manual_memory(
+        self,
+        *,
+        kind: MemoryKind,
+        title: str,
+        summary: str,
+        task_id: str | None = None,
+    ) -> MemoryEntry:
+        """Create or update a manual memory entry."""
+        _, _, storage = self._load_context()
+        now = utc_now()
+        source_ref = f"task:{task_id}" if task_id else "manual:api"
+        tags = [kind.value]
+        if task_id:
+            tags.append(task_id)
+        entry = MemoryEntry(
+            id=stable_id(kind.value, title, summary, source_ref, prefix="manual"),
+            kind=kind,
+            title=title,
+            summary=summary,
+            details=summary,
+            source_type=SourceType.MANUAL,
+            source_ref=source_ref,
+            tags=unique_preserve(tags),
+            confidence=0.75,
+            created_at=now,
+            updated_at=now,
+        )
+        storage.upsert_memories([entry])
+        return storage.get_memory(entry.id) or entry
+
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).get(memory_id)
+
+    def search_memories(self, files: list[str]) -> list[MemoryEntry]:
+        """Return repo memories ranked for the provided file paths."""
+        _, _, storage = self._load_context()
+        query = " ".join(files)
+        candidates = storage.list_memories()
+        ranked: list[tuple[float, MemoryEntry]] = []
+        file_tokens = set(tokenize(query))
+        for memory in candidates:
+            source_text = " ".join([memory.source_ref, *memory.tags, memory.title, memory.summary])
+            source_tokens = set(tokenize(source_text))
+            score = float(len(file_tokens & source_tokens) * 4) + memory.confidence
+            if any(path == memory.source_ref or path in memory.source_ref for path in files):
+                score += 4.0
+            ranked.append((score, memory))
+
+        ranked.sort(key=lambda item: (-item[0], item[1].title))
+        selected = [memory for score, memory in ranked if score > 0][:8]
+        if selected:
+            return selected
+        return score_memories(query, candidates)[:5]
 
     def configure_llm(
         self,
