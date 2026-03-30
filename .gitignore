@@ -11,4 +11,4 @@ dist/
 *.egg-info/
 .coverage
 htmlcov/
-
+.env
