@@ -4,6 +4,7 @@ import shutil
 from importlib import resources
 from pathlib import Path
 
+import onmc
 from oh_no_my_claudecode import OnmcRepo, init
 
 
@@ -85,3 +86,8 @@ def test_py_typed_marker_is_packaged() -> None:
     marker = resources.files("oh_no_my_claudecode").joinpath("py.typed")
 
     assert marker.is_file()
+
+
+def test_onmc_import_alias_exposes_public_api() -> None:
+    assert onmc.OnmcRepo is OnmcRepo
+    assert onmc.init is init

@@ -9,20 +9,26 @@ Shipped in this repo:
 - SQLite memory store
 - task lifecycle foundation
 - task attempt logging
+- git-portable `.agent-memory/` sync
+- Claude Code compaction hooks + continuation snapshots
+- typed public Python API
+- read-only MCP server
 - doc ingestion
 - git-history ingestion
 - hotspot and git-pattern extraction
 - task brief compilation
+- incremental ingest for selected files + post-commit hook
 - memory inspection commands
 - tests, linting, CI, and packaging scaffolding
 
 ## P1
 
 - manual memory CRUD
-- incremental ingest with stale-entry pruning by source fingerprint
+- stale-entry pruning by source fingerprint
 - richer test-mapping heuristics
 - branch-aware briefing
-- memory import/export
+- MCP write tools
+- richer Claude Code session-state capture beyond compaction snapshots
 
 ## P2
 

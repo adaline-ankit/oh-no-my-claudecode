@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oh-no-my-claudecode"
-version = "0.1.0"
+version = "0.2.0"
 description = "Repo-native memory and context compiler for coding agents."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -44,7 +44,11 @@ dev = [
 onmc = "oh_no_my_claudecode.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/oh_no_my_claudecode"]
+packages = ["src/oh_no_my_claudecode", "src/onmc"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/oh_no_my_claudecode/py.typed" = "oh_no_my_claudecode/py.typed"
+"src/onmc/py.typed" = "onmc/py.typed"
 
 [tool.pytest.ini_options]
 addopts = "-q -p no:capture"

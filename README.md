@@ -46,11 +46,16 @@ It:
 - `onmc task ...` tracks task-scoped engineering memory with status, branch, labels, and final summaries.
 - `onmc attempt ...` records what was tried during a task, including evidence and touched files.
 - `onmc memory add ...` captures durable task-derived artifacts such as fixes, failed approaches, and design conflicts.
+- `onmc sync ...` exports repo memory to `.agent-memory/`, restores it on fresh machines, and can install a post-commit export hook.
+- `onmc hooks ...` installs Claude Code pre/post-compaction hooks and compiles a continuation brief after compaction.
+- `onmc serve --mcp` exposes ONMC state as a read-only MCP server for on-demand context pulls mid-session.
+- `onmc ingest --files ...` and `onmc ingest --install-hook` support lightweight incremental ingest after commits.
 - `onmc llm ...` configures optional Anthropic or OpenAI provider settings without requiring secrets in config files.
 - `onmc solve`, `onmc review`, and `onmc teach` execute optional LLM-backed modes against ONMC's deterministic memory spine.
 - `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
 - `onmc brief --task "..."` produces a compact markdown brief and pretty terminal output.
 - `onmc status` reports repo root, ingest state, storage location, and config summary.
+- `import onmc` exposes the same repo, memory, task, hook, and sync operations as a typed Python API.
 
 ## Agent Modes
 
@@ -94,10 +99,13 @@ Inside any git repository:
 ```bash
 onmc init
 onmc ingest
+onmc sync --restore
 onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate test churn around cache invalidation" --label bug
 onmc attempt add task-abc123def4 --summary "Try a narrower cache fix first" --kind fix_attempt --status tried --file src/cache.py
 onmc memory add task-abc123def4 --type did_not_work --title "Cache-only patch missed the worker path" --summary "Tried a narrower change in src/cache.py only"
 onmc brief --task "fix flaky Redis cache invalidation bug"
+onmc hooks install
+onmc serve --mcp
 onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 ```
@@ -118,6 +126,15 @@ This creates local state under:
 onmc --help
 onmc init
 onmc ingest
+onmc ingest --files README.md docs/architecture.md
+onmc ingest --install-hook
+onmc sync --commit
+onmc sync --restore
+onmc hooks install
+onmc hooks status
+onmc hooks pre-compact
+onmc hooks post-compact
+onmc serve --mcp
 onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate cache invalidation flow"
 onmc task list
 onmc task show task-abc123def4
@@ -140,6 +157,22 @@ onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123
 onmc review --task "review the proposed cache invalidation fix" --input-file notes.md
 onmc teach --task "explain the cache invalidation bug" --task-id task-abc123def4
 onmc status
+```
+
+## Python API
+
+The CLI now sits on top of a small public API:
+
+```python
+import onmc
+
+repo = onmc.init(".")
+repo.ingest()
+brief = repo.brief(task="fix the cache invalidation bug")
+print(brief.markdown)
+memories = repo.memory.search(files=["src/cache.py"])
+task = repo.task.start(title="Fix cache bug", description="Track the flaky path.")
+repo.sync.commit()
 ```
 
 ## Example Brief Output
@@ -174,6 +207,27 @@ Given a task string, `onmc brief` ranks:
 
 The output is written to `.onmc/compiled/<timestamp>-brief.md`.
 
+### Git-Portable Memory
+
+`onmc sync --commit` exports repo memory, tasks, attempts, artifacts, and the most recent brief to `.agent-memory/` as stable JSON plus markdown. `onmc sync --restore` restores that state into `.onmc/memory.db` on another machine or cloud workspace.
+
+### Hooks and Continuation Briefs
+
+`onmc hooks install` merges Claude Code PreCompact and PostCompact hooks into `~/.claude/settings.json`. Pre-compaction stores a `CompactionSnapshot`; post-compaction compiles a continuation brief to `~/.onmc-continuation-brief.md` so the next turn can recover the active task, decisions, working hypothesis, and next step.
+
+### MCP Server
+
+`onmc serve --mcp` runs a read-only MCP server over stdio. It exposes:
+
+- `onmc://brief`
+- `onmc://memory/list`
+- `onmc://memory/{kind}`
+- `onmc://memory/search?files=...`
+- `onmc://tasks`
+- `onmc://task/{id}`
+- `onmc://snapshot/latest`
+- `onmc://status`
+
 ### Optional LLM-Backed Modes
 
 When an optional provider is configured, ONMC can execute three end-to-end modes:
@@ -193,6 +247,10 @@ High-level modules:
 - `task lifecycle`: durable task records stored alongside repo memory
 - `attempt logging`: task-linked records of tried, rejected, partial, or successful approaches
 - `memory artifacts`: durable task-derived findings that preserve fixes, failures, conflicts, gotchas, invariants, and validation guidance
+- `sync/`: git-portable export/import to `.agent-memory/`
+- `hooks/`: Claude Code compaction snapshots and continuation brief generation
+- `mcp_server/`: read-only MCP resource handlers over stdio
+- `api.py`: typed import surface for repo, memory, task, hook, and sync workflows
 - `ingest/`: doc parsing, git parsing, repo scanning, and heuristic extraction
 - `brief/`: task-to-context compilation and ranking
 - `core/`: repo discovery and service orchestration
@@ -215,6 +273,7 @@ More detail:
 - Task-derived memory artifacts are manually authored in P0 rather than auto-summarized.
 - Brief ranking is token-based, not embedding-based.
 - Git-derived patterns are suggestions, not guarantees.
+- MCP is read-only in this release; there are no write tools yet.
 - LLM-backed solve/review/teach commands are explicit and single-shot; there is still no autonomous loop or tool orchestration.
 
 ## Roadmap
