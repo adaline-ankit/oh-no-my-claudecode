@@ -9,6 +9,7 @@ from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptRecord,
     AttemptStatus,
+    CompactionSnapshotRecord,
     FileStat,
     MemoryArtifactRecord,
     MemoryArtifactType,
@@ -130,6 +131,21 @@ class SQLiteStorage:
                     ON task_outputs(task_id);
                 CREATE INDEX IF NOT EXISTS idx_task_outputs_type
                     ON task_outputs(type);
+                CREATE TABLE IF NOT EXISTS compaction_snapshots (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT,
+                    timestamp TEXT NOT NULL,
+                    active_files_json TEXT NOT NULL,
+                    recent_decisions_json TEXT NOT NULL,
+                    working_hypothesis TEXT,
+                    last_error_trace TEXT,
+                    next_step TEXT,
+                    brief_token_count INTEGER,
+                    continuation_brief_md TEXT,
+                    FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE SET NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_compaction_snapshots_timestamp
+                    ON compaction_snapshots(timestamp);
                 """
             )
 
@@ -681,6 +697,90 @@ class SQLiteStorage:
             ).fetchall()
         return {str(row["task_id"]): int(row["count"]) for row in rows}
 
+    def create_compaction_snapshot(self, snapshot: CompactionSnapshotRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO compaction_snapshots (
+                    id,
+                    task_id,
+                    timestamp,
+                    active_files_json,
+                    recent_decisions_json,
+                    working_hypothesis,
+                    last_error_trace,
+                    next_step,
+                    brief_token_count,
+                    continuation_brief_md
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._compaction_snapshot_values(snapshot),
+            )
+
+    def update_compaction_snapshot(self, snapshot: CompactionSnapshotRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE compaction_snapshots SET
+                    task_id = ?,
+                    timestamp = ?,
+                    active_files_json = ?,
+                    recent_decisions_json = ?,
+                    working_hypothesis = ?,
+                    last_error_trace = ?,
+                    next_step = ?,
+                    brief_token_count = ?,
+                    continuation_brief_md = ?
+                WHERE id = ?
+                """,
+                (
+                    snapshot.task_id,
+                    isoformat_utc(snapshot.timestamp),
+                    json.dumps(snapshot.active_files),
+                    json.dumps(snapshot.recent_decisions),
+                    snapshot.working_hypothesis,
+                    snapshot.last_error_trace,
+                    snapshot.next_step,
+                    snapshot.brief_token_count,
+                    snapshot.continuation_brief_md,
+                    snapshot.id,
+                ),
+            )
+
+    def get_compaction_snapshot(self, snapshot_id: str) -> CompactionSnapshotRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM compaction_snapshots WHERE id = ?",
+                (snapshot_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_compaction_snapshot(row)
+
+    def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM compaction_snapshots
+                ORDER BY timestamp DESC, rowid DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return None if row is None else self._row_to_compaction_snapshot(row)
+
+    def list_compaction_snapshots(self) -> list[CompactionSnapshotRecord]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM compaction_snapshots
+                ORDER BY timestamp DESC, rowid DESC
+                """
+            ).fetchall()
+        return [self._row_to_compaction_snapshot(row) for row in rows]
+
+    def compaction_snapshot_count(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM compaction_snapshots").fetchone()
+        return int(row["count"])
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
@@ -856,4 +956,40 @@ class SQLiteStorage:
             output.content_json,
             output.markdown_path,
             isoformat_utc(output.created_at),
+        )
+
+    @staticmethod
+    def _row_to_compaction_snapshot(row: sqlite3.Row) -> CompactionSnapshotRecord:
+        timestamp = parse_datetime(row["timestamp"])
+        if timestamp is None:
+            msg = "Compaction snapshot row is missing timestamp."
+            raise ValueError(msg)
+        return CompactionSnapshotRecord(
+            id=row["id"],
+            task_id=row["task_id"],
+            timestamp=timestamp,
+            active_files=json.loads(row["active_files_json"]),
+            recent_decisions=json.loads(row["recent_decisions_json"]),
+            working_hypothesis=row["working_hypothesis"],
+            last_error_trace=row["last_error_trace"],
+            next_step=row["next_step"],
+            brief_token_count=int(row["brief_token_count"])
+            if row["brief_token_count"] is not None
+            else None,
+            continuation_brief_md=row["continuation_brief_md"],
+        )
+
+    @staticmethod
+    def _compaction_snapshot_values(snapshot: CompactionSnapshotRecord) -> tuple[Any, ...]:
+        return (
+            snapshot.id,
+            snapshot.task_id,
+            isoformat_utc(snapshot.timestamp),
+            json.dumps(snapshot.active_files),
+            json.dumps(snapshot.recent_decisions),
+            snapshot.working_hypothesis,
+            snapshot.last_error_trace,
+            snapshot.next_step,
+            snapshot.brief_token_count,
+            snapshot.continuation_brief_md,
         )

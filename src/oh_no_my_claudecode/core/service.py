@@ -17,6 +17,15 @@ from oh_no_my_claudecode.config import (
     write_config,
 )
 from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root
+from oh_no_my_claudecode.hooks import (
+    build_compaction_snapshot,
+    claude_settings_backup_path,
+    claude_settings_path,
+    compile_continuation_brief,
+    install_claude_hooks,
+    uninstall_claude_hooks,
+    write_continuation_brief,
+)
 from oh_no_my_claudecode.ingest.pipeline import run_ingest
 from oh_no_my_claudecode.llm import default_api_key_env_var, llm_status, provider_from_settings
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
@@ -29,7 +38,9 @@ from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
     BriefArtifact,
+    CompactionSnapshotRecord,
     CompiledPrompt,
+    HookStatus,
     IngestResult,
     LLMProviderType,
     LLMSettings,
@@ -90,6 +101,99 @@ class OnmcService:
         output_path.write_text(artifact.to_markdown(), encoding="utf-8")
         artifact.output_path = output_path.as_posix()
         return repo_root, artifact
+
+    def install_hooks(
+        self,
+        *,
+        home: Path | None = None,
+        add_mcp_server: bool = False,
+    ) -> HookStatus:
+        """Install Claude Code compaction hooks into settings.json."""
+        settings_path = claude_settings_path(home)
+        backup_path = claude_settings_backup_path(home)
+        install_claude_hooks(
+            settings_path=settings_path,
+            backup_path=backup_path,
+            add_mcp_server=add_mcp_server,
+        )
+        return self.hooks_status(home=home)
+
+    def uninstall_hooks(self, *, home: Path | None = None) -> HookStatus:
+        """Remove Claude Code compaction hooks from settings.json."""
+        settings_path = claude_settings_path(home)
+        backup_path = claude_settings_backup_path(home)
+        uninstall_claude_hooks(settings_path=settings_path, backup_path=backup_path)
+        return self.hooks_status(home=home)
+
+    def hooks_status(self, *, home: Path | None = None) -> HookStatus:
+        """Return the current Claude hook installation and snapshot status."""
+        _, _, storage = self._load_context()
+        meta = storage.all_meta()
+        latest_snapshot = storage.latest_compaction_snapshot()
+        settings_path = claude_settings_path(home)
+        backup_path = claude_settings_backup_path(home)
+        from oh_no_my_claudecode.hooks.installer import hooks_installed
+
+        return HookStatus(
+            installed=hooks_installed(settings_path=settings_path),
+            backup_path=backup_path.as_posix(),
+            settings_path=settings_path.as_posix(),
+            latest_snapshot_id=latest_snapshot.id if latest_snapshot else None,
+            last_pre_compact_at=meta.get("last_pre_compact_at"),
+            last_post_compact_at=meta.get("last_post_compact_at"),
+        )
+
+    def pre_compact(self) -> CompactionSnapshotRecord:
+        """Capture the latest task-scoped state into a compaction snapshot."""
+        _, _, storage = self._load_context()
+        task = self._latest_active_task(storage)
+        attempts = storage.list_attempts_for_task(task.task_id) if task else []
+        artifacts = storage.list_memory_artifacts_for_task(task.task_id) if task else []
+        outputs = storage.list_task_outputs_for_task(task.task_id) if task else []
+        memories = storage.list_memories()
+        snapshot = build_compaction_snapshot(
+            task=task,
+            attempts=attempts,
+            artifacts=artifacts,
+            outputs=outputs,
+            memories=memories,
+        )
+        storage.create_compaction_snapshot(snapshot)
+        storage.set_meta("last_pre_compact_at", isoformat_utc(snapshot.timestamp))
+        return snapshot
+
+    def post_compact(self, *, home: Path | None = None) -> tuple[CompactionSnapshotRecord, Path]:
+        """Compile and persist the latest continuation brief after compaction."""
+        _, _, storage = self._load_context()
+        snapshot = storage.latest_compaction_snapshot()
+        if snapshot is None:
+            msg = "No compaction snapshot is available."
+            raise LookupError(msg)
+        task = storage.get_task(snapshot.task_id) if snapshot.task_id else None
+        decisions = [
+            memory
+            for memory in (storage.get_memory(memory_id) for memory_id in snapshot.recent_decisions)
+            if memory is not None
+        ]
+        brief_md, token_count = compile_continuation_brief(
+            snapshot=snapshot,
+            task=task,
+            decisions=decisions,
+        )
+        brief_path, updated_snapshot = write_continuation_brief(
+            home=home or Path.home(),
+            snapshot=snapshot,
+            continuation_brief_md=brief_md,
+            token_count=token_count,
+        )
+        storage.update_compaction_snapshot(updated_snapshot)
+        storage.set_meta("last_post_compact_at", isoformat_utc(utc_now()))
+        return updated_snapshot, brief_path
+
+    def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
+        """Return the most recent compaction snapshot."""
+        _, _, storage = self._load_context()
+        return storage.latest_compaction_snapshot()
 
     def sync_commit(self, output_dir: Path | None = None) -> tuple[Path, SyncResult]:
         """Export ONMC memory and task state to a git-portable directory."""
@@ -624,6 +728,25 @@ class OnmcService:
             msg = f"Attempt not found: {attempt_id}"
             raise LookupError(msg)
         return attempt
+
+    @staticmethod
+    def _latest_active_task(storage: SQLiteStorage) -> TaskRecord | None:
+        candidates = [task for task in storage.list_tasks() if task.status == TaskStatus.ACTIVE]
+        if not candidates:
+            return None
+
+        def recency(task: TaskRecord) -> tuple[str, str]:
+            attempts = storage.list_attempts_for_task(task.task_id)
+            artifacts = storage.list_memory_artifacts_for_task(task.task_id)
+            outputs = storage.list_task_outputs_for_task(task.task_id)
+            latest_markers = [task.started_at or task.created_at]
+            latest_markers.extend(item.created_at for item in attempts[:1])
+            latest_markers.extend(item.created_at for item in artifacts[:1])
+            latest_markers.extend(item.created_at for item in outputs[:1])
+            latest = max(marker for marker in latest_markers if marker is not None)
+            return latest.isoformat(), task.task_id
+
+        return sorted(candidates, key=recency, reverse=True)[0]
 
 
 def _task_matches_text(task: TaskRecord, task_text: str) -> bool:

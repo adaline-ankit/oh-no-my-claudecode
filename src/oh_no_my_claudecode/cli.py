@@ -23,6 +23,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_list,
     render_attempt_updated,
     render_brief,
+    render_hook_status,
     render_ingest_result,
     render_init_summary,
     render_llm_configured,
@@ -50,10 +51,12 @@ memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 task_app = typer.Typer(help="Manage task lifecycle state.", no_args_is_help=True)
 attempt_app = typer.Typer(help="Track task-scoped attempts.", no_args_is_help=True)
 llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=True)
+hooks_app = typer.Typer(help="Install and run Claude Code compaction hooks.", no_args_is_help=True)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(llm_app, name="llm")
+app.add_typer(hooks_app, name="hooks")
 
 
 def main() -> None:
@@ -268,6 +271,65 @@ def llm_configure_command(
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_llm_configured(settings)
+
+
+@hooks_app.command("install")
+def hooks_install_command() -> None:
+    """Install Claude Code compaction hooks into settings.json."""
+    try:
+        add_mcp_server = typer.confirm(
+            "Add ONMC as an MCP server to Claude Code?",
+            default=False,
+        )
+        status = _service().install_hooks(add_mcp_server=add_mcp_server)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    console.print(
+        "Hooks installed. Claude Code will now snapshot context before compaction "
+        "and restore it after."
+    )
+    console.print(f"[green]Backup:[/green] {status.backup_path}")
+    render_hook_status(status)
+
+
+@hooks_app.command("uninstall")
+def hooks_uninstall_command() -> None:
+    """Remove ONMC Claude hooks from settings.json."""
+    try:
+        status = _service().uninstall_hooks()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    console.print("Hooks removed from Claude Code settings.")
+    render_hook_status(status)
+
+
+@hooks_app.command("status")
+def hooks_status_command() -> None:
+    """Show current Claude hook installation and snapshot status."""
+    try:
+        status = _service().hooks_status()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_hook_status(status)
+
+
+@hooks_app.command("pre-compact")
+def hooks_pre_compact_command() -> None:
+    """Capture a compaction snapshot before Claude Code compacts context."""
+    try:
+        _service().pre_compact()
+    except Exception as exc:  # noqa: BLE001 - hook commands should never block compaction.
+        console.print(f"[yellow]ONMC pre-compact warning: {exc}[/yellow]")
+
+
+@hooks_app.command("post-compact")
+def hooks_post_compact_command() -> None:
+    """Compile the latest continuation brief after Claude Code compacts context."""
+    try:
+        _, brief_path = _service().post_compact()
+        console.print(f"ONMC_BRIEF_PATH={brief_path}")
+    except Exception as exc:  # noqa: BLE001 - hook commands should never block compaction.
+        console.print(f"[yellow]ONMC post-compact warning: {exc}[/yellow]")
 
 
 @memory_app.command("list")
