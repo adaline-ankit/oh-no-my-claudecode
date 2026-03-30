@@ -33,6 +33,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_review_output,
     render_solve_output,
     render_status,
+    render_sync_result,
     render_task_detail,
     render_task_list,
     render_task_started,
@@ -100,6 +101,56 @@ def status_command() -> None:
         render_status(_service().status())
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+
+@app.command("sync")
+def sync_command(
+    commit: Annotated[bool, typer.Option("--commit", help="Export to .agent-memory/.")] = False,
+    restore: Annotated[
+        bool,
+        typer.Option("--restore", help="Restore from .agent-memory/."),
+    ] = False,
+    install_hook: Annotated[
+        bool,
+        typer.Option("--install-hook", help="Install a post-commit sync hook."),
+    ] = False,
+) -> None:
+    """Export, restore, or hook git-portable ONMC memory state."""
+    selected = [commit, restore, install_hook]
+    if sum(1 for item in selected if item) != 1:
+        raise typer.Exit(
+            code=_fatal("Choose exactly one of --commit, --restore, or --install-hook.")
+        )
+    try:
+        if commit:
+            _, result = _service().sync_commit()
+            render_sync_result(result, action="Sync Export Complete")
+            console.print(
+                "[green]Exported "
+                f"{result.memory_count} memories, "
+                f"{result.task_count} tasks to .agent-memory/[/green]"
+            )
+            console.print(
+                "Add .agent-memory/ to git tracking: "
+                "`git add .agent-memory/ && git commit -m 'chore: add agent memory export'`"
+            )
+            return
+        if restore:
+            _, result = _service().sync_restore()
+            render_sync_result(result, action="Sync Restore Complete")
+            console.print(
+                "[green]Restored "
+                f"{result.memory_count} memories, "
+                f"{result.task_count} tasks from .agent-memory/[/green]"
+            )
+            return
+        _, hook_path = _service().install_sync_hook()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    console.print(
+        "post-commit hook installed. Memory will export to .agent-memory/ on every commit."
+    )
+    console.print(f"[green]Hook path:[/green] {hook_path}")
 
 
 @app.command("solve")

@@ -545,6 +545,42 @@ class SQLiteStorage:
             ).fetchone()
         return None if row is None else self._row_to_memory_artifact(row)
 
+    def update_memory_artifact(self, artifact: MemoryArtifactRecord) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE memory_artifacts SET
+                    task_id = ?,
+                    type = ?,
+                    title = ?,
+                    summary = ?,
+                    why_it_matters = ?,
+                    apply_when = ?,
+                    avoid_when = ?,
+                    evidence = ?,
+                    related_files_json = ?,
+                    related_modules_json = ?,
+                    confidence = ?,
+                    created_at = ?
+                WHERE memory_id = ?
+                """,
+                (
+                    artifact.task_id,
+                    artifact.type.value,
+                    artifact.title,
+                    artifact.summary,
+                    artifact.why_it_matters,
+                    artifact.apply_when,
+                    artifact.avoid_when,
+                    artifact.evidence,
+                    json.dumps(artifact.related_files),
+                    json.dumps(artifact.related_modules),
+                    artifact.confidence,
+                    isoformat_utc(artifact.created_at),
+                    artifact.memory_id,
+                ),
+            )
+
     def list_memory_artifacts(
         self,
         *,

@@ -23,6 +23,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.utils.text import shorten
 
 console = Console()
@@ -272,6 +273,24 @@ def render_status(status: dict[str, str]) -> None:
     for key, value in status.items():
         table.add_row(key, value)
     console.print(table)
+
+
+def render_sync_result(result: SyncResult, *, action: str) -> None:
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Directory: {result.output_dir}",
+                    f"Memories: {result.memory_count}",
+                    f"Tasks: {result.task_count}",
+                    f"Attempts: {result.attempt_count}",
+                    f"Artifacts: {result.artifact_count}",
+                    f"Latest brief: {result.latest_brief_path or '-'}",
+                ]
+            ),
+            title=action,
+        )
+    )
 
 
 def render_llm_status(status: LLMStatus) -> None:

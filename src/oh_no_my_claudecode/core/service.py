@@ -50,6 +50,8 @@ from oh_no_my_claudecode.models import (
 )
 from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.sync import export_agent_memory, restore_agent_memory
+from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.utils.text import shorten, tokenize
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
@@ -88,6 +90,44 @@ class OnmcService:
         output_path.write_text(artifact.to_markdown(), encoding="utf-8")
         artifact.output_path = output_path.as_posix()
         return repo_root, artifact
+
+    def sync_commit(self, output_dir: Path | None = None) -> tuple[Path, SyncResult]:
+        """Export ONMC memory and task state to a git-portable directory."""
+        repo_root, config, storage = self._load_context()
+        target_dir = output_dir or repo_root / ".agent-memory"
+        result = export_agent_memory(
+            repo_root=repo_root,
+            config=config,
+            storage=storage,
+            output_dir=target_dir,
+        )
+        return repo_root, result
+
+    def sync_restore(self, input_dir: Path | None = None) -> tuple[Path, SyncResult]:
+        """Restore ONMC memory and task state from a git-portable directory."""
+        repo_root, _, storage = self._load_context()
+        source_dir = input_dir or repo_root / ".agent-memory"
+        manifest_path = source_dir / "manifest.json"
+        if not manifest_path.exists():
+            msg = f"Missing sync manifest: {manifest_path}"
+            raise FileNotFoundError(msg)
+        return repo_root, restore_agent_memory(input_dir=source_dir, storage=storage)
+
+    def install_sync_hook(self) -> tuple[Path, Path]:
+        """Install a post-commit hook that exports ONMC memory to .agent-memory."""
+        repo_root = discover_repo_root(self.cwd)
+        hook_path = repo_root / ".git" / "hooks" / "post-commit"
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        snippet = "#!/bin/sh\nonmc sync --commit\n"
+        if hook_path.exists():
+            existing = hook_path.read_text(encoding="utf-8")
+            if "onmc sync --commit" not in existing:
+                updated = existing.rstrip() + "\n" + snippet
+                hook_path.write_text(updated, encoding="utf-8")
+        else:
+            hook_path.write_text(snippet, encoding="utf-8")
+        hook_path.chmod(0o755)
+        return repo_root, hook_path
 
     def list_memories(self, *, kind: MemoryKind | None = None) -> list[MemoryEntry]:
         _, _, storage = self._load_context()
