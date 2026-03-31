@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from oh_no_my_claudecode.cli import app
+from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.models import LLMProviderType
+
+
+def test_doctor_exit_code_zero_when_checks_pass(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest()
+    service.generate_claude_md(no_llm=True)
+    service.sync_commit()
+    service.install_sync_hook()
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "ONMC Health Check" in result.stdout
+
+
+def test_doctor_exit_code_one_when_provider_check_fails(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest()
+    service.configure_llm(
+        provider=LLMProviderType.ANTHROPIC,
+        model="claude-sonnet-4-5",
+        api_key_env_var="ANTHROPIC_API_KEY",
+        temperature=0.0,
+        max_tokens=1200,
+    )
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 1
+    assert "LLM provider check failed" in result.stdout
