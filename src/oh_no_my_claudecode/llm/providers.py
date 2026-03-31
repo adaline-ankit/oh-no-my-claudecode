@@ -195,6 +195,51 @@ def _post_json(
     return payload_obj
 
 
+def validate_provider_api_key(
+    provider: LLMProviderType,
+    api_key: str,
+) -> tuple[bool, str]:
+    """Validate provider credentials with a lightweight API request."""
+    if provider == LLMProviderType.MOCK:
+        return True, "Mock provider does not require validation."
+    url: str
+    headers: dict[str, str]
+    if provider == LLMProviderType.ANTHROPIC:
+        url = "https://api.anthropic.com/v1/models"
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    elif provider == LLMProviderType.OPENAI:
+        url = "https://api.openai.com/v1/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+    else:
+        return False, f"Unsupported LLM provider: {provider.value}"
+    request = urllib.request.Request(  # noqa: S310 - provider URLs are fixed https endpoints.
+        url,
+        headers=headers,
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - provider request target is prevalidated above.
+            request,
+            timeout=llm_call_timeout_seconds(),
+        ) as response:
+            response.read()
+    except TimeoutError:
+        return False, "validation request timed out"
+    except urllib.error.HTTPError as exc:
+        if exc.code in {401, 403}:
+            return False, "invalid credentials"
+        return False, f"provider returned HTTP {exc.code}"
+    except urllib.error.URLError as exc:
+        reason = str(exc.reason)
+        if "timed out" in reason.lower():
+            return False, "validation request timed out"
+        return False, reason
+    return True, "valid"
+
+
 def _provider_http_error_message(
     *,
     status_code: int,

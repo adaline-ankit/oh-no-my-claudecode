@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax
 
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.llm.providers import validate_provider_api_key
 from oh_no_my_claudecode.models import IngestResult, LLMProviderType, MemoryKind, SourceType
 from oh_no_my_claudecode.rendering.console import console
 from oh_no_my_claudecode.setup.detector import EnvironmentDetection, detect_environment
@@ -132,7 +134,7 @@ def _provider_phase(service: OnmcService, *, yes: bool) -> tuple[str | None, str
         model = Prompt.ask("Model?", default=model)
     api_key_env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
     if not yes:
-        api_key_env_var = Prompt.ask("API key env var?", default=api_key_env_var)
+        api_key_env_var = _prompt_api_key_env_var_name(default=api_key_env_var)
     _, settings = service.configure_llm(
         provider=LLMProviderType(provider),
         model=model,
@@ -140,9 +142,42 @@ def _provider_phase(service: OnmcService, *, yes: bool) -> tuple[str | None, str
         temperature=0.0,
         max_tokens=1600,
     )
-    provider_status = "✓ configured" if service.provider_available() else "⚠ not available"
-    console.print(f"Checking key... {provider_status}")
+    actual_key = os.environ.get(api_key_env_var)
+    if not actual_key:
+        console.print(f"  [yellow]⚠  {api_key_env_var} is not set in your environment.[/yellow]")
+        console.print("  Set it before running ONMC commands:")
+        console.print(f"  [bold]export {api_key_env_var}=your-key-here[/bold]")
+        console.print("  Continuing — you can set this later.")
+    else:
+        console.print(f"  Checking {api_key_env_var}... ", end="")
+        valid, message = validate_provider_api_key(
+            settings.provider or LLMProviderType(provider),
+            actual_key,
+        )
+        if valid:
+            console.print("✓ valid")
+        else:
+            console.print(f"[red]✗ {message}[/red]")
     return settings.provider.value if settings.provider else None, settings.model
+
+
+def _prompt_api_key_env_var_name(*, default: str) -> str:
+    """Prompt for an environment variable name and reject raw API key input."""
+    while True:
+        value = Prompt.ask("  API key env var name", default=default).strip()
+        if _looks_like_api_key(value):
+            console.print("[red]⚠  That looks like an API key, not a variable name.[/red]")
+            console.print(
+                "Enter the environment variable name "
+                f"(for example {default}), not the key itself."
+            )
+            continue
+        return value or default
+
+
+def _looks_like_api_key(value: str) -> bool:
+    """Return whether the provided value resembles a raw provider secret."""
+    return len(value) > 30 and value.startswith("sk-")
 
 
 def _scan_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> IngestResult:
