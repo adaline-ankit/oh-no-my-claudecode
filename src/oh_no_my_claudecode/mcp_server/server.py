@@ -18,6 +18,12 @@ from oh_no_my_claudecode.mcp_server.resources import (
     read_onmc_resource,
 )
 
+STARTUP_SNIPPET = (
+    "ONMC MCP server running. Add to Claude Code settings:\n"
+    '{\n  "mcpServers": {\n    "onmc": {\n      "command": "onmc",\n'
+    '      "args": ["serve", "--mcp"]\n    }\n  }\n}\n'
+)
+
 
 def build_mcp_server(path: Path | str = ".") -> Server:
     """Build the ONMC MCP server for a repo path."""
@@ -47,10 +53,6 @@ async def _run(path: Path | str = ".") -> None:
 
 def run_mcp_server(path: Path | str = ".") -> None:
     """Run the ONMC MCP server over stdio."""
-    print("ONMC MCP server running. Add to Claude Code settings:", file=sys.stderr)
-    print(
-        '{\n  "mcpServers": {\n    "onmc": {\n      "command": "onmc",\n'
-        '      "args": ["serve", "--mcp"]\n    }\n  }\n}',
-        file=sys.stderr,
-    )
+    sys.stderr.write(STARTUP_SNIPPET)
+    sys.stderr.flush()
     asyncio.run(_run(path))
