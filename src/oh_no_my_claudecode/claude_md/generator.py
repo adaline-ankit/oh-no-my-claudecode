@@ -5,12 +5,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+from oh_no_my_claudecode.ingest.docs import is_primarily_english, is_structural_heading
 from oh_no_my_claudecode.llm import MarkdownEnvelope, generate_structured_logged
 from oh_no_my_claudecode.llm.base import BaseLLMProvider, LLMProviderError
 from oh_no_my_claudecode.models import (
     LLMGenerationRequest,
     MemoryArtifactRecord,
     MemoryEntry,
+    MemoryKind,
     TaskRecord,
 )
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -90,13 +92,14 @@ def build_claude_md_markdown(
 ) -> dict[str, str]:
     """Build CLAUDE.md sections from stored memory, optionally with LLM assistance."""
     memories = storage.list_memories()
+    claude_md_memories = filter_for_claude_md(memories)
     artifacts = storage.list_memory_artifacts()
     active_tasks = [task for task in storage.list_tasks() if task.status.value == "active"]
     if provider is not None and log_path is not None:
         try:
             envelope = generate_structured_logged(
                 provider,
-                request=_generation_request(memories, artifacts, active_tasks),
+                request=_generation_request(claude_md_memories, artifacts, active_tasks),
                 response_model=MarkdownEnvelope,
                 log_path=log_path,
                 operation="claude_md.generate",
@@ -106,7 +109,7 @@ def build_claude_md_markdown(
                 return parsed
         except LLMProviderError:
             pass
-    return _deterministic_sections(memories, artifacts, active_tasks)
+    return _deterministic_sections(claude_md_memories, artifacts, active_tasks)
 
 
 def _generation_request(
@@ -180,7 +183,6 @@ def _deterministic_sections(
                 for memory in memories
                 if memory.kind.value == "invariant"
             ],
-            fallback="No critical invariants have been recorded yet.",
         ),
         "Architecture decisions": _bullets(
             [
@@ -188,7 +190,6 @@ def _deterministic_sections(
                 for memory in memories
                 if memory.kind.value == "decision"
             ],
-            fallback="No architecture decisions have been recorded yet.",
         ),
         "Hotspot areas": _bullets(
             [
@@ -196,7 +197,6 @@ def _deterministic_sections(
                 for memory in memories
                 if memory.kind.value == "hotspot"
             ],
-            fallback="No hotspot areas have been recorded yet.",
         ),
         "Known bad approaches": _bullets(
             [
@@ -209,7 +209,6 @@ def _deterministic_sections(
                 for memory in memories
                 if memory.kind.value in {"failed_approach", "design_conflict", "gotcha"}
             ],
-            fallback="No known bad approaches have been captured yet.",
         ),
         "Validation": _bullets(
             [
@@ -217,40 +216,41 @@ def _deterministic_sections(
                 for memory in memories
                 if memory.kind.value == "validation_rule"
             ],
-            fallback="No explicit validation guidance has been recorded yet.",
         ),
         "Current active tasks": _bullets(
             [
                 f"{task.title}: {shorten(task.description, max_length=100)}"
                 for task in active_tasks
             ],
-            fallback="No active tasks are currently recorded.",
         ),
     }
-    return grouped
+    return {heading: content for heading, content in grouped.items() if content.strip()}
 
 
 def _project_overview(memories: list[MemoryEntry]) -> str:
     candidates = [
         memory.summary
         for memory in memories
-        if memory.kind.value == "doc_fact"
+        if memory.kind == MemoryKind.DOC_FACT
     ]
     if not candidates:
-        return "Project overview unavailable. Run `onmc ingest` to build repo memory first."
+        return ""
     return " ".join(candidates[:3])
 
 
-def _bullets(items: list[str], *, fallback: str) -> str:
+def _bullets(items: list[str]) -> str:
     if not items:
-        return fallback
+        return ""
     return "\n".join(f"- {item}" for item in items[:6])
 
 
 def _join_sections(sections: dict[str, str]) -> str:
     lines = ["# CLAUDE.md", ""]
     for heading in SECTION_ORDER:
-        lines.extend([f"## {heading}", sections.get(heading, ""), ""])
+        content = sections.get(heading, "").strip()
+        if not content:
+            continue
+        lines.extend([f"## {heading}", content, ""])
     return "\n".join(lines).strip() + "\n"
 
 
@@ -281,3 +281,30 @@ def _section_hashes(repo_root: Path, storage: SQLiteStorage) -> dict[str, str]:
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return dict.fromkeys(SECTION_ORDER, digest)
+
+
+def filter_for_claude_md(memories: list[MemoryEntry]) -> list[MemoryEntry]:
+    """Filter memory records down to high-signal inputs for CLAUDE.md generation."""
+    filtered: list[MemoryEntry] = []
+    for memory in memories:
+        if memory.feedback_score < -0.3:
+            continue
+        if memory.confidence < 0.6:
+            continue
+        if not is_primarily_english(memory.summary):
+            continue
+        if is_structural_heading(memory.title):
+            continue
+        if memory.kind == MemoryKind.DOC_FACT:
+            continue
+        filtered.append(memory)
+    overview_candidates = [
+        memory
+        for memory in memories
+        if memory.kind == MemoryKind.DOC_FACT
+        and memory.confidence >= 0.6
+        and memory.feedback_score >= -0.3
+        and is_primarily_english(memory.summary)
+        and not is_structural_heading(memory.title)
+    ][:2]
+    return [*overview_candidates, *filtered]
