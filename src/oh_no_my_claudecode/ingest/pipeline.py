@@ -10,18 +10,27 @@ from oh_no_my_claudecode.ingest.git_history import (
     extract_git_memories,
     load_git_history,
 )
+from oh_no_my_claudecode.ingest.llm_extractor import commit_lines_from_payload, extract_llm_memories
 from oh_no_my_claudecode.ingest.repo_tree import (
     detect_project_hints,
     infer_repo_shape_memories,
     scan_repository_files,
     scan_selected_files,
 )
+from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.models import IngestResult, MemoryEntry, ProjectConfig
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 
-def run_ingest(repo_root: Path, config: ProjectConfig, storage: SQLiteStorage) -> IngestResult:
+def run_ingest(
+    repo_root: Path,
+    config: ProjectConfig,
+    storage: SQLiteStorage,
+    *,
+    provider: BaseLLMProvider | None = None,
+    log_path: Path | None = None,
+) -> IngestResult:
     repo_files = scan_repository_files(repo_root, exclude_dirs=config.ingest.exclude_dirs)
     doc_paths = discover_doc_paths(repo_root, globs=config.ingest.doc_globs)
     commits = load_git_history(repo_root, max_commits=config.ingest.max_git_commits)
@@ -39,6 +48,33 @@ def run_ingest(repo_root: Path, config: ProjectConfig, storage: SQLiteStorage) -
         )
     memories.extend(infer_repo_shape_memories(repo_root, hints))
     memories.extend(extract_git_memories(commits, file_stats))
+    llm_new_count = 0
+    llm_deduped_count = 0
+    if provider is not None and log_path is not None:
+        docs_payload = {
+            path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
+            for path in doc_paths
+        }
+        commit_payload: list[dict[str, object]] = [
+            {
+                "commit_hash": commit.commit_hash,
+                "subject": commit.subject,
+                "files": commit.files,
+            }
+            for commit in commits[:500]
+        ]
+        commit_lines = commit_lines_from_payload(commit_payload)
+        llm_memories, llm_deduped_count = extract_llm_memories(
+            repo_root=repo_root,
+            config=config,
+            provider=provider,
+            log_path=log_path,
+            commit_lines=commit_lines,
+            docs=docs_payload,
+            existing_memories=memories,
+        )
+        llm_new_count = len(llm_memories)
+        memories.extend(llm_memories)
 
     storage.replace_repo_files(repo_files)
     storage.replace_file_stats(file_stats)
@@ -60,6 +96,8 @@ def run_ingest(repo_root: Path, config: ProjectConfig, storage: SQLiteStorage) -
         memory_count=len(memories),
         new_memory_count=new_count,
         updated_memory_count=updated_count,
+        llm_new_memory_count=llm_new_count,
+        llm_deduped_count=llm_deduped_count,
         repo_file_count=len(repo_files),
         file_stat_count=len(file_stats),
         doc_count=len(doc_paths),
@@ -74,6 +112,9 @@ def run_ingest_files(
     config: ProjectConfig,
     storage: SQLiteStorage,
     paths: list[str],
+    *,
+    provider: BaseLLMProvider | None = None,
+    log_path: Path | None = None,
 ) -> IngestResult:
     selected_repo_files, warnings = scan_selected_files(
         repo_root,
@@ -98,6 +139,34 @@ def run_ingest_files(
     shape_memories = _shape_memories_for_paths(repo_root, config, relative_paths)
     git_memories = _git_memories_for_paths(repo_root, config, storage, commits, relative_paths)
     memories = [*doc_memories, *shape_memories, *git_memories]
+    llm_new_count = 0
+    llm_deduped_count = 0
+    if provider is not None and log_path is not None:
+        docs_payload = {
+            path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
+            for path in targeted_docs
+        }
+        commit_payload: list[dict[str, object]] = [
+            {
+                "commit_hash": commit.commit_hash,
+                "subject": commit.subject,
+                "files": [path for path in commit.files if path in relative_paths],
+            }
+            for commit in commits[:500]
+            if any(path in relative_paths for path in commit.files)
+        ]
+        commit_lines = commit_lines_from_payload(commit_payload)
+        llm_memories, llm_deduped_count = extract_llm_memories(
+            repo_root=repo_root,
+            config=config,
+            provider=provider,
+            log_path=log_path,
+            commit_lines=commit_lines,
+            docs=docs_payload,
+            existing_memories=storage.list_memories(),
+        )
+        llm_new_count = len(llm_memories)
+        memories.extend(llm_memories)
 
     if targeted_docs:
         storage.delete_generated_memories_by_source_refs(
@@ -117,6 +186,8 @@ def run_ingest_files(
         memory_count=len(memories),
         new_memory_count=new_count,
         updated_memory_count=updated_count,
+        llm_new_memory_count=llm_new_count,
+        llm_deduped_count=llm_deduped_count,
         repo_file_count=len(selected_repo_files),
         file_stat_count=len(selected_stats),
         doc_count=len(targeted_docs),

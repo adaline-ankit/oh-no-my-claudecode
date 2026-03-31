@@ -33,6 +33,8 @@ class IngestResult(BaseModel):
     memory_count: int
     new_memory_count: int
     updated_memory_count: int
+    llm_new_memory_count: int = 0
+    llm_deduped_count: int = 0
     repo_file_count: int
     file_stat_count: int
     doc_count: int

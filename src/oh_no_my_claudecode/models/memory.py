@@ -13,6 +13,9 @@ class MemoryKind(StrEnum):
     HOTSPOT = "hotspot"
     GIT_PATTERN = "git_pattern"
     VALIDATION_RULE = "validation_rule"
+    FAILED_APPROACH = "failed_approach"
+    DESIGN_CONFLICT = "design_conflict"
+    GOTCHA = "gotcha"
 
 
 class SourceType(StrEnum):
@@ -20,6 +23,8 @@ class SourceType(StrEnum):
     DOC = "doc"
     CODE = "code"
     MANUAL = "manual"
+    LLM_EXTRACTED = "llm_extracted"
+    TRANSCRIPT = "transcript"
 
 
 class MemoryEntry(BaseModel):

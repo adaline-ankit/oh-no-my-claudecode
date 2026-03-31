@@ -24,6 +24,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_list,
     render_attempt_updated,
     render_brief,
+    render_doctor_report,
     render_hook_status,
     render_ingest_result,
     render_init_summary,
@@ -32,6 +33,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_artifact_added,
     render_memory_detail,
     render_memory_list,
+    render_mine_result,
     render_review_output,
     render_solve_output,
     render_status,
@@ -42,6 +44,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_task_updated,
     render_teach_output,
 )
+from oh_no_my_claudecode.setup import run_setup_wizard
 
 app = typer.Typer(
     help="Repo-native memory and context compiler for coding agents.",
@@ -53,11 +56,32 @@ task_app = typer.Typer(help="Manage task lifecycle state.", no_args_is_help=True
 attempt_app = typer.Typer(help="Track task-scoped attempts.", no_args_is_help=True)
 llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=True)
 hooks_app = typer.Typer(help="Install and run Claude Code compaction hooks.", no_args_is_help=True)
+claude_md_app = typer.Typer(
+    help="Generate and maintain CLAUDE.md from ONMC memory.",
+    no_args_is_help=False,
+    invoke_without_command=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(llm_app, name="llm")
 app.add_typer(hooks_app, name="hooks")
+app.add_typer(claude_md_app, name="claude-md")
+
+
+@app.command("setup")
+def setup_command(
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Use defaults and skip interactive prompts."),
+    ] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip provider setup and LLM-assisted extraction."),
+    ] = False,
+) -> None:
+    """Run the interactive ONMC onboarding wizard."""
+    run_setup_wizard(cwd=Path.cwd(), yes=yes, no_llm=no_llm)
 
 
 def main() -> None:
@@ -86,6 +110,10 @@ def ingest_command(
         bool,
         typer.Option("--install-hook", help="Install the ONMC incremental post-commit hook."),
     ] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the optional LLM extraction pass."),
+    ] = False,
 ) -> None:
     """Ingest repo knowledge into local structured memory."""
     try:
@@ -99,11 +127,11 @@ def ingest_command(
         if files:
             if not ctx.args:
                 raise typer.Exit(code=_fatal("Provide one or more file paths after --files."))
-            _, result = _service().ingest_files(list(ctx.args))
+            _, result = _service().ingest_files(list(ctx.args), no_llm=no_llm)
         else:
             if ctx.args:
                 raise typer.Exit(code=_fatal("Unexpected trailing arguments."))
-            _, result = _service().ingest()
+            _, result = _service().ingest(no_llm=no_llm)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_ingest_result(result)
@@ -112,10 +140,14 @@ def ingest_command(
 @app.command("brief")
 def brief_command(
     task: Annotated[str, typer.Option("--task", help="Task description to compile a brief for.")],
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the optional LLM reranking pass."),
+    ] = False,
 ) -> None:
     """Compile a task-specific context brief."""
     try:
-        _, artifact = _service().compile_brief(task)
+        _, artifact = _service().compile_brief(task, no_llm=no_llm)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_brief(artifact)
@@ -204,10 +236,14 @@ def solve_command(
         str | None,
         typer.Option("--task-id", help="Optional existing task to link this output to."),
     ] = None,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use heuristic fallback instead of the configured LLM."),
+    ] = False,
 ) -> None:
     """Compile repo-aware context and ask the configured LLM for the next best approach."""
     try:
-        _, record, output = _service().solve(task=task, task_id=task_id)
+        _, record, output = _service().solve(task=task, task_id=task_id, no_llm=no_llm)
     except (
         FileNotFoundError,
         LookupError,
@@ -227,11 +263,19 @@ def review_command(
         Path | None,
         typer.Option("--input-file", help="Optional file containing plan, diff, or notes."),
     ] = None,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use heuristic fallback instead of the configured LLM."),
+    ] = False,
 ) -> None:
     """Compile repo-aware review context and critique the proposed approach."""
     try:
         external_input = input_file.read_text(encoding="utf-8") if input_file else None
-        _, record, output = _service().review(task=task, external_input=external_input)
+        _, record, output = _service().review(
+            task=task,
+            external_input=external_input,
+            no_llm=no_llm,
+        )
     except (
         FileNotFoundError,
         OSError,
@@ -251,10 +295,18 @@ def teach_command(
         str | None,
         typer.Option("--task-id", help="Optional existing task to link this output to."),
     ] = None,
+    interactive: Annotated[
+        bool,
+        typer.Option("--interactive", help="Enter a follow-up Q&A loop after the initial output."),
+    ] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use heuristic fallback instead of the configured LLM."),
+    ] = False,
 ) -> None:
     """Compile repo-aware teaching context and generate a learning artifact."""
     try:
-        _, record, output = _service().teach(task=task, task_id=task_id)
+        _, record, output = _service().teach(task=task, task_id=task_id, no_llm=no_llm)
     except (
         FileNotFoundError,
         LookupError,
@@ -265,6 +317,16 @@ def teach_command(
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_teach_output(output, record)
     console.print(f"[green]Wrote output:[/green] {record.markdown_path}")
+    if interactive and not no_llm:
+        while True:
+            question = typer.prompt("Ask a follow-up question (or press Enter to exit)", default="")
+            if not question.strip():
+                break
+            try:
+                answer = _service().teach_followup(task=task, question=question, task_id=task_id)
+            except (FileNotFoundError, ValueError, LLMConfigurationError, LLMProviderError) as exc:
+                raise typer.Exit(code=_fatal(str(exc))) from exc
+            console.print(answer)
 
 
 @llm_app.command("status")
@@ -371,6 +433,102 @@ def hooks_post_compact_command() -> None:
         console.print(f"ONMC_BRIEF_PATH={brief_path}")
     except Exception as exc:  # noqa: BLE001 - hook commands should never block compaction.
         console.print(f"[yellow]ONMC post-compact warning: {exc}[/yellow]")
+
+
+@claude_md_app.callback(invoke_without_command=True)
+def claude_md_callback(
+    ctx: typer.Context,
+    watch: Annotated[
+        bool,
+        typer.Option("--watch", help="Watch ONMC state and regenerate CLAUDE.md on updates."),
+    ] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use deterministic generation only."),
+    ] = False,
+) -> None:
+    """Generate and maintain CLAUDE.md from ONMC memory."""
+    if watch and ctx.invoked_subcommand is None:
+        _service().watch_claude_md(no_llm=no_llm)
+
+
+@claude_md_app.command("generate")
+def claude_md_generate_command(
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use deterministic generation only."),
+    ] = False,
+) -> None:
+    """Generate CLAUDE.md from stored memory."""
+    markdown = _service().generate_claude_md(no_llm=no_llm, write=True)
+    console.print(markdown)
+
+
+@claude_md_app.command("update")
+def claude_md_update_command(
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use deterministic generation only."),
+    ] = False,
+) -> None:
+    """Update stale CLAUDE.md sections."""
+    markdown, stale_sections = _service().update_claude_md(no_llm=no_llm, write=True)
+    console.print(markdown)
+    if stale_sections:
+        console.print(f"[green]Updated sections:[/green] {', '.join(stale_sections)}")
+
+
+@claude_md_app.command("preview")
+def claude_md_preview_command(
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Use deterministic generation only."),
+    ] = False,
+) -> None:
+    """Preview CLAUDE.md without writing it."""
+    markdown = _service().generate_claude_md(no_llm=no_llm, write=False)
+    console.print(markdown)
+
+
+@app.command("mine")
+def mine_command(
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Mine a specific session id."),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show findings without writing them."),
+    ] = False,
+    since: Annotated[
+        str | None,
+        typer.Option("--since", help="Only process transcripts newer than this value."),
+    ] = None,
+    no_llm: Annotated[
+        bool,
+        typer.Option(
+            "--no-llm",
+            help="Skip LLM extraction and only inspect transcript availability.",
+        ),
+    ] = False,
+) -> None:
+    """Mine Claude Code session transcripts into ONMC memory."""
+    if not no_llm:
+        console.print(
+            "Note: onmc mine sends session transcript excerpts to your configured LLM provider.\n"
+            "Only assistant turns are sent. User turns are excluded.\n"
+            "Disable with: onmc mine --no-llm (heuristic extraction only)"
+        )
+    result = _service().mine(dry_run=dry_run, session_id=session, since=since, no_llm=no_llm)
+    render_mine_result(result, dry_run=dry_run)
+
+
+@app.command("doctor")
+def doctor_command() -> None:
+    """Run a health check over repo state, memory, provider setup, and integrations."""
+    ok, report = _service().doctor()
+    render_doctor_report(ok, report)
+    raise typer.Exit(code=0 if ok else 1)
 
 
 @memory_app.command("list")

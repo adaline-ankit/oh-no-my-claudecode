@@ -252,14 +252,32 @@ def _default_mock_response(prompt: str) -> str:
                 "required_tests": ["tests/test_cache.py"],
             }
         )
-    if '"mental_model_upgrade"' in prompt:
+    if '"current_implementation"' in prompt:
         return json.dumps(
             {
-                "reasoning_map": ["Trace the execution boundary", "Check prior failed paths"],
-                "system_lesson": "Shared boundaries should be treated as system constraints.",
-                "false_lead_analysis": ["Do not overfit to a single high-churn file."],
-                "mental_model_upgrade": (
-                    "Start from execution flow and invariants before narrowing to local edits."
+                "problem_this_solves": "The task needs repo-specific context and guardrails.",
+                "approach_chosen_and_why": (
+                    "Start from the execution boundary and the recorded invariants."
+                ),
+                "what_was_tried_first": ["A narrower fix missed the adjacent caller path."],
+                "current_implementation": (
+                    "The current implementation routes work through a shared boundary."
+                ),
+                "what_would_break": ["Bypassing the shared boundary would violate the invariant."],
+                "open_questions": ["Double-check the adjacent test coverage."],
+                "validation": ["pytest", "ruff check ."],
+                "reasoning_map": ["Trace the shared boundary first."],
+                "system_lesson": "System boundaries are more reliable than local symptoms.",
+                "false_lead_analysis": ["A narrower fix missed the adjacent caller path."],
+                "mental_model_upgrade": "Start from the boundary that coordinates the workflow.",
+            }
+        )
+    if '"markdown"' in prompt or "Follow-up question:" in prompt:
+        return json.dumps(
+            {
+                "markdown": (
+                    "The config-only approach failed because the problem lived at the shared "
+                    "execution boundary rather than in a tunable leaf setting."
                 ),
             }
         )

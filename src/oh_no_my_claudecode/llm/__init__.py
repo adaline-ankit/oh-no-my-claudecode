@@ -10,6 +10,11 @@ from oh_no_my_claudecode.llm.factory import (
     provider_from_settings,
 )
 from oh_no_my_claudecode.llm.providers import AnthropicProvider, MockProvider, OpenAIProvider
+from oh_no_my_claudecode.llm.runtime import (
+    MarkdownEnvelope,
+    generate_logged,
+    generate_structured_logged,
+)
 
 __all__ = [
     "AnthropicProvider",
@@ -20,6 +25,9 @@ __all__ = [
     "MockProvider",
     "OpenAIProvider",
     "default_api_key_env_var",
+    "generate_logged",
+    "generate_structured_logged",
     "llm_status",
+    "MarkdownEnvelope",
     "provider_from_settings",
 ]

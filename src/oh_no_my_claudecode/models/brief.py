@@ -14,6 +14,7 @@ class BriefArtifact(BaseModel):
     task_summary: str
     repo_overview: list[str] = Field(default_factory=list)
     relevant_memories: list[MemoryEntry] = Field(default_factory=list)
+    relevance_reasons: dict[str, str] = Field(default_factory=dict)
     impacted_areas: list[str] = Field(default_factory=list)
     files_to_inspect: list[str] = Field(default_factory=list)
     risk_notes: list[str] = Field(default_factory=list)
@@ -44,6 +45,8 @@ class BriefArtifact(BaseModel):
                 lines.append(f"### [{memory.kind.value}] {memory.title}")
                 lines.append("")
                 lines.append(f"- Summary: {memory.summary}")
+                if reason := self.relevance_reasons.get(memory.id):
+                    lines.append(f"- Relevant because: {reason}")
                 lines.append(f"- Source: `{memory.source_type.value}:{memory.source_ref}`")
                 lines.append(f"- Confidence: {memory.confidence:.2f}")
                 lines.append("")

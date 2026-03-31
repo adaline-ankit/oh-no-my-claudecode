@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import json
 import secrets
+import subprocess
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
+from oh_no_my_claudecode.claude_md import (
+    claude_md_path,
+    generate_claude_md,
+    load_claude_md_meta,
+    update_claude_md,
+    watch_claude_md,
+)
 from oh_no_my_claudecode.config import (
     compiled_dir,
     config_exists,
@@ -13,6 +21,7 @@ from oh_no_my_claudecode.config import (
     database_path,
     default_config,
     load_config,
+    logs_dir,
     state_dir,
     write_config,
 )
@@ -27,9 +36,16 @@ from oh_no_my_claudecode.hooks import (
     write_continuation_brief,
 )
 from oh_no_my_claudecode.ingest.pipeline import run_ingest, run_ingest_files
-from oh_no_my_claudecode.llm import default_api_key_env_var, llm_status, provider_from_settings
+from oh_no_my_claudecode.llm import (
+    MarkdownEnvelope,
+    default_api_key_env_var,
+    generate_structured_logged,
+    llm_status,
+    provider_from_settings,
+)
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
+from oh_no_my_claudecode.mine import mine_transcripts
 from oh_no_my_claudecode.models import (
     TERMINAL_ATTEMPT_STATUSES,
     TERMINAL_TASK_STATUSES,
@@ -42,6 +58,7 @@ from oh_no_my_claudecode.models import (
     CompiledPrompt,
     HookStatus,
     IngestResult,
+    LLMGenerationRequest,
     LLMProviderType,
     LLMSettings,
     LLMStatus,
@@ -90,18 +107,40 @@ class OnmcService:
         storage.set_meta("initialized_at", isoformat_utc(utc_now()))
         return repo_root, config
 
-    def ingest(self) -> tuple[Path, IngestResult]:
+    def ingest(self, *, no_llm: bool = False) -> tuple[Path, IngestResult]:
         repo_root, config, storage = self._load_context()
-        return repo_root, run_ingest(repo_root, config, storage)
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        return repo_root, run_ingest(
+            repo_root,
+            config,
+            storage,
+            provider=provider,
+            log_path=self._llm_log_path(repo_root, config),
+        )
 
-    def ingest_files(self, paths: list[str]) -> tuple[Path, IngestResult]:
+    def ingest_files(self, paths: list[str], *, no_llm: bool = False) -> tuple[Path, IngestResult]:
         """Ingest only the specified repo-relative files."""
         repo_root, config, storage = self._load_context()
-        return repo_root, run_ingest_files(repo_root, config, storage, paths)
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        return repo_root, run_ingest_files(
+            repo_root,
+            config,
+            storage,
+            paths,
+            provider=provider,
+            log_path=self._llm_log_path(repo_root, config),
+        )
 
-    def compile_brief(self, task: str) -> tuple[Path, BriefArtifact]:
+    def compile_brief(self, task: str, *, no_llm: bool = False) -> tuple[Path, BriefArtifact]:
         repo_root, config, storage = self._load_context()
-        artifact = compile_brief(repo_root, config, storage, task)
+        artifact = compile_brief(
+            repo_root,
+            config,
+            storage,
+            task,
+            provider=self._optional_provider(config=config, no_llm=no_llm),
+            log_path=self._llm_log_path(repo_root, config),
+        )
         output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-brief.md"
         output_path = compiled_dir(config, repo_root) / output_name
         output_path.write_text(artifact.to_markdown(), encoding="utf-8")
@@ -194,12 +233,156 @@ class OnmcService:
         )
         storage.update_compaction_snapshot(updated_snapshot)
         storage.set_meta("last_post_compact_at", isoformat_utc(utc_now()))
+        self._refresh_claude_md_if_stale(storage=storage, home=home)
         return updated_snapshot, brief_path
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""
         _, _, storage = self._load_context()
         return storage.latest_compaction_snapshot()
+
+    def provider_available(self) -> bool:
+        """Return whether a configured provider can be instantiated."""
+        try:
+            _, config, _ = self._load_context()
+            self._optional_provider(config=config, no_llm=False)
+        except Exception:
+            return False
+        return True
+
+    def generate_claude_md(self, *, no_llm: bool = False, write: bool = True) -> str:
+        """Generate CLAUDE.md from stored memory and active task state."""
+        repo_root, config, storage = self._load_context()
+        markdown, _ = generate_claude_md(
+            repo_root=repo_root,
+            storage=storage,
+            provider=self._optional_provider(config=config, no_llm=no_llm),
+            log_path=self._llm_log_path(repo_root, config),
+            write=write,
+        )
+        return markdown
+
+    def update_claude_md(
+        self,
+        *,
+        no_llm: bool = False,
+        write: bool = True,
+    ) -> tuple[str, list[str]]:
+        """Update stale CLAUDE.md sections while preserving user-written sections."""
+        repo_root, config, storage = self._load_context()
+        return update_claude_md(
+            repo_root=repo_root,
+            storage=storage,
+            provider=self._optional_provider(config=config, no_llm=no_llm),
+            log_path=self._llm_log_path(repo_root, config),
+            write=write,
+        )
+
+    def watch_claude_md(self, *, no_llm: bool = False) -> None:
+        """Watch the ONMC state directory and regenerate CLAUDE.md on updates."""
+        repo_root, config, storage = self._load_context()
+        watch_claude_md(
+            repo_root=repo_root,
+            storage=storage,
+            provider=self._optional_provider(config=config, no_llm=no_llm),
+            log_path=self._llm_log_path(repo_root, config),
+        )
+
+    def mine(
+        self,
+        *,
+        dry_run: bool = False,
+        session_id: str | None = None,
+        since: str | None = None,
+        no_llm: bool = False,
+    ) -> dict[str, object]:
+        """Mine Claude Code transcripts for attempts and memory findings."""
+        repo_root, config, storage = self._load_context()
+        return mine_transcripts(
+            repo_root=repo_root,
+            storage=storage,
+            provider=self._optional_provider(config=config, no_llm=no_llm),
+            log_path=self._llm_log_path(repo_root, config),
+            dry_run=dry_run,
+            session_id=session_id,
+            since=since,
+        )
+
+    def doctor(self) -> tuple[bool, dict[str, list[str]]]:
+        """Run a health check over the repo, memory store, and agent integrations."""
+        repo_root, config, storage = self._load_context()
+        report: dict[str, list[str]] = {
+            "repo": [],
+            "memory": [],
+            "provider": [],
+            "claude": [],
+            "sync": [],
+            "errors": [],
+            "warnings": [],
+        }
+        commit_count = _git_count(repo_root)
+        report["repo"].append(f"Git repo detected ({commit_count} commits)")
+        report["repo"].append(".onmc initialized")
+        meta = storage.all_meta()
+        last_ingest = meta.get("last_ingest_at")
+        if last_ingest:
+            report["repo"].append(f"Last ingested: {last_ingest}")
+        else:
+            report["warnings"].append("No ingest metadata found — run `onmc ingest`.")
+        if last_ingest:
+            commits_since = _git_commits_since(repo_root, last_ingest)
+            if commits_since > 0:
+                report["warnings"].append(
+                    f"{commits_since} commits since last ingest — run `onmc ingest`."
+                )
+        memories = storage.list_memories()
+        llm_extracted = len(
+            [item for item in memories if item.source_type == SourceType.LLM_EXTRACTED]
+        )
+        heuristic = len(memories) - llm_extracted
+        active_task_count = len(
+            [task for task in storage.list_tasks() if task.status == TaskStatus.ACTIVE]
+        )
+        report["memory"].append(
+            f"{len(memories)} memory records "
+            f"({llm_extracted} LLM-extracted, {heuristic} heuristic)"
+        )
+        report["memory"].append(f"{storage.task_count()} tasks ({active_task_count} active)")
+        if (repo_root / ".agent-memory" / "manifest.json").exists():
+            report["sync"].append(".agent-memory/ export present")
+        else:
+            report["warnings"].append(".agent-memory/ not found — run `onmc sync --commit`.")
+        if config.llm.provider is None or config.llm.model is None:
+            report["warnings"].append("LLM provider is not fully configured.")
+        else:
+            try:
+                provider = self.llm_provider()
+                report["provider"].append(
+                    "Provider: "
+                    f"{provider.settings.provider.value if provider.settings.provider else '-'} "
+                    f"({provider.settings.model or '-'})"
+                )
+                report["provider"].append(
+                    f"API key env var: {provider.settings.api_key_env_var or '-'} present"
+                )
+            except Exception as exc:
+                report["errors"].append(f"LLM provider check failed: {exc}")
+        hook_status = self.hooks_status()
+        report["claude"].append(
+            f"Compaction hooks {'installed' if hook_status.installed else 'not installed'}"
+        )
+        if hook_status.last_pre_compact_at:
+            report["claude"].append(f"Last pre-compact: {hook_status.last_pre_compact_at}")
+        if claude_md_path(repo_root).exists():
+            report["claude"].append("CLAUDE.md present")
+        else:
+            report["warnings"].append("CLAUDE.md not found — run `onmc claude-md generate`.")
+        post_commit = repo_root / ".git" / "hooks" / "post-commit"
+        if post_commit.exists():
+            report["sync"].append("Post-commit hook installed")
+        else:
+            report["warnings"].append("Post-commit hook not installed.")
+        return not report["errors"], report
 
     def sync_commit(self, output_dir: Path | None = None) -> tuple[Path, SyncResult]:
         """Export ONMC memory and task state to a git-portable directory."""
@@ -384,40 +567,86 @@ class OnmcService:
         *,
         task: str,
         task_id: str | None = None,
+        no_llm: bool = False,
     ) -> tuple[Path, TaskOutputRecord, SolveModeOutput]:
-        return self._run_llm_mode(
+        repo_root, record, output = self._run_llm_mode(
             mode=AgentMode.SOLVE,
             task=task,
             task_id=task_id,
             response_model=SolveModeOutput,
+            no_llm=no_llm,
         )
+        return repo_root, record, cast(SolveModeOutput, output)
 
     def review(
         self,
         *,
         task: str,
         external_input: str | None = None,
+        no_llm: bool = False,
     ) -> tuple[Path, TaskOutputRecord, ReviewModeOutput]:
-        return self._run_llm_mode(
+        repo_root, record, output = self._run_llm_mode(
             mode=AgentMode.REVIEW,
             task=task,
             task_id=None,
             response_model=ReviewModeOutput,
             external_input=external_input,
+            no_llm=no_llm,
         )
+        return repo_root, record, cast(ReviewModeOutput, output)
 
     def teach(
         self,
         *,
         task: str,
         task_id: str | None = None,
+        no_llm: bool = False,
     ) -> tuple[Path, TaskOutputRecord, TeachModeOutput]:
-        return self._run_llm_mode(
+        repo_root, record, output = self._run_llm_mode(
             mode=AgentMode.TEACH,
             task=task,
             task_id=task_id,
             response_model=TeachModeOutput,
+            no_llm=no_llm,
         )
+        return repo_root, record, cast(TeachModeOutput, output)
+
+    def teach_followup(
+        self,
+        *,
+        task: str,
+        question: str,
+        task_id: str | None = None,
+    ) -> str:
+        """Answer a follow-up teaching question using the same repo memory spine."""
+        repo_root, config, storage = self._load_context()
+        provider = provider_from_settings(config.llm)
+        brief = compile_brief(
+            repo_root,
+            config,
+            storage,
+            task,
+            provider=self._optional_provider(config=config, no_llm=False),
+            log_path=self._llm_log_path(repo_root, config),
+        )
+        return generate_structured_logged(
+            provider,
+            LLMGenerationRequest(
+                system_prompt="Return valid JSON with a single `markdown` key.",
+                prompt=(
+                    "Use the repo brief below to answer the follow-up teaching question "
+                    "concisely and concretely.\n\n"
+                    f"Task: {task}\n"
+                    f"Follow-up question: {question}\n\n"
+                    f"Brief:\n{brief.to_markdown()}"
+                ),
+                temperature=0.0,
+                max_tokens=800,
+            ),
+            MarkdownEnvelope,
+            log_path=self._llm_log_path(repo_root, config),
+            operation="teach.followup",
+        ).markdown
 
     def get_task_output(self, output_id: str) -> TaskOutputRecord | None:
         _, _, storage = self._load_context()
@@ -650,9 +879,10 @@ class OnmcService:
         task_id: str | None,
         response_model: type[StructuredOutputT],
         external_input: str | None = None,
-    ) -> tuple[Path, TaskOutputRecord, StructuredOutputT]:
+        no_llm: bool = False,
+    ) -> tuple[Path, TaskOutputRecord, SolveModeOutput | ReviewModeOutput | TeachModeOutput]:
         repo_root, config, storage = self._load_context()
-        provider = provider_from_settings(config.llm)
+        provider = None if no_llm else self.llm_provider()
         task_record = self._resolve_task_context(
             repo_root=repo_root,
             storage=storage,
@@ -661,7 +891,14 @@ class OnmcService:
         )
         attempts = storage.list_attempts_for_task(task_id) if task_id else []
         memory_artifacts = storage.list_memory_artifacts_for_task(task_id) if task_id else []
-        brief = compile_brief(repo_root, config, storage, task)
+        brief = compile_brief(
+            repo_root,
+            config,
+            storage,
+            task,
+            provider=provider,
+            log_path=self._llm_log_path(repo_root, config),
+        )
         prompt = compile_prompt(
             mode=mode,
             task=task_record,
@@ -671,10 +908,25 @@ class OnmcService:
             supplemental_input=external_input,
         )
         self._ensure_prompt_size(prompt)
-        structured = provider.generate_structured(
-            prompt.to_generation_request(),
-            response_model,
-        )
+        if provider is None:
+            structured = _fallback_mode_output(
+                mode=mode,
+                brief=brief,
+                attempts=attempts,
+                memory_artifacts=memory_artifacts,
+            )
+            provider_name = "heuristic"
+            model_name = "none"
+        else:
+            structured = generate_structured_logged(
+                provider,
+                prompt.to_generation_request(),
+                response_model,
+                log_path=self._llm_log_path(repo_root, config),
+                operation=f"{mode.value}.structured",
+            )
+            provider_name = config.llm.provider.value if config.llm.provider else "unconfigured"
+            model_name = config.llm.model or "unknown"
         output_path = self._write_llm_output_markdown(
             repo_root=repo_root,
             config=config,
@@ -682,17 +934,16 @@ class OnmcService:
             task=task,
             prompt=prompt,
             brief=brief,
-            structured=structured,
-            provider=provider,
+            structured=cast(StructuredOutputT, structured),
         )
         output = TaskOutputRecord(
             output_id=f"output-{secrets.token_hex(5)}",
             task_id=task_id,
             type=_output_type_for_mode(mode),
             task_text=task,
-            provider=config.llm.provider.value if config.llm.provider else "unconfigured",
-            model=config.llm.model or "unknown",
-            summary=_summary_for_structured_output(mode, structured),
+            provider=provider_name,
+            model=model_name,
+            summary=_summary_for_structured_output(mode, cast(StructuredOutputT, structured)),
             content_json=json.dumps(structured.model_dump(mode="json"), sort_keys=True),
             markdown_path=output_path.as_posix(),
             created_at=utc_now(),
@@ -754,7 +1005,6 @@ class OnmcService:
         prompt: CompiledPrompt,
         brief: BriefArtifact,
         structured: StructuredOutputT,
-        provider: BaseLLMProvider,
     ) -> Path:
         output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-{mode.value}.md"
         output_path = compiled_dir(config, repo_root) / output_name
@@ -806,6 +1056,47 @@ class OnmcService:
         storage = SQLiteStorage(database_path(config, repo_root))
         storage.initialize()
         return repo_root, config, storage
+
+    @staticmethod
+    def _llm_log_path(repo_root: Path, config: ProjectConfig) -> Path:
+        return logs_dir(config, repo_root) / "llm-calls.jsonl"
+
+    @staticmethod
+    def _optional_provider(
+        *,
+        config: ProjectConfig,
+        no_llm: bool,
+    ) -> BaseLLMProvider | None:
+        if no_llm or config.llm.provider is None or config.llm.model is None:
+            return None
+        try:
+            return provider_from_settings(config.llm)
+        except Exception:
+            return None
+
+    def _refresh_claude_md_if_stale(
+        self,
+        *,
+        storage: SQLiteStorage,
+        home: Path | None,
+    ) -> None:
+        repo_root, config, _ = self._load_context()
+        meta = load_claude_md_meta(repo_root)
+        generated_at = meta.get("generated_at")
+        if generated_at:
+            parsed = generated_at if isinstance(generated_at, str) else ""
+            if parsed and _is_recent_enough(parsed):
+                return
+        try:
+            generate_claude_md(
+                repo_root=repo_root,
+                storage=storage,
+                provider=self._optional_provider(config=config, no_llm=False),
+                log_path=self._llm_log_path(repo_root, config),
+                write=True,
+            )
+        except Exception:
+            return
 
     @staticmethod
     def _require_task(storage: SQLiteStorage, task_id: str) -> TaskRecord:
@@ -868,6 +1159,95 @@ def _summary_for_structured_output(mode: AgentMode, structured: StructuredOutput
             return shorten(structured.concerns[0], max_length=180)
         return "Review completed with no major concerns recorded."
     if isinstance(structured, TeachModeOutput):
-        return shorten(structured.system_lesson, max_length=180)
+        return shorten(structured.approach_chosen_and_why, max_length=180)
     msg = f"Unsupported structured output for mode {mode.value}."
     raise TypeError(msg)
+
+
+def _fallback_mode_output(
+    *,
+    mode: AgentMode,
+    brief: BriefArtifact,
+    attempts: list[AttemptRecord],
+    memory_artifacts: list[MemoryArtifactRecord],
+) -> SolveModeOutput | ReviewModeOutput | TeachModeOutput:
+    if mode == AgentMode.SOLVE:
+        return SolveModeOutput(
+            approach_summary=(
+                "Start with the highest-signal files from the brief, preserve recorded "
+                "invariants, and avoid any documented failed approaches."
+            ),
+            files_to_inspect=brief.files_to_inspect[:5],
+            risks=brief.risk_notes[:4],
+            validations=brief.validation_checklist[:5],
+            confidence="heuristic",
+        )
+    if mode == AgentMode.REVIEW:
+        return ReviewModeOutput(
+            concerns=brief.risk_notes[:4]
+            or ["No major historical risks were identified by the heuristic fallback."],
+            assumptions=[
+                "The proposed change respects the repo invariants surfaced in the brief."
+            ],
+            likely_regressions=brief.impacted_areas[:4],
+            required_tests=brief.validation_checklist[:5],
+        )
+    return TeachModeOutput(
+        problem_this_solves=brief.task_summary,
+        approach_chosen_and_why=(
+            brief.relevant_memories[0].summary
+            if brief.relevant_memories
+            else "Use the repo brief to recover the relevant subsystem and validation path."
+        ),
+        what_was_tried_first=[attempt.summary for attempt in attempts[:4]],
+        current_implementation="\n".join(brief.files_to_inspect[:5]) or "No files were ranked.",
+        what_would_break=brief.risk_notes[:4],
+        open_questions=[artifact.summary for artifact in memory_artifacts[:3]],
+        validation=brief.validation_checklist[:5],
+        reasoning_map=brief.files_to_inspect[:5],
+        system_lesson=(
+            "Start at the system boundary the repo memory keeps pointing to, not the first "
+            "local symptom."
+        ),
+        false_lead_analysis=[attempt.summary for attempt in attempts[:3]],
+        mental_model_upgrade=(
+            "Use repo memory to trace shared boundaries before optimizing a local implementation."
+        ),
+    )
+
+
+def _git_count(repo_root: Path) -> int:
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return 0
+    return int(result.stdout.strip() or "0")
+
+
+def _git_commits_since(repo_root: Path, since: str) -> int:
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", f"--since={since}", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return 0
+    return int(result.stdout.strip() or "0")
+
+
+def _is_recent_enough(timestamp: str) -> bool:
+    from oh_no_my_claudecode.utils.time import parse_datetime
+
+    parsed = parse_datetime(timestamp)
+    if parsed is None:
+        return False
+    return (utc_now() - parsed).days < 7

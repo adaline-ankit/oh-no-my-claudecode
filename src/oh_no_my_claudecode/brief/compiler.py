@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from oh_no_my_claudecode.brief.llm_ranker import rerank_memories_with_llm
 from oh_no_my_claudecode.ingest.repo_tree import detect_project_hints
+from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.models import (
     BriefArtifact,
     FileStat,
@@ -26,6 +28,9 @@ def compile_brief(
     config: ProjectConfig,
     storage: SQLiteStorage,
     task: str,
+    *,
+    provider: BaseLLMProvider | None = None,
+    log_path: Path | None = None,
 ) -> BriefArtifact:
     repo_files = storage.list_repo_files()
     file_stats = storage.list_file_stats()
@@ -33,7 +38,16 @@ def compile_brief(
     hints = detect_project_hints(repo_root, repo_files)
     meta = storage.all_meta()
 
-    selected_memories = score_memories(task, memories)
+    selected_memories = score_memories(task, memories, limit=max(config.brief.max_memories, 30))
+    relevance_reasons: dict[str, str] = {}
+    if provider is not None and log_path is not None:
+        reranked, relevance_reasons = rerank_memories_with_llm(
+            task=task,
+            candidates=selected_memories[:30],
+            provider=provider,
+            log_path=log_path,
+        )
+        selected_memories = reranked
     selected_memories = selected_memories[: config.brief.max_memories]
     files_to_inspect = score_files(task, repo_files, file_stats, selected_memories)
     files_to_inspect = files_to_inspect[: config.brief.max_files]
@@ -60,6 +74,7 @@ def compile_brief(
         task_summary=shorten(task_summary, max_length=220),
         repo_overview=repo_overview,
         relevant_memories=selected_memories,
+        relevance_reasons=relevance_reasons,
         impacted_areas=impacted_areas,
         files_to_inspect=files_to_inspect,
         risk_notes=risk_notes,
@@ -69,7 +84,7 @@ def compile_brief(
     )
 
 
-def score_memories(task: str, memories: list[MemoryEntry]) -> list[MemoryEntry]:
+def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) -> list[MemoryEntry]:
     task_tokens = set(tokenize(task))
     ranked: list[tuple[float, MemoryEntry]] = []
     for memory in memories:
@@ -102,10 +117,10 @@ def score_memories(task: str, memories: list[MemoryEntry]) -> list[MemoryEntry]:
         ranked.append((score, memory))
 
     ranked.sort(key=lambda item: (-item[0], item[1].title))
-    top = [memory for score, memory in ranked if score > 0][:8]
+    top = [memory for score, memory in ranked if score > 0][:limit]
     if top:
         return top
-    return [memory for _, memory in ranked[:5]]
+    return [memory for _, memory in ranked[: min(limit, 5)]]
 
 
 def score_files(

@@ -56,6 +56,9 @@ def render_ingest_result(result: IngestResult) -> None:
     table.add_row("Memories extracted", str(result.memory_count))
     table.add_row("New memories", str(result.new_memory_count))
     table.add_row("Updated memories", str(result.updated_memory_count))
+    if result.llm_new_memory_count or result.llm_deduped_count:
+        table.add_row("LLM-added memories", str(result.llm_new_memory_count))
+        table.add_row("LLM deduplicated", str(result.llm_deduped_count))
     table.add_row("Repo files indexed", str(result.repo_file_count))
     table.add_row("File stats stored", str(result.file_stat_count))
     table.add_row("Docs parsed", str(result.doc_count))
@@ -276,6 +279,51 @@ def render_status(status: dict[str, str]) -> None:
     console.print(table)
 
 
+def render_doctor_report(ok: bool, report: dict[str, list[str]]) -> None:
+    title = "ONMC Health Check"
+    lines: list[str] = []
+    for section, items in report.items():
+        if section in {"warnings", "errors"}:
+            continue
+        lines.append(section.title())
+        for item in items:
+            lines.append(f"  ✓ {item}")
+        lines.append("")
+    if report.get("errors"):
+        lines.append("Errors")
+        for item in report["errors"]:
+            lines.append(f"  ✗ {item}")
+        lines.append("")
+    if report.get("warnings"):
+        lines.append("Warnings")
+        for item in report["warnings"]:
+            lines.append(f"  ⚠ {item}")
+    console.print(Panel.fit("\n".join(lines), title=title, border_style="green" if ok else "red"))
+
+
+def render_mine_result(result: dict[str, object], *, dry_run: bool) -> None:
+    message = result.get("message")
+    if isinstance(message, str) and message:
+        console.print(f"[yellow]{message}[/yellow]")
+        return
+    attempts = result.get("attempts", [])
+    memories = result.get("memories", [])
+    artifacts = result.get("artifacts", [])
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Mode: {'dry-run' if dry_run else 'persisted'}",
+                    f"Attempts: {len(attempts) if isinstance(attempts, list) else 0}",
+                    f"Memories: {len(memories) if isinstance(memories, list) else 0}",
+                    f"Artifacts: {len(artifacts) if isinstance(artifacts, list) else 0}",
+                ]
+            ),
+            title="Transcript Mining",
+        )
+    )
+
+
 def render_sync_result(result: SyncResult, *, action: str) -> None:
     console.print(
         Panel.fit(
@@ -389,7 +437,7 @@ def render_teach_output(output: TeachModeOutput, record: TaskOutputRecord) -> No
         Panel.fit(
             "\n".join(
                 [
-                    output.system_lesson,
+                    output.problem_this_solves,
                     "",
                     f"Output ID: {record.output_id}",
                     f"Task ID: {record.task_id or '-'}",
@@ -399,10 +447,24 @@ def render_teach_output(output: TeachModeOutput, record: TaskOutputRecord) -> No
             title="Teach",
         )
     )
+    console.print("[cyan]The Problem This Solves:[/cyan]")
+    console.print(output.problem_this_solves)
+    console.print("[cyan]Approach Chosen And Why:[/cyan]")
+    console.print(output.approach_chosen_and_why)
+    _render_output_list("What Was Tried First", output.what_was_tried_first, ordered=False)
+    console.print("[cyan]Current Implementation:[/cyan]")
+    console.print(output.current_implementation)
     _render_output_list("Reasoning Map", output.reasoning_map, ordered=False)
-    _render_output_list("False Leads", output.false_lead_analysis, ordered=False)
-    console.print("[cyan]Mental Model Upgrade:[/cyan]")
-    console.print(output.mental_model_upgrade)
+    _render_output_list("What Would Break", output.what_would_break, ordered=False)
+    _render_output_list("Open Questions", output.open_questions, ordered=False)
+    _render_output_list("Validation", output.validation, ordered=False)
+    if output.system_lesson:
+        console.print("[cyan]System Lesson:[/cyan]")
+        console.print(output.system_lesson)
+    _render_output_list("False Lead Analysis", output.false_lead_analysis, ordered=False)
+    if output.mental_model_upgrade:
+        console.print("[cyan]Mental Model Upgrade:[/cyan]")
+        console.print(output.mental_model_upgrade)
 
 
 def render_task_started(task: TaskRecord) -> None:

@@ -4,4 +4,4 @@ from oh_no_my_claudecode.api import OnmcRepo, init
 
 __all__ = ["__version__", "OnmcRepo", "init"]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
