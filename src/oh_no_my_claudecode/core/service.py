@@ -477,11 +477,19 @@ class OnmcService:
         *,
         kind: MemoryKind | None = None,
         source_type: SourceType | None = None,
+        min_confidence: float | None = None,
+        confirmed_only: bool = False,
     ) -> list[MemoryEntry]:
         _, _, storage = self._load_context()
         if source_type is not None:
-            return storage.list_memories(kind=kind, source_type=source_type)
-        return MemoryCatalog(storage).list(kind=kind)
+            memories = storage.list_memories(kind=kind, source_type=source_type)
+        else:
+            memories = MemoryCatalog(storage).list(kind=kind)
+        if min_confidence is not None:
+            memories = [memory for memory in memories if memory.confidence >= min_confidence]
+        if confirmed_only:
+            memories = [memory for memory in memories if memory.feedback_score > 0]
+        return memories
 
     def add_manual_memory(
         self,

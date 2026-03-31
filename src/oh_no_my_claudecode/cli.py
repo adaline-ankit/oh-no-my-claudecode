@@ -602,6 +602,18 @@ def memory_list_command(
         MemoryArtifactType | None,
         typer.Option("--type", help="Filter task-derived memory artifacts by type."),
     ] = None,
+    min_confidence: Annotated[
+        float | None,
+        typer.Option("--min-confidence", min=0.0, max=1.0, help="Filter by minimum confidence."),
+    ] = None,
+    confirmed: Annotated[
+        bool,
+        typer.Option("--confirmed", help="Show only explicitly confirmed memories."),
+    ] = False,
+    wide: Annotated[
+        bool,
+        typer.Option("--wide/--compact", help="Show a wider, more readable memory table."),
+    ] = True,
 ) -> None:
     """List stored memory entries."""
     if artifact_type is not None and (kind is not None or source_type is not None):
@@ -609,7 +621,12 @@ def memory_list_command(
             code=_fatal("Use --type alone, or filter stored memory with --kind/--source.")
         )
     try:
-        memories = _service().list_memories(kind=kind, source_type=source_type)
+        memories = _service().list_memories(
+            kind=kind,
+            source_type=source_type,
+            min_confidence=min_confidence,
+            confirmed_only=confirmed,
+        )
         artifacts = _service().list_memory_artifacts(artifact_type=artifact_type)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
@@ -617,7 +634,7 @@ def memory_list_command(
         artifacts = []
     if artifact_type is not None:
         memories = []
-    render_memory_list(memories, artifacts=artifacts)
+    render_memory_list(memories, artifacts=artifacts, wide=wide)
 
 
 @memory_app.command("add")

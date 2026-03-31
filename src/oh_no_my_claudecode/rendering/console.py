@@ -116,6 +116,7 @@ def render_memory_list(
     memories: list[MemoryEntry],
     *,
     artifacts: list[MemoryArtifactRecord] | None = None,
+    wide: bool = True,
 ) -> None:
     artifact_rows = artifacts or []
     if not memories and not artifact_rows:
@@ -142,18 +143,20 @@ def render_memory_list(
         return
 
     table = Table(title="Stored Memory")
-    table.add_column("", no_wrap=True)
-    table.add_column("ID")
-    table.add_column("Kind")
-    table.add_column("Title")
-    table.add_column("Source")
-    table.add_column("Confidence", justify="right")
+    table.add_column("", no_wrap=True, width=2)
+    table.add_column("ID", style="dim", width=24)
+    table.add_column("Kind", width=14)
+    table.add_column("Title", min_width=20 if not wide else 40, no_wrap=False)
+    table.add_column("Summary", min_width=24 if not wide else 48, no_wrap=False)
+    table.add_column("Source", width=20, style="dim")
+    table.add_column("Conf", width=6, justify="right", no_wrap=True)
     for memory in memories:
         table.add_row(
             _memory_feedback_indicator(memory.feedback_score),
             memory.id,
             memory.kind.value,
-            memory.title,
+            memory.title if wide else shorten(memory.title, max_length=20),
+            memory.summary if wide else shorten(memory.summary, max_length=36),
             f"{memory.source_type.value}:{memory.source_ref}",
             f"{memory.confidence:.2f}",
         )
