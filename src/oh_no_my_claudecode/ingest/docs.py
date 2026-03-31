@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from oh_no_my_claudecode.core.repo import relative_path
@@ -7,12 +8,36 @@ from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import utc_now
 
+EXCLUDED_DOC_PATTERNS = [
+    r"README\.[a-z]{2}(?:-[A-Z]{2})?\.md$",
+    r"CHANGELOG\.[a-z]{2}(?:-[A-Z]{2})?\.md$",
+    r"CONTRIBUTING\.[a-z]{2}(?:-[A-Z]{2})?\.md$",
+]
+OUTPUT_FILES = {"CLAUDE.md", "AGENTS.md", ".cursorrules"}
+
 
 def discover_doc_paths(repo_root: Path, *, globs: list[str]) -> list[Path]:
     discovered: set[Path] = set()
     for pattern in globs:
         discovered.update(repo_root.glob(pattern))
-    return sorted(path for path in discovered if path.is_file() and ".onmc" not in path.parts)
+    return sorted(
+        path
+        for path in discovered
+        if path.is_file() and ".onmc" not in path.parts and should_ingest_doc_path(path)
+    )
+
+
+def is_primary_doc(path: Path) -> bool:
+    """Return False for translated variants of primary docs."""
+    name = path.name
+    return not any(re.search(pattern, name) for pattern in EXCLUDED_DOC_PATTERNS)
+
+
+def should_ingest_doc_path(path: Path) -> bool:
+    """Return whether the doc path should be ingested into ONMC memory."""
+    if path.name in OUTPUT_FILES:
+        return False
+    return is_primary_doc(path)
 
 
 def extract_doc_memories(repo_root: Path, doc_path: Path, *, max_chars: int) -> list[MemoryEntry]:
