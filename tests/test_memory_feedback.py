@@ -204,3 +204,46 @@ def test_memory_cli_feedback_and_mine_hint(
 
     assert mine_result.exit_code == 0
     assert "Review them? [onmc memory list --source transcript]" in mine_result.stdout
+
+
+def test_memory_list_supports_wide_and_filter_flags(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    confirmed = service.add_memory(
+        kind=MemoryKind.INVARIANT,
+        title="Confirmed repository boundary",
+        summary="All writes must go through the repository boundary.",
+        source_type=SourceType.MANUAL_SEED,
+        confidence=0.95,
+    )
+    service.confirm_memory(confirmed.id)
+    service.add_memory(
+        kind=MemoryKind.GOTCHA,
+        title="Low confidence note",
+        summary="This should be filtered out.",
+        source_type=SourceType.LLM_EXTRACTED,
+        confidence=0.2,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "memory",
+            "list",
+            "--source",
+            "manual_seed",
+            "--min-confidence",
+            "0.8",
+            "--confirmed",
+            "--wide",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert confirmed.id in result.stdout
+    assert "Low confidence note" not in result.stdout

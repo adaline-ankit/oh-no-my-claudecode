@@ -194,6 +194,30 @@ def test_installer_creates_backup_before_writing(tmp_path: Path) -> None:
     assert json.loads(backup_path.read_text(encoding="utf-8")) == {"theme": "light"}
 
 
+def test_hooks_install_yes_is_non_interactive_and_can_skip_mcp(
+    sample_repo: Path,
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr("oh_no_my_claudecode.hooks.installer.Path.home", lambda: fake_home)
+
+    result = runner.invoke(app, ["hooks", "install", "--yes", "--no-mcp"])
+
+    settings_path = fake_home / ".claude" / "settings.json"
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+
+    assert result.exit_code == 0
+    assert "Hooks installed." in result.stdout
+    assert "mcpServers" not in payload
+    assert "PreCompact" in payload["hooks"]
+    assert "PostCompact" in payload["hooks"]
+
+
 def test_pre_compact_cli_exits_zero_even_when_no_active_task(
     sample_repo: Path,
     monkeypatch: object,

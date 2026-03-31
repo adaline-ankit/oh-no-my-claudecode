@@ -28,7 +28,7 @@ def test_doctor_exit_code_zero_when_checks_pass(
     assert "ONMC Health Check" in result.stdout
 
 
-def test_doctor_exit_code_one_when_provider_check_fails(
+def test_doctor_exit_code_zero_when_provider_env_var_is_missing(
     sample_repo: Path,
     monkeypatch: object,
 ) -> None:
@@ -48,8 +48,36 @@ def test_doctor_exit_code_one_when_provider_check_fails(
 
     result = runner.invoke(app, ["doctor"])
 
+    assert result.exit_code == 0
+    assert "ANTHROPIC_API_KEY not set in current environment" in result.stdout
+
+
+def test_doctor_exit_code_one_when_provider_key_is_invalid(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest()
+    service.configure_llm(
+        provider=LLMProviderType.ANTHROPIC,
+        model="claude-sonnet-4-5",
+        api_key_env_var="ANTHROPIC_API_KEY",
+        temperature=0.0,
+        max_tokens=1200,
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-invalid-test-key")
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.core.service.validate_provider_api_key",
+        lambda provider, api_key: (False, "invalid credentials"),
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
     assert result.exit_code == 1
-    assert "LLM provider check failed" in result.stdout
+    assert "anthropic key is invalid" in result.stdout.lower()
 
 
 def test_detect_leaked_keys_finds_provider_secret_patterns(tmp_path: Path) -> None:
