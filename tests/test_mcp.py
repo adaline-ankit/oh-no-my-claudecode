@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from oh_no_my_claudecode import init
 from oh_no_my_claudecode.mcp_server.resources import read_onmc_resource
-from oh_no_my_claudecode.mcp_server.server import build_mcp_server
+from oh_no_my_claudecode.mcp_server.server import build_mcp_server, run_mcp_server
 
 
 def _resource_text(repo_path: Path, uri: str) -> str:
@@ -55,3 +58,32 @@ def test_brief_resource_returns_non_empty_markdown(
     text = _resource_text(sample_repo, "onmc://brief")
 
     assert "# ONMC Task Brief" in text
+
+
+def test_run_mcp_server_prints_startup_message_to_stderr_only(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    def fake_run(coro: asyncio.Future[object]) -> None:
+        coro.close()
+
+    stdout = SimpleNamespace(buffer="")
+    stderr = SimpleNamespace(buffer="")
+
+    def write_stdout(text: str) -> int:
+        stdout.buffer += text
+        return len(text)
+
+    def write_stderr(text: str) -> int:
+        stderr.buffer += text
+        return len(text)
+
+    monkeypatch.setattr(sys, "stdout", SimpleNamespace(write=write_stdout, flush=lambda: None))
+    monkeypatch.setattr(sys, "stderr", SimpleNamespace(write=write_stderr, flush=lambda: None))
+    monkeypatch.setattr("oh_no_my_claudecode.mcp_server.server.asyncio.run", fake_run)
+
+    run_mcp_server(sample_repo)
+
+    assert "ONMC MCP server running." in stderr.buffer
+    assert '"command": "onmc"' in stderr.buffer
+    assert stdout.buffer == ""

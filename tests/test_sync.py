@@ -139,7 +139,10 @@ def test_sync_restore_missing_manifest_exits_with_code_one(
     result = runner.invoke(app, ["sync", "--restore"])
 
     assert result.exit_code == 1
-    assert "Missing sync manifest" in result.stdout
+    assert "Error: " in result.stdout
+    assert ".agent-memory/manifest.json not found." in result.stdout
+    assert "Run `onmc sync --commit`" in result.stdout
+    assert "commit .agent-memory/ to git before restoring." in result.stdout
 
 
 def test_manifest_counts_match_exported_files(sample_repo: Path, monkeypatch: object) -> None:

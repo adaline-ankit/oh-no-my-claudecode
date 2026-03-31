@@ -219,7 +219,16 @@ class OnmcService:
         source_dir = input_dir or repo_root / ".agent-memory"
         manifest_path = source_dir / "manifest.json"
         if not manifest_path.exists():
-            msg = f"Missing sync manifest: {manifest_path}"
+            display_path = (
+                ".agent-memory/manifest.json"
+                if source_dir == repo_root / ".agent-memory"
+                else manifest_path.as_posix()
+            )
+            msg = (
+                f"Error: {display_path} not found.\n"
+                "Run `onmc sync --commit` on a machine with an initialized repo first,\n"
+                "then commit .agent-memory/ to git before restoring."
+            )
             raise FileNotFoundError(msg)
         return repo_root, restore_agent_memory(input_dir=source_dir, storage=storage)
 

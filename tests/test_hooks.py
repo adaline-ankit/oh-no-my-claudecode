@@ -125,6 +125,12 @@ def test_installer_merges_existing_settings_without_destroying_other_keys(tmp_pa
         json.dumps(
             {
                 "theme": "dark",
+                "mcpServers": {
+                    "existing": {
+                        "command": "existing-mcp",
+                        "args": ["serve"],
+                    }
+                },
                 "hooks": {
                     "PreCompact": [
                         {
@@ -145,9 +151,36 @@ def test_installer_merges_existing_settings_without_destroying_other_keys(tmp_pa
 
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     assert payload["theme"] == "dark"
+    assert payload["mcpServers"]["existing"]["command"] == "existing-mcp"
     assert backup_path.exists()
     assert "PreCompact" in payload["hooks"]
     assert "PostCompact" in payload["hooks"]
+
+
+def test_installer_creates_claude_settings_when_directory_missing(tmp_path: Path) -> None:
+    settings_path = tmp_path / ".claude" / "settings.json"
+    backup_path = tmp_path / ".claude" / "settings.json.onmc-backup"
+
+    install_claude_hooks(settings_path=settings_path, backup_path=backup_path, add_mcp_server=False)
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "hooks" in payload
+    assert "PreCompact" in payload["hooks"]
+    assert "PostCompact" in payload["hooks"]
+    assert backup_path.exists()
+
+
+def test_installer_creates_settings_when_file_missing(tmp_path: Path) -> None:
+    settings_path = tmp_path / ".claude" / "settings.json"
+    backup_path = tmp_path / ".claude" / "settings.json.onmc-backup"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    install_claude_hooks(settings_path=settings_path, backup_path=backup_path, add_mcp_server=True)
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert payload["mcpServers"]["onmc"]["command"] == "onmc"
+    assert payload["mcpServers"]["onmc"]["args"] == ["serve", "--mcp"]
+    assert backup_path.exists()
 
 
 def test_installer_creates_backup_before_writing(tmp_path: Path) -> None:
@@ -174,3 +207,32 @@ def test_pre_compact_cli_exits_zero_even_when_no_active_task(
     result = runner.invoke(app, ["hooks", "pre-compact"])
 
     assert result.exit_code == 0
+
+
+def test_pre_compact_cli_exits_zero_when_onmc_state_is_missing(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+
+    result = runner.invoke(app, ["hooks", "pre-compact"])
+
+    assert result.exit_code == 0
+    assert "ONMC pre-compact warning" in result.stdout
+
+
+def test_pre_compact_cli_exits_zero_with_corrupted_database(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    (sample_repo / ".onmc" / "memory.db").write_text("not-a-sqlite-database", encoding="utf-8")
+
+    result = runner.invoke(app, ["hooks", "pre-compact"])
+
+    assert result.exit_code == 0
+    assert "ONMC pre-compact warning" in result.stdout
