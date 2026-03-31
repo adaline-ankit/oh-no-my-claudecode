@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] — 2026-03-31
+
+### Added
+
+- **God Mode setup wizard** (`onmc setup`): a guided onboarding flow that detects repo shape, optionally configures an LLM provider, runs ingest, generates `CLAUDE.md`, and offers Claude Code hook/MCP/post-commit integration in one command.
+- **LLM-powered ingest upgrade**: `onmc ingest` now optionally mines commit batches and docs for decisions, invariants, failed approaches, design conflicts, and gotchas, with Pydantic validation and logged provider calls.
+- **`CLAUDE.md` generation and maintenance** (`onmc claude-md`): generate, preview, update, and watch a repo-specific `CLAUDE.md` synthesized from stored memory and active tasks.
+- **Claude Code transcript mining** (`onmc mine`): read Claude Code assistant transcripts, exclude user turns, extract attempts and durable memory, and link findings back to tasks when possible.
+- **LLM-ranked briefs**: `onmc brief` can now rerank candidate memory with task-specific relevance reasons while preserving the deterministic fallback.
+- **Upgraded `teach` mode**: richer teaching output plus interactive follow-up Q&A with the same memory spine.
+- **Health checks** (`onmc doctor`): audit repo state, memory freshness, provider readiness, Claude integration, and sync state from one command.
+- **LLM call logging**: all provider calls are appended to `.onmc/logs/llm-calls.jsonl` with timestamps, token counts, model, and latency.
+
+### Changed
+
+- README and architecture docs now describe the God Mode workflow, `CLAUDE.md`, transcript mining, doctor, and optional LLM-assisted ingest/ranking.
+- `teach` output now supports a richer schema while remaining backward-compatible with the earlier prompt contract.
+
+### Fixed
+
+- `solve` / `review` / `teach` now remain strict about provider configuration unless `--no-llm` is explicitly requested.
+- Transcript-to-task linking now uses tokenized file overlap instead of exact string matching.
+
 ## [0.2.0] — 2026-03-31
 
 ### Added

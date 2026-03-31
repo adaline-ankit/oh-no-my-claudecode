@@ -18,11 +18,30 @@ It is not just a prompt pack and it is not yet a generic multi-agent runtime.
 Today ONMC does four core things:
 
 - builds deterministic repo memory from docs, git history, and file structure
+- optionally uses an LLM to extract and rank higher-signal memory where heuristics are weak
 - stores durable task-scoped engineering memory in local SQLite state
 - compiles high-signal briefs and prompts for coding work
 - exposes that memory to agents through CLI commands, a Python API, Claude Code hooks, and a read-only MCP server
 
 ## What Is Implemented
+
+### 0. Setup Wizard
+
+The recommended onboarding flow is now:
+
+```bash
+onmc setup
+```
+
+The wizard can:
+
+- initialize `.onmc/`
+- configure an optional provider
+- ingest repo memory
+- generate `CLAUDE.md`
+- install Claude Code hooks
+- register the MCP server
+- install post-commit ingest/sync automation
 
 ### 1. Repo Memory Ingest
 
@@ -39,6 +58,10 @@ What gets stored:
 - git-derived hotspots and co-change patterns
 - repo-tree-derived validation and layout hints
 - repo file metadata and git file stats
+
+If a provider is configured, ingest now adds an LLM extraction pass over commit batches and docs.
+Those extractions are validated before storage and written as `llm_extracted` memory with
+confidence scores.
 
 Stored under:
 
@@ -149,6 +172,9 @@ The brief includes:
 
 The markdown artifact is written to `.onmc/compiled/<timestamp>-brief.md`.
 
+When a provider is configured, ONMC reranks the final candidate memory set with an LLM and stores
+one-sentence relevance reasons in the brief output.
+
 ### 7. Optional LLM Layer
 
 ONMC can optionally call a configured provider:
@@ -194,7 +220,37 @@ Outputs are:
 - written under `.onmc/compiled/`
 - persisted as task-linked output records when a task context is provided
 
-### 9. Git-Portable Memory Sync
+`teach --interactive` can continue the explanation as a follow-up Q&A loop with the same memory
+spine re-injected each turn.
+
+### 9. `CLAUDE.md` Generation
+
+ONMC can generate and maintain agent bootstrap context directly:
+
+```bash
+onmc claude-md generate
+onmc claude-md preview
+onmc claude-md update
+onmc claude-md --watch
+```
+
+Generated sections cover project overview, invariants, decisions, hotspots, bad approaches,
+validation, and active tasks.
+
+### 10. Claude Code Transcript Mining
+
+ONMC can mine Claude Code transcripts:
+
+```bash
+onmc mine
+onmc mine --dry-run
+onmc mine --since "2 days ago"
+```
+
+This reads assistant turns only, excludes user turns from provider payloads, and extracts attempts,
+decisions, failed approaches, and gotchas.
+
+### 11. Git-Portable Memory Sync
 
 ONMC can export and restore state in a git-committable format:
 
@@ -216,7 +272,7 @@ Export format:
 
 This allows memory to move with the repo instead of staying trapped in `.onmc/memory.db`.
 
-### 10. Claude Code Compaction Hooks
+### 12. Claude Code Compaction Hooks
 
 ONMC can install Claude Code compaction hooks:
 
@@ -238,7 +294,7 @@ What they do:
 
 This is ONMC's first continuity mechanism for recovering context after compaction.
 
-### 11. Read-Only MCP Server
+### 13. Read-Only MCP Server
 
 ONMC can serve memory over MCP:
 
@@ -258,6 +314,16 @@ Exposed resources:
 - `onmc://status`
 
 This is read-only in the current release.
+
+### 14. Health Check
+
+```bash
+onmc doctor
+```
+
+The doctor command audits initialization, ingest freshness, provider setup, Claude integration,
+`CLAUDE.md`, `.agent-memory/`, and post-commit hooks, and returns a nonzero exit code only for
+actual errors.
 
 ### 12. Public Python API
 

@@ -53,10 +53,17 @@ Goal:
 
 Structured output shape:
 
-- `reasoning_map`
-- `system_lesson`
-- `false_lead_analysis`
-- `mental_model_upgrade`
+- `problem_this_solves`
+- `approach_chosen_and_why`
+- `what_was_tried_first`
+- `current_implementation`
+- `what_would_break`
+- `open_questions`
+- `validation`
+
+The model still accepts the original `reasoning_map` / `system_lesson` / `false_lead_analysis` /
+`mental_model_upgrade` shape for backward compatibility, and ONMC normalizes that into the richer
+teach output model.
 
 ## Prompt Sections
 
@@ -84,3 +91,9 @@ ONMC is memory-first. The prompt compiler uses the deterministic brief as the sp
 - provenance keeps the prompt grounded in where the signals came from
 
 This keeps the model in a reasoning role instead of using it to rediscover repo context from scratch.
+
+When a provider is configured, the same memory spine also powers:
+
+- brief reranking with explicit relevance reasons
+- transcript mining
+- interactive `teach` follow-up answers

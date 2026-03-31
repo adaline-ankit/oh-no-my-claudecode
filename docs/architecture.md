@@ -14,74 +14,98 @@ The system compiles repo-specific context into a brief that a coding agent can c
 
 ## Runtime Flow
 
-1. `onmc init`
+1. `onmc setup`
+   - detects repo characteristics and Claude Code presence
+   - optionally configures an LLM provider
+   - runs ingest, `CLAUDE.md` generation, hook install, MCP registration, and auto-sync
+
+2. `onmc init`
    - discovers the git repo root
    - creates `.onmc/`
    - writes `.onmc/config.yaml`
    - initializes `.onmc/memory.db`
 
-2. `onmc ingest`
+3. `onmc ingest`
    - scans repository files
    - parses selected markdown docs
    - walks git history
    - infers hotspots and validation hints
    - stores structured memory and repo metadata in SQLite
+   - optionally runs an LLM extraction pass over commit batches and docs
+   - validates extracted JSON before storing `llm_extracted` memory
 
-3. `onmc ingest --files ...`
+4. `onmc ingest --files ...`
    - reprocesses only the requested files
    - updates matching doc memories and file stats
    - refreshes related git patterns for the touched paths
    - leaves unrelated memory untouched
 
-4. `onmc sync --commit` / `onmc sync --restore`
+5. `onmc sync --commit` / `onmc sync --restore`
    - exports SQLite state to `.agent-memory/` JSON + markdown
    - restores that exported state on another machine or workspace
 
-5. `onmc task start`
+6. `onmc task start`
    - creates a durable task record
    - captures repo root and current branch
    - initializes lifecycle timestamps and labels
 
-6. `onmc attempt add`
+7. `onmc attempt add`
    - attaches an attempt record to an existing task
    - stores status, reasoning notes, evidence, and touched files
    - preserves failed or partial paths alongside successful ones
 
-7. `onmc brief --task "..."`
+8. `onmc brief --task "..."`
    - loads stored memory and repo metadata
    - tokenizes the task
-   - ranks memory entries and file paths
+   - ranks memory entries and file paths heuristically
+   - optionally reranks the final candidate set with an LLM and annotates relevance reasons
    - builds a concise markdown brief
    - writes `.onmc/compiled/<timestamp>-brief.md`
 
-8. `onmc hooks install`
+9. `onmc hooks install`
    - merges Claude Code PreCompact and PostCompact hooks into `~/.claude/settings.json`
    - optionally adds `onmc serve --mcp` to Claude Code MCP server config
 
-9. `onmc hooks pre-compact` / `onmc hooks post-compact`
+10. `onmc hooks pre-compact` / `onmc hooks post-compact`
    - serialize active task state into `compaction_snapshots`
    - compile a short continuation brief after compaction
    - write `~/.onmc-continuation-brief.md` for session recovery
 
-10. `onmc llm configure`
+11. `onmc llm configure`
    - persists optional provider settings in `.onmc/config.yaml`
    - keeps secrets in environment variables instead of local config
    - prepares a minimal generation interface for future LLM-backed features
 
-11. prompt compilation
+12. prompt compilation
    - loads task records, attempts, memory artifacts, and a fresh deterministic brief
    - builds a structured prompt for `solve`, `review`, or `teach`
    - injects negative memory and validation guidance before any model call
 
-12. `onmc solve`, `onmc review`, `onmc teach`
+13. `onmc solve`, `onmc review`, `onmc teach`
    - resolve the configured provider from `.onmc/config.yaml` plus environment variables
    - compile the mode-specific prompt from ONMC memory and brief context
    - request structured JSON output from the provider
    - render a concise terminal view
    - write `.onmc/compiled/<timestamp>-<mode>.md`
    - persist a task-linked output record when a task context is provided
+   - `teach --interactive` re-injects the memory spine for follow-up Q&A
 
-13. `onmc serve --mcp`
+14. `onmc claude-md ...`
+   - generate `CLAUDE.md` from stored memory and active tasks
+   - update stale sections while preserving `<!-- user-written -->` sections
+   - watch the memory DB and regenerate automatically on change
+
+15. `onmc mine`
+   - discover Claude Code session transcripts for the current repo
+   - exclude user turns from provider payloads
+   - extract attempts, decisions, failed approaches, and gotchas
+   - link mined findings back to tasks when file overlap is strong enough
+
+16. `onmc doctor`
+   - audit repo state, ingest freshness, memory counts, provider config, Claude integration, and sync state
+   - return a nonzero exit code only when a genuine error is detected
+
+17. `onmc serve --mcp`
    - serves read-only MCP resources over stdio
    - exposes briefs, memory, task state, snapshots, and status on demand
 
@@ -126,6 +150,10 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - `pipeline.py`
   - end-to-end ingest orchestration
   - file-scoped incremental ingest
+- `llm_extractor.py`
+  - commit/doc extraction prompts
+  - Pydantic validation
+  - conservative semantic deduplication
 
 ### `sync/`
 
@@ -144,6 +172,23 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - read-only MCP server definition
 - ONMC resource listing and URI handlers
 
+### `setup/`
+
+- environment detection for repo + Claude Code
+- interactive onboarding wizard
+
+### `claude_md/`
+
+- memory-to-`CLAUDE.md` generation
+- section-preserving updates
+- file watcher integration
+
+### `mine/`
+
+- Claude Code transcript discovery
+- assistant-turn parsing
+- transcript extraction and task linking
+
 ### `api.py`
 
 - typed public import surface
@@ -153,6 +198,7 @@ The system compiles repo-specific context into a brief that a coding agent can c
 
 - task tokenization and scoring
 - relevant memory selection
+- optional LLM reranking
 - impacted-file ranking
 - risk and validation checklist generation
 - reading-list generation
@@ -163,6 +209,7 @@ The system compiles repo-specific context into a brief that a coding agent can c
 - config-to-provider resolution
 - optional Anthropic and OpenAI text generation
 - mock provider support for tests
+- shared logging for all provider calls
 
 ### `prompt/`
 
@@ -197,6 +244,8 @@ P0 tables:
 
 Manual memory is reserved in the schema through `source_type = manual`, even though P0 does not yet expose a write command for it.
 
+LLM-extracted and transcript-mined memories share the same `memories` table; deterministic selection and storage remain centralized even when extraction is model-assisted.
+
 Tasks are stored as first-class records so branch, status, timestamps, labels, and final summaries can be recovered later without depending on prior chat transcripts.
 
 Attempts are stored as task-linked records so ONMC can preserve failed, partial, and successful approaches without requiring transcript recovery or model-based summarization.
@@ -224,14 +273,18 @@ Embeddings add infrastructure, tuning overhead, and a false sense of intelligenc
 
 ## Current LLM Boundary
 
-The LLM layer is intentionally narrow in this step:
+The LLM layer is now optional but materially useful:
 
 - provider configuration is optional
-- generation is not wired into `ingest` or an autonomous task loop yet
-- prompt compilation is wired, but model execution is still an explicit later step
+- `ingest` can mine commits and docs with an LLM
+- `brief` can rerank candidate memory with an LLM
+- `CLAUDE.md` can be generated by an LLM or a deterministic fallback
+- transcript mining can extract attempts and findings with an LLM
+- `solve` / `review` / `teach` are explicit model-backed commands
 - there is no orchestration, tool calling, or autonomous solve loop yet
-- solve/review/teach are explicit single-shot commands, not a background agent runtime
+- solve/review/teach are explicit commands, not a background agent runtime
 - secrets stay in environment variables
+- every provider call is logged to `.onmc/logs/llm-calls.jsonl`
 
 ## Public Surface
 
