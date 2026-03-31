@@ -109,6 +109,8 @@ These modes do not yet run an agent loop. ONMC compiles structured prompts so a 
 
 Python 3.11+ is required.
 
+**Platform support:** macOS and Linux. Windows support is planned for v0.4.0.
+
 ```bash
 pip install oh-no-my-claudecode
 ```
