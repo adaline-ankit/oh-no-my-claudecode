@@ -203,7 +203,7 @@ def _provider_http_error_message(
         return (
             "Anthropic model not found: "
             f"{requested_model}. Configure a current model such as "
-            "`claude-sonnet-4-20250514` or `claude-3-7-sonnet-20250219`, "
+            "`claude-sonnet-4-5`, "
             "or list models available to your key with "
             "`curl https://api.anthropic.com/v1/models --header \"x-api-key: $ANTHROPIC_API_KEY\" "
             "--header \"anthropic-version: 2023-06-01\"`."

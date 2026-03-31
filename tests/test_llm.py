@@ -29,7 +29,7 @@ def test_llm_config_round_trip(sample_repo: Path, monkeypatch: object) -> None:
 
     _, settings = service.configure_llm(
         provider=LLMProviderType.ANTHROPIC,
-        model="claude-3-7-sonnet-20250219",
+        model="claude-sonnet-4-5",
         api_key_env_var="ANTHROPIC_API_KEY",
         temperature=0.1,
         max_tokens=900,
@@ -38,7 +38,7 @@ def test_llm_config_round_trip(sample_repo: Path, monkeypatch: object) -> None:
     loaded = load_config(sample_repo)
     assert settings.provider == LLMProviderType.ANTHROPIC
     assert loaded.llm.provider == LLMProviderType.ANTHROPIC
-    assert loaded.llm.model == "claude-3-7-sonnet-20250219"
+    assert loaded.llm.model == "claude-sonnet-4-5"
     assert loaded.llm.api_key_env_var == "ANTHROPIC_API_KEY"
     assert loaded.llm.temperature == 0.1
     assert loaded.llm.max_tokens == 900
@@ -48,7 +48,7 @@ def test_provider_selection_uses_configured_provider() -> None:
     anthropic = provider_from_settings(
         LLMSettings(
             provider=LLMProviderType.ANTHROPIC,
-            model="claude-3-7-sonnet-20250219",
+            model="claude-sonnet-4-5",
             api_key_env_var="ANTHROPIC_API_KEY",
         ),
         environ={"ANTHROPIC_API_KEY": "test-key"},
@@ -85,8 +85,7 @@ def test_anthropic_model_not_found_error_is_actionable() -> None:
     )
 
     assert "Anthropic model not found" in message
-    assert "claude-sonnet-4-20250514" in message
-    assert "claude-3-7-sonnet-20250219" in message
+    assert "claude-sonnet-4-5" in message
 
 
 def test_missing_credentials_raise_clear_error() -> None:

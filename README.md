@@ -1,3 +1,8 @@
+[![CI](https://github.com/adaline-ankit/oh-no-my-claudecode/actions/workflows/ci.yml/badge.svg)](https://github.com/adaline-ankit/oh-no-my-claudecode/actions)
+[![PyPI version](https://badge.fury.io/py/oh-no-my-claudecode.svg)](https://pypi.org/project/oh-no-my-claudecode/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 # oh-no-my-claudecode
 
 `oh-no-my-claudecode` helps coding agents and engineers recover the high-signal, repo-specific context that static instructions and raw transcripts miss.
@@ -12,6 +17,17 @@ P0 is intentionally conservative:
 - no autonomous coding claims
 
 The goal is better repo context recovery, not magic.
+
+## Works with every coding agent
+
+| Agent | Integration |
+|---|---|
+| **Claude Code** | `onmc hooks install` → `onmc serve --mcp` |
+| **Cursor** | Pipe `onmc brief` output into `.cursorrules` |
+| **Codex CLI** | Pass `onmc brief` output via `AGENTS.md` or `--context` |
+| **GitHub Coding Agent** | Add `onmc sync --restore` to repo's `postCreateCommand` |
+| **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` or `.devcontainer.json` |
+| **Any agent** | `onmc sync --restore && onmc brief --task "..."` in startup script |
 
 ## Problem
 
@@ -94,20 +110,26 @@ pip install -e ".[dev]"
 
 ## Quickstart
 
-Inside any git repository:
+### Flow A — Fresh repo (no existing `.agent-memory/`)
 
 ```bash
 onmc init
 onmc ingest
+onmc task start --title "Your task" --description "What you are working on"
+onmc brief --task "your task"
+onmc sync --commit
+git add .agent-memory/
+git commit -m "chore: add agent memory export"
+```
+
+### Flow B — Cloning a repo that already has `.agent-memory/`
+
+```bash
+git clone <repo-url>
+cd <repo>
+onmc init
 onmc sync --restore
-onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate test churn around cache invalidation" --label bug
-onmc attempt add task-abc123def4 --summary "Try a narrower cache fix first" --kind fix_attempt --status tried --file src/cache.py
-onmc memory add task-abc123def4 --type did_not_work --title "Cache-only patch missed the worker path" --summary "Tried a narrower change in src/cache.py only"
-onmc brief --task "fix flaky Redis cache invalidation bug"
-onmc hooks install
-onmc serve --mcp
-onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
-onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
+onmc brief --task "your task"
 ```
 
 This creates local state under:
@@ -129,6 +151,8 @@ onmc ingest
 onmc ingest --files README.md docs/architecture.md
 onmc ingest --install-hook
 onmc sync --commit
+git add .agent-memory/
+git commit -m "chore: export agent memory"
 onmc sync --restore
 onmc hooks install
 onmc hooks status
@@ -152,7 +176,7 @@ onmc memory list --kind hotspot
 onmc memory show artifact-123abc
 onmc memory show hotspot-123abc
 onmc llm status
-onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
+onmc llm configure --provider anthropic --model claude-sonnet-4-5
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 onmc review --task "review the proposed cache invalidation fix" --input-file notes.md
 onmc teach --task "explain the cache invalidation bug" --task-id task-abc123def4
@@ -211,6 +235,12 @@ The output is written to `.onmc/compiled/<timestamp>-brief.md`.
 
 `onmc sync --commit` exports repo memory, tasks, attempts, artifacts, and the most recent brief to `.agent-memory/` as stable JSON plus markdown. `onmc sync --restore` restores that state into `.onmc/memory.db` on another machine or cloud workspace.
 
+```bash
+onmc sync --commit
+git add .agent-memory/
+git commit -m "chore: export agent memory"
+```
+
 ### Hooks and Continuation Briefs
 
 `onmc hooks install` merges Claude Code PreCompact and PostCompact hooks into `~/.claude/settings.json`. Pre-compaction stores a `CompactionSnapshot`; post-compaction compiles a continuation brief to `~/.onmc-continuation-brief.md` so the next turn can recover the active task, decisions, working hypothesis, and next step.
@@ -227,6 +257,23 @@ The output is written to `.onmc/compiled/<timestamp>-brief.md`.
 - `onmc://task/{id}`
 - `onmc://snapshot/latest`
 - `onmc://status`
+
+**Connecting to Claude Code:**
+
+Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "onmc": {
+      "command": "onmc",
+      "args": ["serve", "--mcp"]
+    }
+  }
+}
+```
+
+Once connected, Claude Code can query `onmc://memory/search?files=src/cache.py` mid-session to get ranked context for any file without consuming context window space at startup.
 
 ### Optional LLM-Backed Modes
 
@@ -318,7 +365,7 @@ Supported providers today:
 Configure one locally:
 
 ```bash
-onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
+onmc llm configure --provider anthropic --model claude-sonnet-4-5
 export ANTHROPIC_API_KEY=...
 onmc llm status
 ```
@@ -349,7 +396,7 @@ Then the configured provider is asked for structured JSON output, and ONMC store
 Example:
 
 ```bash
-onmc llm configure --provider anthropic --model claude-3-7-sonnet-20250219
+onmc llm configure --provider anthropic --model claude-sonnet-4-5
 export ANTHROPIC_API_KEY=...
 onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
 onmc review --task "review the proposed cache fix" --input-file plan.md
