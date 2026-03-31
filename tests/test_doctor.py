@@ -5,7 +5,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
-from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.core.service import OnmcService, _detect_leaked_keys
 from oh_no_my_claudecode.models import LLMProviderType
 
 
@@ -50,3 +50,19 @@ def test_doctor_exit_code_one_when_provider_check_fails(
 
     assert result.exit_code == 1
     assert "LLM provider check failed" in result.stdout
+
+
+def test_detect_leaked_keys_finds_provider_secret_patterns(tmp_path: Path) -> None:
+    onmc_dir = tmp_path / ".onmc"
+    logs_dir = onmc_dir / "logs"
+    logs_dir.mkdir(parents=True)
+    leak_path = logs_dir / "llm-calls.jsonl"
+    leak_path.write_text(
+        "sk-ant-api03-this-value-should-trigger-a-doctor-warning-1234567890",
+        encoding="utf-8",
+    )
+
+    warnings = _detect_leaked_keys(onmc_dir)
+
+    assert len(warnings) == 1
+    assert leak_path.as_posix() in warnings[0]

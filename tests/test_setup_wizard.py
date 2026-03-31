@@ -4,6 +4,7 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import LLMProviderType
 from oh_no_my_claudecode.setup.detector import detect_environment
@@ -112,3 +113,41 @@ def test_integration_phase_installs_requested_surfaces(sample_repo: Path) -> Non
     assert auto_sync_enabled is True
     assert service.installs == [False, True]
     assert service.ingest_hook is True
+
+
+def test_provider_phase_rejects_raw_api_key_and_stores_env_var_name_only(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    raw_key = "sk-ant-api03-this-should-never-be-stored-in-config-or-logs"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "real-env-value")
+    answers = iter(["anthropic", "claude-sonnet-4-5", raw_key, "ANTHROPIC_API_KEY"])
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.Prompt.ask",
+        lambda *args, **kwargs: next(answers),
+    )
+
+    seen_keys: list[str] = []
+
+    def fake_validate(provider: object, api_key: str) -> tuple[bool, str]:
+        seen_keys.append(api_key)
+        return True, "valid"
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.validate_provider_api_key",
+        fake_validate,
+    )
+
+    provider, model = _provider_phase(service, yes=False)
+    config = load_config(sample_repo)
+    config_text = (sample_repo / ".onmc" / "config.yaml").read_text(encoding="utf-8")
+
+    assert provider == "anthropic"
+    assert model == "claude-sonnet-4-5"
+    assert config.llm.api_key_env_var == "ANTHROPIC_API_KEY"
+    assert raw_key not in config_text
+    assert seen_keys == ["real-env-value"]
