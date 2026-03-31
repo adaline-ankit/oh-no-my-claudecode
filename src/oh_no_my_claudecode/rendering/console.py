@@ -434,15 +434,34 @@ def render_task_list(
     if not tasks:
         console.print("[yellow]No tasks found for this repository.[/yellow]")
         return
+    counts = attempt_counts or {}
+    artifact_counts = memory_artifact_counts or {}
+    output_counts = task_output_counts or {}
+    if not console.is_terminal:
+        console.print("Tasks")
+        for task in tasks:
+            console.print(
+                "\t".join(
+                    [
+                        task.task_id,
+                        task.status.value,
+                        shorten(task.title, max_length=40),
+                        (
+                            f"{counts.get(task.task_id, 0)}/"
+                            f"{artifact_counts.get(task.task_id, 0)}/"
+                            f"{output_counts.get(task.task_id, 0)}"
+                        ),
+                        task.branch,
+                    ]
+                )
+            )
+        return
     table = Table(title="Tasks")
     table.add_column("Task ID", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     table.add_column("Title", overflow="fold")
     table.add_column("A/M/O", no_wrap=True, justify="right")
     table.add_column("Branch", no_wrap=True)
-    counts = attempt_counts or {}
-    artifact_counts = memory_artifact_counts or {}
-    output_counts = task_output_counts or {}
     for task in tasks:
         table.add_row(
             task.task_id,

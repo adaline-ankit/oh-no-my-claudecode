@@ -37,7 +37,7 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
             "--provider",
             "anthropic",
             "--model",
-            "claude-3-7-sonnet-20250219",
+            "claude-sonnet-4-5",
         ],
     )
     assert llm_configure_result.exit_code == 0
@@ -75,6 +75,10 @@ def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:
     assert task_list_result.exit_code == 0
     assert "Tasks" in task_list_result.stdout
     assert task_id in task_list_result.stdout
+    task_line = next(
+        line for line in task_list_result.stdout.splitlines() if task_id in line
+    )
+    assert task_line.split()[0] == task_id
 
     task_show_result = runner.invoke(app, ["task", "show", task_id])
     assert task_show_result.exit_code == 0
