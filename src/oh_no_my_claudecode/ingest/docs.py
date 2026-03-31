@@ -14,6 +14,18 @@ EXCLUDED_DOC_PATTERNS = [
     r"CONTRIBUTING\.[a-z]{2}(?:-[A-Z]{2})?\.md$",
 ]
 OUTPUT_FILES = {"CLAUDE.md", "AGENTS.md", ".cursorrules"}
+TOC_PATTERNS = [
+    r"^table of contents$",
+    r"^contents$",
+    r"^index$",
+    r"^\d+\.\s",
+    r"^overview$",
+    r"^introduction$",
+    r"^installation$",
+    r"^usage$",
+    r"^license$",
+    r"^contributing$",
+]
 
 
 def discover_doc_paths(repo_root: Path, *, globs: list[str]) -> list[Path]:
@@ -107,6 +119,8 @@ def classify_doc_section(heading: str, body: str) -> MemoryKind:
         "we chose",
     )
 
+    if is_structural_heading(heading):
+        return MemoryKind.DOC_FACT
     if any(keyword in text for keyword in invariant_keywords):
         if any(keyword in text for keyword in validation_keywords):
             return MemoryKind.VALIDATION_RULE
@@ -128,3 +142,9 @@ def doc_confidence(kind: MemoryKind, body: str) -> float:
     if len(body) > 300:
         return min(base + 0.05, 0.95)
     return base
+
+
+def is_structural_heading(title: str) -> bool:
+    """Return whether a heading is structural boilerplate rather than repo knowledge."""
+    normalized = title.lower().strip()
+    return any(re.match(pattern, normalized) for pattern in TOC_PATTERNS)
