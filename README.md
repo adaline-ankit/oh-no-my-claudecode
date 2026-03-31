@@ -261,6 +261,7 @@ More detail:
 - [docs/architecture.md](docs/architecture.md)
 - [docs/memory-model.md](docs/memory-model.md)
 - [docs/prompt-compiler.md](docs/prompt-compiler.md)
+- [docs/shipped-capabilities.md](docs/shipped-capabilities.md)
 - [docs/task-lifecycle.md](docs/task-lifecycle.md)
 - [docs/roadmap.md](docs/roadmap.md)
 
