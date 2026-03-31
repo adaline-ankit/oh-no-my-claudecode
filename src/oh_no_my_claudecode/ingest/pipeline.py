@@ -25,6 +25,7 @@ from oh_no_my_claudecode.ingest.repo_tree import (
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.models import IngestResult, MemoryEntry, ProjectConfig
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.utils.text import tokenize
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 
@@ -88,9 +89,11 @@ def run_ingest(
         memories.extend(llm_memories)
         notes.extend([*llm_notes, *extraction_notes])
 
+    deduped_memories, deduped_count = deduplicate_memories(memories)
+
     storage.replace_repo_files(repo_files)
     storage.replace_file_stats(file_stats)
-    new_count, updated_count = storage.replace_generated_memories(memories)
+    new_count, updated_count = storage.replace_generated_memories(deduped_memories)
 
     generated_at = utc_now()
     storage.set_meta("last_ingest_at", isoformat_utc(generated_at))
@@ -102,9 +105,14 @@ def run_ingest(
         notes.append("No git commits were available; hotspot and git-pattern inference is limited.")
     if not doc_paths:
         notes.append("No markdown docs matched the configured glob set.")
+    if deduped_count:
+        notes.append(
+            f"Deduplicated {deduped_count} overlapping record"
+            f"{'s' if deduped_count != 1 else ''}."
+        )
 
     return IngestResult(
-        memory_count=len(memories),
+        memory_count=len(deduped_memories),
         new_memory_count=new_count,
         updated_memory_count=updated_count,
         llm_new_memory_count=llm_new_count,
@@ -185,13 +193,15 @@ def run_ingest_files(
         memories.extend(llm_memories)
         warnings.extend([*llm_notes, *extraction_notes])
 
+    deduped_memories, deduped_count = deduplicate_memories(memories)
+
     if targeted_docs:
         storage.delete_generated_memories_by_source_refs(
             [path.relative_to(repo_root).as_posix() for path in targeted_docs]
         )
     storage.upsert_repo_files(selected_repo_files)
     storage.upsert_file_stats(selected_stats)
-    new_count, updated_count = storage.upsert_memories(memories)
+    new_count, updated_count = storage.upsert_memories(deduped_memories)
 
     generated_at = utc_now()
     storage.set_meta("last_ingest_at", isoformat_utc(generated_at))
@@ -199,8 +209,14 @@ def run_ingest_files(
     storage.set_meta("last_ingest_doc_count", str(len(targeted_docs)))
     storage.set_meta("last_ingest_commit_count", str(len(commits)))
 
+    if deduped_count:
+        warnings.append(
+            f"Deduplicated {deduped_count} overlapping record"
+            f"{'s' if deduped_count != 1 else ''}."
+        )
+
     return IngestResult(
-        memory_count=len(memories),
+        memory_count=len(deduped_memories),
         new_memory_count=new_count,
         updated_memory_count=updated_count,
         llm_new_memory_count=llm_new_count,
@@ -303,6 +319,33 @@ def _git_total_commit_count(repo_root: Path) -> int:
         return int(result.stdout.strip())
     except ValueError:
         return 0
+
+
+def deduplicate_memories(memories: list[MemoryEntry]) -> tuple[list[MemoryEntry], int]:
+    """Drop near-duplicate memories of the same kind, keeping the highest-confidence entry."""
+    kept: list[MemoryEntry] = []
+    removed = 0
+    for memory in sorted(memories, key=_dedup_sort_key):
+        if any(_title_overlap(memory, current) >= 0.8 for current in kept):
+            removed += 1
+            continue
+        kept.append(memory)
+    kept.sort(key=lambda item: (item.kind.value, item.id))
+    return kept, removed
+
+
+def _dedup_sort_key(memory: MemoryEntry) -> tuple[float, float, str]:
+    return (-(memory.confidence or 0.0), -memory.feedback_score, memory.id)
+
+
+def _title_overlap(left: MemoryEntry, right: MemoryEntry) -> float:
+    if left.kind != right.kind:
+        return 0.0
+    left_tokens = set(tokenize(left.title))
+    right_tokens = set(tokenize(right.title))
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens))
 
 
 def _needs_shape_refresh(relative_paths: list[str]) -> bool:
