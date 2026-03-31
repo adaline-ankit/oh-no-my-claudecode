@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import subprocess
 import tempfile
@@ -394,6 +395,7 @@ class OnmcService:
             report["sync"].append("Post-commit hook installed")
         else:
             report["warnings"].append("Post-commit hook not installed.")
+        report["warnings"].extend(_detect_leaked_keys(state_dir(config, repo_root)))
         return not report["errors"], report
 
     def sync_commit(self, output_dir: Path | None = None) -> tuple[Path, SyncResult]:
@@ -1370,6 +1372,29 @@ def _git_commits_since(repo_root: Path, since: str) -> int:
     except subprocess.CalledProcessError:
         return 0
     return int(result.stdout.strip() or "0")
+
+
+LEAKED_KEY_PATTERNS = (
+    re.compile(r"sk-ant-api\d{2}-[A-Za-z0-9_-]{20,}"),
+    re.compile(r"sk-(?:proj|live|test)-[A-Za-z0-9_-]{20,}"),
+)
+
+
+def _detect_leaked_keys(onmc_dir: Path) -> list[str]:
+    """Return warning messages for probable provider secrets stored in ONMC state."""
+    if not onmc_dir.exists():
+        return []
+    warnings: list[str] = []
+    for path in onmc_dir.rglob("*"):
+        if not path.is_file() or path.suffix not in {".yaml", ".json", ".jsonl", ".log"}:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if any(pattern.search(content) for pattern in LEAKED_KEY_PATTERNS):
+            warnings.append(f"Possible API key found in {path}. Rotate the key immediately.")
+    return warnings
 
 
 def _is_recent_enough(timestamp: str) -> bool:
