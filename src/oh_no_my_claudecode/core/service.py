@@ -47,6 +47,7 @@ from oh_no_my_claudecode.llm import (
     provider_from_settings,
 )
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
+from oh_no_my_claudecode.llm.providers import validate_provider_api_key
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
 from oh_no_my_claudecode.mine import mine_github_prs, mine_transcripts
 from oh_no_my_claudecode.models import (
@@ -368,18 +369,33 @@ class OnmcService:
         if config.llm.provider is None or config.llm.model is None:
             report["warnings"].append("LLM provider is not fully configured.")
         else:
-            try:
-                provider = self.llm_provider()
-                report["provider"].append(
-                    "Provider: "
-                    f"{provider.settings.provider.value if provider.settings.provider else '-'} "
-                    f"({provider.settings.model or '-'})"
+            provider_name = config.llm.provider.value
+            model_name = config.llm.model
+            key_var = config.llm.api_key_env_var or default_api_key_env_var(config.llm.provider)
+            report["provider"].append(f"Provider: {provider_name} ({model_name})")
+            if not key_var:
+                report["warnings"].append(
+                    f"No API key environment variable is configured for {provider_name}."
                 )
-                report["provider"].append(
-                    f"API key env var: {provider.settings.api_key_env_var or '-'} present"
-                )
-            except Exception as exc:
-                report["errors"].append(f"LLM provider check failed: {exc}")
+            else:
+                key_value = os.environ.get(key_var)
+                if not key_value:
+                    report["warnings"].append(
+                        f"{key_var} not set in current environment. "
+                        f"Set {key_var} to enable LLM features."
+                    )
+                else:
+                    valid, detail = validate_provider_api_key(config.llm.provider, key_value)
+                    if valid:
+                        report["provider"].append(f"API key env var: {key_var} valid")
+                    elif detail == "invalid credentials":
+                        report["errors"].append(
+                            f"{provider_name} key is invalid. Check {key_var}."
+                        )
+                    else:
+                        report["warnings"].append(
+                            f"Could not validate {key_var}: {detail}."
+                        )
         hook_status = self.hooks_status()
         report["claude"].append(
             f"Compaction hooks {'installed' if hook_status.installed else 'not installed'}"
