@@ -1,230 +1,141 @@
+# oh-no-my-claudecode (`onmc`)
+
 [![CI](https://github.com/adaline-ankit/oh-no-my-claudecode/actions/workflows/ci.yml/badge.svg)](https://github.com/adaline-ankit/oh-no-my-claudecode/actions)
 [![PyPI version](https://badge.fury.io/py/oh-no-my-claudecode.svg)](https://pypi.org/project/oh-no-my-claudecode/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![AI-Ready](https://img.shields.io/badge/AI--Ready-ONMC-6B7280)](https://github.com/adaline-ankit/oh-no-my-claudecode)
 
-# oh-no-my-claudecode
+> Repo-native memory for AI coding agents.  
+> Your agent knows your codebase history, not just its current state.
 
-`oh-no-my-claudecode` helps coding agents and engineers recover the high-signal, repo-specific context that static instructions and raw transcripts miss.
+---
 
-It is a memory-first, provenance-driven CLI that scans a local git repository, stores structured repo memory in `.onmc/`, and compiles compact task briefs for coding agents such as Claude Code, Codex, or similar tools.
+## Get started
 
-As of `0.3.0`, ONMC also has a God Mode layer:
+```bash
+pip install oh-no-my-claudecode
+onmc setup
+```
 
-- a one-command setup wizard
-- optional LLM-assisted ingest and brief ranking
-- auto-generated `CLAUDE.md`
-- Claude Code transcript mining
-- a built-in health check
+That's it. `onmc setup` reads your git history, extracts architectural decisions and invariants, generates `CLAUDE.md`, and connects to Claude Code — all in one interactive wizard.
 
-P0 is intentionally conservative:
+---
 
-- no hosted service
-- no vector database
-- no mandatory LLM dependency
-- no autonomous coding claims
+## What it does
 
-The goal is better repo context recovery, not magic.
+Your coding agent starts every session like it has never seen your codebase before. It doesn't know why the code looks the way it does, what was tried and failed, or which files are dangerous to change. **ONMC fixes that.**
+
+It reads your git history, docs, and code structure with an LLM and builds a structured memory store. That memory travels with the repo. Every agent — Claude Code, Cursor, Codex — gets it.
+
+---
 
 ## Works with every coding agent
 
 | Agent | Integration |
 |---|---|
-| **Claude Code** | `onmc hooks install` → `onmc serve --mcp` |
-| **Cursor** | Pipe `onmc brief` output into `.cursorrules` |
-| **Codex CLI** | Pass `onmc brief` output via `AGENTS.md` or `--context` |
-| **GitHub Coding Agent** | Add `onmc sync --restore` to repo's `postCreateCommand` |
-| **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` or `.devcontainer.json` |
-| **Any agent** | `onmc sync --restore && onmc brief --task "..."` in startup script |
+| **Claude Code** | `onmc hooks install` + `onmc serve --mcp` |
+| **Cursor** | Pipe `onmc brief` output to `.cursorrules` |
+| **Codex CLI** | Pass `onmc brief` output via `AGENTS.md` |
+| **Cloud agents** (Codex, GitHub Coding Agent) | `onmc sync --restore` in container startup |
+| **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` |
 
-## Problem
+---
 
-Coding agents repeatedly lose repo-specific context:
+## Commands
 
-- they forget documented decisions and invariants
-- they revisit already-known hotspots
-- they miss repo-specific validation patterns
-- they overfit to static instructions that are too broad or stale
-
-`onmc` addresses that by building a local memory layer from repo docs, git history, and file structure, then using it to compile a task-specific brief before an agent starts editing.
-
-## Product Thesis
-
-`oh-no-my-claudecode` is a repo-native memory and context compiler.
-
-It:
-
-- scans a local git repository
-- extracts typed structured memory with provenance
-- stores that memory locally in `.onmc/memory.db`
-- stores durable task lifecycle records for active engineering work
-- stores task-scoped attempt logs, including failed or partial approaches
-- stores task-derived memory artifacts that preserve what worked, what did not, and what conflicted with design constraints
-- compiles concise task briefs for coding agents
-- stays useful without paid model access
-
-## Features
-
-- `onmc init` bootstraps `.onmc/` state for the current repository.
-- `onmc setup` runs the full onboarding wizard: init, optional provider setup, ingest, `CLAUDE.md`, Claude Code hooks, MCP, and auto-sync.
-- `onmc ingest` indexes repo docs, file tree metadata, git history, hotspots, and validation hints, then optionally runs an LLM extraction pass over commits and docs.
-- `onmc task ...` tracks task-scoped engineering memory with status, branch, labels, and final summaries.
-- `onmc attempt ...` records what was tried during a task, including evidence and touched files.
-- `onmc memory add ...` captures durable task-derived artifacts such as fixes, failed approaches, and design conflicts.
-- `onmc sync ...` exports repo memory to `.agent-memory/`, restores it on fresh machines, and can install a post-commit export hook.
-- `onmc hooks ...` installs Claude Code pre/post-compaction hooks and compiles a continuation brief after compaction.
-- `onmc serve --mcp` exposes ONMC state as a read-only MCP server for on-demand context pulls mid-session.
-- `onmc ingest --files ...` and `onmc ingest --install-hook` support lightweight incremental ingest after commits.
-- `onmc claude-md ...` generates, previews, updates, and watches `CLAUDE.md` from stored memory.
-- `onmc mine ...` mines Claude Code session transcripts into attempts, decisions, failed approaches, and gotchas.
-- `onmc doctor` audits repo state, memory freshness, provider config, Claude Code integration, and sync health.
-- `onmc llm ...` configures optional Anthropic or OpenAI provider settings without requiring secrets in config files.
-- `onmc solve`, `onmc review`, and `onmc teach` execute optional LLM-backed modes against ONMC's deterministic memory spine.
-- `onmc teach --interactive` keeps the memory spine loaded for follow-up Q&A after the initial explanation.
-- `onmc memory list` and `onmc memory show` inspect stored memory with provenance.
-- `onmc brief --task "..."` produces a compact markdown brief and, when a provider is configured, reranks the final memory set with LLM reasoning plus relevance reasons.
-- `onmc status` reports repo root, ingest state, storage location, and config summary.
-- `import onmc` exposes the same repo, memory, task, hook, and sync operations as a typed Python API.
-
-## Agent Modes
-
-ONMC now has the first prompt-compiler layer for three agent modes:
-
-- `solve`: propose the next best engineering approach using repo brief, memory, failed attempts, and validation guidance
-- `review`: critique a proposed approach for assumptions, regressions, and missing checks
-- `teach`: explain the problem and solution shape in a staff-engineer-like way, including false leads and durable lessons
-
-These modes do not yet run an agent loop. ONMC compiles structured prompts so a configured provider or external coding agent can reason over the repo-aware memory spine.
-
-### Supported P0 Memory Kinds
-
-- `doc_fact`
-- `decision`
-- `invariant`
-- `hotspot`
-- `git_pattern`
-- `validation_rule`
-
-## Installation
-
-Python 3.11+ is required.
-
-**Platform support:** macOS and Linux. Windows support is planned for v0.4.0.
+### Setup and health
 
 ```bash
-pip install oh-no-my-claudecode
+onmc setup              # full onboarding wizard — run this first
+onmc doctor             # health check: memory freshness, hooks, MCP, CLAUDE.md
+onmc status             # repo root, ingest state, memory counts
 ```
 
-For local development:
+### Memory extraction
 
 ```bash
-git clone <your-fork-or-repo-url>
-cd oh-no-my-claudecode
-pip install -e ".[dev]"
+onmc ingest             # scan git history, docs, source — extract structured memory
+onmc ingest --files x   # re-ingest specific files
+onmc ingest --install-hook  # auto-ingest on every commit
+onmc mine               # extract memory from Claude Code session transcripts
+onmc mine --github      # extract decisions and gotchas from GitHub PRs
 ```
 
-## Quickstart
-
-### One-command setup
+### Memory management
 
 ```bash
-onmc setup
-```
-
-This is the fastest path for a real repo. It:
-
-- initializes `.onmc/`
-- optionally configures an LLM provider
-- ingests repo memory
-- generates `CLAUDE.md`
-- offers Claude Code hooks + MCP registration
-- offers a post-commit ingest/sync hook
-
-### Flow A — Fresh repo (no existing `.agent-memory/`)
-
-```bash
-onmc setup --no-llm
-onmc task start --title "Your task" --description "What you are working on"
-onmc brief --task "your task"
-onmc sync --commit
-git add .agent-memory/
-git commit -m "chore: add agent memory export"
-```
-
-### Flow B — Cloning a repo that already has `.agent-memory/`
-
-```bash
-git clone <repo-url>
-cd <repo>
-onmc init
-onmc sync --restore
-onmc doctor
-onmc brief --task "your task"
-```
-
-This creates local state under:
-
-```text
-.onmc/
-├── compiled/
-├── config.yaml
-├── logs/
-└── memory.db
-```
-
-## Command Examples
-
-```bash
-onmc --help
-onmc setup
-onmc init
-onmc ingest
-onmc ingest --no-llm
-onmc ingest --files README.md docs/architecture.md
-onmc ingest --install-hook
-onmc sync --commit
-git add .agent-memory/
-git commit -m "chore: export agent memory"
-onmc sync --restore
-onmc claude-md preview
-onmc claude-md generate
-onmc claude-md update
-onmc claude-md --watch
-onmc hooks install
-onmc hooks status
-onmc hooks pre-compact
-onmc hooks post-compact
-onmc serve --mcp
-onmc task start --title "Fix flaky Redis cache invalidation bug" --description "Investigate cache invalidation flow"
-onmc task list
-onmc task show task-abc123def4
-onmc attempt add task-abc123def4 --summary "Try a cache-only fix" --kind fix_attempt --status tried
-onmc attempt list task-abc123def4
-onmc attempt show attempt-abc123def4
-onmc attempt update attempt-abc123def4 --status rejected --evidence-against "Did not address the failing path"
-onmc task status task-abc123def4 --status blocked
-onmc task end task-abc123def4 --status solved --summary "Fixed cache churn and updated tests"
-onmc brief --task "fix flaky Redis cache invalidation bug"
-onmc memory list
-onmc memory add task-abc123def4 --type fix --title "Route worker refresh through the cache boundary" --summary "The shared cache boundary fixed the flaky path"
+onmc memory list                    # browse all memory
+onmc memory list --kind hotspot     # filter by kind
 onmc memory list --type did_not_work
-onmc memory list --kind hotspot
-onmc memory show artifact-123abc
-onmc memory show hotspot-123abc
-onmc mine --dry-run
-onmc mine --since "2 days ago"
-onmc llm status
-onmc llm configure --provider anthropic --model claude-sonnet-4-5
-onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
-onmc review --task "review the proposed cache invalidation fix" --input-file notes.md
-onmc teach --task "explain the cache invalidation bug" --task-id task-abc123def4 --interactive
-onmc doctor
-onmc status
+onmc memory show <id>               # full record with provenance
+onmc memory confirm <id>            # mark as verified useful
+onmc memory reject <id>             # mark as wrong or stale
+onmc memory edit <id>               # update the summary
+onmc memory add <task_id> --type fix --title "..." --summary "..."
 ```
+
+### CLAUDE.md
+
+```bash
+onmc claude-md generate  # generate CLAUDE.md from memory store
+onmc claude-md update    # refresh stale sections, preserve user-written ones
+onmc claude-md preview   # show what would be generated without writing
+onmc claude-md --watch   # auto-regenerate when memory changes
+```
+
+### Tasks and attempts
+
+```bash
+onmc task start --title "..." --description "..."
+onmc task list / show / status / end
+onmc attempt add <task_id> --summary "..." --kind fix_attempt --status tried
+onmc attempt list / show / update
+```
+
+### Brief compilation
+
+```bash
+onmc brief --task "fix the cache invalidation bug"
+# LLM-ranked, annotated with relevance reasons
+# Written to .onmc/compiled/ and rendered in terminal
+```
+
+### Agent modes (optional LLM)
+
+```bash
+onmc solve --task "..." --task-id <id>     # next best engineering approach
+onmc review --task "..." --input-file plan.md
+onmc teach --task "..."                     # staff-engineer explanation
+onmc teach --task "..." --interactive       # follow-up Q&A loop
+```
+
+### Claude Code integration
+
+```bash
+onmc hooks install      # compaction hooks — context survives every compact
+onmc hooks status
+onmc serve --mcp        # read-only MCP server for mid-session memory queries
+```
+
+### Git-portable memory
+
+```bash
+onmc sync --commit      # export memory to .agent-memory/ (commit this)
+onmc sync --restore     # restore memory on a fresh machine or cloud env
+onmc sync --install-hook
+```
+
+### LLM provider
+
+```bash
+onmc llm configure --provider anthropic --model claude-sonnet-4-5
+onmc llm status
+```
+
+---
 
 ## Python API
-
-The CLI now sits on top of a small public API:
 
 ```python
 import onmc
@@ -232,314 +143,72 @@ import onmc
 repo = onmc.init(".")
 repo.ingest()
 brief = repo.brief(task="fix the cache invalidation bug")
-print(brief.markdown)
 memories = repo.memory.search(files=["src/cache.py"])
-task = repo.task.start(title="Fix cache bug", description="Track the flaky path.")
+task = repo.task.start(title="Fix cache bug")
 repo.sync.commit()
-repo.hooks.install()
 ```
 
-## Example Brief Output
+---
 
-See [examples/brief-example.md](examples/brief-example.md) for a representative artifact written by `onmc brief`.
-
-## How It Works
-
-### Ingest
-
-P0 ingests:
-
-- git commit history
-- repository file tree metadata
-- markdown docs such as `README*`, `docs/**/*.md`, `AGENTS.md`, `CLAUDE.md`, and architecture docs
-
-Heuristics are deterministic and lightweight:
-
-- docs are split into markdown sections and classified conservatively
-- git history is used for hotspots, co-change patterns, and test-coupling hints
-- repo shape is used to infer likely validation commands and source/test layout
-
-If a provider is configured, `onmc ingest` adds an LLM extraction pass on top of the heuristic ingest:
-
-- commit batches are mined for decisions, invariants, failed approaches, design conflicts, and gotchas
-- markdown docs are mined for project-specific decisions, invariants, and validation rules
-- extracted items are validated with Pydantic before storage
-- overlapping titles are deduplicated conservatively before insert
-- every LLM call is logged to `.onmc/logs/llm-calls.jsonl`
-
-### Brief Compilation
-
-Given a task string, `onmc brief` ranks:
-
-- relevant memory entries
-- likely impacted files
-- hotspot areas
-- likely validation steps
-- next files to inspect
-
-The output is written to `.onmc/compiled/<timestamp>-brief.md`.
-
-When a provider is configured, ONMC first selects candidates heuristically, then asks the model to rerank the final 8-12 records with task-specific relevance reasons.
-
-### Git-Portable Memory
-
-`onmc sync --commit` exports repo memory, tasks, attempts, artifacts, and the most recent brief to `.agent-memory/` as stable JSON plus markdown. `onmc sync --restore` restores that state into `.onmc/memory.db` on another machine or cloud workspace.
+## How memory travels with your repo
 
 ```bash
 onmc sync --commit
 git add .agent-memory/
 git commit -m "chore: export agent memory"
+git push
 ```
 
-### Hooks and Continuation Briefs
-
-`onmc hooks install` merges Claude Code PreCompact and PostCompact hooks into `~/.claude/settings.json`. Pre-compaction stores a `CompactionSnapshot`; post-compaction compiles a continuation brief to `~/.onmc-continuation-brief.md` so the next turn can recover the active task, decisions, working hypothesis, and next step.
-
-The PostCompact hook also refreshes `CLAUDE.md` automatically if it has been stale for more than 7 days.
-
-### MCP Server
-
-`onmc serve --mcp` runs a read-only MCP server over stdio. It exposes:
-
-- `onmc://brief`
-- `onmc://memory/list`
-- `onmc://memory/{kind}`
-- `onmc://memory/search?files=...`
-- `onmc://tasks`
-- `onmc://task/{id}`
-- `onmc://snapshot/latest`
-- `onmc://status`
-
-**Connecting to Claude Code:**
-
-Add this to `~/.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "onmc": {
-      "command": "onmc",
-      "args": ["serve", "--mcp"]
-    }
-  }
-}
-```
-
-Once connected, Claude Code can query `onmc://memory/search?files=src/cache.py` mid-session to get ranked context for any file without consuming context window space at startup.
-
-### Optional LLM-Backed Modes
-
-When an optional provider is configured, ONMC can execute three end-to-end modes:
-
-- `onmc solve`: compile the deterministic brief plus task memory, then ask the model for the next best approach
-- `onmc review`: critique a proposed fix or plan, optionally with external notes from `--input-file`
-- `onmc teach`: turn the same memory spine into a staff-style reasoning and learning artifact
-
-These commands still follow the ONMC design: memory and provenance are compiled first, model reasoning happens second, and outputs are stored locally under `.onmc/compiled/`. Task-linked runs are also persisted in SQLite so they remain visible from `onmc task show`.
-
-### `CLAUDE.md` Generation
-
-Generate or refresh `CLAUDE.md` from ONMC memory:
+Any machine that clones this repo — cloud agent, new teammate, ephemeral container — runs:
 
 ```bash
-onmc claude-md generate
-onmc claude-md preview
-onmc claude-md update
-onmc claude-md --watch
+onmc init && onmc sync --restore
 ```
 
-Generated sections include:
+And gets the full memory store instantly. No accounts. No cloud. No config.
 
-- project overview
-- critical invariants
-- architecture decisions
-- hotspot areas
-- known bad approaches
-- validation
-- current active tasks
+---
 
-`onmc claude-md update` preserves sections marked with `<!-- user-written -->`.
+## Local state
 
-### Claude Code Transcript Mining
-
-Mine Claude Code sessions into attempts and memory:
-
-```bash
-onmc mine
-onmc mine --dry-run
-onmc mine --session <session-id>
-onmc mine --since "2 days ago"
+```text
+.onmc/            ← gitignored (binary SQLite + logs)
+.agent-memory/    ← commit this (readable JSON exports)
+CLAUDE.md         ← commit this (generated by onmc claude-md generate)
 ```
 
-Mining behavior:
+---
 
-- reads assistant turns only from `~/.claude/projects/<hash>/sessions/*.jsonl`
-- excludes user turns from provider payloads
-- extracts attempts, decisions, failed approaches, and gotchas
-- links findings back to active or recently relevant tasks when file overlap is strong enough
-- logs provider calls to `.onmc/logs/llm-calls.jsonl`
+## Platform support
 
-### Health Check
+macOS and Linux. Windows support planned for v0.4.0.
 
-```bash
-onmc doctor
-```
-
-This checks:
-
-- repo + `.onmc/` initialization
-- ingest freshness
-- memory/task counts
-- provider configuration
-- Claude Code hooks
-- `CLAUDE.md`
-- `.agent-memory/` presence
-- post-commit hook state
-
-## Architecture Overview
-
-High-level modules:
-
-- `models/`: typed config, memory, ingest, and brief models
-- `storage/`: local SQLite-backed state
-- `task lifecycle`: durable task records stored alongside repo memory
-- `attempt logging`: task-linked records of tried, rejected, partial, or successful approaches
-- `memory artifacts`: durable task-derived findings that preserve fixes, failures, conflicts, gotchas, invariants, and validation guidance
-- `sync/`: git-portable export/import to `.agent-memory/`
-- `hooks/`: Claude Code compaction snapshots and continuation brief generation
-- `mcp_server/`: read-only MCP resource handlers over stdio
-- `api.py`: typed import surface for repo, memory, task, hook, and sync workflows
-- `ingest/`: doc parsing, git parsing, repo scanning, and heuristic extraction
-- `brief/`: task-to-context compilation and ranking
-- `core/`: repo discovery and service orchestration
-- `rendering/`: Rich terminal presentation
-
-More detail:
-
-- [docs/architecture.md](docs/architecture.md)
-- [docs/memory-model.md](docs/memory-model.md)
-- [docs/prompt-compiler.md](docs/prompt-compiler.md)
-- [docs/shipped-capabilities.md](docs/shipped-capabilities.md)
-- [docs/task-lifecycle.md](docs/task-lifecycle.md)
-- [docs/roadmap.md](docs/roadmap.md)
-
-## Limitations
-
-- `onmc mine` currently targets Claude Code session transcripts only.
-- Memory extraction is heuristic and intentionally conservative.
-- LLM extraction is optional and provider-dependent.
-- Task lifecycle is local-only and intentionally lightweight.
-- Transcript mining links tasks by file/token overlap, not semantic trace reconstruction.
-- `CLAUDE.md` update is section-aware, but not a full semantic merge engine.
-- Git-derived patterns are suggestions, not guarantees.
-- MCP is read-only in this release; there are no write tools yet.
-- LLM-backed solve/review/teach commands are explicit and single-shot; there is still no autonomous loop or tool orchestration.
-
-## Roadmap
-
-Short-term roadmap items live in [docs/roadmap.md](docs/roadmap.md). Near-term extensions include:
-
-- manual memory authoring and curation
-- incremental ingest and richer stale-memory handling
-- write-capable MCP tools
-- deeper diff-aware briefing for active branches
-- richer task-memory capture tied to briefs and outcomes
-- linking briefs and outcomes back to recorded attempts
-- artifact-assisted brief compilation that can surface prior failed approaches before a task starts
+---
 
 ## Development
 
-Install dev dependencies and run the full local check suite:
-
 ```bash
+git clone https://github.com/adaline-ankit/oh-no-my-claudecode
+cd oh-no-my-claudecode
 pip install -e ".[dev]"
+pytest
 ruff check .
 mypy src
-pytest
 ```
 
-Optional pre-commit hooks:
-
-```bash
-pre-commit install
-```
-
-## Optional LLM Providers
-
-The core ONMC workflow stays useful without a model API. The LLM layer is optional and currently powers:
-
-- commit/doc extraction during ingest
-- brief reranking with relevance reasons
-- `CLAUDE.md` generation
-- transcript mining
-- `solve` / `review` / `teach`
-- interactive `teach` follow-ups
-
-Supported providers today:
-
-- `anthropic`
-- `openai`
-
-Configure one locally:
-
-```bash
-onmc llm configure --provider anthropic --model claude-sonnet-4-5
-export ANTHROPIC_API_KEY=...
-onmc llm status
-```
-
-If Anthropic returns `model not found`, the configured model ID is stale or unavailable to your key. Run:
-
-```bash
-curl https://api.anthropic.com/v1/models \
-  --header "x-api-key: $ANTHROPIC_API_KEY" \
-  --header "anthropic-version: 2023-06-01"
-```
-
-Then re-run `onmc llm configure --model ...` with one of the returned IDs.
-
-Secrets are always read from environment variables. ONMC stores the provider name, model, and API key env var name in `.onmc/config.yaml`, but it does not write the secret value itself.
-
-Prompt compilation stays separate from provider calls. ONMC first builds a structured prompt from:
-
-- the task record
-- the deterministic repo brief
-- relevant repo memory
-- prior attempts
-- negative memory such as `did_not_work` and `design_conflict`
-- validation guidance and provenance
-
-Then the configured provider is asked for structured JSON output, and ONMC stores the rendered result under `.onmc/compiled/` plus a task-linked output record when `--task-id` is provided. Every provider call is also logged to `.onmc/logs/llm-calls.jsonl`.
-
-Example:
-
-```bash
-onmc llm configure --provider anthropic --model claude-sonnet-4-5
-export ANTHROPIC_API_KEY=...
-onmc solve --task "fix flaky Redis cache invalidation bug" --task-id task-abc123def4
-onmc review --task "review the proposed cache fix" --input-file plan.md
-onmc teach --task "teach the cache invalidation reasoning" --task-id task-abc123def4
-```
-
-That keeps the memory/context layer inspectable before any model is asked to reason.
-
-## Publishing
-
-The repo includes:
-
-- build metadata in `pyproject.toml`
-- GitHub Actions CI
-- a PyPI trusted-publishing workflow scaffold
-
-Publishing still requires:
-
-- a real GitHub repository
-- PyPI project setup
-- trusted publishing configured on the PyPI side for the GitHub `pypi` environment used by the release workflow
+---
 
 ## Contributing
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are labeled in the tracker.
+
+Areas actively looking for contributors:
+- Cursor hook adapter
+- Embedding-based memory ranking (opt-in)
+- VS Code extension for brief display
+- Semantic transcript-to-task linking
+
+---
 
 ## License
 
