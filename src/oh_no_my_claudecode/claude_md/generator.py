@@ -149,21 +149,26 @@ def _generation_request(
         ],
     }
     prompt = (
-        "You are generating a CLAUDE.md file for a coding agent working on this repository.\n\n"
-        "CLAUDE.md is read by the agent at the start of every session. It must be:\n"
-        "- Concise (target 400-600 tokens total)\n"
-        "- Specific to this codebase, not generic advice\n"
-        "- Actionable — every line should change how the agent behaves\n"
-        "- Honest about complexity and known pitfalls\n\n"
-        "Never include generic advice like \"write clean code\" or \"add tests\".\n"
-        "Only include things specific to this repo that an agent would not know "
-        "from reading the code.\n\n"
+        "You are writing a CLAUDE.md for a coding agent.\n\n"
+        "Rules:\n"
+        "- Write in your own words. Do not copy text from the memory records.\n"
+        "- Be specific to this codebase. Generic advice is useless.\n"
+        "- Each bullet must be actionable — it must change how the agent behaves.\n"
+        "- Omit any section that has no supporting records.\n"
+        "- Do not write placeholder text like \"No X recorded yet\".\n"
+        "- Maximum 600 tokens total.\n"
+        "- English only.\n\n"
+        "The output should explain the current repo reality, not restate documentation structure.\n"
+        "Use the memory records as source material, not as text to reproduce.\n\n"
         "Return valid JSON with a single key named `markdown`.\n\n"
-        "Here is the structured memory for this repository:\n"
+        "Memory records (use as source material, do not reproduce):\n"
         f"{json.dumps(payload, indent=2, sort_keys=True)}"
     )
     return LLMGenerationRequest(
-        system_prompt="Return only valid JSON. Do not use markdown fences.",
+        system_prompt=(
+            "Return only valid JSON. Do not use markdown fences. "
+            "The markdown must be concise, synthesized, and repo-specific."
+        ),
         prompt=prompt,
         temperature=0.0,
         max_tokens=1600,
