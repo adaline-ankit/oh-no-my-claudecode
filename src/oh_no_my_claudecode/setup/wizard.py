@@ -171,6 +171,7 @@ def _scan_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> IngestResul
                     f"✓ Extracted {result.memory_count} memory records",
                     f"✓ LLM-added records: {result.llm_new_memory_count}",
                     f"✓ Deduplicated overlaps: {result.llm_deduped_count}",
+                    *result.notes[:4],
                 ]
             ),
             title="Extracting repo knowledge",

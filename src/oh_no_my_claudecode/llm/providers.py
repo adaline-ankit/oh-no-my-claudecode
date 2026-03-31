@@ -6,7 +6,11 @@ import urllib.request
 from collections.abc import Mapping
 from typing import Any
 
-from oh_no_my_claudecode.llm.base import BaseLLMProvider, LLMProviderError
+from oh_no_my_claudecode.llm.base import (
+    BaseLLMProvider,
+    LLMProviderError,
+    llm_call_timeout_seconds,
+)
 from oh_no_my_claudecode.models.llm import (
     LLMGenerationRequest,
     LLMGenerationResponse,
@@ -158,9 +162,12 @@ def _post_json(
     try:
         with urllib.request.urlopen(  # noqa: S310 - provider request target is prevalidated above.
             request,
-            timeout=30,
+            timeout=llm_call_timeout_seconds(),
         ) as response:
             body = response.read().decode("utf-8")
+    except TimeoutError as exc:
+        msg = "Provider request timed out."
+        raise LLMProviderError(msg) from exc
     except urllib.error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
         msg = _provider_http_error_message(
@@ -171,6 +178,9 @@ def _post_json(
         )
         raise LLMProviderError(msg) from exc
     except urllib.error.URLError as exc:
+        if "timed out" in str(exc.reason).lower():
+            msg = "Provider request timed out."
+            raise LLMProviderError(msg) from exc
         msg = f"Provider request failed: {exc.reason}"
         raise LLMProviderError(msg) from exc
 

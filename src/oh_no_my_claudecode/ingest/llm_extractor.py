@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import Iterable
 from pathlib import Path
@@ -20,8 +21,9 @@ from oh_no_my_claudecode.utils.text import stable_id, tokenize
 from oh_no_my_claudecode.utils.time import utc_now
 
 COMMIT_BATCH_SIZE = 50
-MAX_COMMIT_BATCHES = 10
+MAX_LLM_COMMITS = 500
 MAX_SOURCE_FILES = 20
+logger = logging.getLogger(__name__)
 
 
 class ExtractedKnowledgeItem(BaseModel):
@@ -39,15 +41,28 @@ class ExtractedKnowledgeList(RootModel[list[ExtractedKnowledgeItem]]):
 
 def batch_commits_for_llm(
     commit_lines: list[str],
-    batch_size: int = COMMIT_BATCH_SIZE,
+    *,
+    total_commits: int | None = None,
+    batch_size: int | None = None,
 ) -> list[str]:
     """Group commit lines into stable prompt-sized batches."""
+    limited_lines = commit_lines[:MAX_LLM_COMMITS]
+    resolved_batch_size = batch_size or get_batch_size(total_commits or len(limited_lines))
     batches: list[str] = []
-    for index in range(0, len(commit_lines), batch_size):
-        chunk = commit_lines[index : index + batch_size]
+    for index in range(0, len(limited_lines), resolved_batch_size):
+        chunk = limited_lines[index : index + resolved_batch_size]
         if chunk:
             batches.append("\n".join(chunk))
-    return batches[:MAX_COMMIT_BATCHES]
+    return batches
+
+
+def get_batch_size(total_commits: int) -> int:
+    """Return an adaptive commit batch size based on repo history depth."""
+    if total_commits > 1000:
+        return 20
+    if total_commits > 500:
+        return 30
+    return COMMIT_BATCH_SIZE
 
 
 def extract_llm_memories(
@@ -61,12 +76,16 @@ def extract_llm_memories(
     existing_memories: list[MemoryEntry],
     repo_files: list[RepoFileRecord] | None = None,
     git_churn_rank: list[str] | None = None,
-) -> tuple[list[MemoryEntry], int]:
+    total_commit_count: int | None = None,
+) -> tuple[list[MemoryEntry], int, list[str]]:
     """Extract structured repo memory from commits and docs using the configured LLM."""
     commit_extracted: list[MemoryEntry] = []
     extracted: list[MemoryEntry] = []
     deduped = 0
-    for batch_index, batch in enumerate(batch_commits_for_llm(commit_lines), start=1):
+    warnings: list[str] = []
+    timeout_batches = 0
+    commit_batches = batch_commits_for_llm(commit_lines, total_commits=total_commit_count)
+    for batch_index, batch in enumerate(commit_batches, start=1):
         try:
             payload = generate_structured_logged(
                 provider,
@@ -83,7 +102,21 @@ def extract_llm_memories(
                 log_path=log_path,
                 operation=f"ingest.commits.batch_{batch_index}",
             )
-        except LLMProviderError:
+        except Exception as exc:  # noqa: BLE001 - ingest should tolerate provider failures.
+            if _is_timeout_error(exc):
+                timeout_batches += 1
+                logger.warning(
+                    "LLM ingest batch %s/%s timed out and was skipped.",
+                    batch_index,
+                    len(commit_batches),
+                )
+            else:
+                logger.warning(
+                    "LLM ingest batch %s/%s failed (%s) and was skipped.",
+                    batch_index,
+                    len(commit_batches),
+                    type(exc).__name__,
+                )
             continue
         commit_extracted.extend(
             _items_to_memories(
@@ -143,7 +176,12 @@ def extract_llm_memories(
             deduped += 1
             continue
         deduped_entries.append(entry)
-    return deduped_entries, deduped
+    if timeout_batches:
+        warnings.append(
+            "LLM commit extraction skipped "
+            f"{timeout_batches} batch{'es' if timeout_batches != 1 else ''} due to timeout."
+        )
+    return deduped_entries, deduped, warnings
 
 
 def _items_to_memories(
@@ -256,6 +294,18 @@ def _is_semantic_duplicate(entry: MemoryEntry, existing: list[MemoryEntry]) -> b
         overlap = len(entry_tokens & current_tokens) / max(len(entry_tokens), len(current_tokens))
         if overlap >= 0.6:
             return True
+    return False
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    """Return True when an exception chain indicates a provider timeout."""
+    current: BaseException | None = exc
+    while current is not None:
+        if isinstance(current, TimeoutError):
+            return True
+        if "timed out" in str(current).lower():
+            return True
+        current = current.__cause__ or current.__context__
     return False
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from abc import ABC, abstractmethod
 from typing import Any, TypeVar
@@ -20,6 +21,7 @@ JSON_ONLY_INSTRUCTION = (
     "No markdown fences, no preamble, no explanation. Raw JSON only."
 )
 logger = logging.getLogger(__name__)
+DEFAULT_LLM_CALL_TIMEOUT_SECONDS = 60
 
 
 class LLMError(RuntimeError):
@@ -93,3 +95,12 @@ def parse_llm_json(text: str) -> Any:
     if object_match:
         return json.loads(object_match.group(1))
     raise json.JSONDecodeError("No valid JSON found in response", stripped, 0)
+
+
+def llm_call_timeout_seconds() -> int:
+    """Return the configured LLM call timeout in seconds."""
+    raw_value = os.environ.get("ONMC_LLM_TIMEOUT", str(DEFAULT_LLM_CALL_TIMEOUT_SECONDS))
+    try:
+        return max(int(raw_value), 1)
+    except ValueError:
+        return DEFAULT_LLM_CALL_TIMEOUT_SECONDS

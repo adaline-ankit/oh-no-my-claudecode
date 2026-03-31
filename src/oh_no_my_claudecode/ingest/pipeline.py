@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from oh_no_my_claudecode.core.repo import path_bucket
@@ -10,7 +11,11 @@ from oh_no_my_claudecode.ingest.git_history import (
     extract_git_memories,
     load_git_history,
 )
-from oh_no_my_claudecode.ingest.llm_extractor import commit_lines_from_payload, extract_llm_memories
+from oh_no_my_claudecode.ingest.llm_extractor import (
+    MAX_LLM_COMMITS,
+    commit_lines_from_payload,
+    extract_llm_memories,
+)
 from oh_no_my_claudecode.ingest.repo_tree import (
     detect_project_hints,
     infer_repo_shape_memories,
@@ -48,9 +53,11 @@ def run_ingest(
         )
     memories.extend(infer_repo_shape_memories(repo_root, hints))
     memories.extend(extract_git_memories(commits, file_stats))
+    notes: list[str] = []
     llm_new_count = 0
     llm_deduped_count = 0
     if provider is not None and log_path is not None:
+        llm_commits, llm_notes = _llm_commit_window(repo_root, commits)
         docs_payload = {
             path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
             for path in doc_paths
@@ -62,10 +69,10 @@ def run_ingest(
                 "subject": commit.subject,
                 "files": commit.files,
             }
-            for commit in commits[:500]
+            for commit in llm_commits
         ]
         commit_lines = commit_lines_from_payload(commit_payload)
-        llm_memories, llm_deduped_count = extract_llm_memories(
+        llm_memories, llm_deduped_count, extraction_notes = extract_llm_memories(
             repo_root=repo_root,
             config=config,
             provider=provider,
@@ -75,9 +82,11 @@ def run_ingest(
             existing_memories=memories,
             repo_files=repo_files,
             git_churn_rank=git_churn_rank,
+            total_commit_count=_git_total_commit_count(repo_root),
         )
         llm_new_count = len(llm_memories)
         memories.extend(llm_memories)
+        notes.extend([*llm_notes, *extraction_notes])
 
     storage.replace_repo_files(repo_files)
     storage.replace_file_stats(file_stats)
@@ -89,7 +98,6 @@ def run_ingest(
     storage.set_meta("last_ingest_doc_count", str(len(doc_paths)))
     storage.set_meta("last_ingest_commit_count", str(len(commits)))
 
-    notes: list[str] = []
     if not commits:
         notes.append("No git commits were available; hotspot and git-pattern inference is limited.")
     if not doc_paths:
@@ -145,6 +153,7 @@ def run_ingest_files(
     llm_new_count = 0
     llm_deduped_count = 0
     if provider is not None and log_path is not None:
+        llm_commits, llm_notes = _llm_commit_window(repo_root, commits)
         docs_payload = {
             path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
             for path in targeted_docs
@@ -156,11 +165,11 @@ def run_ingest_files(
                 "subject": commit.subject,
                 "files": [path for path in commit.files if path in relative_paths],
             }
-            for commit in commits[:500]
+            for commit in llm_commits
             if any(path in relative_paths for path in commit.files)
         ]
         commit_lines = commit_lines_from_payload(commit_payload)
-        llm_memories, llm_deduped_count = extract_llm_memories(
+        llm_memories, llm_deduped_count, extraction_notes = extract_llm_memories(
             repo_root=repo_root,
             config=config,
             provider=provider,
@@ -170,9 +179,11 @@ def run_ingest_files(
             existing_memories=storage.list_memories(),
             repo_files=selected_repo_files,
             git_churn_rank=git_churn_rank,
+            total_commit_count=_git_total_commit_count(repo_root),
         )
         llm_new_count = len(llm_memories)
         memories.extend(llm_memories)
+        warnings.extend([*llm_notes, *extraction_notes])
 
     if targeted_docs:
         storage.delete_generated_memories_by_source_refs(
@@ -257,6 +268,41 @@ def _git_memories_for_paths(
         if refs & target_buckets:
             selected.append(memory)
     return selected
+
+
+def _llm_commit_window(
+    repo_root: Path,
+    commits: list[GitCommitRecord],
+) -> tuple[list[GitCommitRecord], list[str]]:
+    total_commit_count = _git_total_commit_count(repo_root)
+    if total_commit_count > MAX_LLM_COMMITS and len(commits) < MAX_LLM_COMMITS:
+        llm_commits = load_git_history(repo_root, max_commits=MAX_LLM_COMMITS)
+    else:
+        llm_commits = commits[:MAX_LLM_COMMITS]
+    notes: list[str] = []
+    if total_commit_count > len(llm_commits):
+        notes.append(
+            f"Note: Analyzing most recent {len(llm_commits)} commits "
+            f"(repo has {total_commit_count} total)."
+        )
+    return llm_commits, notes
+
+
+def _git_total_commit_count(repo_root: Path) -> int:
+    try:
+        result = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return 0
+    try:
+        return int(result.stdout.strip())
+    except ValueError:
+        return 0
 
 
 def _needs_shape_refresh(relative_paths: list[str]) -> bool:

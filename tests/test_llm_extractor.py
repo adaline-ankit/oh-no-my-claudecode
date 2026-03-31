@@ -9,6 +9,7 @@ from oh_no_my_claudecode.ingest.llm_extractor import (
     _is_semantic_duplicate,
     batch_commits_for_llm,
     extract_llm_memories,
+    get_batch_size,
 )
 from oh_no_my_claudecode.llm import provider_from_settings
 from oh_no_my_claudecode.models import (
@@ -31,6 +32,12 @@ def test_commit_batching_keeps_stable_batch_sizes() -> None:
     assert batches[0].count("\n") == 49
     assert batches[-1].count("\n") == 22
     assert "sha122 | commit 122" in batches[-1]
+
+
+def test_get_batch_size_adapts_for_large_repos() -> None:
+    assert get_batch_size(200) == 50
+    assert get_batch_size(700) == 30
+    assert get_batch_size(2000) == 20
 
 
 def test_semantic_deduplication_uses_title_overlap() -> None:
@@ -85,7 +92,7 @@ def test_extract_llm_memories_with_mock_provider(sample_repo: Path) -> None:
         ),
     )
 
-    records, deduped = extract_llm_memories(
+    records, deduped, warnings = extract_llm_memories(
         repo_root=sample_repo,
         config=default_config(sample_repo),
         provider=provider,
@@ -97,6 +104,7 @@ def test_extract_llm_memories_with_mock_provider(sample_repo: Path) -> None:
 
     assert deduped == 0
     assert len(records) == 1
+    assert warnings == []
     assert records[0].source_type == SourceType.LLM_EXTRACTED
     assert records[0].kind == MemoryKind.DECISION
 
@@ -107,7 +115,7 @@ def test_extract_llm_memories_handles_malformed_json(sample_repo: Path) -> None:
         mock_response_text="not json",
     )
 
-    records, deduped = extract_llm_memories(
+    records, deduped, warnings = extract_llm_memories(
         repo_root=sample_repo,
         config=default_config(sample_repo),
         provider=provider,
@@ -119,6 +127,7 @@ def test_extract_llm_memories_handles_malformed_json(sample_repo: Path) -> None:
 
     assert records == []
     assert deduped == 0
+    assert warnings == []
 
 
 def test_memory_schema_columns_exist_idempotently(tmp_path: Path) -> None:
