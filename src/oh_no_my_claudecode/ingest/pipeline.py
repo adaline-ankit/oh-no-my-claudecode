@@ -55,6 +55,7 @@ def run_ingest(
             path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
             for path in doc_paths
         }
+        git_churn_rank = [stat.path for stat in file_stats]
         commit_payload: list[dict[str, object]] = [
             {
                 "commit_hash": commit.commit_hash,
@@ -72,6 +73,8 @@ def run_ingest(
             commit_lines=commit_lines,
             docs=docs_payload,
             existing_memories=memories,
+            repo_files=repo_files,
+            git_churn_rank=git_churn_rank,
         )
         llm_new_count = len(llm_memories)
         memories.extend(llm_memories)
@@ -146,6 +149,7 @@ def run_ingest_files(
             path.relative_to(repo_root).as_posix(): path.read_text(encoding="utf-8")
             for path in targeted_docs
         }
+        git_churn_rank = [stat.path for stat in selected_stats]
         commit_payload: list[dict[str, object]] = [
             {
                 "commit_hash": commit.commit_hash,
@@ -164,6 +168,8 @@ def run_ingest_files(
             commit_lines=commit_lines,
             docs=docs_payload,
             existing_memories=storage.list_memories(),
+            repo_files=selected_repo_files,
+            git_churn_rank=git_churn_rank,
         )
         llm_new_count = len(llm_memories)
         memories.extend(llm_memories)

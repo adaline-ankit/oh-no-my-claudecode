@@ -148,6 +148,16 @@ class SQLiteStorage:
                     ON compaction_snapshots(timestamp);
                 """
             )
+            self._ensure_memory_column(
+                conn,
+                "confidence",
+                "ALTER TABLE memories ADD COLUMN confidence REAL",
+            )
+            self._ensure_memory_column(
+                conn,
+                "source_type",
+                "ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'heuristic'",
+            )
 
     def upsert_memories(self, entries: list[MemoryEntry]) -> tuple[int, int]:
         new_count = 0
@@ -198,8 +208,8 @@ class SQLiteStorage:
     def replace_generated_memories(self, entries: list[MemoryEntry]) -> tuple[int, int]:
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id FROM memories WHERE source_type != ?",
-                (SourceType.MANUAL.value,),
+                "SELECT id FROM memories WHERE source_type NOT IN (?, ?)",
+                tuple(self._protected_memory_source_values()),
             ).fetchall()
             existing_ids = {str(row["id"]) for row in rows}
             next_ids = {entry.id for entry in entries}
@@ -207,8 +217,8 @@ class SQLiteStorage:
             updated_count = len(next_ids & existing_ids)
 
             conn.execute(
-                "DELETE FROM memories WHERE source_type != ?",
-                (SourceType.MANUAL.value,),
+                "DELETE FROM memories WHERE source_type NOT IN (?, ?)",
+                tuple(self._protected_memory_source_values()),
             )
             conn.executemany(
                 """
@@ -243,8 +253,8 @@ class SQLiteStorage:
             deleted = 0
             for source_ref in dict.fromkeys(source_refs):
                 cursor = conn.execute(
-                    "DELETE FROM memories WHERE source_type != ? AND source_ref = ?",
-                    (SourceType.MANUAL.value, source_ref),
+                    "DELETE FROM memories WHERE source_type NOT IN (?, ?) AND source_ref = ?",
+                    (*self._protected_memory_source_values(), source_ref),
                 )
                 deleted += int(cursor.rowcount)
         return deleted
@@ -857,6 +867,19 @@ class SQLiteStorage:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
+    @staticmethod
+    def _ensure_memory_column(conn: sqlite3.Connection, column: str, ddl: str) -> None:
+        columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info(memories)").fetchall()
+        }
+        if column not in columns:
+            conn.execute(ddl)
+
+    @staticmethod
+    def _protected_memory_source_values() -> list[str]:
+        return [SourceType.MANUAL.value, SourceType.MANUAL_SEED.value]
 
     @staticmethod
     def _row_to_memory(row: sqlite3.Row) -> MemoryEntry:

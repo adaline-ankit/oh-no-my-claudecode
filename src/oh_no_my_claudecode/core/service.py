@@ -469,29 +469,58 @@ class OnmcService:
         title: str,
         summary: str,
         task_id: str | None = None,
+        source_type: SourceType = SourceType.MANUAL,
+        confidence: float = 0.75,
+        source_ref: str | None = None,
     ) -> MemoryEntry:
         """Create or update a manual memory entry."""
         _, _, storage = self._load_context()
         now = utc_now()
-        source_ref = f"task:{task_id}" if task_id else "manual:api"
+        resolved_source_ref = source_ref or (f"task:{task_id}" if task_id else "manual:api")
         tags = [kind.value]
         if task_id:
             tags.append(task_id)
         entry = MemoryEntry(
-            id=stable_id(kind.value, title, summary, source_ref, prefix="manual"),
+            id=stable_id(kind.value, title, summary, resolved_source_ref, prefix="manual"),
             kind=kind,
             title=title,
             summary=summary,
             details=summary,
-            source_type=SourceType.MANUAL,
-            source_ref=source_ref,
+            source_type=source_type,
+            source_ref=resolved_source_ref,
             tags=unique_preserve(tags),
-            confidence=0.75,
+            confidence=confidence,
             created_at=now,
             updated_at=now,
         )
         storage.upsert_memories([entry])
         return storage.get_memory(entry.id) or entry
+
+    def add_memory(
+        self,
+        *,
+        kind: MemoryKind | str,
+        title: str,
+        summary: str,
+        task_id: str | None = None,
+        source_type: SourceType | str = SourceType.MANUAL,
+        confidence: float = 0.75,
+        source_ref: str | None = None,
+    ) -> MemoryEntry:
+        """Create or update a memory entry with explicit source metadata."""
+        resolved_kind = kind if isinstance(kind, MemoryKind) else MemoryKind(kind)
+        resolved_source = (
+            source_type if isinstance(source_type, SourceType) else SourceType(source_type)
+        )
+        return self.add_manual_memory(
+            kind=resolved_kind,
+            title=title,
+            summary=summary,
+            task_id=task_id,
+            source_type=resolved_source,
+            confidence=confidence,
+            source_ref=source_ref,
+        )
 
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
         _, _, storage = self._load_context()

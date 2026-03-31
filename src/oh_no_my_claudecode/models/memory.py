@@ -23,6 +23,7 @@ class SourceType(StrEnum):
     DOC = "doc"
     CODE = "code"
     MANUAL = "manual"
+    MANUAL_SEED = "manual_seed"
     LLM_EXTRACTED = "llm_extracted"
     TRANSCRIPT = "transcript"
 

@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax
 
 from oh_no_my_claudecode.core.service import OnmcService
-from oh_no_my_claudecode.models import IngestResult, LLMProviderType
+from oh_no_my_claudecode.models import IngestResult, LLMProviderType, MemoryKind, SourceType
 from oh_no_my_claudecode.rendering.console import console
 from oh_no_my_claudecode.setup.detector import EnvironmentDetection, detect_environment
 
@@ -46,6 +47,9 @@ def run_setup_wizard(
     if not no_llm:
         provider_name, model_name = _provider_phase(service, yes=yes)
     ingest_result = _scan_phase(service, yes=yes, no_llm=no_llm)
+    if should_seed_interactively(ingest_result.memory_count, yes=yes):
+        seeded = interactive_seed(console, service)
+        ingest_result.memory_count += seeded
     claude_md_generated = _claude_md_phase(service, yes=yes, no_llm=no_llm)
     hooks_installed, mcp_registered, auto_sync_enabled = _integration_phase(
         service,
@@ -173,6 +177,72 @@ def _scan_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> IngestResul
         )
     )
     return result
+
+
+def should_seed_interactively(memory_count: int, *, yes: bool) -> bool:
+    """Return whether the setup wizard should offer manual memory seeding."""
+    return not yes and memory_count < 5
+
+
+def interactive_seed(console: Console, service: OnmcService) -> int:
+    """Ask three targeted questions and seed durable memory for cold-start repos."""
+    console.print(
+        Panel(
+            "Your repo has limited history to extract from.\n"
+            "Answer 3 quick questions to seed your memory — takes 2 minutes.",
+            style="yellow",
+        )
+    )
+    q1 = Prompt.ask(
+        "\n  What is the most important rule anyone editing this codebase must know",
+        default="",
+    )
+    if q1.strip():
+        service.add_memory(
+            kind=MemoryKind.INVARIANT,
+            title="Manually seeded invariant",
+            summary=q1.strip(),
+            source_type=SourceType.MANUAL_SEED,
+            source_ref="manual_seed:setup",
+            confidence=0.9,
+        )
+    q2 = Prompt.ask(
+        "\n  What is one approach that looks right but does NOT work here",
+        default="",
+    )
+    if q2.strip():
+        service.add_memory(
+            kind=MemoryKind.FAILED_APPROACH,
+            title="Manually seeded anti-pattern",
+            summary=q2.strip(),
+            source_type=SourceType.MANUAL_SEED,
+            source_ref="manual_seed:setup",
+            confidence=0.9,
+        )
+    q3 = Prompt.ask(
+        (
+            "\n  Which files are most dangerous to change without understanding first "
+            "(comma-separated)"
+        ),
+        default="",
+    )
+    if q3.strip():
+        for raw_path in q3.split(","):
+            path = raw_path.strip()
+            if not path:
+                continue
+            service.add_memory(
+                kind=MemoryKind.HOTSPOT,
+                title=f"Manually flagged hotspot: {path}",
+                summary=(
+                    f"{path} was manually identified as high-risk. "
+                    "Understand it before editing."
+                ),
+                source_type=SourceType.MANUAL_SEED,
+                source_ref="manual_seed:setup",
+                confidence=0.9,
+            )
+    return 3
 
 
 def _claude_md_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> bool:
