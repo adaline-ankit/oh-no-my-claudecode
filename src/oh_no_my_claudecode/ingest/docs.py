@@ -68,6 +68,9 @@ def extract_doc_memories(repo_root: Path, doc_path: Path, *, max_chars: int) -> 
         title = f"{doc_path.name}: {heading or 'Overview'}"
         summary = shorten(clipped, max_length=160)
         tags = unique_preserve(tokenize(relative) + tokenize(heading))
+        confidence = doc_confidence(kind, clipped)
+        if not is_primarily_english(summary):
+            confidence = 0.0
         memories.append(
             MemoryEntry(
                 id=stable_id(relative, heading, summary, prefix=kind.value),
@@ -78,7 +81,7 @@ def extract_doc_memories(repo_root: Path, doc_path: Path, *, max_chars: int) -> 
                 source_type=SourceType.DOC,
                 source_ref=relative,
                 tags=tags[:8],
-                confidence=doc_confidence(kind, clipped),
+                confidence=confidence,
                 created_at=now,
                 updated_at=now,
             )
@@ -148,3 +151,11 @@ def is_structural_heading(title: str) -> bool:
     """Return whether a heading is structural boilerplate rather than repo knowledge."""
     normalized = title.lower().strip()
     return any(re.match(pattern, normalized) for pattern in TOC_PATTERNS)
+
+
+def is_primarily_english(text: str) -> bool:
+    """Return False when non-ASCII content dominates the supplied text."""
+    if not text:
+        return True
+    non_ascii = sum(1 for char in text if ord(char) > 127)
+    return (non_ascii / max(len(text), 1)) < 0.3

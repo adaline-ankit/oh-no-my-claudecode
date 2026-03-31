@@ -90,6 +90,8 @@ def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) ->
     for memory in memories:
         if memory.feedback_score <= -0.5:
             continue
+        if memory.confidence <= 0.0:
+            continue
         haystack_tokens = set(
             tokenize(
                 " ".join(

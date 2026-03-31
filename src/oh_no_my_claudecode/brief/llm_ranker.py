@@ -28,7 +28,11 @@ def rerank_memories_with_llm(
     log_path: Path,
 ) -> tuple[list[MemoryEntry], dict[str, str]]:
     """Re-rank candidate memory entries with LLM reasoning and annotate relevance."""
-    filtered_candidates = [memory for memory in candidates if memory.feedback_score > -0.5]
+    filtered_candidates = [
+        memory
+        for memory in candidates
+        if memory.feedback_score > -0.5 and memory.confidence > 0.0
+    ]
     if not filtered_candidates:
         return [], {}
     payload: list[dict[str, object]] = [
