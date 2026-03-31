@@ -1,0 +1,19 @@
+{
+  "memory": {
+    "confidence": 0.65,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Mirror the checks that appear in CI workflows when preparing a change. This is a conservative repo-shape inference, not a guarantee of required gates.",
+    "feedback_score": 0.0,
+    "id": "validation_rule-0d7961070179",
+    "kind": "validation_rule",
+    "source_ref": ".github/workflows",
+    "source_type": "code",
+    "summary": "GitHub Actions workflows are present: ci.yml, release.yml.",
+    "tags": [
+      "ci",
+      "validation"
+    ],
+    "title": "CI workflow hints",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

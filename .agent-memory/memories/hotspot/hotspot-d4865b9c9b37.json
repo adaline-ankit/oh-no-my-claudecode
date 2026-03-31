@@ -1,0 +1,18 @@
+{
+  "memory": {
+    "confidence": 0.85,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Git history suggests docs changes frequently. Treat this as a risk hint and inspect recent commits before editing.",
+    "feedback_score": 0.0,
+    "id": "hotspot-d4865b9c9b37",
+    "kind": "hotspot",
+    "source_ref": "docs",
+    "source_type": "git",
+    "summary": "docs shows repeated churn across 10 commits in the analyzed history.",
+    "tags": [
+      "docs"
+    ],
+    "title": "Hotspot subsystem: docs",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

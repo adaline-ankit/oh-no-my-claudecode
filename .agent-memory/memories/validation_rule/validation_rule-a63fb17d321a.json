@@ -1,0 +1,20 @@
+{
+  "memory": {
+    "confidence": 0.82,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "History suggests reviewing or updating tests in tests when touching docs. This is a heuristic from git co-change patterns.",
+    "feedback_score": 0.0,
+    "id": "validation_rule-a63fb17d321a",
+    "kind": "validation_rule",
+    "source_ref": "docs|tests",
+    "source_type": "git",
+    "summary": "Changes under docs frequently land with tests (7 commits).",
+    "tags": [
+      "docs",
+      "tests",
+      "tests"
+    ],
+    "title": "Tests often accompany docs",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

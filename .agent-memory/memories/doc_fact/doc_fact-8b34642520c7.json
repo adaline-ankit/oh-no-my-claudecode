@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Tasks can also store attempt records so ONMC preserves what was tried, not just the final outcome.\n\nEach attempt stores:\n\n- `attempt_id`\n- `task_id`\n- `summary`\n- `kind`\n- `status`\n- `reasoning_summary`\n- `evidence_for`\n- `evidence_against`\n- `files_touched`\n- `created_at`\n- `closed_at`\n\nCommon attempt commands:\n\n```bash\nonmc attempt add task-abc123def4 \\\n  --summary \"Try a narrower cache fix first\" \\\n  --kind fix_attempt \\\n  --status tried \\\n  --reasoning-summary \"The cache module has the strongest churn signal.\" \\\n  --file src/cache.py\n\nonmc attempt list task-abc123def4\nonmc attempt show attempt-abc123def4\nonmc attempt update attempt-abc123def4 \\\n  --status rejected \\\n  --evidence-against \"The narrowed fix did not touch the failing path.\"\n```\n\nTask detail output includes a compact attempts summary when attempts exist, and task list output includes an attempt count so related attempts are discoverable quickly.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-8b34642520c7",
+    "kind": "doc_fact",
+    "source_ref": "docs/task-lifecycle.md",
+    "source_type": "doc",
+    "summary": "Tasks can also store attempt records so ONMC preserves what was tried, not just the final outcome. Each attempt stores: - `attempt_id` - `task_id` - `summary...",
+    "tags": [
+      "docs",
+      "task",
+      "lifecycle",
+      "md",
+      "attempts"
+    ],
+    "title": "task-lifecycle.md: Attempts",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

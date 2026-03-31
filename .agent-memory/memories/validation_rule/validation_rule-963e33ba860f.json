@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Goal:\n\n- critique a proposed or likely fix\n- identify assumptions, missing checks, architectural risks, and likely regressions\n\nStructured output shape:\n\n- `concerns`\n- `assumptions`\n- `likely_regressions`\n- `required_tests`",
+    "feedback_score": 0.0,
+    "id": "validation_rule-963e33ba860f",
+    "kind": "validation_rule",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "Goal: - critique a proposed or likely fix - identify assumptions, missing checks, architectural risks, and likely regressions Structured output shape: - `con...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "review"
+    ],
+    "title": "prompt-compiler.md: `review`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

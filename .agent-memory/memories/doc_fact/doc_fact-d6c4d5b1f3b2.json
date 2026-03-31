@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\nonmc brief --task \"fix the cache invalidation bug\"",
+    "feedback_score": 0.0,
+    "id": "doc_fact-d6c4d5b1f3b2",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash onmc brief --task \"fix the cache invalidation bug\"",
+    "tags": [
+      "readme",
+      "md",
+      "brief",
+      "compilation"
+    ],
+    "title": "README.md: Brief compilation",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- keep prompt construction inspectable\n- inject repo-specific memory before model reasoning\n- separate instructions, task context, negative memory, and output contracts\n- avoid large unstructured dumps",
+    "feedback_score": 0.0,
+    "id": "doc_fact-630e008a1037",
+    "kind": "doc_fact",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "- keep prompt construction inspectable - inject repo-specific memory before model reasoning - separate instructions, task context, negative memory, and outpu...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "goals"
+    ],
+    "title": "prompt-compiler.md: Goals",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

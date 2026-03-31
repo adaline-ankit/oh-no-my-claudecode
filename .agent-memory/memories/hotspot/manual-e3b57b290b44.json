@@ -1,0 +1,18 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:12:02Z",
+    "details": "src/oh_no_my_claudecode/cli.py and src/oh_no_my_claudecode/storage/sqlite.py are dangerous to change without understanding first",
+    "feedback_score": 0.0,
+    "id": "manual-e3b57b290b44",
+    "kind": "hotspot",
+    "source_ref": "manual_seed:bootstrap",
+    "source_type": "manual_seed",
+    "summary": "src/oh_no_my_claudecode/cli.py and src/oh_no_my_claudecode/storage/sqlite.py are dangerous to change without understanding first",
+    "tags": [
+      "hotspot"
+    ],
+    "title": "High-risk ONMC core files",
+    "updated_at": "2026-03-31T10:12:02Z"
+  }
+}

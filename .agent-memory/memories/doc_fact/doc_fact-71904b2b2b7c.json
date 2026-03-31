@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "These are not planned for the MVP path:\n\n- hosted dashboard\n- remote sync\n- auth\n- vector database as a requirement\n- generic multi-agent orchestration runtime\n- autonomous patching engine",
+    "feedback_score": 0.0,
+    "id": "doc_fact-71904b2b2b7c",
+    "kind": "doc_fact",
+    "source_ref": "docs/roadmap.md",
+    "source_type": "doc",
+    "summary": "These are not planned for the MVP path: - hosted dashboard - remote sync - auth - vector database as a requirement - generic multi-agent orchestration runtim...",
+    "tags": [
+      "docs",
+      "roadmap",
+      "md",
+      "explicit",
+      "non",
+      "goals"
+    ],
+    "title": "roadmap.md: Explicit Non-Goals",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

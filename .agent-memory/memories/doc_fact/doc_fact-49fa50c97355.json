@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC now treats tasks as first-class local records, not just free-form prompt text.\n\nEach task is stored in `.onmc/memory.db` with:\n\n- `task_id`\n- `title`\n- `description`\n- `status`\n- `created_at`\n- `started_at`\n- `ended_at`\n- `repo_root`\n- `branch`\n- `labels`\n- `final_summary`\n- `final_outcome`\n- `confidence`",
+    "feedback_score": 0.0,
+    "id": "doc_fact-49fa50c97355",
+    "kind": "doc_fact",
+    "source_ref": "docs/task-lifecycle.md",
+    "source_type": "doc",
+    "summary": "ONMC now treats tasks as first-class local records, not just free-form prompt text. Each task is stored in `.onmc/memory.db` with: - `task_id` - `title` - `d...",
+    "tags": [
+      "docs",
+      "task",
+      "lifecycle",
+      "md"
+    ],
+    "title": "task-lifecycle.md: Task Lifecycle",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

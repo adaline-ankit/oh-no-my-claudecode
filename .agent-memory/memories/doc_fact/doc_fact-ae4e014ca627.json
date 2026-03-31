@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Each memory entry stores:\n\n- `id`\n- `kind`\n- `title`\n- `summary`\n- `details`\n- `source_type`\n- `source_ref`\n- `tags`\n- `confidence`\n- `created_at`\n- `updated_at`",
+    "feedback_score": 0.0,
+    "id": "doc_fact-ae4e014ca627",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "Each memory entry stores: - `id` - `kind` - `title` - `summary` - `details` - `source_type` - `source_ref` - `tags` - `confidence` - `created_at` - `updated_at`",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "schema"
+    ],
+    "title": "memory-model.md: Schema",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

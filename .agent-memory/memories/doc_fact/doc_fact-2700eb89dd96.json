@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\nonmc setup              # full onboarding wizard \u2014 run this first\nonmc doctor             # health check: memory freshness, hooks, MCP, CLAUDE.md\nonmc status             # repo root, ingest state, memory counts\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-2700eb89dd96",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash onmc setup # full onboarding wizard \u2014 run this first onmc doctor # health check: memory freshness, hooks, MCP, CLAUDE.md onmc status # repo root, ing...",
+    "tags": [
+      "readme",
+      "md",
+      "setup",
+      "health"
+    ],
+    "title": "README.md: Setup and health",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

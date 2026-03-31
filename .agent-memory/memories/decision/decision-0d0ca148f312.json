@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.7,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\npip install oh-no-my-claudecode\nonmc setup\n```\n\nThat's it. `onmc setup` reads your git history, extracts architectural decisions and invariants, generates `CLAUDE.md`, and connects to Claude Code \u2014 all in one interactive wizard.\n\n---",
+    "feedback_score": 0.0,
+    "id": "decision-0d0ca148f312",
+    "kind": "decision",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash pip install oh-no-my-claudecode onmc setup ``` That's it. `onmc setup` reads your git history, extracts architectural decisions and invariants, gener...",
+    "tags": [
+      "readme",
+      "md",
+      "get",
+      "started"
+    ],
+    "title": "README.md: Get started",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

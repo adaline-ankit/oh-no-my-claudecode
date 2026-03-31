@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "| Agent | Integration |\n|---|---|\n| **Claude Code** | `onmc hooks install` + `onmc serve --mcp` |\n| **Cursor** | Pipe `onmc brief` output to `.cursorrules` |\n| **Codex CLI** | Pass `onmc brief` output via `AGENTS.md` |\n| **Cloud agents** (Codex, GitHub Coding Agent) | `onmc sync --restore` in container startup |\n| **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` |\n\n---",
+    "feedback_score": 0.0,
+    "id": "doc_fact-e5f1b15a4190",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "| Agent | Integration | |---|---| | **Claude Code** | `onmc hooks install` + `onmc serve --mcp` | | **Cursor** | Pipe `onmc brief` output to `.cursorrules` |...",
+    "tags": [
+      "readme",
+      "md",
+      "works",
+      "every",
+      "coding",
+      "agent"
+    ],
+    "title": "README.md: Works with every coding agent",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

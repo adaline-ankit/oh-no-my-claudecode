@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC can initialize local state and ingest repo knowledge with:\n\n```bash\nonmc init\nonmc ingest\n```\n\nWhat gets stored:\n\n- markdown-derived facts, decisions, invariants, and validation rules\n- git-derived hotspots and co-change patterns\n- repo-tree-derived validation and layout hints\n- repo file metadata and git file stats\n\nIf a provider is configured, ingest now adds an LLM extraction pass over commit batches and docs.\nThose extractions are validated before storage and written as `llm_extracted` memory with\nconfidence scores.\n\nStored under:\n\n- `.onmc/config.yaml`\n- `.onmc/memory.db`\n- `.onmc/compiled/`",
+    "feedback_score": 0.0,
+    "id": "decision-ae1ba3936695",
+    "kind": "decision",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "ONMC can initialize local state and ingest repo knowledge with: ```bash onmc init onmc ingest ``` What gets stored: - markdown-derived facts, decisions, inva...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "repo",
+      "memory",
+      "ingest"
+    ],
+    "title": "shipped-capabilities.md: 1. Repo Memory Ingest",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

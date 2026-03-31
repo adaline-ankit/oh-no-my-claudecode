@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC compiles a task-specific deterministic brief:\n\n```bash\nonmc brief --task \"fix flaky Redis cache invalidation bug\"\n```\n\nThe brief includes:\n\n- task summary\n- repo overview\n- relevant memory\n- likely impacted areas\n- files to inspect first\n- risk notes\n- validation checklist\n- provenance\n\nThe markdown artifact is written to `.onmc/compiled/<timestamp>-brief.md`.\n\nWhen a provider is configured, ONMC reranks the final candidate memory set with an LLM and stores\none-sentence relevance reasons in the brief output.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-0cf820c6bbbe",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "ONMC compiles a task-specific deterministic brief: ```bash onmc brief --task \"fix flaky Redis cache invalidation bug\" ``` The brief includes: - task summary...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "brief",
+      "compilation"
+    ],
+    "title": "shipped-capabilities.md: 6. Brief Compilation",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

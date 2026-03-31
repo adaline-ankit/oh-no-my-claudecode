@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- read-only MCP server definition\n- ONMC resource listing and URI handlers",
+    "feedback_score": 0.0,
+    "id": "doc_fact-19579cdcaeb3",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "- read-only MCP server definition - ONMC resource listing and URI handlers",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "mcp",
+      "server"
+    ],
+    "title": "architecture.md: `mcp_server/`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

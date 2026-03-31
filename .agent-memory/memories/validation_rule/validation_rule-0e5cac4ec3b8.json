@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "A solution that conflicted with a repo constraint, invariant, or design principle.\n\nExamples:\n\n- bypassing a shared cache boundary that architecture docs mark as required",
+    "feedback_score": 0.0,
+    "id": "validation_rule-0e5cac4ec3b8",
+    "kind": "validation_rule",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "A solution that conflicted with a repo constraint, invariant, or design principle. Examples: - bypassing a shared cache boundary that architecture docs mark...",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "design",
+      "conflict"
+    ],
+    "title": "memory-model.md: `design_conflict`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Tasks are first-class records:\n\n```bash\nonmc task start --title \"Fix cache bug\" --description \"Track the flaky path\"\nonmc task list\nonmc task show <task_id>\nonmc task status <task_id> --status blocked\nonmc task end <task_id> --status solved --summary \"Fixed at the cache boundary\"\n```\n\nTask records persist:\n\n- task id\n- title and description\n- lifecycle status\n- timestamps\n- repo root and branch\n- labels\n- final summary / outcome fields",
+    "feedback_score": 0.0,
+    "id": "doc_fact-138a51d0da0c",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "Tasks are first-class records: ```bash onmc task start --title \"Fix cache bug\" --description \"Track the flaky path\" onmc task list onmc task show <task_id> o...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "task",
+      "lifecycle"
+    ],
+    "title": "shipped-capabilities.md: 3. Task Lifecycle",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

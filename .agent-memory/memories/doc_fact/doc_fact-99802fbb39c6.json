@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "1. `onmc setup`\n   - detects repo characteristics and Claude Code presence\n   - optionally configures an LLM provider\n   - runs ingest, `CLAUDE.md` generation, hook install, MCP registration, and auto-sync\n\n2. `onmc init`\n   - discovers the git repo root\n   - creates `.onmc/`\n   - writes `.onmc/config.yaml`\n   - initializes `.onmc/memory.db`\n\n3. `onmc ingest`\n   - scans repository files\n   - parses selected markdown docs\n   - walks git history\n   - infers hotspots and validation hints\n   - stores structured memory and repo metadata in SQLite\n   - optionally runs an LLM extraction pass over commit batches and docs\n   - validates extracted JSON before storing `llm_extracted` memory\n\n4. `onmc ingest --files ...`\n   - reprocesses only the requested files\n   - updates matching doc memories and file stats\n   - refreshes related git patterns for the touched paths\n   - leaves unrelated memory untouched\n\n5. `onmc sync --commit` / `onmc sync --restore`\n   - exports SQLite state to `.agent-memory/` JSON + markdown\n   - restores that exported state on another machine or workspace\n\n6. `onmc task start`\n   - creates a durable task record\n   - captures repo root and current branch\n   - initialize",
+    "feedback_score": 0.0,
+    "id": "doc_fact-99802fbb39c6",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "1. `onmc setup` - detects repo characteristics and Claude Code presence - optionally configures an LLM provider - runs ingest, `CLAUDE.md` generation, hook i...",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "runtime",
+      "flow"
+    ],
+    "title": "architecture.md: Runtime Flow",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

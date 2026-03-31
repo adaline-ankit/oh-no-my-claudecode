@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "A task-derived invariant worth preserving in future edits.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-d5c119dbc5a2",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "A task-derived invariant worth preserving in future edits.",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "invariant"
+    ],
+    "title": "memory-model.md: `invariant`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

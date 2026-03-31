@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Git history suggests these areas often move together. Use this as a review hint, not an architectural rule.",
+    "feedback_score": 0.0,
+    "id": "git_pattern-2497c99eddcc",
+    "kind": "git_pattern",
+    "source_ref": "src/oh_no_my_claudecode|tests",
+    "source_type": "git",
+    "summary": "src/oh_no_my_claudecode and tests were changed together in 16 commits.",
+    "tags": [
+      "src",
+      "oh",
+      "no",
+      "tests"
+    ],
+    "title": "Co-modified areas: src/oh_no_my_claudecode + tests",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

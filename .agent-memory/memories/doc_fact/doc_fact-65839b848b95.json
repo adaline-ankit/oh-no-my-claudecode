@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "[![CI](https://github.com/adaline-ankit/oh-no-my-claudecode/actions/workflows/ci.yml/badge.svg)](https://github.com/adaline-ankit/oh-no-my-claudecode/actions)\n[![PyPI version](https://badge.fury.io/py/oh-no-my-claudecode.svg)](https://pypi.org/project/oh-no-my-claudecode/)\n[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)\n[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)\n[![AI-Ready](https://img.shields.io/badge/AI--Ready-ONMC-6B7280)](https://github.com/adaline-ankit/oh-no-my-claudecode)\n\n> Repo-native memory for AI coding agents.  \n> Your agent knows your codebase history, not just its current state.\n\n---",
+    "feedback_score": 0.0,
+    "id": "doc_fact-65839b848b95",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "[![CI](https://github.com/adaline-ankit/oh-no-my-claudecode/actions/workflows/ci.yml/badge.svg)](https://github.com/adaline-ankit/oh-no-my-claudecode/actions...",
+    "tags": [
+      "readme",
+      "md",
+      "oh",
+      "no",
+      "my",
+      "claudecode",
+      "onmc"
+    ],
+    "title": "README.md: oh-no-my-claudecode (`onmc`)",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

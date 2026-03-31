@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "A sharp edge that regularly surprises implementers.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-8167eee56bdb",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "A sharp edge that regularly surprises implementers.",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "gotcha"
+    ],
+    "title": "memory-model.md: `gotcha`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

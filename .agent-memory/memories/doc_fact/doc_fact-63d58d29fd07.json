@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "`oh-no-my-claudecode` is a repo-native memory and context layer for coding agents.\n\nIt is not just a prompt pack and it is not yet a generic multi-agent runtime.\n\nToday ONMC does four core things:\n\n- builds deterministic repo memory from docs, git history, and file structure\n- optionally uses an LLM to extract and rank higher-signal memory where heuristics are weak\n- stores durable task-scoped engineering memory in local SQLite state\n- compiles high-signal briefs and prompts for coding work\n- exposes that memory to agents through CLI commands, a Python API, Claude Code hooks, and a read-only MCP server",
+    "feedback_score": 0.0,
+    "id": "doc_fact-63d58d29fd07",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "`oh-no-my-claudecode` is a repo-native memory and context layer for coding agents. It is not just a prompt pack and it is not yet a generic multi-agent runti...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "what",
+      "onmc"
+    ],
+    "title": "shipped-capabilities.md: What ONMC Is",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

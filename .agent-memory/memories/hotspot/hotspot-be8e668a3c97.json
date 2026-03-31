@@ -1,0 +1,18 @@
+{
+  "memory": {
+    "confidence": 0.85,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Git history suggests tests changes frequently. Treat this as a risk hint and inspect recent commits before editing.",
+    "feedback_score": 0.0,
+    "id": "hotspot-be8e668a3c97",
+    "kind": "hotspot",
+    "source_ref": "tests",
+    "source_type": "git",
+    "summary": "tests shows repeated churn across 21 commits in the analyzed history.",
+    "tags": [
+      "tests"
+    ],
+    "title": "Hotspot subsystem: tests",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

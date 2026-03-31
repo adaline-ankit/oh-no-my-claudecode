@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Shipped in this repo:\n\n- `onmc setup` onboarding wizard\n- installable Python package\n- repo-local `.onmc/` state\n- SQLite memory store\n- task lifecycle foundation\n- task attempt logging\n- git-portable `.agent-memory/` sync\n- Claude Code compaction hooks + continuation snapshots\n- typed public Python API\n- read-only MCP server\n- doc ingestion\n- git-history ingestion\n- hotspot and git-pattern extraction\n- task brief compilation\n- optional LLM-powered commit/doc extraction during ingest\n- optional LLM reranking for briefs\n- `CLAUDE.md` generation, update, and watch mode\n- Claude Code transcript mining\n- `onmc doctor` health check\n- incremental ingest for selected files + post-commit hook\n- memory inspection commands\n- tests, linting, CI, and packaging scaffolding",
+    "feedback_score": 0.0,
+    "id": "doc_fact-8fc6260b2e77",
+    "kind": "doc_fact",
+    "source_ref": "docs/roadmap.md",
+    "source_type": "doc",
+    "summary": "Shipped in this repo: - `onmc setup` onboarding wizard - installable Python package - repo-local `.onmc/` state - SQLite memory store - task lifecycle founda...",
+    "tags": [
+      "docs",
+      "roadmap",
+      "md",
+      "p0"
+    ],
+    "title": "roadmap.md: P0",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

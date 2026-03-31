@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "The prompt compiler is ONMC's first bridge between deterministic repo memory and optional LLM reasoning.\n\nIt does not run an agent loop. It compiles a structured prompt so a provider-backed call can reason over high-signal repo context instead of raw task text alone.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-09f812948117",
+    "kind": "doc_fact",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "The prompt compiler is ONMC's first bridge between deterministic repo memory and optional LLM reasoning. It does not run an agent loop. It compiles a structu...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md"
+    ],
+    "title": "prompt-compiler.md: Prompt Compiler",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

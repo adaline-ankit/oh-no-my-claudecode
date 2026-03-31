@@ -1,0 +1,19 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Git history suggests these areas often move together. Use this as a review hint, not an architectural rule.",
+    "feedback_score": 0.0,
+    "id": "git_pattern-c2f3447ce37b",
+    "kind": "git_pattern",
+    "source_ref": "docs|tests",
+    "source_type": "git",
+    "summary": "docs and tests were changed together in 7 commits.",
+    "tags": [
+      "docs",
+      "tests"
+    ],
+    "title": "Co-modified areas: docs + tests",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

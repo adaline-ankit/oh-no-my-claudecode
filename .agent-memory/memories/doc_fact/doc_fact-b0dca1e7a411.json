@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "A durable validation rule learned from task work.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-b0dca1e7a411",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "A durable validation rule learned from task work.",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "validation"
+    ],
+    "title": "memory-model.md: `validation`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

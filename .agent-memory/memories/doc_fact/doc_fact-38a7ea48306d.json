@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\nonmc task start --title \"...\" --description \"...\"\nonmc task list / show / status / end\nonmc attempt add <task_id> --summary \"...\" --kind fix_attempt --status tried\nonmc attempt list / show / update\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-38a7ea48306d",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash onmc task start --title \"...\" --description \"...\" onmc task list / show / status / end onmc attempt add <task_id> --summary \"...\" --kind fix_attempt...",
+    "tags": [
+      "readme",
+      "md",
+      "tasks",
+      "attempts"
+    ],
+    "title": "README.md: Tasks and attempts",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

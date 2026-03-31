@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- export SQLite-backed state to `.agent-memory/`\n- restore exported state into a fresh local `.onmc/`\n- install a post-commit sync hook",
+    "feedback_score": 0.0,
+    "id": "doc_fact-53075ce41277",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "- export SQLite-backed state to `.agent-memory/` - restore exported state into a fresh local `.onmc/` - install a post-commit sync hook",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "sync"
+    ],
+    "title": "architecture.md: `sync/`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

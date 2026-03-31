@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Goal:\n\n- explain how to think about the task at a staff-engineer level\n- summarize root-cause reasoning, false leads, and transferable lessons\n\nStructured output shape:\n\n- `problem_this_solves`\n- `approach_chosen_and_why`\n- `what_was_tried_first`\n- `current_implementation`\n- `what_would_break`\n- `open_questions`\n- `validation`\n\nThe model still accepts the original `reasoning_map` / `system_lesson` / `false_lead_analysis` /\n`mental_model_upgrade` shape for backward compatibility, and ONMC normalizes that into the richer\nteach output model.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-5823a3688faf",
+    "kind": "doc_fact",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "Goal: - explain how to think about the task at a staff-engineer level - summarize root-cause reasoning, false leads, and transferable lessons Structured outp...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "teach"
+    ],
+    "title": "prompt-compiler.md: `teach`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

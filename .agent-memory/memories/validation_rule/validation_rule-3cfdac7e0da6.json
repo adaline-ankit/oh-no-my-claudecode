@@ -1,0 +1,19 @@
+{
+  "memory": {
+    "confidence": 0.85,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Detected from repo metadata under onmc. Consider running `ruff check .` for impacted changes.",
+    "feedback_score": 0.0,
+    "id": "validation_rule-3cfdac7e0da6",
+    "kind": "validation_rule",
+    "source_ref": "pyproject.toml",
+    "source_type": "code",
+    "summary": "Repository configuration indicates `ruff` is part of the local validation flow.",
+    "tags": [
+      "validation",
+      "ruff"
+    ],
+    "title": "Validation tool configured: ruff",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

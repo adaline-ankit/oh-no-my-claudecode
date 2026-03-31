@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "The recommended onboarding flow is now:\n\n```bash\nonmc setup\n```\n\nThe wizard can:\n\n- initialize `.onmc/`\n- configure an optional provider\n- ingest repo memory\n- generate `CLAUDE.md`\n- install Claude Code hooks\n- register the MCP server\n- install post-commit ingest/sync automation",
+    "feedback_score": 0.0,
+    "id": "doc_fact-ee580e17267d",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "The recommended onboarding flow is now: ```bash onmc setup ``` The wizard can: - initialize `.onmc/` - configure an optional provider - ingest repo memory -...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "setup",
+      "wizard"
+    ],
+    "title": "shipped-capabilities.md: 0. Setup Wizard",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

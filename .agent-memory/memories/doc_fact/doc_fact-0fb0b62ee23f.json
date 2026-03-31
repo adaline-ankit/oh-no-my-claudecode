@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Attempts preserve what was tried, including partial or failed approaches:\n\n```bash\nonmc attempt add <task_id> --summary \"Try a cache-only fix\" --kind fix_attempt --status tried\nonmc attempt list <task_id>\nonmc attempt show <attempt_id>\nonmc attempt update <attempt_id> --status rejected --evidence-against \"Did not touch the failing path\"\n```\n\nAttempts store:\n\n- summary\n- kind\n- status\n- reasoning summary\n- evidence for / against\n- files touched\n- creation / close timestamps",
+    "feedback_score": 0.0,
+    "id": "doc_fact-0fb0b62ee23f",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "Attempts preserve what was tried, including partial or failed approaches: ```bash onmc attempt add <task_id> --summary \"Try a cache-only fix\" --kind fix_atte...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "attempt",
+      "logging"
+    ],
+    "title": "shipped-capabilities.md: 4. Attempt Logging",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

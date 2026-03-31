@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "P0 memory is typed structured repo knowledge, not raw chat history.\n\nONMC now stores two conservative memory layers:\n\n- repo-derived memory from ingest\n- task-derived memory artifacts recorded from completed or in-progress task work",
+    "feedback_score": 0.0,
+    "id": "doc_fact-591983ac1d28",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "P0 memory is typed structured repo knowledge, not raw chat history. ONMC now stores two conservative memory layers: - repo-derived memory from ingest - task-...",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md"
+    ],
+    "title": "memory-model.md: Memory Model",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

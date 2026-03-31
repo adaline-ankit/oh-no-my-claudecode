@@ -1,0 +1,20 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\nonmc claude-md generate  # generate CLAUDE.md from memory store\nonmc claude-md update    # refresh stale sections, preserve user-written ones\nonmc claude-md preview   # show what would be generated without writing\nonmc claude-md --watch   # auto-regenerate when memory changes\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-06f1f5d61415",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash onmc claude-md generate # generate CLAUDE.md from memory store onmc claude-md update # refresh stale sections, preserve user-written ones onmc claude...",
+    "tags": [
+      "readme",
+      "md",
+      "claude"
+    ],
+    "title": "README.md: CLAUDE.md",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

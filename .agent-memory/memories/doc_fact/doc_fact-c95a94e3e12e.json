@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC can optionally call a configured provider:\n\n```bash\nonmc llm configure --provider anthropic --model <model-id>\nonmc llm status\n```\n\nSupported providers:\n\n- Anthropic\n- OpenAI\n- Mock provider for tests\n\nSecrets are read from environment variables, not stored in config.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-c95a94e3e12e",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "ONMC can optionally call a configured provider: ```bash onmc llm configure --provider anthropic --model <model-id> onmc llm status ``` Supported providers: -...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "optional",
+      "llm",
+      "layer"
+    ],
+    "title": "shipped-capabilities.md: 7. Optional LLM Layer",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

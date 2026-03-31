@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Stable repo facts extracted from markdown docs or repo shape.\n\nExamples:\n\n- local setup instructions from `README.md`\n- primary source layout inferred from the repo tree",
+    "feedback_score": 0.0,
+    "id": "doc_fact-0bd0a4c6c298",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "Stable repo facts extracted from markdown docs or repo shape. Examples: - local setup instructions from `README.md` - primary source layout inferred from the...",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "doc",
+      "fact"
+    ],
+    "title": "memory-model.md: `doc_fact`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

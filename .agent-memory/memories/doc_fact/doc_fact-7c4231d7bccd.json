@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Goal:\n\n- propose the next best engineering approach\n- respect repo memory and constraints\n- avoid repeated failures\n- recommend likely files and validations\n\nStructured output shape:\n\n- `approach_summary`\n- `files_to_inspect`\n- `risks`\n- `validations`\n- `confidence`",
+    "feedback_score": 0.0,
+    "id": "doc_fact-7c4231d7bccd",
+    "kind": "doc_fact",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "Goal: - propose the next best engineering approach - respect repo memory and constraints - avoid repeated failures - recommend likely files and validations S...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "solve"
+    ],
+    "title": "prompt-compiler.md: `solve`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "memory": {
+    "confidence": 0.85,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Detected from repo metadata under onmc. Consider running `pytest` for impacted changes.",
+    "feedback_score": 0.0,
+    "id": "validation_rule-a5d8660a4d70",
+    "kind": "validation_rule",
+    "source_ref": "pyproject.toml",
+    "source_type": "code",
+    "summary": "Repository configuration indicates `pytest` is part of the local validation flow.",
+    "tags": [
+      "validation",
+      "pytest"
+    ],
+    "title": "Validation tool configured: pytest",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Each compiled prompt separates:\n\n1. mode goal\n2. instructions\n3. task record\n4. repo context from the deterministic brief\n5. relevant repo memory with provenance\n6. prior attempts\n7. negative memory\n8. validation guidance\n9. provenance summary\n10. output contract",
+    "feedback_score": 0.0,
+    "id": "doc_fact-afc2e5bd6540",
+    "kind": "doc_fact",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "Each compiled prompt separates: 1. mode goal 2. instructions 3. task record 4. repo context from the deterministic brief 5. relevant repo memory with provena...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "sections"
+    ],
+    "title": "prompt-compiler.md: Prompt Sections",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

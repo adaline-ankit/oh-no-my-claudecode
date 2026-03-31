@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- task IDs are short and copyable by design\n- tasks are scoped to the current repository\n- branch is captured when the task starts\n- terminal states set `ended_at`\n- `final_summary`, `final_outcome`, and `confidence` are schema-ready for richer task memory without requiring more workflow in P0",
+    "feedback_score": 0.0,
+    "id": "doc_fact-e627f9c9f413",
+    "kind": "doc_fact",
+    "source_ref": "docs/task-lifecycle.md",
+    "source_type": "doc",
+    "summary": "- task IDs are short and copyable by design - tasks are scoped to the current repository - branch is captured when the task starts - terminal states set `end...",
+    "tags": [
+      "docs",
+      "task",
+      "lifecycle",
+      "md",
+      "notes"
+    ],
+    "title": "task-lifecycle.md: Notes",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

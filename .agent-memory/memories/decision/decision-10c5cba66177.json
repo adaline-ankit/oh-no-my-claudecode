@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC can reprocess only selected files:\n\n```bash\nonmc ingest --files README.md docs/architecture.md\n```\n\nWhat this updates:\n\n- matching doc memories for those files\n- matching repo file records\n- matching file stats\n- related git-pattern memories for the touched paths\n\nIt does not yet do stale-memory pruning.",
+    "feedback_score": 0.0,
+    "id": "decision-10c5cba66177",
+    "kind": "decision",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "ONMC can reprocess only selected files: ```bash onmc ingest --files README.md docs/architecture.md ``` What this updates: - matching doc memories for those f...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "incremental",
+      "ingest"
+    ],
+    "title": "shipped-capabilities.md: 2. Incremental Ingest",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

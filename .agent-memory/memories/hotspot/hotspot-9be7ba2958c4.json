@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Observed 11 modifying commits in the last 33 analyzed commits for src/oh_no_my_claudecode/rendering/console.py. Recent churn count in the last 30 days: 11.",
+    "feedback_score": 0.0,
+    "id": "hotspot-9be7ba2958c4",
+    "kind": "hotspot",
+    "source_ref": "src/oh_no_my_claudecode/rendering/console.py",
+    "source_type": "git",
+    "summary": "Observed 11 modifying commits in the last 33 analyzed commits for src/oh_no_my_claudecode/rendering/console.py. Recent churn count in the last 30 days: 11.",
+    "tags": [
+      "src",
+      "oh",
+      "no",
+      "my",
+      "claudecode"
+    ],
+    "title": "High-churn file: src/oh_no_my_claudecode/rendering/console.py",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

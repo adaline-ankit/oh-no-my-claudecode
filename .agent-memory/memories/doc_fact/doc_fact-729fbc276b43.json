@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "P0 is intentionally narrow:\n\n- local-first\n- useful without an LLM\n- deterministic where possible\n- provenance-driven\n- easy to publish as a small OSS package\n\nThe system compiles repo-specific context into a brief that a coding agent can consume before editing.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-729fbc276b43",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "P0 is intentionally narrow: - local-first - useful without an LLM - deterministic where possible - provenance-driven - easy to publish as a small OSS package...",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "goals"
+    ],
+    "title": "architecture.md: Goals",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

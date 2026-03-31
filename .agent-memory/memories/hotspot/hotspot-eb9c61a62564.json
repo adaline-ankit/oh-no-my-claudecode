@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Observed 13 modifying commits in the last 33 analyzed commits for src/oh_no_my_claudecode/cli.py. Recent churn count in the last 30 days: 13.",
+    "feedback_score": 0.0,
+    "id": "hotspot-eb9c61a62564",
+    "kind": "hotspot",
+    "source_ref": "src/oh_no_my_claudecode/cli.py",
+    "source_type": "git",
+    "summary": "Observed 13 modifying commits in the last 33 analyzed commits for src/oh_no_my_claudecode/cli.py. Recent churn count in the last 30 days: 13.",
+    "tags": [
+      "src",
+      "oh",
+      "no",
+      "my",
+      "claudecode"
+    ],
+    "title": "High-churn file: src/oh_no_my_claudecode/cli.py",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

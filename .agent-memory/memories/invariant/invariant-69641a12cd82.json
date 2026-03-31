@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Your coding agent starts every session like it has never seen your codebase before. It doesn't know why the code looks the way it does, what was tried and failed, or which files are dangerous to change. **ONMC fixes that.**\n\nIt reads your git history, docs, and code structure with an LLM and builds a structured memory store. That memory travels with the repo. Every agent \u2014 Claude Code, Cursor, Codex \u2014 gets it.\n\n---",
+    "feedback_score": 0.0,
+    "id": "invariant-69641a12cd82",
+    "kind": "invariant",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "Your coding agent starts every session like it has never seen your codebase before. It doesn't know why the code looks the way it does, what was tried and fa...",
+    "tags": [
+      "readme",
+      "md",
+      "what",
+      "does"
+    ],
+    "title": "README.md: What it does",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

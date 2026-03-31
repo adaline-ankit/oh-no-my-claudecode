@@ -1,0 +1,18 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:12:02Z",
+    "details": "Adding a second database or ORM alongside SQLite did not work \u2014 the storage layer must stay single-file SQLite",
+    "feedback_score": 0.0,
+    "id": "manual-a9a4f4bd5217",
+    "kind": "failed_approach",
+    "source_ref": "manual_seed:bootstrap",
+    "source_type": "manual_seed",
+    "summary": "Adding a second database or ORM alongside SQLite did not work \u2014 the storage layer must stay single-file SQLite",
+    "tags": [
+      "failed_approach"
+    ],
+    "title": "Second database anti-pattern",
+    "updated_at": "2026-03-31T10:12:02Z"
+  }
+}

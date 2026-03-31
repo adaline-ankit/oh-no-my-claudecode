@@ -1,0 +1,16 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Observed 15 modifying commits in the last 33 analyzed commits for README.md. Recent churn count in the last 30 days: 15.",
+    "feedback_score": 0.0,
+    "id": "hotspot-9f2370268d23",
+    "kind": "hotspot",
+    "source_ref": "README.md",
+    "source_type": "git",
+    "summary": "Observed 15 modifying commits in the last 33 analyzed commits for README.md. Recent churn count in the last 30 days: 15.",
+    "tags": [],
+    "title": "High-churn file: README.md",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

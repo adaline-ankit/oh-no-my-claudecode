@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- environment detection for repo + Claude Code\n- interactive onboarding wizard",
+    "feedback_score": 0.0,
+    "id": "doc_fact-646f69ccf710",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "- environment detection for repo + Claude Code - interactive onboarding wizard",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "setup"
+    ],
+    "title": "architecture.md: `setup/`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

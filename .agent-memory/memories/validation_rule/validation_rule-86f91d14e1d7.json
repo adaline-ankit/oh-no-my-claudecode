@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.82,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "History suggests reviewing or updating tests in tests when touching src/oh_no_my_claudecode. This is a heuristic from git co-change patterns.",
+    "feedback_score": 0.0,
+    "id": "validation_rule-86f91d14e1d7",
+    "kind": "validation_rule",
+    "source_ref": "src/oh_no_my_claudecode|tests",
+    "source_type": "git",
+    "summary": "Changes under src/oh_no_my_claudecode frequently land with tests (16 commits).",
+    "tags": [
+      "src",
+      "oh",
+      "no",
+      "tests",
+      "tests"
+    ],
+    "title": "Tests often accompany src/oh_no_my_claudecode",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Tasks can also produce durable memory artifacts when the work reveals something future agents should reuse or avoid.\n\nCommon memory artifact commands:\n\n```bash\nonmc memory add task-abc123def4 \\\n  --type fix \\\n  --title \"Route worker refresh through the cache boundary\" \\\n  --summary \"The shared cache boundary fixed the flaky path.\" \\\n  --why-it-matters \"This was the change that actually stabilized the worker refresh flow.\" \\\n  --apply-when \"A task touches cache invalidation behavior from worker code.\" \\\n  --evidence \"The paired worker test passed only after the shared boundary was restored.\"\n\nonmc memory add task-abc123def4 \\\n  --type did_not_work \\\n  --title \"Cache-only patch missed the worker path\" \\\n  --summary \"Tried narrowing the change to src/cache.py only.\" \\\n  --why-it-matters \"Future agents should not repeat a cache-only patch for this failure mode.\" \\\n  --avoid-when \"The failing path crosses worker refresh logic.\" \\\n  --evidence \"The worker test still failed after the narrow change.\"\n\nonmc memory list\nonmc memory list --type did_not_work\nonmc memory show artifact-abc123def4\n```\n\nTask detail output includes a compact memory artifact summary so it is easy to see what a task",
+    "feedback_score": 0.0,
+    "id": "doc_fact-b00935b97576",
+    "kind": "doc_fact",
+    "source_ref": "docs/task-lifecycle.md",
+    "source_type": "doc",
+    "summary": "Tasks can also produce durable memory artifacts when the work reveals something future agents should reuse or avoid. Common memory artifact commands: ```bash...",
+    "tags": [
+      "docs",
+      "task",
+      "lifecycle",
+      "md",
+      "memory",
+      "artifacts"
+    ],
+    "title": "task-lifecycle.md: Memory Artifacts",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

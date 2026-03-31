@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- manual memory CRUD\n- stale-entry pruning by source fingerprint\n- richer test-mapping heuristics\n- branch-aware briefing\n- MCP write tools\n- richer Claude Code session-state capture beyond compaction snapshots\n- smarter transcript-to-task linking\n- richer `CLAUDE.md` merge semantics\n- provider-side model validation and discovery",
+    "feedback_score": 0.0,
+    "id": "doc_fact-7e4bbcfcb22c",
+    "kind": "doc_fact",
+    "source_ref": "docs/roadmap.md",
+    "source_type": "doc",
+    "summary": "- manual memory CRUD - stale-entry pruning by source fingerprint - richer test-mapping heuristics - branch-aware briefing - MCP write tools - richer Claude C...",
+    "tags": [
+      "docs",
+      "roadmap",
+      "md",
+      "p1"
+    ],
+    "title": "roadmap.md: P1",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

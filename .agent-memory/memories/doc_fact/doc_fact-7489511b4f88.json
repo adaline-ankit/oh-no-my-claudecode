@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Start a task:\n\n```bash\nonmc task start \\\n  --title \"Fix flaky cache invalidation bug\" \\\n  --description \"Investigate cache churn in worker refresh flow\" \\\n  --label bug \\\n  --label cache\n```\n\nList tasks:\n\n```bash\nonmc task list\n```\n\nInspect one task:\n\n```bash\nonmc task show task-abc123def4\n```\n\nMark a task blocked or active:\n\n```bash\nonmc task status task-abc123def4 --status blocked\nonmc task status task-abc123def4 --status active\n```\n\nEnd a task with a final summary:\n\n```bash\nonmc task end task-abc123def4 \\\n  --status solved \\\n  --summary \"Fixed cache invalidation churn and updated related tests.\"\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-7489511b4f88",
+    "kind": "doc_fact",
+    "source_ref": "docs/task-lifecycle.md",
+    "source_type": "doc",
+    "summary": "Start a task: ```bash onmc task start \\ --title \"Fix flaky cache invalidation bug\" \\ --description \"Investigate cache churn in worker refresh flow\" \\ --label...",
+    "tags": [
+      "docs",
+      "task",
+      "lifecycle",
+      "md",
+      "commands"
+    ],
+    "title": "task-lifecycle.md: Commands",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

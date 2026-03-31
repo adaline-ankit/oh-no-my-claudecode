@@ -1,0 +1,19 @@
+{
+  "memory": {
+    "confidence": 0.6,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Observed source-like directories from the current file tree: .agent-memory, .agent-memory/memories, ., src/oh_no_my_claudecode, src/onmc. Use this as a navig...",
+    "feedback_score": 0.0,
+    "id": "doc_fact-bd8cff6adad9",
+    "kind": "doc_fact",
+    "source_ref": "repo_tree",
+    "source_type": "code",
+    "summary": "Primary source directories include .agent-memory, .agent-memory/memories, ., src/oh_no_my_claudecode, src/onmc.",
+    "tags": [
+      "layout",
+      "source"
+    ],
+    "title": "Primary source layout",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

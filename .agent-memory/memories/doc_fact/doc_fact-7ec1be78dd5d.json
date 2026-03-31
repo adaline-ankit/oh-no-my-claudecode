@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- repo discovery\n- lifecycle orchestration\n- config + storage bootstrapping",
+    "feedback_score": 0.0,
+    "id": "doc_fact-7ec1be78dd5d",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "- repo discovery - lifecycle orchestration - config + storage bootstrapping",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "core"
+    ],
+    "title": "architecture.md: `core/`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

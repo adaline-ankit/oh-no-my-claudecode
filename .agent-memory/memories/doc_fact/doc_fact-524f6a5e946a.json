@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Tasks can produce durable reusable artifacts:\n\n```bash\nonmc memory add <task_id> --type fix --title \"Use the cache boundary\" --summary \"The shared boundary fixed the worker path\"\nonmc memory list\nonmc memory list --type did_not_work\nonmc memory show <memory_id>\n```\n\nArtifact types:\n\n- `fix`\n- `did_not_work`\n- `design_conflict`\n- `gotcha`\n- `invariant`\n- `validation`\n\nThese are explicitly provenance-linked to the task that produced them.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-524f6a5e946a",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "Tasks can produce durable reusable artifacts: ```bash onmc memory add <task_id> --type fix --title \"Use the cache boundary\" --summary \"The shared boundary fi...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "task",
+      "derived",
+      "memory",
+      "artifacts"
+    ],
+    "title": "shipped-capabilities.md: 5. Task-Derived Memory Artifacts",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

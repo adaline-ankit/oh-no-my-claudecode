@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "This document is the fastest way for a human or coding agent to understand what ONMC currently ships.\n\nIt answers four questions:\n\n1. What ONMC is\n2. What features are implemented right now\n3. How the pieces fit together\n4. Which workflows are intended versus out of scope",
+    "feedback_score": 0.0,
+    "id": "doc_fact-281f81295c5f",
+    "kind": "doc_fact",
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "summary": "This document is the fastest way for a human or coding agent to understand what ONMC currently ships. It answers four questions: 1. What ONMC is 2. What feat...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md"
+    ],
+    "title": "shipped-capabilities.md: Shipped Capabilities",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "```bash\nonmc memory list                    # browse all memory\nonmc memory list --kind hotspot     # filter by kind\nonmc memory list --type did_not_work\nonmc memory show <id>               # full record with provenance\nonmc memory confirm <id>            # mark as verified useful\nonmc memory reject <id>             # mark as wrong or stale\nonmc memory edit <id>               # update the summary\nonmc memory add <task_id> --type fix --title \"...\" --summary \"...\"\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-d644824d6d31",
+    "kind": "doc_fact",
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "summary": "```bash onmc memory list # browse all memory onmc memory list --kind hotspot # filter by kind onmc memory list --type did_not_work onmc memory show <id> # fu...",
+    "tags": [
+      "readme",
+      "md",
+      "memory",
+      "management"
+    ],
+    "title": "README.md: Memory management",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

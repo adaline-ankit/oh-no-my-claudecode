@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "- `repo_tree.py`\n  - file-tree scanning\n  - repo-shape hints\n- `docs.py`\n  - markdown discovery\n  - heading/section extraction\n  - conservative section classification\n- `git_history.py`\n  - commit parsing\n  - hotspot detection\n  - co-change pattern extraction\n- `pipeline.py`\n  - end-to-end ingest orchestration\n  - file-scoped incremental ingest\n- `llm_extractor.py`\n  - commit/doc extraction prompts\n  - Pydantic validation\n  - conservative semantic deduplication",
+    "feedback_score": 0.0,
+    "id": "doc_fact-a398809bea96",
+    "kind": "doc_fact",
+    "source_ref": "docs/architecture.md",
+    "source_type": "doc",
+    "summary": "- `repo_tree.py` - file-tree scanning - repo-shape hints - `docs.py` - markdown discovery - heading/section extraction - conservative section classification...",
+    "tags": [
+      "docs",
+      "architecture",
+      "md",
+      "ingest"
+    ],
+    "title": "architecture.md: `ingest/`",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

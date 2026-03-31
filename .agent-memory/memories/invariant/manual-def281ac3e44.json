@@ -1,0 +1,18 @@
+{
+  "memory": {
+    "confidence": 0.9,
+    "created_at": "2026-03-31T10:12:02Z",
+    "details": "All LLM calls must go through the provider abstraction in llm/ \u2014 never hardcode Anthropic or OpenAI in feature code",
+    "feedback_score": 0.0,
+    "id": "manual-def281ac3e44",
+    "kind": "invariant",
+    "source_ref": "manual_seed:bootstrap",
+    "source_type": "manual_seed",
+    "summary": "All LLM calls must go through the provider abstraction in llm/ \u2014 never hardcode Anthropic or OpenAI in feature code",
+    "tags": [
+      "invariant"
+    ],
+    "title": "Provider abstraction invariant",
+    "updated_at": "2026-03-31T10:12:02Z"
+  }
+}

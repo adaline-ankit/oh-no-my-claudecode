@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "Task-derived memory artifacts are separate from repo ingest. They preserve durable findings from task execution and attempts.\n\nEach artifact stores:\n\n- `memory_id`\n- `task_id`\n- `type`\n- `title`\n- `summary`\n- `why_it_matters`\n- `apply_when`\n- `avoid_when`\n- `evidence`\n- `related_files`\n- `related_modules`\n- `confidence`\n- `created_at`\n\nThese artifacts are linked back to the task that produced them. That provenance matters: ONMC should preserve not just final fixes, but also rejected or incompatible paths.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-4270d0a099e0",
+    "kind": "doc_fact",
+    "source_ref": "docs/memory-model.md",
+    "source_type": "doc",
+    "summary": "Task-derived memory artifacts are separate from repo ingest. They preserve durable findings from task execution and attempts. Each artifact stores: - `memory...",
+    "tags": [
+      "docs",
+      "memory",
+      "model",
+      "md",
+      "task",
+      "derived",
+      "artifacts"
+    ],
+    "title": "memory-model.md: Task-Derived Memory Artifacts",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}

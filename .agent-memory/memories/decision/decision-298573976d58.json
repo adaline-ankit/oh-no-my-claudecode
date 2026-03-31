@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-03-31T10:10:54Z",
+    "details": "ONMC is memory-first. The prompt compiler uses the deterministic brief as the spine, then adds task-scoped records around it:\n\n- repo memory provides durable facts, decisions, invariants, hotspots, and validation rules\n- attempts preserve what was already tried\n- negative memory highlights failures and design conflicts so the model does not repeat them\n- validation guidance keeps the response tied to likely repo checks\n- provenance keeps the prompt grounded in where the signals came from\n\nThis keeps the model in a reasoning role instead of using it to rediscover repo context from scratch.\n\nWhen a provider is configured, the same memory spine also powers:\n\n- brief reranking with explicit relevance reasons\n- transcript mining\n- interactive `teach` follow-up answers",
+    "feedback_score": 0.0,
+    "id": "decision-298573976d58",
+    "kind": "decision",
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "summary": "ONMC is memory-first. The prompt compiler uses the deterministic brief as the spine, then adds task-scoped records around it: - repo memory provides durable...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "why",
+      "memory",
+      "injected",
+      "way"
+    ],
+    "title": "prompt-compiler.md: Why Memory Is Injected This Way",
+    "updated_at": "2026-03-31T10:10:54Z"
+  }
+}
