@@ -59,7 +59,7 @@ def update_claude_md(
         for heading in SECTION_ORDER
         if not isinstance(section_hashes, dict)
         or section_hashes.get(heading) != next_hashes.get(heading)
-        or heading not in existing_sections
+        or (heading not in existing_sections and fresh_sections.get(heading, "").strip())
     ]
     merged: dict[str, str] = {}
     for heading in SECTION_ORDER:
