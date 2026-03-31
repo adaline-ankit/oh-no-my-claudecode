@@ -142,6 +142,7 @@ def render_memory_list(
         return
 
     table = Table(title="Stored Memory")
+    table.add_column("", no_wrap=True)
     table.add_column("ID")
     table.add_column("Kind")
     table.add_column("Title")
@@ -149,6 +150,7 @@ def render_memory_list(
     table.add_column("Confidence", justify="right")
     for memory in memories:
         table.add_row(
+            _memory_feedback_indicator(memory.feedback_score),
             memory.id,
             memory.kind.value,
             memory.title,
@@ -171,6 +173,7 @@ def render_memory_detail(memory: MemoryEntry | MemoryArtifactRecord) -> None:
                     f"Kind: {memory.kind.value}",
                     f"Source: {memory.source_type.value}:{memory.source_ref}",
                     f"Confidence: {memory.confidence:.2f}",
+                    f"Feedback: {memory.feedback_score:.2f}",
                     "",
                     memory.summary,
                     "",
@@ -299,6 +302,14 @@ def render_doctor_report(ok: bool, report: dict[str, list[str]]) -> None:
         for item in report["warnings"]:
             lines.append(f"  ⚠ {item}")
     console.print(Panel.fit("\n".join(lines), title=title, border_style="green" if ok else "red"))
+
+
+def _memory_feedback_indicator(score: float) -> str:
+    if score > 0:
+        return "✓"
+    if score < 0:
+        return "✗"
+    return ""
 
 
 def render_mine_result(result: dict[str, object], *, dry_run: bool) -> None:

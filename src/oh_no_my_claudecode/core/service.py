@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -458,8 +460,15 @@ class OnmcService:
         hook_path.chmod(0o755)
         return repo_root, hook_path
 
-    def list_memories(self, *, kind: MemoryKind | None = None) -> list[MemoryEntry]:
+    def list_memories(
+        self,
+        *,
+        kind: MemoryKind | None = None,
+        source_type: SourceType | None = None,
+    ) -> list[MemoryEntry]:
         _, _, storage = self._load_context()
+        if source_type is not None:
+            return storage.list_memories(kind=kind, source_type=source_type)
         return MemoryCatalog(storage).list(kind=kind)
 
     def add_manual_memory(
@@ -526,6 +535,80 @@ class OnmcService:
         _, _, storage = self._load_context()
         return MemoryCatalog(storage).get(memory_id)
 
+    def confirm_memory(self, memory_id: str) -> MemoryEntry:
+        """Mark a memory as explicitly useful."""
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        updated = memory.model_copy(
+            update={
+                "feedback_score": min(memory.feedback_score + 0.3, 1.0),
+                "updated_at": utc_now(),
+            }
+        )
+        storage.update_memory(updated)
+        return updated
+
+    def reject_memory(self, memory_id: str) -> MemoryEntry:
+        """Mark a memory as explicitly wrong or stale."""
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        updated = memory.model_copy(
+            update={
+                "feedback_score": max(memory.feedback_score - 0.5, -1.0),
+                "updated_at": utc_now(),
+            }
+        )
+        storage.update_memory(updated)
+        return updated
+
+    def edit_memory(self, memory_id: str, new_summary: str) -> MemoryEntry:
+        """Replace a memory summary and reset its feedback score."""
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        updated = memory.model_copy(
+            update={
+                "summary": new_summary,
+                "details": new_summary,
+                "feedback_score": 0.0,
+                "updated_at": utc_now(),
+            }
+        )
+        storage.update_memory(updated)
+        return updated
+
+    def edit_memory_in_editor(self, memory_id: str) -> str | None:
+        """Open a memory summary in $EDITOR and return the edited value."""
+        editor = os.environ.get("EDITOR")
+        if not editor:
+            return None
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        with tempfile.NamedTemporaryFile(
+            "w+",
+            encoding="utf-8",
+            suffix=".md",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(memory.summary)
+            handle.flush()
+        try:
+            subprocess.run([editor, temp_path.as_posix()], check=True)
+            return temp_path.read_text(encoding="utf-8").strip()
+        finally:
+            temp_path.unlink(missing_ok=True)
+
     def search_memories(self, files: list[str]) -> list[MemoryEntry]:
         """Return repo memories ranked for the provided file paths."""
         _, _, storage = self._load_context()
@@ -534,9 +617,15 @@ class OnmcService:
         ranked: list[tuple[float, MemoryEntry]] = []
         file_tokens = set(tokenize(query))
         for memory in candidates:
+            if memory.feedback_score <= -0.5:
+                continue
             source_text = " ".join([memory.source_ref, *memory.tags, memory.title, memory.summary])
             source_tokens = set(tokenize(source_text))
-            score = float(len(file_tokens & source_tokens) * 4) + memory.confidence
+            score = (
+                float(len(file_tokens & source_tokens) * 4)
+                + memory.confidence
+                + (memory.feedback_score * 0.2)
+            )
             if any(path == memory.source_ref or path in memory.source_ref for path in files):
                 score += 4.0
             ranked.append((score, memory))

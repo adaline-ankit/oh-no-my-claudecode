@@ -38,5 +38,6 @@ class MemoryEntry(BaseModel):
     source_ref: str
     tags: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
+    feedback_score: float = 0.0
     created_at: datetime
     updated_at: datetime

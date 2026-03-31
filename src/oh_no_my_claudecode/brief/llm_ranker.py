@@ -28,7 +28,8 @@ def rerank_memories_with_llm(
     log_path: Path,
 ) -> tuple[list[MemoryEntry], dict[str, str]]:
     """Re-rank candidate memory entries with LLM reasoning and annotate relevance."""
-    if not candidates:
+    filtered_candidates = [memory for memory in candidates if memory.feedback_score > -0.5]
+    if not filtered_candidates:
         return [], {}
     payload: list[dict[str, object]] = [
         {
@@ -39,8 +40,9 @@ def rerank_memories_with_llm(
             "source_type": memory.source_type.value,
             "source_ref": memory.source_ref,
             "confidence": memory.confidence,
+            "feedback_score": memory.feedback_score,
         }
-        for memory in candidates
+        for memory in filtered_candidates
     ]
     try:
         ranked = generate_structured_logged(
@@ -59,19 +61,24 @@ def rerank_memories_with_llm(
             operation="brief.rerank",
         )
     except LLMProviderError:
-        return candidates, {}
+        return filtered_candidates, {}
 
-    by_id = {memory.id: memory for memory in candidates}
+    by_id = {memory.id: memory for memory in filtered_candidates}
     ordered: list[MemoryEntry] = []
     reasons: dict[str, str] = {}
-    for item in sorted(ranked.root, key=lambda current: (-current.priority, current.memory_id)):
+    def _sort_key(item: RankedMemory) -> tuple[float, str]:
+        memory = by_id.get(item.memory_id)
+        feedback_score = memory.feedback_score if memory is not None else 0.0
+        return (-float(item.priority) - (feedback_score * 0.2), item.memory_id)
+
+    for item in sorted(ranked.root, key=_sort_key):
         memory = by_id.get(item.memory_id)
         if memory is None:
             continue
         ordered.append(memory)
         reasons[memory.id] = item.relevance_reason
     if not ordered:
-        return candidates, {}
+        return filtered_candidates, {}
     return ordered, reasons
 
 

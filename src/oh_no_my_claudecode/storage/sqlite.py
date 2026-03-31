@@ -44,6 +44,7 @@ class SQLiteStorage:
                     source_ref TEXT NOT NULL,
                     tags_json TEXT NOT NULL,
                     confidence REAL NOT NULL,
+                    feedback_score REAL NOT NULL DEFAULT 0.0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -158,6 +159,11 @@ class SQLiteStorage:
                 "source_type",
                 "ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'heuristic'",
             )
+            self._ensure_memory_column(
+                conn,
+                "feedback_score",
+                "ALTER TABLE memories ADD COLUMN feedback_score REAL DEFAULT 0.0",
+            )
 
     def upsert_memories(self, entries: list[MemoryEntry]) -> tuple[int, int]:
         new_count = 0
@@ -176,8 +182,8 @@ class SQLiteStorage:
                     """
                     INSERT INTO memories (
                         id, kind, title, summary, details, source_type, source_ref,
-                        tags_json, confidence, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tags_json, confidence, feedback_score, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         kind=excluded.kind,
                         title=excluded.title,
@@ -187,6 +193,7 @@ class SQLiteStorage:
                         source_ref=excluded.source_ref,
                         tags_json=excluded.tags_json,
                         confidence=excluded.confidence,
+                        feedback_score=excluded.feedback_score,
                         updated_at=excluded.updated_at
                     """,
                     (
@@ -199,6 +206,7 @@ class SQLiteStorage:
                         entry.source_ref,
                         json.dumps(entry.tags),
                         entry.confidence,
+                        entry.feedback_score,
                         isoformat_utc(entry.created_at),
                         isoformat_utc(entry.updated_at),
                     ),
@@ -224,8 +232,8 @@ class SQLiteStorage:
                 """
                 INSERT INTO memories (
                     id, kind, title, summary, details, source_type, source_ref,
-                    tags_json, confidence, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    tags_json, confidence, feedback_score, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -238,6 +246,7 @@ class SQLiteStorage:
                         entry.source_ref,
                         json.dumps(entry.tags),
                         entry.confidence,
+                        entry.feedback_score,
                         isoformat_utc(entry.created_at),
                         isoformat_utc(entry.updated_at),
                     )
@@ -259,12 +268,21 @@ class SQLiteStorage:
                 deleted += int(cursor.rowcount)
         return deleted
 
-    def list_memories(self, *, kind: MemoryKind | None = None) -> list[MemoryEntry]:
+    def list_memories(
+        self,
+        *,
+        kind: MemoryKind | None = None,
+        source_type: SourceType | None = None,
+    ) -> list[MemoryEntry]:
         query = "SELECT * FROM memories"
         params: tuple[Any, ...] = ()
         if kind is not None:
             query += " WHERE kind = ?"
             params = (kind.value,)
+        if source_type is not None:
+            query += " WHERE " if " WHERE " not in query else " AND "
+            query += "source_type = ?"
+            params += (source_type.value,)
         query += " ORDER BY updated_at DESC, title ASC"
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
@@ -274,6 +292,40 @@ class SQLiteStorage:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         return None if row is None else self._row_to_memory(row)
+
+    def update_memory(self, memory: MemoryEntry) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE memories SET
+                    kind = ?,
+                    title = ?,
+                    summary = ?,
+                    details = ?,
+                    source_type = ?,
+                    source_ref = ?,
+                    tags_json = ?,
+                    confidence = ?,
+                    feedback_score = ?,
+                    created_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    memory.kind.value,
+                    memory.title,
+                    memory.summary,
+                    memory.details,
+                    memory.source_type.value,
+                    memory.source_ref,
+                    json.dumps(memory.tags),
+                    memory.confidence,
+                    memory.feedback_score,
+                    isoformat_utc(memory.created_at),
+                    isoformat_utc(memory.updated_at),
+                    memory.id,
+                ),
+            )
 
     def replace_repo_files(self, records: list[RepoFileRecord]) -> None:
         with self._connect() as conn:
@@ -898,6 +950,9 @@ class SQLiteStorage:
             source_ref=row["source_ref"],
             tags=json.loads(row["tags_json"]),
             confidence=float(row["confidence"]),
+            feedback_score=(
+                float(row["feedback_score"]) if row["feedback_score"] is not None else 0.0
+            ),
             created_at=created_at,
             updated_at=updated_at,
         )

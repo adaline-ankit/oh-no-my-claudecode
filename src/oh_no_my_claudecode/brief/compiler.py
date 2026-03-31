@@ -88,6 +88,8 @@ def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) ->
     task_tokens = set(tokenize(task))
     ranked: list[tuple[float, MemoryEntry]] = []
     for memory in memories:
+        if memory.feedback_score <= -0.5:
+            continue
         haystack_tokens = set(
             tokenize(
                 " ".join(
@@ -113,7 +115,7 @@ def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) ->
             score += 1.0
         if any(token in memory.source_ref.lower() for token in task_tokens):
             score += 2.0
-        score += memory.confidence
+        score += memory.confidence + (memory.feedback_score * 0.2)
         ranked.append((score, memory))
 
     ranked.sort(key=lambda item: (-item[0], item[1].title))

@@ -14,6 +14,7 @@ from oh_no_my_claudecode.models import (
     LLMProviderType,
     MemoryArtifactType,
     MemoryKind,
+    SourceType,
     TaskLifecycleError,
     TaskStatus,
 )
@@ -521,6 +522,26 @@ def mine_command(
         )
     result = _service().mine(dry_run=dry_run, session_id=session, since=since, no_llm=no_llm)
     render_mine_result(result, dry_run=dry_run)
+    if dry_run:
+        return
+    message = result.get("message")
+    if isinstance(message, str) and message:
+        return
+    extracted_count = sum(
+        len(items)
+        for items in (
+            result.get("attempts"),
+            result.get("memories"),
+            result.get("artifacts"),
+        )
+        if isinstance(items, list)
+    )
+    if extracted_count:
+        console.print(
+            f"  Extracted {extracted_count} records from this session.\n"
+            "  Review them? [onmc memory list --source transcript] or press Enter to skip",
+            markup=False,
+        )
 
 
 @app.command("doctor")
@@ -537,20 +558,26 @@ def memory_list_command(
         MemoryKind | None,
         typer.Option("--kind", help="Filter by memory kind."),
     ] = None,
+    source_type: Annotated[
+        SourceType | None,
+        typer.Option("--source", help="Filter by memory source type."),
+    ] = None,
     artifact_type: Annotated[
         MemoryArtifactType | None,
         typer.Option("--type", help="Filter task-derived memory artifacts by type."),
     ] = None,
 ) -> None:
     """List stored memory entries."""
-    if kind is not None and artifact_type is not None:
-        raise typer.Exit(code=_fatal("Use either --kind or --type, not both."))
+    if artifact_type is not None and (kind is not None or source_type is not None):
+        raise typer.Exit(
+            code=_fatal("Use --type alone, or filter stored memory with --kind/--source.")
+        )
     try:
-        memories = _service().list_memories(kind=kind)
+        memories = _service().list_memories(kind=kind, source_type=source_type)
         artifacts = _service().list_memory_artifacts(artifact_type=artifact_type)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-    if kind is not None:
+    if kind is not None or source_type is not None:
         artifacts = []
     if artifact_type is not None:
         memories = []
@@ -635,6 +662,47 @@ def memory_show_command(memory_id: str) -> None:
     if memory is None:
         raise typer.Exit(code=_fatal(f"Memory not found: {memory_id}"))
     render_memory_detail(memory)
+
+
+@memory_app.command("confirm")
+def memory_confirm_command(memory_id: str) -> None:
+    """Mark a memory record as verified useful."""
+    try:
+        memory = _service().confirm_memory(memory_id)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_memory_detail(memory)
+
+
+@memory_app.command("reject")
+def memory_reject_command(memory_id: str) -> None:
+    """Mark a memory record as wrong or stale."""
+    try:
+        memory = _service().reject_memory(memory_id)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_memory_detail(memory)
+
+
+@memory_app.command("edit")
+def memory_edit_command(memory_id: str) -> None:
+    """Edit a memory summary and reset its feedback score."""
+    try:
+        current = _service().get_memory(memory_id)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if current is None:
+        raise typer.Exit(code=_fatal(f"Memory not found: {memory_id}"))
+    edited = _service().edit_memory_in_editor(memory_id)
+    if edited is None:
+        edited = typer.prompt("New summary", default=current.summary)
+    if not edited.strip():
+        raise typer.Exit(code=_fatal("Edited summary cannot be empty."))
+    if not typer.confirm("Save this?", default=True):
+        console.print("[yellow]Memory edit cancelled.[/yellow]")
+        return
+    updated = _service().edit_memory(memory_id, edited.strip())
+    render_memory_detail(updated)
 
 
 @task_app.command("start")
