@@ -378,13 +378,24 @@ def llm_configure_command(
 
 
 @hooks_app.command("install")
-def hooks_install_command() -> None:
+def hooks_install_command(
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Accept defaults without prompting."),
+    ] = False,
+    no_mcp: Annotated[
+        bool,
+        typer.Option("--no-mcp", help="Skip MCP server setup."),
+    ] = False,
+) -> None:
     """Install Claude Code compaction hooks into settings.json."""
     try:
-        add_mcp_server = typer.confirm(
-            "Add ONMC as an MCP server to Claude Code?",
-            default=False,
-        )
+        add_mcp_server = False if no_mcp else yes
+        if not yes and not no_mcp:
+            add_mcp_server = typer.confirm(
+                "Add ONMC as an MCP server to Claude Code?",
+                default=False,
+            )
         status = _service().install_hooks(add_mcp_server=add_mcp_server)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
