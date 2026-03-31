@@ -3,6 +3,7 @@ from oh_no_my_claudecode.llm.base import (
     LLMConfigurationError,
     LLMError,
     LLMProviderError,
+    parse_llm_json,
 )
 from oh_no_my_claudecode.llm.factory import (
     default_api_key_env_var,
@@ -29,5 +30,6 @@ __all__ = [
     "generate_structured_logged",
     "llm_status",
     "MarkdownEnvelope",
+    "parse_llm_json",
     "provider_from_settings",
 ]

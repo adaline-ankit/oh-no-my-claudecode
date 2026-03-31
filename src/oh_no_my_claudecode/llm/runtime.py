@@ -1,18 +1,25 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 from typing import TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from oh_no_my_claudecode.llm.base import BaseLLMProvider, LLMProviderError
+from oh_no_my_claudecode.llm.base import (
+    BaseLLMProvider,
+    LLMProviderError,
+    json_only_request,
+    parse_llm_json,
+)
 from oh_no_my_claudecode.models import LLMGenerationRequest
 from oh_no_my_claudecode.utils.text import tokenize
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 StructuredResultT = TypeVar("StructuredResultT", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 class MarkdownEnvelope(BaseModel):
@@ -62,15 +69,27 @@ def generate_structured_logged(
     operation: str,
 ) -> StructuredResultT:
     """Generate structured output, validate it, and append a structured log entry."""
-    raw_text = generate_logged(provider, request, log_path=log_path, operation=operation)
+    raw_text = generate_logged(
+        provider,
+        json_only_request(request),
+        log_path=log_path,
+        operation=operation,
+    )
+    parsed: object | None = None
     try:
-        payload = json.loads(raw_text)
+        parsed = parse_llm_json(raw_text)
     except json.JSONDecodeError as exc:
+        logger.error("LLM returned unparseable response. Raw: %s", raw_text[:500])
         msg = "Provider response was not valid JSON for structured parsing."
         raise LLMProviderError(msg) from exc
     try:
-        return response_model.model_validate(payload)
-    except Exception as exc:
+        return response_model.model_validate(parsed)
+    except ValidationError as exc:
+        logger.error(
+            "LLM returned parseable but invalid JSON. Parsed: %s. Error: %s",
+            parsed,
+            exc,
+        )
         msg = "Provider response did not match the expected structured schema."
         raise LLMProviderError(msg) from exc
 
