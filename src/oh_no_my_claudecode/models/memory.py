@@ -26,6 +26,7 @@ class SourceType(StrEnum):
     MANUAL_SEED = "manual_seed"
     LLM_EXTRACTED = "llm_extracted"
     TRANSCRIPT = "transcript"
+    GITHUB_PR = "github_pr"
 
 
 class MemoryEntry(BaseModel):

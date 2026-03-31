@@ -47,7 +47,7 @@ from oh_no_my_claudecode.llm import (
 )
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
-from oh_no_my_claudecode.mine import mine_transcripts
+from oh_no_my_claudecode.mine import mine_github_prs, mine_transcripts
 from oh_no_my_claudecode.models import (
     TERMINAL_ATTEMPT_STATUSES,
     TERMINAL_TASK_STATUSES,
@@ -297,13 +297,23 @@ class OnmcService:
         session_id: str | None = None,
         since: str | None = None,
         no_llm: bool = False,
+        github: bool = False,
     ) -> dict[str, object]:
         """Mine Claude Code transcripts for attempts and memory findings."""
         repo_root, config, storage = self._load_context()
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        if github:
+            return mine_github_prs(
+                repo_root=repo_root,
+                storage=storage,
+                provider=provider,
+                log_path=self._llm_log_path(repo_root, config),
+                dry_run=dry_run,
+            )
         return mine_transcripts(
             repo_root=repo_root,
             storage=storage,
-            provider=self._optional_provider(config=config, no_llm=no_llm),
+            provider=provider,
             log_path=self._llm_log_path(repo_root, config),
             dry_run=dry_run,
             session_id=session_id,

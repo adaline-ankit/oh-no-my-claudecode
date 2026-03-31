@@ -493,6 +493,10 @@ def claude_md_preview_command(
 
 @app.command("mine")
 def mine_command(
+    github: Annotated[
+        bool,
+        typer.Option("--github", help="Mine GitHub PRs and reviews from the repo remote."),
+    ] = False,
     session: Annotated[
         str | None,
         typer.Option("--session", help="Mine a specific session id."),
@@ -514,13 +518,23 @@ def mine_command(
     ] = False,
 ) -> None:
     """Mine Claude Code session transcripts into ONMC memory."""
-    if not no_llm:
+    if github and session is not None:
+        raise typer.Exit(code=_fatal("Use either --github or --session, not both."))
+    if github and since is not None:
+        raise typer.Exit(code=_fatal("Use either --github or --since, not both."))
+    if not no_llm and not github:
         console.print(
             "Note: onmc mine sends session transcript excerpts to your configured LLM provider.\n"
             "Only assistant turns are sent. User turns are excluded.\n"
             "Disable with: onmc mine --no-llm (heuristic extraction only)"
         )
-    result = _service().mine(dry_run=dry_run, session_id=session, since=since, no_llm=no_llm)
+    result = _service().mine(
+        dry_run=dry_run,
+        session_id=session,
+        since=since,
+        no_llm=no_llm,
+        github=github,
+    )
     render_mine_result(result, dry_run=dry_run)
     if dry_run:
         return
@@ -537,9 +551,20 @@ def mine_command(
         if isinstance(items, list)
     )
     if extracted_count:
+        source_label = result.get("memory_source")
+        display_source = (
+            str(source_label)
+            if isinstance(source_label, str) and source_label
+            else SourceType.TRANSCRIPT.value
+        )
+        source_phrase = (
+            "from GitHub PRs"
+            if display_source == SourceType.GITHUB_PR.value
+            else "from this session"
+        )
         console.print(
-            f"  Extracted {extracted_count} records from this session.\n"
-            "  Review them? [onmc memory list --source transcript] or press Enter to skip",
+            f"  Extracted {extracted_count} records {source_phrase}.\n"
+            f"  Review them? [onmc memory list --source {display_source}] or press Enter to skip",
             markup=False,
         )
 
