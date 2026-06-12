@@ -48,6 +48,20 @@ def test_translated_readmes_and_output_docs_are_excluded(tmp_path: Path) -> None
     assert [path.name for path in discovered] == ["README.md"]
 
 
+def test_repository_scan_skips_symlinks_that_resolve_outside_repo(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    plans_dir = repo_root / "plans"
+    plans_dir.mkdir(parents=True)
+    (repo_root / "README.md").write_text("# Primary\n", encoding="utf-8")
+    outside_file = tmp_path / "outside.md"
+    outside_file.write_text("# External\n", encoding="utf-8")
+    (plans_dir / "linked.md").symlink_to(outside_file)
+
+    repo_files = scan_repository_files(repo_root, exclude_dirs=[])
+
+    assert [record.path for record in repo_files] == ["README.md"]
+
+
 def test_deduplicate_memories_preserves_higher_confidence_record() -> None:
     now = utc_now()
     stronger = MemoryEntry(

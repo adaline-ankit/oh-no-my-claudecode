@@ -30,7 +30,12 @@ def scan_repository_files(repo_root: Path, *, exclude_dirs: list[str]) -> list[R
             continue
         for filename in filenames:
             file_path = current_root_path / filename
-            rel_path = relative_path(repo_root, file_path)
+            try:
+                rel_path = relative_path(repo_root, file_path)
+            except ValueError:
+                if file_path.is_symlink():
+                    continue
+                raise
             if rel_path.startswith(".onmc/"):
                 continue
             records.append(
