@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import TypeVar
@@ -20,6 +21,9 @@ from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 StructuredResultT = TypeVar("StructuredResultT", bound=BaseModel)
 logger = logging.getLogger(__name__)
+FULL_PROMPT_LOG_ENV_VAR = "ONMC_LOG_FULL_PROMPTS"
+LOG_TEXT_PREVIEW_CHARS = 200
+LOG_ROTATE_BYTES = 10 * 1024 * 1024
 
 
 class MarkdownEnvelope(BaseModel):
@@ -107,13 +111,21 @@ def _append_log(
     error: str | None,
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    _rotate_log_if_needed(log_path)
+    prompt_token_count = len(tokenize(prompt))
+    response_token_count = len(tokenize(response_text))
+    log_full_prompts = os.environ.get(FULL_PROMPT_LOG_ENV_VAR) == "1"
+    if not log_full_prompts:
+        prompt = _truncate_for_log(prompt)
+        system_prompt = _truncate_for_log(system_prompt) if system_prompt is not None else None
+        response_text = _truncate_for_log(response_text)
     payload = {
         "timestamp": isoformat_utc(utc_now()),
         "operation": operation,
         "provider": provider,
         "model": model,
-        "prompt_token_count": len(tokenize(prompt)),
-        "response_token_count": len(tokenize(response_text)),
+        "prompt_token_count": prompt_token_count,
+        "response_token_count": response_token_count,
         "latency_ms": round(latency_ms, 2),
         "prompt": prompt,
         "system_prompt": system_prompt,
@@ -122,3 +134,19 @@ def _append_log(
     }
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _truncate_for_log(text: str) -> str:
+    if len(text) <= LOG_TEXT_PREVIEW_CHARS:
+        return text
+    truncated_chars = len(text) - LOG_TEXT_PREVIEW_CHARS
+    return f"{text[:LOG_TEXT_PREVIEW_CHARS]} …[truncated {truncated_chars} chars]"
+
+
+def _rotate_log_if_needed(log_path: Path) -> None:
+    try:
+        size = log_path.stat().st_size
+    except FileNotFoundError:
+        return
+    if size > LOG_ROTATE_BYTES:
+        log_path.replace(log_path.with_name(f"{log_path.name}.1"))

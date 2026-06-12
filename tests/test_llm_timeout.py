@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+import pytest
 
 from oh_no_my_claudecode.config import default_config
 from oh_no_my_claudecode.core.service import OnmcService
@@ -10,8 +13,17 @@ from oh_no_my_claudecode.ingest.llm_extractor import (
     batch_commits_for_llm,
     extract_llm_memories,
 )
-from oh_no_my_claudecode.llm import provider_from_settings
-from oh_no_my_claudecode.models import LLMProviderType, LLMSettings
+from oh_no_my_claudecode.llm import (
+    AnthropicProvider,
+    LLMProviderError,
+    provider_from_settings,
+)
+from oh_no_my_claudecode.llm import providers as llm_providers
+from oh_no_my_claudecode.models import (
+    LLMGenerationRequest,
+    LLMProviderType,
+    LLMSettings,
+)
 
 
 def test_timeout_in_one_batch_does_not_stop_full_extract(
@@ -96,3 +108,71 @@ def test_timeout_warning_surfaces_in_ingest_notes(
     _, result = service.ingest()
 
     assert any("timed out" in note.lower() or "timeout" in note.lower() for note in result.notes)
+
+
+def _anthropic_provider() -> AnthropicProvider:
+    return AnthropicProvider(
+        LLMSettings(
+            provider=LLMProviderType.ANTHROPIC,
+            model="claude-sonnet-4-5",
+            api_key_env_var="ANTHROPIC_API_KEY",
+        ),
+        api_key="test-key",
+    )
+
+
+class _FakeHTTPResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def read(self) -> bytes:
+        return self._body
+
+    def __enter__(self) -> _FakeHTTPResponse:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+
+def test_provider_timeouts_are_retried_then_succeed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"count": 0}
+    sleeps: list[float] = []
+    success_body = json.dumps({"content": [{"type": "text", "text": "made it"}]}).encode("utf-8")
+
+    def fake_urlopen(request: object, timeout: float | None = None) -> _FakeHTTPResponse:
+        attempts["count"] += 1
+        if attempts["count"] <= 2:
+            raise TimeoutError("timed out")
+        return _FakeHTTPResponse(success_body)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(llm_providers, "_sleep", sleeps.append)
+
+    response = _anthropic_provider().generate(LLMGenerationRequest(prompt="hello"))
+
+    assert response.text == "made it"
+    assert attempts["count"] == 3
+    assert len(sleeps) == 2
+
+
+def test_provider_timeout_exhausts_bounded_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = {"count": 0}
+    sleeps: list[float] = []
+
+    def fake_urlopen(request: object, timeout: float | None = None) -> _FakeHTTPResponse:
+        attempts["count"] += 1
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(llm_providers, "_sleep", sleeps.append)
+
+    with pytest.raises(LLMProviderError, match="timed out"):
+        _anthropic_provider().generate(LLMGenerationRequest(prompt="hello"))
+
+    assert attempts["count"] == llm_providers.MAX_REQUEST_ATTEMPTS
+    assert len(sleeps) == llm_providers.MAX_REQUEST_ATTEMPTS - 1
