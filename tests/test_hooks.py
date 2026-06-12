@@ -21,6 +21,13 @@ from oh_no_my_claudecode.models import AttemptKind, AttemptStatus, CompactionSna
 from oh_no_my_claudecode.utils.time import utc_now
 
 
+def _cli_runner() -> CliRunner:
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -511,7 +518,7 @@ def test_hooks_install_yes_is_non_interactive_and_can_skip_mcp(
     monkeypatch: pytest.MonkeyPatch,
     fake_home: Path,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -535,7 +542,7 @@ def test_hooks_install_yes_registers_project_mcp(
     monkeypatch: pytest.MonkeyPatch,
     fake_home: Path,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -554,7 +561,7 @@ def test_hooks_uninstall_cli_removes_project_entries(
     monkeypatch: pytest.MonkeyPatch,
     fake_home: Path,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -578,7 +585,7 @@ def test_pre_compact_cli_exits_zero_even_when_no_active_task(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -594,7 +601,7 @@ def test_pre_compact_cli_exits_zero_when_onmc_state_is_missing(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
 
     result = runner.invoke(app, ["hooks", "pre-compact"], input="")
@@ -608,7 +615,7 @@ def test_pre_compact_cli_exits_zero_with_corrupted_database(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -625,7 +632,7 @@ def test_pre_compact_cli_reads_transcript_path_from_stdin_payload(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -653,7 +660,7 @@ def test_pre_compact_cli_tolerates_invalid_stdin(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -697,7 +704,7 @@ def test_session_start_emits_only_additional_context_json(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
     payload = {
@@ -724,7 +731,7 @@ def test_session_start_writes_debug_artifact_under_state_dir(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
 
@@ -744,7 +751,7 @@ def test_session_start_skips_injection_for_non_compact_sources(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
 
@@ -762,7 +769,7 @@ def test_session_start_is_permissive_when_stdin_is_missing(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
 
@@ -777,7 +784,7 @@ def test_session_start_exits_zero_with_clean_stdout_when_no_snapshot_exists(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     service = OnmcService(sample_repo)
     service.init_project()
@@ -797,7 +804,7 @@ def test_post_compact_alias_delegates_to_session_start(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
+    runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
 

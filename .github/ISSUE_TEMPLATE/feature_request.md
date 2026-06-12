@@ -8,11 +8,22 @@ assignees: ""
 
 ## Problem
 
+What workflow is hard today? Who runs into it?
+
 ## Proposed Change
 
 ## Why It Fits ONMC
 
 Please explain why this stays aligned with the project's focus on repo-local memory and task briefing.
 
-## Additional Context
+## Agent Workflow
 
+Which agent path should this improve?
+
+- Claude Code hooks / MCP
+- Codex / AGENTS.md
+- Cursor / rules files
+- Cloud agents / `.agent-memory`
+- Local CLI only
+
+## Additional Context

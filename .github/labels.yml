@@ -1,0 +1,57 @@
+- name: needs-triage
+  color: "fbca04"
+  description: "Needs maintainer review and routing"
+- name: bug
+  color: "d73a4a"
+  description: "Something is broken or behaves incorrectly"
+- name: enhancement
+  color: "a2eeef"
+  description: "New capability or improvement"
+- name: documentation
+  color: "0075ca"
+  description: "Docs, examples, README, or contributor guidance"
+- name: good first issue
+  color: "7057ff"
+  description: "Small, well-scoped issue suitable for new contributors"
+- name: help wanted
+  color: "008672"
+  description: "Maintainer wants community implementation help"
+- name: agent-integration
+  color: "5319e7"
+  description: "Claude Code, Codex, Cursor, MCP, or cloud-agent behavior"
+- name: memory-model
+  color: "0e8a16"
+  description: "Memory extraction, provenance, ranking, sync, or schema semantics"
+- name: setup
+  color: "1d76db"
+  description: "Setup wizard, doctor, install, hooks, or local environment"
+- name: mcp
+  color: "0052cc"
+  description: "MCP server, tools, resources, or client compatibility"
+- name: ci
+  color: "bfdadc"
+  description: "GitHub Actions, release automation, packaging, or quality gates"
+- name: dependencies
+  color: "0366d6"
+  description: "Dependency updates or compatibility work"
+- name: python
+  color: "3572A5"
+  description: "Python packaging, runtime, typing, or version compatibility"
+- name: github-actions
+  color: "2088ff"
+  description: "GitHub Actions workflow or action dependency"
+- name: security
+  color: "b60205"
+  description: "Security boundary, vulnerability, or secret-handling concern"
+- name: question
+  color: "d876e3"
+  description: "Needs clarification or belongs in discussions"
+- name: duplicate
+  color: "cfd3d7"
+  description: "Duplicate of another issue or PR"
+- name: invalid
+  color: "e4e669"
+  description: "Not reproducible, out of scope, or based on incorrect assumptions"
+- name: wontfix
+  color: "ffffff"
+  description: "Maintainer has decided not to pursue this"

@@ -34,11 +34,14 @@ It reads your git history, docs, and code structure with an LLM and builds a str
 
 | Agent | Integration |
 |---|---|
-| **Claude Code** | `onmc hooks install` + `onmc serve --mcp` |
+| **Claude Code** | `CLAUDE.md` + `onmc hooks install` + `onmc serve --mcp` |
 | **Cursor** | Pipe `onmc brief` output to `.cursorrules` |
-| **Codex CLI** | Pass `onmc brief` output via `AGENTS.md` |
+| **Codex CLI** | `AGENTS.md` + `onmc brief` output |
 | **Cloud agents** (Codex, GitHub Coding Agent) | `onmc sync --restore` in container startup |
 | **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` |
+
+See [Agent-Native Workflows](docs/agent-native-workflows.md) for the supported
+Claude Code, Codex, MCP, and cloud-agent boundaries.
 
 ---
 
@@ -191,9 +194,11 @@ macOS and Linux. Windows support planned for v0.4.0.
 git clone https://github.com/adaline-ankit/oh-no-my-claudecode
 cd oh-no-my-claudecode
 pip install -e ".[dev]"
-pytest
 ruff check .
 mypy src
+pytest --cov=oh_no_my_claudecode --cov-report=term-missing
+python -m build
+python -m twine check dist/*
 ```
 
 ---

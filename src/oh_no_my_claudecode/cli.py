@@ -475,7 +475,7 @@ def hooks_pre_compact_command() -> None:
         )
         _service().pre_compact(transcript_path=transcript_path)
     except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
-        print(f"ONMC pre-compact warning: {exc}", file=sys.stderr)
+        typer.echo(f"ONMC pre-compact warning: {exc}", err=True)
 
 
 def _run_session_start_hook() -> None:
@@ -493,7 +493,7 @@ def _run_session_start_hook() -> None:
         _, brief_md = _service().session_start()
         sys.stdout.write(session_start_context_json(brief_md) + "\n")
     except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
-        print(f"ONMC session-start warning: {exc}", file=sys.stderr)
+        typer.echo(f"ONMC session-start warning: {exc}", err=True)
 
 
 @hooks_app.command("session-start")
