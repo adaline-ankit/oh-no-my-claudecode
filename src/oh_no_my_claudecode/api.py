@@ -6,6 +6,9 @@ from pathlib import Path
 
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import (
+    AttemptKind,
+    AttemptRecord,
+    AttemptStatus,
     HookStatus,
     IngestResult,
     MemoryArtifactRecord,
@@ -216,6 +219,30 @@ class TaskAPI:
     def end(self, task_id: str, status: str, summary: str = "") -> TaskRecord:
         """End a task with a terminal status and summary."""
         return self._repo._service.end_task(task_id, status=TaskStatus(status), summary=summary)
+
+    def add_attempt(
+        self,
+        task_id: str,
+        *,
+        summary: str,
+        kind: str = AttemptKind.OTHER.value,
+        status: str = AttemptStatus.TRIED.value,
+        reasoning_summary: str | None = None,
+        evidence_for: str | None = None,
+        evidence_against: str | None = None,
+        files_touched: StringList | None = None,
+    ) -> AttemptRecord:
+        """Add an attempt record to a task."""
+        return self._repo._service.add_attempt(
+            task_id,
+            summary=summary,
+            kind=AttemptKind(kind),
+            status=AttemptStatus(status),
+            reasoning_summary=reasoning_summary,
+            evidence_for=evidence_for,
+            evidence_against=evidence_against,
+            files_touched=files_touched or [],
+        )
 
 
 class HooksAPI:
