@@ -63,13 +63,21 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - writes `.onmc/compiled/<timestamp>-brief.md`
 
 9. `onmc hooks install`
-   - merges Claude Code PreCompact and PostCompact hooks into `~/.claude/settings.json`
-   - optionally adds `onmc serve --mcp` to Claude Code MCP server config
+   - merges PreCompact and SessionStart (matcher `"compact"`) hooks into the
+     project's `.claude/settings.json`
+   - optionally registers `onmc serve --mcp` in the project's `.mcp.json`
+   - migrates and cleans up legacy global installs in `~/.claude/settings.json`
 
-10. `onmc hooks pre-compact` / `onmc hooks post-compact`
-   - serialize active task state into `compaction_snapshots`
-   - compile a short continuation brief after compaction
-   - write `~/.onmc-continuation-brief.md` for session recovery
+10. `onmc hooks pre-compact` / `onmc hooks session-start`
+   - read the hook JSON payload from stdin (`session_id`, `transcript_path`, ...)
+   - pre-compact: snapshot active task state into `compaction_snapshots`,
+     enriched with active files and recent assistant text parsed from the
+     actual session transcript
+   - session-start: when the session resumes after compaction, compile a
+     continuation brief and emit the Claude Code stdout contract
+     (`hookSpecificOutput.additionalContext`) so the brief is injected into
+     model context; a copy is written to `.onmc/continuation-brief.md` for
+     inspection only
 
 11. `onmc llm configure`
    - persists optional provider settings in `.onmc/config.yaml`
@@ -105,9 +113,11 @@ The system compiles repo-specific context into a brief that a coding agent can c
    - audit repo state, ingest freshness, memory counts, provider config, Claude integration, and sync state
    - return a nonzero exit code only when a genuine error is detected
 
-17. `onmc serve --mcp`
-   - serves read-only MCP resources over stdio
-   - exposes briefs, memory, task state, snapshots, and status on demand
+17. `onmc serve --mcp [--repo PATH]`
+   - serves MCP tools and resources over stdio, repo resolved once at startup
+   - tools: `search_memory`, `get_brief`, `record_attempt`, `record_memory`,
+     `list_tasks` — the action surface agents use mid-session
+   - resources expose briefs, memory, task state, snapshots, and status
 
 ## Module Responsibilities
 
