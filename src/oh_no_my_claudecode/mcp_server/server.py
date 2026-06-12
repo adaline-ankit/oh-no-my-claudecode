@@ -20,9 +20,12 @@ from oh_no_my_claudecode.mcp_server.resources import (
 from oh_no_my_claudecode.mcp_server.tools import call_onmc_tool, list_onmc_tools
 
 STARTUP_SNIPPET = (
-    "ONMC MCP server running. Add to Claude Code settings:\n"
+    "ONMC MCP server running. Register it with Claude Code from the repo root:\n"
+    "  claude mcp add onmc -- onmc serve --mcp\n"
+    "or commit a project-scoped .mcp.json (this is what `onmc hooks install` writes):\n"
     '{\n  "mcpServers": {\n    "onmc": {\n      "command": "onmc",\n'
     '      "args": ["serve", "--mcp"]\n    }\n  }\n}\n'
+    "Note: Claude Code does not read MCP servers from settings.json.\n"
 )
 
 
