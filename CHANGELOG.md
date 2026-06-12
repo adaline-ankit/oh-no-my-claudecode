@@ -11,12 +11,15 @@ All notable changes to this project are documented here.
 - **`onmc mine` now finds real transcripts.** Discovery previously used a fabricated `sha256`-hashed `sessions/` layout; it now targets the actual `~/.claude/projects/<sanitized-path>/<session-uuid>.jsonl` layout and parses the real message schema (text and `tool_use` content blocks, sidechain transcripts skipped).
 - **Re-ingest no longer destroys feedback.** `onmc memory confirm`/`reject` scores (and original creation times) survive every `onmc ingest`.
 - **Storage hygiene.** Connections are now closed (previously leaked in the MCP server and watch mode), WAL and a busy timeout are enabled, and schema migrations are versioned.
+- **`onmc init` now gitignores `.onmc/`.** The docs always claimed the local state dir was gitignored, but nothing enforced it — a `git add -A` would commit the binary SQLite store and the LLM call log (which can contain repo source). Init now adds an idempotent `.onmc/` entry to the repo's `.gitignore`. Only the JSON export under `.agent-memory/` is meant to travel with the repo.
+- **MCP startup banner** told users to register the server in `settings.json`, which Claude Code ignores; it now shows `claude mcp add` and the project `.mcp.json` form.
 - OpenAI requests send `max_completion_tokens` (required by newer models) with a one-shot fallback to `max_tokens` for older ones.
 
 ### Added
 
 - **MCP tools.** `onmc serve --mcp` now exposes `search_memory`, `get_brief`, `record_attempt`, `record_memory`, and `list_tasks` alongside the existing read-only resources, plus a `--repo` flag so the server no longer depends on its working directory.
 - **LLM call retries.** Provider calls retry up to 3 attempts with exponential backoff and jitter on 429/5xx/timeouts, honoring `Retry-After`.
+- **End-to-end test suite** (`tests/test_e2e.py`) drives the real `onmc` binary as a subprocess through the full memory lifecycle, the Claude Code hook stdin/stdout contracts, transcript-mining discovery, a `sync`→clone→`restore` roundtrip, and a real MCP stdio client/server handshake.
 
 ### Changed
 

@@ -25,7 +25,11 @@ Shipped in this repo:
 - `onmc doctor` health check
 - incremental ingest for selected files + post-commit hook
 - memory inspection commands
-- tests, linting, CI, and packaging scaffolding
+- tests, linting, coverage reporting, CI, and packaging scaffolding
+- PyPI release workflow with trusted publishing scaffold
+- OSS contributor guardrails, issue templates, Dependabot, labels, and branch protection
+- CodeQL, OpenSSF Scorecard, dependency audit, and Windows smoke CI
+- generated CLI reference checked in CI
 
 ## P1
 
@@ -37,6 +41,8 @@ Shipped in this repo:
 - smarter transcript-to-task linking
 - richer `CLAUDE.md` merge semantics
 - provider-side model validation and discovery
+- turn Windows smoke coverage into full Windows support
+- add release notes automation around `CHANGELOG.md`
 
 ## P2
 
