@@ -19,7 +19,8 @@ Codex-friendly restore flows, and portable `.agent-memory` exports.
 ```bash
 ruff check .
 mypy src
-pytest --cov=oh_no_my_claudecode --cov-report=term-missing
+pytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-under=80
+python scripts/generate-cli-reference.py --check
 python -m build
 python -m twine check dist/*
 ```
@@ -39,6 +40,7 @@ Do:
 - keep diffs focused
 - preserve user-authored sections in generated files where the code supports it
 - document CLI, hook, MCP, sync, or agent-context behavior changes
+- regenerate `docs/cli-reference.md` when CLI commands or help text change
 - prefer deterministic behavior over opaque inference in core paths
 
 ## Pull Request Expectations
