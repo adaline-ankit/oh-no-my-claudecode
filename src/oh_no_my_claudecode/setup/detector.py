@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from oh_no_my_claudecode.core.repo import discover_repo_root
-from oh_no_my_claudecode.hooks.installer import claude_settings_path
+from oh_no_my_claudecode.hooks.installer import (
+    hooks_installed,
+    mcp_config_path,
+    mcp_registered,
+    project_settings_path,
+    user_settings_path,
+)
 from oh_no_my_claudecode.ingest.docs import discover_doc_paths
 from oh_no_my_claudecode.ingest.repo_tree import detect_project_hints, scan_repository_files
 
@@ -32,17 +37,15 @@ def detect_environment(cwd: Path | str = ".") -> EnvironmentDetection:
         repo_root,
         globs=["README*", "docs/**/*.md", "CLAUDE.md", "AGENTS.md"],
     )
-    settings_path = claude_settings_path()
-    settings = _load_settings(settings_path)
     return EnvironmentDetection(
         repo_root=repo_root,
         commit_count=_commit_count(repo_root),
         file_count=len(repo_files),
         doc_count=len(docs),
         project_type=_project_type(hints),
-        claude_code_detected=settings_path.parent.exists(),
-        hooks_installed=_hooks_installed(settings),
-        mcp_registered=_mcp_registered(settings),
+        claude_code_detected=user_settings_path().parent.exists(),
+        hooks_installed=hooks_installed(settings_path=project_settings_path(repo_root)),
+        mcp_registered=mcp_registered(mcp_path=mcp_config_path(repo_root)),
     )
 
 
@@ -70,23 +73,3 @@ def _project_type(hints: object) -> str:
     return "General repo"
 
 
-def _load_settings(settings_path: Path) -> dict[str, object]:
-    if not settings_path.exists():
-        return {}
-    try:
-        payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _hooks_installed(settings: dict[str, object]) -> bool:
-    hooks = settings.get("hooks")
-    if not isinstance(hooks, dict):
-        return False
-    return "PreCompact" in hooks and "PostCompact" in hooks
-
-
-def _mcp_registered(settings: dict[str, object]) -> bool:
-    servers = settings.get("mcpServers")
-    return isinstance(servers, dict) and "onmc" in servers

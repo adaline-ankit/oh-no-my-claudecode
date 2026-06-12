@@ -30,13 +30,19 @@ from oh_no_my_claudecode.config import (
 )
 from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root
 from oh_no_my_claudecode.hooks import (
+    HookInstallResult,
     build_compaction_snapshot,
-    claude_settings_backup_path,
-    claude_settings_path,
     compile_continuation_brief,
+    hooks_installed,
     install_claude_hooks,
+    legacy_global_hooks_present,
+    mcp_config_path,
+    mcp_registered,
+    project_settings_backup_path,
+    project_settings_path,
     uninstall_claude_hooks,
-    write_continuation_brief,
+    user_settings_path,
+    write_continuation_brief_artifact,
 )
 from oh_no_my_claudecode.ingest.pipeline import run_ingest, run_ingest_files
 from oh_no_my_claudecode.llm import (
@@ -156,45 +162,49 @@ class OnmcService:
         *,
         home: Path | None = None,
         add_mcp_server: bool = False,
-    ) -> HookStatus:
-        """Install Claude Code compaction hooks into settings.json."""
-        settings_path = claude_settings_path(home)
-        backup_path = claude_settings_backup_path(home)
-        install_claude_hooks(
-            settings_path=settings_path,
-            backup_path=backup_path,
-            add_mcp_server=add_mcp_server,
+    ) -> tuple[HookInstallResult, HookStatus]:
+        """Install project-scoped Claude Code hooks (and optionally .mcp.json)."""
+        repo_root = discover_repo_root(self.cwd)
+        result = install_claude_hooks(
+            repo_root=repo_root,
+            register_mcp=add_mcp_server,
+            global_settings_path=user_settings_path(home),
         )
-        return self.hooks_status(home=home)
+        return result, self.hooks_status(home=home)
 
     def uninstall_hooks(self, *, home: Path | None = None) -> HookStatus:
-        """Remove Claude Code compaction hooks from settings.json."""
-        settings_path = claude_settings_path(home)
-        backup_path = claude_settings_backup_path(home)
-        uninstall_claude_hooks(settings_path=settings_path, backup_path=backup_path)
+        """Surgically remove onmc hooks from project settings, .mcp.json, and legacy global."""
+        repo_root = discover_repo_root(self.cwd)
+        uninstall_claude_hooks(
+            repo_root=repo_root,
+            global_settings_path=user_settings_path(home),
+        )
         return self.hooks_status(home=home)
 
     def hooks_status(self, *, home: Path | None = None) -> HookStatus:
-        """Return the current Claude hook installation and snapshot status."""
-        _, _, storage = self._load_context()
+        """Return the project-scoped hook installation and snapshot status."""
+        repo_root, _, storage = self._load_context()
         meta = storage.all_meta()
         latest_snapshot = storage.latest_compaction_snapshot()
-        settings_path = claude_settings_path(home)
-        backup_path = claude_settings_backup_path(home)
-        from oh_no_my_claudecode.hooks.installer import hooks_installed
-
+        settings_path = project_settings_path(repo_root)
+        mcp_path = mcp_config_path(repo_root)
         return HookStatus(
             installed=hooks_installed(settings_path=settings_path),
-            backup_path=backup_path.as_posix(),
+            backup_path=project_settings_backup_path(repo_root).as_posix(),
             settings_path=settings_path.as_posix(),
+            mcp_path=mcp_path.as_posix(),
+            mcp_registered=mcp_registered(mcp_path=mcp_path),
+            legacy_global_hooks=legacy_global_hooks_present(
+                settings_path=user_settings_path(home)
+            ),
             latest_snapshot_id=latest_snapshot.id if latest_snapshot else None,
             last_pre_compact_at=meta.get("last_pre_compact_at"),
-            last_post_compact_at=meta.get("last_post_compact_at"),
+            last_session_start_at=meta.get("last_session_start_at"),
         )
 
-    def pre_compact(self) -> CompactionSnapshotRecord:
-        """Capture the latest task-scoped state into a compaction snapshot."""
-        _, _, storage = self._load_context()
+    def pre_compact(self, *, transcript_path: Path | None = None) -> CompactionSnapshotRecord:
+        """Capture task state (plus live transcript context) into a compaction snapshot."""
+        repo_root, _, storage = self._load_context()
         task = self._latest_active_task(storage)
         attempts = storage.list_attempts_for_task(task.task_id) if task else []
         artifacts = storage.list_memory_artifacts_for_task(task.task_id) if task else []
@@ -206,14 +216,21 @@ class OnmcService:
             artifacts=artifacts,
             outputs=outputs,
             memories=memories,
+            transcript_path=transcript_path,
+            repo_root=repo_root,
         )
         storage.create_compaction_snapshot(snapshot)
         storage.set_meta("last_pre_compact_at", isoformat_utc(snapshot.timestamp))
         return snapshot
 
-    def post_compact(self, *, home: Path | None = None) -> tuple[CompactionSnapshotRecord, Path]:
-        """Compile and persist the latest continuation brief after compaction."""
-        _, _, storage = self._load_context()
+    def session_start(self, *, home: Path | None = None) -> tuple[CompactionSnapshotRecord, str]:
+        """Compile the continuation brief for the SessionStart("compact") hook.
+
+        Returns the updated snapshot and the brief markdown. The CLI emits the
+        hook stdout JSON; the markdown is also written to
+        ``.onmc/continuation-brief.md`` as a debug artifact.
+        """
+        repo_root, config, storage = self._load_context()
         snapshot = storage.latest_compaction_snapshot()
         if snapshot is None:
             msg = "No compaction snapshot is available."
@@ -229,16 +246,16 @@ class OnmcService:
             task=task,
             decisions=decisions,
         )
-        brief_path, updated_snapshot = write_continuation_brief(
-            home=home or Path.home(),
+        _, updated_snapshot = write_continuation_brief_artifact(
+            state_dir=state_dir(config, repo_root),
             snapshot=snapshot,
             continuation_brief_md=brief_md,
             token_count=token_count,
         )
         storage.update_compaction_snapshot(updated_snapshot)
-        storage.set_meta("last_post_compact_at", isoformat_utc(utc_now()))
+        storage.set_meta("last_session_start_at", isoformat_utc(utc_now()))
         self._refresh_claude_md_if_stale(storage=storage, home=home)
-        return updated_snapshot, brief_path
+        return updated_snapshot, brief_md
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""
@@ -398,8 +415,19 @@ class OnmcService:
                         )
         hook_status = self.hooks_status()
         report["claude"].append(
-            f"Compaction hooks {'installed' if hook_status.installed else 'not installed'}"
+            "Compaction hooks "
+            f"{'installed' if hook_status.installed else 'not installed'} "
+            "(.claude/settings.json)"
         )
+        report["claude"].append(
+            f"MCP server {'registered' if hook_status.mcp_registered else 'not registered'} "
+            "(.mcp.json)"
+        )
+        if hook_status.legacy_global_hooks:
+            report["warnings"].append(
+                "Legacy onmc hooks found in ~/.claude/settings.json — "
+                "run `onmc hooks install` to migrate or `onmc hooks uninstall` to remove."
+            )
         if hook_status.last_pre_compact_at:
             report["claude"].append(f"Last pre-compact: {hook_status.last_pre_compact_at}")
         if claude_md_path(repo_root).exists():

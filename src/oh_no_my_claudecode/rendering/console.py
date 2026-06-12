@@ -364,9 +364,11 @@ def render_hook_status(status: HookStatus) -> None:
                     f"Installed: {'yes' if status.installed else 'no'}",
                     f"Settings: {status.settings_path}",
                     f"Backup: {status.backup_path}",
+                    f"MCP (.mcp.json): {'registered' if status.mcp_registered else 'no'}",
+                    f"Legacy global hooks: {'present' if status.legacy_global_hooks else 'none'}",
                     f"Latest snapshot: {status.latest_snapshot_id or '-'}",
                     f"Last pre-compact: {status.last_pre_compact_at or '-'}",
-                    f"Last post-compact: {status.last_post_compact_at or '-'}",
+                    f"Last session-start: {status.last_session_start_at or '-'}",
                 ]
             ),
             title="Hooks Status",
