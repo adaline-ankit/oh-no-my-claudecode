@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
@@ -84,3 +85,64 @@ def test_replace_generated_memories_preserves_manual_entries(tmp_path: Path) -> 
 
     ids = {memory.id for memory in storage.list_memories()}
     assert ids == {"manual-1", "doc-2"}
+
+
+def test_replace_generated_memories_preserves_feedback_and_created_at(tmp_path: Path) -> None:
+    storage = SQLiteStorage(tmp_path / "memory.db")
+    storage.initialize()
+    created = utc_now()
+    generated = MemoryEntry(
+        id="doc-1",
+        kind=MemoryKind.DOC_FACT,
+        title="Generated note",
+        summary="Original summary",
+        details="Original summary",
+        source_type=SourceType.DOC,
+        source_ref="README.md",
+        tags=[],
+        confidence=0.7,
+        created_at=created,
+        updated_at=created,
+    )
+    storage.upsert_memories([generated])
+    storage.update_memory(generated.model_copy(update={"feedback_score": 0.3}))
+    stored = storage.get_memory("doc-1")
+    assert stored is not None
+
+    later = created + timedelta(days=1)
+    regenerated = generated.model_copy(
+        update={
+            "summary": "Regenerated summary",
+            "details": "Regenerated summary",
+            "feedback_score": 0.0,
+            "created_at": later,
+            "updated_at": later,
+        }
+    )
+    brand_new = MemoryEntry(
+        id="doc-2",
+        kind=MemoryKind.DOC_FACT,
+        title="Brand new note",
+        summary="New note",
+        details="New note",
+        source_type=SourceType.DOC,
+        source_ref="docs/architecture.md",
+        tags=[],
+        confidence=0.8,
+        created_at=later,
+        updated_at=later,
+    )
+
+    new_count, updated_count = storage.replace_generated_memories([regenerated, brand_new])
+
+    assert new_count == 1
+    assert updated_count == 1
+    survived = storage.get_memory("doc-1")
+    assert survived is not None
+    assert survived.summary == "Regenerated summary"
+    assert survived.feedback_score == 0.3
+    assert survived.created_at == stored.created_at
+    fresh = storage.get_memory("doc-2")
+    assert fresh is not None
+    assert fresh.feedback_score == 0.0
+    assert fresh.created_at == stored.created_at + timedelta(days=1)
