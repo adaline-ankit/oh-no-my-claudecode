@@ -23,6 +23,7 @@ from oh_no_my_claudecode.config import (
     create_state_dirs,
     database_path,
     default_config,
+    ensure_state_dir_gitignored,
     load_config,
     logs_dir,
     state_dir,
@@ -111,6 +112,7 @@ class OnmcService:
         repo_root = discover_repo_root(self.cwd)
         config = load_config(repo_root) if config_exists(repo_root) else default_config(repo_root)
         create_state_dirs(config, repo_root)
+        ensure_state_dir_gitignored(config, repo_root)
         write_config(config, repo_root)
         storage = SQLiteStorage(database_path(config, repo_root))
         storage.initialize()

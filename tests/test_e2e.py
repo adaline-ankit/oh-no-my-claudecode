@@ -172,6 +172,62 @@ def test_full_memory_lifecycle(e2e_env: tuple[Path, Path]) -> None:
     _run("doctor", cwd=repo, home=home)
 
 
+def test_sync_survives_a_fresh_clone(e2e_env: tuple[Path, Path], tmp_path: Path) -> None:
+    """The headline promise: committed memory restores on a fresh clone.
+
+    Exercises ``sync --commit`` → ``git clone`` → ``sync --restore`` and proves
+    that durable memory (repo memories, tasks, task-scoped artifacts) reappears
+    on a machine that has never seen the original ``.onmc`` SQLite state.
+    """
+    repo, home = e2e_env
+    _run("init", cwd=repo, home=home)
+    _run("ingest", cwd=repo, home=home)
+    start = _run(
+        "task", "start", "--title", "Fix flaky cache", "--description", "race",
+        cwd=repo, home=home,
+    )
+    task_id = TASK_ID_RE.search(start.stdout).group(0)  # type: ignore[union-attr]
+    _run(
+        "memory", "add", task_id,
+        "--type", "fix",
+        "--title", "Route through the cache boundary",
+        "--summary", "The shared boundary fixed the worker path",
+        cwd=repo, home=home,
+    )
+    _run("sync", "--commit", cwd=repo, home=home)
+    assert (repo / ".agent-memory" / "manifest.json").is_file()
+
+    # Commit the export the way a user would, then clone into a clean dir.
+    def git(cwd: Path, *args: str) -> None:
+        subprocess.run(
+            ["git", *args], cwd=cwd, check=True, capture_output=True, text=True,
+            env={**os.environ, "HOME": str(home)},
+        )
+
+    git(repo, "add", "-A")
+    git(repo, "commit", "-m", "chore: export agent memory")
+
+    clone = tmp_path / "clone"
+    subprocess.run(
+        ["git", "clone", str(repo), str(clone)],
+        check=True, capture_output=True, text=True,
+        env={**os.environ, "HOME": str(home)},
+    )
+    # A fresh HOME proves nothing leaks through the user account.
+    fresh_home = tmp_path / "fresh_home"
+    fresh_home.mkdir()
+
+    assert not (clone / ".onmc").exists(), ".onmc is gitignored and must not clone"
+    _run("init", cwd=clone, home=fresh_home)
+    restore = _run("sync", "--restore", cwd=clone, home=fresh_home)
+    assert "Restored" in restore.stdout
+
+    listing = _run("memory", "list", cwd=clone, home=fresh_home)
+    assert "cache boundary" in listing.stdout.lower()
+    tasks = _run("task", "list", cwd=clone, home=fresh_home)
+    assert "flaky cache" in tasks.stdout.lower()
+
+
 def test_task_attempt_memory_roundtrip(e2e_env: tuple[Path, Path]) -> None:
     repo, home = e2e_env
     _run("init", cwd=repo, home=home)
