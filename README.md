@@ -47,6 +47,8 @@ Claude Code, Codex, MCP, and cloud-agent boundaries.
 
 ## Commands
 
+For full generated help output, see [CLI Reference](docs/cli-reference.md).
+
 ### Setup and health
 
 ```bash
@@ -197,6 +199,7 @@ pip install -e ".[dev]"
 ruff check .
 mypy src
 pytest --cov=oh_no_my_claudecode --cov-report=term-missing
+python scripts/generate-cli-reference.py --check
 python -m build
 python -m twine check dist/*
 ```

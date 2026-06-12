@@ -13,7 +13,8 @@ pip install -e ".[dev]"
 ```bash
 ruff check .
 mypy src
-pytest --cov=oh_no_my_claudecode --cov-report=term-missing
+pytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-under=80
+python scripts/generate-cli-reference.py --check
 python -m build
 python -m twine check dist/*
 ```
@@ -59,6 +60,7 @@ Open a design issue before adding:
 - explain whether Claude Code, Codex, MCP, sync, or `.agent-memory` behavior changed
 - do not commit `.onmc/`, secrets, private prompts, or proprietary source snippets
 - expect maintainer review through `CODEOWNERS`
+- regenerate `docs/cli-reference.md` when CLI help changes
 
 Agent-generated PRs are welcome when they are reproducible. Include the exact commands
 used for validation and keep the diff scoped to the issue.
