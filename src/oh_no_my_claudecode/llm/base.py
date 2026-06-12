@@ -35,6 +35,17 @@ class LLMConfigurationError(LLMError):
 class LLMProviderError(LLMError):
     """Raised when a provider request fails or returns an invalid response."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        details: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.details = details
+
 
 class BaseLLMProvider(ABC):
     def __init__(self, settings: LLMSettings) -> None:

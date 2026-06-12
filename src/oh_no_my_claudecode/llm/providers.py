@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import random
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
+from email.message import Message
 from typing import Any
 
 from oh_no_my_claudecode.llm.base import (
@@ -17,6 +20,11 @@ from oh_no_my_claudecode.models.llm import (
     LLMProviderType,
     LLMSettings,
 )
+
+MAX_REQUEST_ATTEMPTS = 3
+RETRY_BASE_DELAY_SECONDS = 1.0
+RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 529})
+_sleep = time.sleep
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -86,22 +94,39 @@ class OpenAIProvider(BaseLLMProvider):
         if request.system_prompt:
             messages.append({"role": "system", "content": request.system_prompt})
         messages.append({"role": "user", "content": request.prompt})
-        raw = _post_json(
-            self.api_url,
-            {
-                "model": model,
-                "temperature": (
-                    request.temperature
-                    if request.temperature is not None
-                    else self.settings.temperature
-                ),
-                "max_tokens": request.max_tokens or self.settings.max_tokens,
-                "messages": messages,
-            },
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            provider=LLMProviderType.OPENAI,
-            model=model,
-        )
+        max_tokens_value = request.max_tokens or self.settings.max_tokens
+        payload: dict[str, Any] = {
+            "model": model,
+            "temperature": (
+                request.temperature
+                if request.temperature is not None
+                else self.settings.temperature
+            ),
+            "max_completion_tokens": max_tokens_value,
+            "messages": messages,
+        }
+        try:
+            raw = _post_json(
+                self.api_url,
+                payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                provider=LLMProviderType.OPENAI,
+                model=model,
+            )
+        except LLMProviderError as exc:
+            if not _max_completion_tokens_unsupported(exc):
+                raise
+            fallback_payload = {
+                key: value for key, value in payload.items() if key != "max_completion_tokens"
+            }
+            fallback_payload["max_tokens"] = max_tokens_value
+            raw = _post_json(
+                self.api_url,
+                fallback_payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                provider=LLMProviderType.OPENAI,
+                model=model,
+            )
         choices = raw.get("choices", [])
         message = choices[0].get("message", {}) if choices else {}
         content = message.get("content")
@@ -159,31 +184,48 @@ def _post_json(
         },
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(  # noqa: S310 - provider request target is prevalidated above.
-            request,
-            timeout=llm_call_timeout_seconds(),
-        ) as response:
-            body = response.read().decode("utf-8")
-    except TimeoutError as exc:
-        msg = "Provider request timed out."
-        raise LLMProviderError(msg) from exc
-    except urllib.error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        msg = _provider_http_error_message(
-            status_code=exc.code,
-            details=details,
-            provider=provider,
-            model=model,
-        )
-        raise LLMProviderError(msg) from exc
-    except urllib.error.URLError as exc:
-        if "timed out" in str(exc.reason).lower():
+    for attempt in range(MAX_REQUEST_ATTEMPTS):
+        retries_left = attempt + 1 < MAX_REQUEST_ATTEMPTS
+        try:
+            with urllib.request.urlopen(  # noqa: S310 - prevalidated provider URL.
+                request,
+                timeout=llm_call_timeout_seconds(),
+            ) as response:
+                body = response.read().decode("utf-8")
+        except TimeoutError as exc:
+            if retries_left:
+                _sleep(_retry_delay_seconds(attempt))
+                continue
             msg = "Provider request timed out."
             raise LLMProviderError(msg) from exc
-        msg = f"Provider request failed: {exc.reason}"
-        raise LLMProviderError(msg) from exc
+        except urllib.error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            if exc.code in RETRYABLE_STATUS_CODES and retries_left:
+                retry_after = _retry_after_seconds(exc.headers)
+                _sleep(_retry_delay_seconds(attempt, retry_after=retry_after))
+                continue
+            msg = _provider_http_error_message(
+                status_code=exc.code,
+                details=details,
+                provider=provider,
+                model=model,
+            )
+            raise LLMProviderError(msg, status_code=exc.code, details=details) from exc
+        except urllib.error.URLError as exc:
+            if "timed out" in str(exc.reason).lower():
+                if retries_left:
+                    _sleep(_retry_delay_seconds(attempt))
+                    continue
+                msg = "Provider request timed out."
+                raise LLMProviderError(msg) from exc
+            msg = f"Provider request failed: {exc.reason}"
+            raise LLMProviderError(msg) from exc
+        return _parse_response_body(body)
+    msg = "Provider request retries exhausted."
+    raise LLMProviderError(msg)
 
+
+def _parse_response_body(body: str) -> dict[str, Any]:
     try:
         payload_obj = json.loads(body)
     except json.JSONDecodeError as exc:
@@ -193,6 +235,36 @@ def _post_json(
         msg = "Provider response root was not a JSON object."
         raise LLMProviderError(msg)
     return payload_obj
+
+
+def _retry_delay_seconds(attempt: int, *, retry_after: float | None = None) -> float:
+    if retry_after is not None and retry_after >= 0:
+        return retry_after
+    base: float = RETRY_BASE_DELAY_SECONDS * (2**attempt)
+    jitter = random.uniform(0, base * 0.25)  # noqa: S311 - jitter, not cryptographic.
+    return base + jitter
+
+
+def _retry_after_seconds(headers: Message | None) -> float | None:
+    if headers is None:
+        return None
+    raw_value = headers.get("Retry-After")
+    if raw_value is None:
+        return None
+    try:
+        return float(raw_value)
+    except ValueError:
+        return None
+
+
+def _max_completion_tokens_unsupported(error: LLMProviderError) -> bool:
+    """Detect an HTTP 400 rejecting `max_completion_tokens` (older OpenAI models)."""
+    if error.status_code != 400:
+        return False
+    details = error.details.lower()
+    return "max_completion_tokens" in details and (
+        "unsupported" in details or "not supported" in details
+    )
 
 
 def validate_provider_api_key(

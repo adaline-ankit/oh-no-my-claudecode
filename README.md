@@ -115,7 +115,7 @@ onmc teach --task "..." --interactive       # follow-up Q&A loop
 ```bash
 onmc hooks install      # compaction hooks — context survives every compact
 onmc hooks status
-onmc serve --mcp        # read-only MCP server for mid-session memory queries
+onmc serve --mcp        # MCP server: memory tools + resources for mid-session use
 ```
 
 ### Git-portable memory

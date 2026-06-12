@@ -6,6 +6,7 @@ from pathlib import Path
 
 from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.hooks.installer import install_claude_hooks
 from oh_no_my_claudecode.models import LLMProviderType
 from oh_no_my_claudecode.setup.detector import detect_environment
 from oh_no_my_claudecode.setup.wizard import (
@@ -20,21 +21,14 @@ def test_detector_identifies_claude_code_presence(
     monkeypatch: object,
     tmp_path: Path,
 ) -> None:
-    settings_path = tmp_path / ".claude" / "settings.json"
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(
-        json.dumps(
-            {
-                "hooks": {"PreCompact": [], "PostCompact": []},
-                "mcpServers": {"onmc": {"command": "onmc", "args": ["serve", "--mcp"]}},
-            }
-        ),
-        encoding="utf-8",
-    )
+    user_settings = tmp_path / "home" / ".claude" / "settings.json"
+    user_settings.parent.mkdir(parents=True, exist_ok=True)
+    user_settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
     monkeypatch.setattr(
-        "oh_no_my_claudecode.setup.detector.claude_settings_path",
-        lambda: settings_path,
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
+        lambda: user_settings,
     )
+    install_claude_hooks(repo_root=sample_repo, global_settings_path=user_settings)
 
     detection = detect_environment(sample_repo)
 
@@ -45,6 +39,23 @@ def test_detector_identifies_claude_code_presence(
     assert detection.claude_code_detected is True
     assert detection.hooks_installed is True
     assert detection.mcp_registered is True
+
+
+def test_detector_reports_missing_integration(
+    sample_repo: Path,
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
+        lambda: tmp_path / "no-home" / ".claude" / "settings.json",
+    )
+
+    detection = detect_environment(sample_repo)
+
+    assert detection.claude_code_detected is False
+    assert detection.hooks_installed is False
+    assert detection.mcp_registered is False
 
 
 def test_provider_phase_uses_existing_config_without_prompting(
@@ -75,7 +86,7 @@ def test_provider_phase_uses_existing_config_without_prompting(
 def test_setup_yes_no_llm_runs_without_prompts(sample_repo: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(sample_repo)
     monkeypatch.setattr(
-        "oh_no_my_claudecode.setup.detector.claude_settings_path",
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
         lambda: sample_repo / ".missing" / "settings.json",
     )
 

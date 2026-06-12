@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.hooks import session_start_context_json
 from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
 from oh_no_my_claudecode.mcp_server import run_mcp_server
 from oh_no_my_claudecode.models import (
@@ -218,14 +221,18 @@ def sync_command(
 def serve_command(
     mcp: Annotated[
         bool,
-        typer.Option("--mcp", help="Run the read-only ONMC MCP server over stdio."),
+        typer.Option("--mcp", help="Run the ONMC MCP server over stdio."),
     ] = False,
+    repo: Annotated[
+        str,
+        typer.Option("--repo", help="Repository path to serve (resolved once at startup)."),
+    ] = ".",
 ) -> None:
     """Serve ONMC over the requested runtime protocol."""
     if not mcp:
         raise typer.Exit(code=_fatal("Use `onmc serve --mcp` to run the MCP server."))
     try:
-        run_mcp_server(Path.cwd())
+        run_mcp_server(Path(repo).resolve())
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
@@ -388,33 +395,40 @@ def hooks_install_command(
         typer.Option("--no-mcp", help="Skip MCP server setup."),
     ] = False,
 ) -> None:
-    """Install Claude Code compaction hooks into settings.json."""
+    """Install project-scoped Claude Code hooks into .claude/settings.json."""
     try:
         add_mcp_server = False if no_mcp else yes
         if not yes and not no_mcp:
             add_mcp_server = typer.confirm(
-                "Add ONMC as an MCP server to Claude Code?",
+                "Register ONMC as a project MCP server (.mcp.json)?",
                 default=False,
             )
-        status = _service().install_hooks(add_mcp_server=add_mcp_server)
+        result, status = _service().install_hooks(add_mcp_server=add_mcp_server)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     console.print(
-        "Hooks installed. Claude Code will now snapshot context before compaction "
-        "and restore it after."
+        "Hooks installed for this repo. Claude Code snapshots context before compaction "
+        "(PreCompact) and injects a continuation brief after it (SessionStart: compact)."
     )
+    if result.legacy_global_cleaned:
+        console.print(
+            "[yellow]Removed legacy onmc entries from the global ~/.claude/settings.json.[/yellow]"
+        )
     console.print(f"[green]Backup:[/green] {status.backup_path}")
     render_hook_status(status)
 
 
 @hooks_app.command("uninstall")
 def hooks_uninstall_command() -> None:
-    """Remove ONMC Claude hooks from settings.json."""
+    """Remove ONMC entries from project Claude Code settings and .mcp.json."""
     try:
         status = _service().uninstall_hooks()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-    console.print("Hooks removed from Claude Code settings.")
+    console.print(
+        "ONMC hooks removed from .claude/settings.json and .mcp.json. "
+        "The .onmc-backup file is kept as a safety artifact."
+    )
     render_hook_status(status)
 
 
@@ -428,23 +442,70 @@ def hooks_status_command() -> None:
     render_hook_status(status)
 
 
+def _read_hook_payload() -> dict[str, object]:
+    """Read the Claude Code hook JSON payload from stdin, tolerating absence.
+
+    Hook commands receive a JSON payload on stdin. Missing, empty, or invalid
+    stdin yields an empty payload so the hooks degrade to their no-context
+    behavior instead of failing.
+    """
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        raw = sys.stdin.read()
+    except (OSError, ValueError):
+        return {}
+    if not raw.strip():
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 @hooks_app.command("pre-compact")
 def hooks_pre_compact_command() -> None:
     """Capture a compaction snapshot before Claude Code compacts context."""
     try:
-        _service().pre_compact()
-    except Exception as exc:  # noqa: BLE001 - hook commands should never block compaction.
-        console.print(f"[yellow]ONMC pre-compact warning: {exc}[/yellow]")
+        payload = _read_hook_payload()
+        raw_transcript = payload.get("transcript_path")
+        transcript_path = (
+            Path(raw_transcript) if isinstance(raw_transcript, str) and raw_transcript else None
+        )
+        _service().pre_compact(transcript_path=transcript_path)
+    except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
+        print(f"ONMC pre-compact warning: {exc}", file=sys.stderr)
 
 
-@hooks_app.command("post-compact")
-def hooks_post_compact_command() -> None:
-    """Compile the latest continuation brief after Claude Code compacts context."""
+def _run_session_start_hook() -> None:
+    """Emit the SessionStart additionalContext JSON.
+
+    Stdout must contain ONLY the hook JSON — Claude Code parses it verbatim to
+    inject the continuation brief into model context. Diagnostics go to stderr
+    and the command always exits 0 so a failure never blocks the session.
+    """
     try:
-        _, brief_path = _service().post_compact()
-        console.print(f"ONMC_BRIEF_PATH={brief_path}")
-    except Exception as exc:  # noqa: BLE001 - hook commands should never block compaction.
-        console.print(f"[yellow]ONMC post-compact warning: {exc}[/yellow]")
+        payload = _read_hook_payload()
+        source = payload.get("source")
+        if isinstance(source, str) and source and source != "compact":
+            return
+        _, brief_md = _service().session_start()
+        sys.stdout.write(session_start_context_json(brief_md) + "\n")
+    except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
+        print(f"ONMC session-start warning: {exc}", file=sys.stderr)
+
+
+@hooks_app.command("session-start")
+def hooks_session_start_command() -> None:
+    """Inject the continuation brief when a session starts after compaction."""
+    _run_session_start_hook()
+
+
+@hooks_app.command("post-compact", hidden=True, deprecated=True)
+def hooks_post_compact_command() -> None:
+    """Deprecated alias for `onmc hooks session-start`."""
+    _run_session_start_hook()
 
 
 @claude_md_app.callback(invoke_without_command=True)

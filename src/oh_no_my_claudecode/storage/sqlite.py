@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable, Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,40 @@ from oh_no_my_claudecode.models import (
 )
 from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime
 
+_SCHEMA_VERSION_KEY = "schema_version"
+
+
+def _ensure_memory_column(conn: sqlite3.Connection, column: str, ddl: str) -> None:
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
+    if column not in columns:
+        conn.execute(ddl)
+
+
+def _migrate_v1(conn: sqlite3.Connection) -> None:
+    """Add memory columns introduced before schema versioning existed.
+
+    Must stay idempotent: databases created before versioning may already
+    have any of these columns, so each ALTER is guarded by a column check.
+    """
+    _ensure_memory_column(
+        conn,
+        "confidence",
+        "ALTER TABLE memories ADD COLUMN confidence REAL",
+    )
+    _ensure_memory_column(
+        conn,
+        "source_type",
+        "ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'heuristic'",
+    )
+    _ensure_memory_column(
+        conn,
+        "feedback_score",
+        "ALTER TABLE memories ADD COLUMN feedback_score REAL DEFAULT 0.0",
+    )
+
+
+_MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = ((1, _migrate_v1),)
+
 
 class SQLiteStorage:
     def __init__(self, db_path: Path) -> None:
@@ -31,7 +67,7 @@ class SQLiteStorage:
 
     def initialize(self) -> None:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memories (
@@ -149,26 +185,12 @@ class SQLiteStorage:
                     ON compaction_snapshots(timestamp);
                 """
             )
-            self._ensure_memory_column(
-                conn,
-                "confidence",
-                "ALTER TABLE memories ADD COLUMN confidence REAL",
-            )
-            self._ensure_memory_column(
-                conn,
-                "source_type",
-                "ALTER TABLE memories ADD COLUMN source_type TEXT DEFAULT 'heuristic'",
-            )
-            self._ensure_memory_column(
-                conn,
-                "feedback_score",
-                "ALTER TABLE memories ADD COLUMN feedback_score REAL DEFAULT 0.0",
-            )
+            self._run_migrations(conn)
 
     def upsert_memories(self, entries: list[MemoryEntry]) -> tuple[int, int]:
         new_count = 0
         updated_count = 0
-        with self._connect() as conn:
+        with self._connection() as conn:
             for entry in entries:
                 exists = conn.execute(
                     "SELECT 1 FROM memories WHERE id = ?",
@@ -214,15 +236,26 @@ class SQLiteStorage:
         return new_count, updated_count
 
     def replace_generated_memories(self, entries: list[MemoryEntry]) -> tuple[int, int]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
-                "SELECT id FROM memories WHERE source_type NOT IN (?, ?)",
+                "SELECT id, feedback_score, created_at FROM memories "
+                "WHERE source_type NOT IN (?, ?)",
                 tuple(self._protected_memory_source_values()),
             ).fetchall()
-            existing_ids = {str(row["id"]) for row in rows}
+            # Snapshot human feedback and original creation time so re-ingest
+            # does not wipe `onmc memory confirm/reject` history. Memory ids
+            # are deterministic (content/source-derived), so an id match means
+            # the same memory is being regenerated.
+            previous = {
+                str(row["id"]): (
+                    float(row["feedback_score"]) if row["feedback_score"] is not None else 0.0,
+                    str(row["created_at"]),
+                )
+                for row in rows
+            }
             next_ids = {entry.id for entry in entries}
-            new_count = len(next_ids - existing_ids)
-            updated_count = len(next_ids & existing_ids)
+            new_count = len(next_ids - previous.keys())
+            updated_count = len(next_ids & previous.keys())
 
             conn.execute(
                 "DELETE FROM memories WHERE source_type NOT IN (?, ?)",
@@ -246,8 +279,12 @@ class SQLiteStorage:
                         entry.source_ref,
                         json.dumps(entry.tags),
                         entry.confidence,
-                        entry.feedback_score,
-                        isoformat_utc(entry.created_at),
+                        previous[entry.id][0] if entry.id in previous else entry.feedback_score,
+                        (
+                            previous[entry.id][1]
+                            if entry.id in previous
+                            else isoformat_utc(entry.created_at)
+                        ),
                         isoformat_utc(entry.updated_at),
                     )
                     for entry in entries
@@ -258,7 +295,7 @@ class SQLiteStorage:
     def delete_generated_memories_by_source_refs(self, source_refs: list[str]) -> int:
         if not source_refs:
             return 0
-        with self._connect() as conn:
+        with self._connection() as conn:
             deleted = 0
             for source_ref in dict.fromkeys(source_refs):
                 cursor = conn.execute(
@@ -274,27 +311,29 @@ class SQLiteStorage:
         kind: MemoryKind | None = None,
         source_type: SourceType | None = None,
     ) -> list[MemoryEntry]:
-        query = "SELECT * FROM memories"
-        params: tuple[Any, ...] = ()
+        conditions: list[str] = []
+        params: list[Any] = []
         if kind is not None:
-            query += " WHERE kind = ?"
-            params = (kind.value,)
+            conditions.append("kind = ?")
+            params.append(kind.value)
         if source_type is not None:
-            query += " WHERE " if " WHERE " not in query else " AND "
-            query += "source_type = ?"
-            params += (source_type.value,)
+            conditions.append("source_type = ?")
+            params.append(source_type.value)
+        query = "SELECT * FROM memories"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY updated_at DESC, title ASC"
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_memory(row) for row in rows]
 
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM memories WHERE id = ?", (memory_id,)).fetchone()
         return None if row is None else self._row_to_memory(row)
 
     def update_memory(self, memory: MemoryEntry) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE memories SET
@@ -328,7 +367,7 @@ class SQLiteStorage:
             )
 
     def replace_repo_files(self, records: list[RepoFileRecord]) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("DELETE FROM repo_files")
             conn.executemany(
                 """
@@ -349,7 +388,7 @@ class SQLiteStorage:
     def upsert_repo_files(self, records: list[RepoFileRecord]) -> None:
         if not records:
             return
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.executemany(
                 """
                 INSERT INTO repo_files (path, extension, is_test, size_bytes)
@@ -371,7 +410,7 @@ class SQLiteStorage:
             )
 
     def list_repo_files(self) -> list[RepoFileRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute("SELECT * FROM repo_files ORDER BY path ASC").fetchall()
         return [
             RepoFileRecord(
@@ -384,7 +423,7 @@ class SQLiteStorage:
         ]
 
     def replace_file_stats(self, stats: list[FileStat]) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute("DELETE FROM file_stats")
             conn.executemany(
                 """
@@ -413,7 +452,7 @@ class SQLiteStorage:
     def upsert_file_stats(self, stats: list[FileStat]) -> None:
         if not stats:
             return
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.executemany(
                 """
                 INSERT INTO file_stats (
@@ -445,7 +484,7 @@ class SQLiteStorage:
             )
 
     def list_file_stats(self) -> list[FileStat]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 "SELECT * FROM file_stats "
                 "ORDER BY change_count DESC, recent_change_count DESC, path ASC"
@@ -463,7 +502,7 @@ class SQLiteStorage:
         ]
 
     def set_meta(self, key: str, value: str) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO meta (key, value) VALUES (?, ?)
@@ -473,22 +512,22 @@ class SQLiteStorage:
             )
 
     def get_meta(self, key: str) -> str | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
         return None if row is None else str(row["value"])
 
     def all_meta(self) -> dict[str, str]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute("SELECT key, value FROM meta ORDER BY key ASC").fetchall()
         return {str(row["key"]): str(row["value"]) for row in rows}
 
     def memory_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM memories").fetchone()
         return int(row["count"])
 
     def create_task(self, task: TaskRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO tasks (
@@ -511,7 +550,7 @@ class SQLiteStorage:
             )
 
     def update_task(self, task: TaskRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE tasks SET
@@ -547,12 +586,12 @@ class SQLiteStorage:
             )
 
     def get_task(self, task_id: str) -> TaskRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT * FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
         return None if row is None else self._row_to_task(row)
 
     def list_tasks(self) -> list[TaskRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM tasks
@@ -570,12 +609,12 @@ class SQLiteStorage:
         return [self._row_to_task(row) for row in rows]
 
     def task_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM tasks").fetchone()
         return int(row["count"])
 
     def create_attempt(self, attempt: AttemptRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO attempts (
@@ -596,7 +635,7 @@ class SQLiteStorage:
             )
 
     def update_attempt(self, attempt: AttemptRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE attempts SET
@@ -628,7 +667,7 @@ class SQLiteStorage:
             )
 
     def get_attempt(self, attempt_id: str) -> AttemptRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM attempts WHERE attempt_id = ?",
                 (attempt_id,),
@@ -636,7 +675,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_attempt(row)
 
     def list_attempts_for_task(self, task_id: str) -> list[AttemptRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM attempts
@@ -648,7 +687,7 @@ class SQLiteStorage:
         return [self._row_to_attempt(row) for row in rows]
 
     def list_attempt_counts_by_task(self) -> dict[str, int]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT task_id, COUNT(*) AS count
@@ -659,12 +698,12 @@ class SQLiteStorage:
         return {str(row["task_id"]): int(row["count"]) for row in rows}
 
     def attempt_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM attempts").fetchone()
         return int(row["count"])
 
     def create_memory_artifact(self, artifact: MemoryArtifactRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO memory_artifacts (
@@ -687,7 +726,7 @@ class SQLiteStorage:
             )
 
     def get_memory_artifact(self, memory_id: str) -> MemoryArtifactRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM memory_artifacts WHERE memory_id = ?",
                 (memory_id,),
@@ -695,7 +734,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_memory_artifact(row)
 
     def update_memory_artifact(self, artifact: MemoryArtifactRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE memory_artifacts SET
@@ -741,12 +780,12 @@ class SQLiteStorage:
             query += " WHERE type = ?"
             params = (artifact_type.value,)
         query += " ORDER BY created_at DESC, rowid DESC"
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_memory_artifact(row) for row in rows]
 
     def list_memory_artifacts_for_task(self, task_id: str) -> list[MemoryArtifactRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM memory_artifacts
@@ -758,7 +797,7 @@ class SQLiteStorage:
         return [self._row_to_memory_artifact(row) for row in rows]
 
     def list_memory_artifact_counts_by_task(self) -> dict[str, int]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT task_id, COUNT(*) AS count
@@ -769,12 +808,12 @@ class SQLiteStorage:
         return {str(row["task_id"]): int(row["count"]) for row in rows}
 
     def memory_artifact_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM memory_artifacts").fetchone()
         return int(row["count"])
 
     def create_task_output(self, output: TaskOutputRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO task_outputs (
@@ -794,7 +833,7 @@ class SQLiteStorage:
             )
 
     def get_task_output(self, output_id: str) -> TaskOutputRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM task_outputs WHERE output_id = ?",
                 (output_id,),
@@ -802,7 +841,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_task_output(row)
 
     def list_task_outputs_for_task(self, task_id: str) -> list[TaskOutputRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM task_outputs
@@ -814,12 +853,12 @@ class SQLiteStorage:
         return [self._row_to_task_output(row) for row in rows]
 
     def task_output_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM task_outputs").fetchone()
         return int(row["count"])
 
     def list_task_output_counts_by_task(self) -> dict[str, int]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT task_id, COUNT(*) AS count
@@ -831,7 +870,7 @@ class SQLiteStorage:
         return {str(row["task_id"]): int(row["count"]) for row in rows}
 
     def create_compaction_snapshot(self, snapshot: CompactionSnapshotRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 INSERT INTO compaction_snapshots (
@@ -851,7 +890,7 @@ class SQLiteStorage:
             )
 
     def update_compaction_snapshot(self, snapshot: CompactionSnapshotRecord) -> None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             conn.execute(
                 """
                 UPDATE compaction_snapshots SET
@@ -881,7 +920,7 @@ class SQLiteStorage:
             )
 
     def get_compaction_snapshot(self, snapshot_id: str) -> CompactionSnapshotRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 "SELECT * FROM compaction_snapshots WHERE id = ?",
                 (snapshot_id,),
@@ -889,7 +928,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_compaction_snapshot(row)
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute(
                 """
                 SELECT * FROM compaction_snapshots
@@ -900,7 +939,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_compaction_snapshot(row)
 
     def list_compaction_snapshots(self) -> list[CompactionSnapshotRecord]:
-        with self._connect() as conn:
+        with self._connection() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM compaction_snapshots
@@ -910,24 +949,39 @@ class SQLiteStorage:
         return [self._row_to_compaction_snapshot(row) for row in rows]
 
     def compaction_snapshot_count(self) -> int:
-        with self._connect() as conn:
+        with self._connection() as conn:
             row = conn.execute("SELECT COUNT(*) AS count FROM compaction_snapshots").fetchone()
         return int(row["count"])
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+    @contextmanager
+    def _connection(self) -> Iterator[sqlite3.Connection]:
+        """Yield a connection that commits on success, rolls back on error, and closes."""
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")
+            with conn:
+                yield conn
 
     @staticmethod
-    def _ensure_memory_column(conn: sqlite3.Connection, column: str, ddl: str) -> None:
-        columns = {
-            str(row["name"])
-            for row in conn.execute("PRAGMA table_info(memories)").fetchall()
-        }
-        if column not in columns:
-            conn.execute(ddl)
+    def _run_migrations(conn: sqlite3.Connection) -> None:
+        row = conn.execute(
+            "SELECT value FROM meta WHERE key = ?",
+            (_SCHEMA_VERSION_KEY,),
+        ).fetchone()
+        current_version = int(row["value"]) if row is not None else 0
+        for version, migrate in _MIGRATIONS:
+            if version > current_version:
+                migrate(conn)
+                current_version = version
+        conn.execute(
+            """
+            INSERT INTO meta (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (_SCHEMA_VERSION_KEY, str(current_version)),
+        )
 
     @staticmethod
     def _protected_memory_source_values() -> list[str]:

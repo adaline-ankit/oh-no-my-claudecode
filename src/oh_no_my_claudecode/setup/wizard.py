@@ -310,13 +310,13 @@ def _integration_phase(
         )
         return hooks_installed, mcp_registered, auto_sync_enabled
     console.print("Claude Code detected on this machine.")
-    if yes or Confirm.ask("Install compaction hooks?", default=True):
+    if yes or Confirm.ask("Install compaction hooks for this repo?", default=True):
         service.install_hooks(add_mcp_server=False)
-        console.print("✓ Hooks installed -> ~/.claude/settings.json")
+        console.print("✓ Hooks installed -> .claude/settings.json (project)")
         hooks_installed = True
-    if yes or Confirm.ask("Add ONMC as MCP server?", default=True):
+    if yes or Confirm.ask("Register ONMC as a project MCP server?", default=True):
         service.install_hooks(add_mcp_server=True)
-        console.print("✓ MCP server registered -> ~/.claude/settings.json")
+        console.print("✓ MCP server registered -> .mcp.json (project)")
         mcp_registered = True
     if yes or Confirm.ask("Install auto-sync on commit?", default=True):
         service.install_ingest_hook()

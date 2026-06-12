@@ -21,7 +21,7 @@ Today ONMC does four core things:
 - optionally uses an LLM to extract and rank higher-signal memory where heuristics are weak
 - stores durable task-scoped engineering memory in local SQLite state
 - compiles high-signal briefs and prompts for coding work
-- exposes that memory to agents through CLI commands, a Python API, Claude Code hooks, and a read-only MCP server
+- exposes that memory to agents through CLI commands, a Python API, Claude Code hooks, and an MCP server with tools and resources
 
 ## What Is Implemented
 
@@ -285,22 +285,35 @@ onmc hooks uninstall
 Internal hook commands:
 
 - `onmc hooks pre-compact`
-- `onmc hooks post-compact`
+- `onmc hooks session-start`
 
 What they do:
 
-- before compaction, snapshot active task context into `compaction_snapshots`
-- after compaction, compile a continuation brief and write `~/.onmc-continuation-brief.md`
+- before compaction, snapshot active task context into `compaction_snapshots`,
+  enriched from the live session transcript (active files, recent assistant text)
+- when the session resumes after compaction (SessionStart with source `compact`),
+  compile a continuation brief and inject it into model context via the hook
+  stdout contract; a debug copy lands in `.onmc/continuation-brief.md`
 
-This is ONMC's first continuity mechanism for recovering context after compaction.
+Hooks are installed into the project's `.claude/settings.json` (and MCP
+registration into `.mcp.json`), so they travel with the repo and never fire in
+unrelated projects.
 
-### 13. Read-Only MCP Server
+### 13. MCP Server
 
 ONMC can serve memory over MCP:
 
 ```bash
-onmc serve --mcp
+onmc serve --mcp --repo .
 ```
+
+Exposed tools (the agent-facing action surface):
+
+- `search_memory` — relevance-ranked memory search by query, kind, and files
+- `get_brief` — compile the task-focused brief as markdown
+- `record_attempt` — record a task-scoped attempt mid-session
+- `record_memory` — write a durable manual memory (never wiped by ingest)
+- `list_tasks` — list task records
 
 Exposed resources:
 
@@ -312,8 +325,6 @@ Exposed resources:
 - `onmc://task/{id}`
 - `onmc://snapshot/latest`
 - `onmc://status`
-
-This is read-only in the current release.
 
 ### 14. Health Check
 

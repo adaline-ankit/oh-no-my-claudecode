@@ -153,6 +153,7 @@ def test_feedback_score_migration_is_idempotent(tmp_path: Path) -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
 
     assert "feedback_score" in columns
+    assert storage.get_meta("schema_version") == "1"
 
 
 def test_memory_cli_feedback_and_mine_hint(

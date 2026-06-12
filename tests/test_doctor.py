@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -94,3 +95,40 @@ def test_detect_leaked_keys_finds_provider_secret_patterns(tmp_path: Path) -> No
 
     assert len(warnings) == 1
     assert leak_path.as_posix() in warnings[0]
+
+
+def test_doctor_warns_when_legacy_global_hooks_remain(
+    sample_repo: Path,
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    fake_home = tmp_path / "home"
+    global_settings = fake_home / ".claude" / "settings.json"
+    global_settings.parent.mkdir(parents=True, exist_ok=True)
+    global_settings.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PostCompact": [
+                        {
+                            "matcher": "",
+                            "hooks": [
+                                {"type": "command", "command": "onmc hooks post-compact"}
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("oh_no_my_claudecode.hooks.installer.Path.home", lambda: fake_home)
+
+    ok, report = service.doctor()
+
+    assert ok is True
+    assert any("Legacy onmc hooks" in warning for warning in report["warnings"])
+    assert any("MCP server not registered" in line for line in report["claude"])

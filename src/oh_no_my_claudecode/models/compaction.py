@@ -22,6 +22,9 @@ class HookStatus(BaseModel):
     installed: bool
     backup_path: str
     settings_path: str
+    mcp_path: str | None = None
+    mcp_registered: bool = False
+    legacy_global_hooks: bool = False
     latest_snapshot_id: str | None = None
     last_pre_compact_at: str | None = None
-    last_post_compact_at: str | None = None
+    last_session_start_at: str | None = None

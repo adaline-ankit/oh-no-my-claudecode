@@ -86,7 +86,7 @@ def mine_transcripts(
     memories: list[MemoryEntry] = []
     artifacts: list[MemoryArtifactRecord] = []
     for path in transcript_paths:
-        transcript_text, transcript_files = parse_assistant_turns(path)
+        transcript_text, transcript_files = parse_assistant_turns(path, repo_root=repo_root)
         if not transcript_text:
             continue
         findings = (

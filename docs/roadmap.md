@@ -13,7 +13,7 @@ Shipped in this repo:
 - git-portable `.agent-memory/` sync
 - Claude Code compaction hooks + continuation snapshots
 - typed public Python API
-- read-only MCP server
+- MCP server (tools + resources)
 - doc ingestion
 - git-history ingestion
 - hotspot and git-pattern extraction
@@ -33,7 +33,6 @@ Shipped in this repo:
 - stale-entry pruning by source fingerprint
 - richer test-mapping heuristics
 - branch-aware briefing
-- MCP write tools
 - richer Claude Code session-state capture beyond compaction snapshots
 - smarter transcript-to-task linking
 - richer `CLAUDE.md` merge semantics
