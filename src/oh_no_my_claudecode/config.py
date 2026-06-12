@@ -39,6 +39,29 @@ def create_state_dirs(config: ProjectConfig, repo_root: Path) -> None:
     logs_dir(config, repo_root).mkdir(parents=True, exist_ok=True)
 
 
+def ensure_state_dir_gitignored(config: ProjectConfig, repo_root: Path) -> bool:
+    """Ensure the local state dir is ignored by git.
+
+    ``.onmc/`` holds the binary SQLite store and the LLM call log (which can
+    contain repo source), so it must never be committed — only the JSON export
+    under ``.agent-memory/`` travels with the repo. Returns ``True`` if the
+    ``.gitignore`` was created or modified. Idempotent.
+    """
+    state_name = config.storage.state_dir.strip("/")
+    ignore_line = f"{state_name}/"
+    gitignore = repo_root / ".gitignore"
+    existing = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    present = any(
+        line.strip().rstrip("/") == state_name for line in existing.splitlines()
+    )
+    if present:
+        return False
+    prefix = existing if existing.endswith("\n") or not existing else f"{existing}\n"
+    block = f"# oh-no-my-claudecode local state (binary db + logs)\n{ignore_line}\n"
+    gitignore.write_text(prefix + block, encoding="utf-8")
+    return True
+
+
 def write_config(config: ProjectConfig, repo_root: Path) -> Path:
     target = config_path(repo_root)
     create_state_dirs(config, repo_root)

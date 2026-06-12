@@ -17,6 +17,32 @@ def test_init_creates_repo_handle_and_state(sample_repo: Path, monkeypatch: obje
     assert (sample_repo / ".onmc" / "config.yaml").exists()
 
 
+def test_init_gitignores_local_state(sample_repo: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(sample_repo)
+
+    init(sample_repo)
+
+    gitignore = (sample_repo / ".gitignore").read_text(encoding="utf-8")
+    ignored = {line.strip().rstrip("/") for line in gitignore.splitlines()}
+    assert ".onmc" in ignored, "init must keep the binary state dir out of git"
+
+
+def test_init_gitignore_is_idempotent_and_appends(
+    sample_repo: Path, monkeypatch: object
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    (sample_repo / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+
+    init(sample_repo)
+    first = (sample_repo / ".gitignore").read_text(encoding="utf-8")
+    init(sample_repo)
+    second = (sample_repo / ".gitignore").read_text(encoding="utf-8")
+
+    assert "node_modules/" in first, "existing entries must be preserved"
+    assert first.count(".onmc/") == 1
+    assert first == second, "re-init must not duplicate the ignore entry"
+
+
 def test_memory_api_add_and_list(sample_repo: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
