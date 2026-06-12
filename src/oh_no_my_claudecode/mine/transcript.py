@@ -1,22 +1,35 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from oh_no_my_claudecode.utils.time import parse_datetime, utc_now
 
+_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]")
+_TOOL_INPUT_PATH_KEYS = ("file_path", "path", "notebook_path")
 
-def claude_project_hash(repo_root: str) -> str:
-    """Return the Claude Code project hash for a repo path."""
-    return hashlib.sha256(repo_root.encode("utf-8")).hexdigest()[:16]
+
+def claude_project_dir_name(repo_root: str) -> str:
+    """Return the Claude Code project directory name for an absolute repo path.
+
+    Claude Code stores transcripts under ``~/.claude/projects/<name>/`` where
+    ``<name>`` is the absolute repo path with every character outside
+    ``[A-Za-z0-9]`` replaced by ``-``. For example
+    ``/Users/ankit/code/my_repo`` becomes ``-Users-ankit-code-my-repo``
+    (note the leading ``-`` from the leading ``/``).
+    """
+    return _NON_ALNUM_RE.sub("-", repo_root)
 
 
 def discover_transcript_dir(repo_root: Path) -> Path:
-    """Return the Claude Code transcript directory for the repo."""
-    project_hash = claude_project_hash(repo_root.as_posix())
-    return Path.home() / ".claude" / "projects" / project_hash / "sessions"
+    """Return the Claude Code transcript directory for the repo.
+
+    Session files (``<session-uuid>.jsonl``) live directly inside this
+    directory; there is no ``sessions/`` subdirectory.
+    """
+    return Path.home() / ".claude" / "projects" / claude_project_dir_name(repo_root.as_posix())
 
 
 def discover_transcripts(
@@ -42,58 +55,84 @@ def discover_transcripts(
     return candidates
 
 
-def parse_assistant_turns(path: Path) -> tuple[str, list[str]]:
-    """Extract assistant-only turns and mentioned files from a transcript."""
+def parse_assistant_turns(path: Path, *, repo_root: Path | None = None) -> tuple[str, list[str]]:
+    """Extract assistant turn text and touched files from a Claude Code transcript.
+
+    Each transcript line is a JSON object with a top-level ``type``. Only
+    main-thread assistant lines are read: ``type == "assistant"`` with
+    ``isSidechain`` falsy (sidechain lines come from subagents, so mined
+    memory reflects the main conversation). All other line types ("user",
+    "summary", "system", ...) and malformed lines are skipped silently.
+
+    Text is taken from ``message.content`` blocks of type ``"text"``.
+    ``"thinking"`` blocks are ignored — they are not durable output. File
+    paths are taken only from ``"tool_use"`` blocks' ``input`` (the
+    ``file_path``, ``path``, and ``notebook_path`` keys); free-text content
+    is never scanned for paths because that produced garbage like URLs and
+    version numbers. Absolute paths under ``repo_root`` are rewritten to
+    repo-relative POSIX form; paths outside the repo are kept as-is so
+    callers can still see cross-repo touches.
+    """
     turns: list[str] = []
     files: set[str] = set()
     for raw_line in path.read_text(encoding="utf-8").splitlines():
-        if not raw_line.strip():
+        stripped = raw_line.strip()
+        if not stripped:
             continue
         try:
-            payload = json.loads(raw_line)
+            payload = json.loads(stripped)
         except json.JSONDecodeError:
             continue
-        role = str(payload.get("role", payload.get("speaker", ""))).lower()
-        if role != "assistant":
+        if not isinstance(payload, dict):
             continue
-        content = _extract_content(payload)
-        if not content:
+        if payload.get("type") != "assistant":
             continue
-        turns.append(content)
-        files.update(_extract_files(payload, content))
+        if payload.get("isSidechain"):
+            continue
+        message = payload.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        parts: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text)
+            elif block_type == "tool_use":
+                files.update(_tool_use_paths(block, repo_root))
+        if parts:
+            turns.append("\n".join(parts))
     return "\n\n".join(turns), sorted(files)
 
 
-def _extract_content(payload: dict[str, object]) -> str:
-    content = payload.get("content")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict):
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "\n".join(parts)
-    message = payload.get("message")
-    if isinstance(message, str):
-        return message
-    return ""
+def _tool_use_paths(block: dict[str, object], repo_root: Path | None) -> set[str]:
+    paths: set[str] = set()
+    tool_input = block.get("input")
+    if not isinstance(tool_input, dict):
+        return paths
+    for key in _TOOL_INPUT_PATH_KEYS:
+        value = tool_input.get(key)
+        if isinstance(value, str) and value.strip():
+            paths.add(_normalize_path(value.strip(), repo_root))
+    return paths
 
 
-def _extract_files(payload: dict[str, object], content: str) -> set[str]:
-    files: set[str] = set()
-    for key in ("files_touched", "files", "paths"):
-        value = payload.get(key)
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, str):
-                    files.add(item)
-    for token in content.split():
-        if "/" in token and "." in token:
-            files.add(token.strip("`.,:;()[]{}"))
-    return {item for item in files if item}
+def _normalize_path(value: str, repo_root: Path | None) -> str:
+    candidate = Path(value)
+    if repo_root is None or not candidate.is_absolute():
+        return value
+    for root in (repo_root, repo_root.resolve()):
+        try:
+            return candidate.relative_to(root).as_posix()
+        except ValueError:
+            continue
+    return value
 
 
 def _parse_since(value: str) -> datetime:
@@ -111,10 +150,6 @@ def _parse_since(value: str) -> datetime:
         return now - timedelta(hours=1)
     parsed = parse_datetime(value)
     return parsed or now
-
-
-def _mtime_iso(path: Path) -> str:
-    return _mtime_datetime(path).isoformat()
 
 
 def _mtime_datetime(path: Path) -> datetime:

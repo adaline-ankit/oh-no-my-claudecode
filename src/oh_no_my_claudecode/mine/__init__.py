@@ -7,14 +7,14 @@ from oh_no_my_claudecode.mine.github_miner import (
     mine_github_prs,
 )
 from oh_no_my_claudecode.mine.transcript import (
-    claude_project_hash,
+    claude_project_dir_name,
     discover_transcript_dir,
     discover_transcripts,
     parse_assistant_turns,
 )
 
 __all__ = [
-    "claude_project_hash",
+    "claude_project_dir_name",
     "discover_transcript_dir",
     "discover_transcripts",
     "extract_github_pr_findings",
