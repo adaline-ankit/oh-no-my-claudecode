@@ -25,7 +25,8 @@ Run these before opening or updating a PR:
 ```bash
 ruff check .
 mypy src
-pytest --cov=oh_no_my_claudecode --cov-report=term-missing
+pytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-under=80
+python scripts/generate-cli-reference.py --check
 python -m build
 python -m twine check dist/*
 ```
@@ -55,6 +56,12 @@ untrusted input when they come from outside the maintainer's machine.
 If a change affects what agents read or execute, update the relevant docs and tests.
 This includes `CLAUDE.md`, `AGENTS.md`, MCP tools/resources, hook payloads, and sync
 restore behavior.
+
+If a change affects CLI commands or help text, regenerate `docs/cli-reference.md` with:
+
+```bash
+python scripts/generate-cli-reference.py
+```
 
 ## Contribution Style
 
