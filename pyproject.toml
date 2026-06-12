@@ -40,8 +40,10 @@ dev = [
   "build>=1.2.2",
   "mypy>=1.11,<2.0",
   "pre-commit>=3.8,<5.0",
+  "pytest-cov>=6.0,<8.0",
   "pytest>=8.3,<9.0",
   "ruff>=0.15,<1.0",
+  "twine>=5.1,<7.0",
 ]
 
 [project.scripts]

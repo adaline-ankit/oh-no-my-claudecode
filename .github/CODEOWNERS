@@ -1,0 +1,10 @@
+# Keep merge authority centralized while the project is still early.
+* @ankit-adaline
+
+# High-risk surfaces should always route to the maintainer.
+/.github/ @ankit-adaline
+/src/oh_no_my_claudecode/storage/ @ankit-adaline
+/src/oh_no_my_claudecode/hooks/ @ankit-adaline
+/src/oh_no_my_claudecode/llm/ @ankit-adaline
+/src/oh_no_my_claudecode/mcp_server/ @ankit-adaline
+/pyproject.toml @ankit-adaline
