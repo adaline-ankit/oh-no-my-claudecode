@@ -11,7 +11,7 @@ import pytest
 from oh_no_my_claudecode import init
 from oh_no_my_claudecode.api import OnmcRepo
 from oh_no_my_claudecode.mcp_server.resources import read_onmc_resource
-from oh_no_my_claudecode.mcp_server.server import build_mcp_server, run_mcp_server
+from oh_no_my_claudecode.mcp_server.server import STARTUP_SNIPPET, build_mcp_server, run_mcp_server
 from oh_no_my_claudecode.mcp_server.tools import call_onmc_tool, list_onmc_tools
 
 EXPECTED_TOOL_NAMES = {
@@ -99,6 +99,12 @@ def test_run_mcp_server_prints_startup_message_to_stderr_only(
     assert "ONMC MCP server running." in stderr.buffer
     assert '"command": "onmc"' in stderr.buffer
     assert stdout.buffer == ""
+
+
+def test_mcp_startup_snippet_mentions_project_scoped_config() -> None:
+    assert "claude mcp add onmc -- onmc serve --mcp" in STARTUP_SNIPPET
+    assert ".mcp.json" in STARTUP_SNIPPET
+    assert "settings.json" not in STARTUP_SNIPPET
 
 
 def _tool_text(repo: OnmcRepo, name: str, arguments: dict[str, object]) -> str:

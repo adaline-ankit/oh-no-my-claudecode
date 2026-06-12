@@ -25,7 +25,6 @@ STARTUP_SNIPPET = (
     "or commit a project-scoped .mcp.json (this is what `onmc hooks install` writes):\n"
     '{\n  "mcpServers": {\n    "onmc": {\n      "command": "onmc",\n'
     '      "args": ["serve", "--mcp"]\n    }\n  }\n}\n'
-    "Note: Claude Code does not read MCP servers from settings.json.\n"
 )
 
 
