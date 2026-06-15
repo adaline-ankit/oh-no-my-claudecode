@@ -5,7 +5,13 @@ from pathlib import Path
 
 from oh_no_my_claudecode.core.repo import relative_path
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
-from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
+from oh_no_my_claudecode.utils.text import (
+    shorten_to_sentence,
+    stable_id,
+    strip_markdown_noise,
+    tokenize,
+    unique_preserve,
+)
 from oh_no_my_claudecode.utils.time import utc_now
 
 EXCLUDED_DOC_PATTERNS = [
@@ -66,7 +72,7 @@ def extract_doc_memories(repo_root: Path, doc_path: Path, *, max_chars: int) -> 
         clipped = text[:max_chars].strip()
         kind = classify_doc_section(heading, clipped)
         title = f"{doc_path.name}: {heading or 'Overview'}"
-        summary = shorten(clipped, max_length=160)
+        summary = shorten_to_sentence(strip_markdown_noise(clipped), 160)
         tags = unique_preserve(tokenize(relative) + tokenize(heading))
         confidence = doc_confidence(kind, clipped)
         if not is_primarily_english(summary):
