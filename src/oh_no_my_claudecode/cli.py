@@ -47,6 +47,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_task_started,
     render_task_updated,
     render_teach_output,
+    render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
 
@@ -156,6 +157,23 @@ def brief_command(
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_brief(artifact)
     console.print(f"[green]Wrote brief:[/green] {artifact.output_path}")
+
+
+@app.command("why")
+def why_command(
+    path: Annotated[str, typer.Argument(help="File path to explain (repo-relative or absolute).")],
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the optional LLM narrative; deterministic only."),
+    ] = False,
+) -> None:
+    """Explain why a file looks the way it does, from memory + git history."""
+    try:
+        _, report = _service().why(path, no_llm=no_llm)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_why_report(report)
+    console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
 
 @app.command("status")

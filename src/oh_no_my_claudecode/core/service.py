@@ -95,6 +95,7 @@ from oh_no_my_claudecode.sync import export_agent_memory, restore_agent_memory
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
+from oh_no_my_claudecode.why.compiler import WhyReport, compile_why, why_report_to_markdown
 
 StructuredOutputT = TypeVar(
     "StructuredOutputT",
@@ -188,6 +189,54 @@ class OnmcService:
         output_path.write_text(artifact.to_markdown(), encoding="utf-8")
         artifact.output_path = output_path.as_posix()
         return repo_root, artifact
+
+    def why(self, path: str, *, no_llm: bool = False) -> tuple[Path, WhyReport]:
+        """Compile a `why` report for a file from stored memory + git history."""
+        repo_root, config, storage = self._load_context()
+        report = compile_why(repo_root, storage, path)
+        if report.has_data and not no_llm:
+            report.llm_narrative = self._why_narrative(
+                report=report, config=config, repo_root=repo_root, no_llm=no_llm
+            )
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", report.path)
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-why-{safe_name}.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(why_report_to_markdown(report), encoding="utf-8")
+        report.output_path = output_path.as_posix()
+        return repo_root, report
+
+    def _why_narrative(
+        self,
+        *,
+        report: WhyReport,
+        config: ProjectConfig,
+        repo_root: Path,
+        no_llm: bool,
+    ) -> str:
+        """Best-effort LLM narrative for a why report; never raises."""
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        if provider is None:
+            return ""
+        try:
+            return generate_structured_logged(
+                provider,
+                LLMGenerationRequest(
+                    system_prompt="Return valid JSON with a single `markdown` key.",
+                    prompt=(
+                        "Write a 2-3 sentence narrative explaining why this file looks the "
+                        "way it does, grounded ONLY in the report below. Do not invent "
+                        "facts or cite anything not present.\n\n"
+                        f"{why_report_to_markdown(report)}"
+                    ),
+                    temperature=0.0,
+                    max_tokens=400,
+                ),
+                MarkdownEnvelope,
+                log_path=self._llm_log_path(repo_root, config),
+                operation="why.narrative",
+            ).markdown
+        except Exception:
+            return ""
 
     def install_hooks(
         self,
