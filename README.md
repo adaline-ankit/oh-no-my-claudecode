@@ -6,49 +6,86 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![AI-Ready](https://img.shields.io/badge/AI--Ready-ONMC-6B7280)](https://github.com/adaline-ankit/oh-no-my-claudecode)
 
-> Repo-native memory for AI coding agents.  
-> Your agent knows your codebase history, not just its current state.
+**A git-portable, cross-agent memory brain for coding agents.**  
+Your agent knows why the code is the way it is, what failed before, and never repeats a recorded dead-end — across Claude Code, Cursor, and Codex.
 
 ---
 
-## Get started
+## The problem
+
+Every Claude Code session starts blank. Your agent re-discovers that the cache layer can't be mocked, re-tries the auth approach that broke CI three sprints ago, and burns 4,000 context tokens reconstructing what you already knew. Every. Single. Session.
+
+**onmc fixes that.** It reads your git history, session transcripts, and docs, builds a structured memory store in `.agent-memory/` (committable JSON), and injects the right knowledge at session start, on every prompt, and before context compaction. The brain travels with the repo — clone it anywhere and get full memory back in seconds.
+
+---
+
+## Proof it helps
+
+Run the built-in benchmark — no LLM, no network, deterministic:
+
+```bash
+onmc bench
+```
+
+```
+                  onmc bench — onmc-builtin-v1
+┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━┓
+┃ Metric                 ┃ Without memory ┃ With memory ┃ Delta ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━┩
+│ Repeated-failure rate  │           100% │          0% │ -100% │
+├────────────────────────┼────────────────┼─────────────┼───────┤
+│ Wasted attempts        │              9 │           0 │    -9 │
+├────────────────────────┼────────────────┼─────────────┼───────┤
+│ Context tokens (proxy) │           4000 │         107 │  -97% │
+├────────────────────────┼────────────────┼─────────────┼───────┤
+│ Tasks resolved         │              5 │           5 │    +0 │
+└────────────────────────┴────────────────┴─────────────┴───────┘
+
+Headline deltas: repeated-failure rate: 100% → 0%  |  context tokens: -97%
+                 wasted attempts: -9
+```
+
+This is a **deterministic simulation** over a synthetic 5-task scenario — no live LLM is called, so results are reproducible in CI. The harness models an agent executing tasks under two conditions: without onmc (rediscovers context from scratch, retries known dead-ends) and with onmc (brief + recall injected, `failed_approach` memories block repeated mistakes). See [`docs/cli-reference.md`](docs/cli-reference.md) for `--repo-memory` to run against your own store, and `docs/demo.md` for a full walkthrough.
+
+---
+
+## What you get
+
+- **`onmc why <file>`** — explains why a file looks the way it does, from stored memory + git history. Time-travel to any commit with `--at <commit>`.
+
+- **`onmc guard --task "..."`** — surfaces recorded `failed_approach` / `did_not_work` memories as explicit "DO NOT retry these dead-ends" guidance before your agent starts. Also available as a `guard_task` MCP tool mid-session.
+
+- **Auto-injected context via hooks** — `onmc hooks install` registers project-scoped Claude Code hooks: a boot digest on every `SessionStart`, relevant memories on every prompt (`UserPromptSubmit`), a compaction snapshot before `PreCompact`, and memory consolidation on `SessionEnd`. Context survives every compact.
+
+- **Git-portable brain** — `onmc sync --commit` exports memory to `.agent-memory/` as committable JSON. Any machine that clones the repo runs `onmc sync --restore` and gets full memory instantly. No accounts, no cloud, no config. Works in Gitpod, Codespaces, and GitHub Coding Agent containers.
+
+- **Claude Code plugin** — `onmc setup` generates `CLAUDE.md`, installs hooks, and registers the MCP server (`onmc serve --mcp`) exposing `search_memory`, `guard_task`, and `get_brief` tools. A plugin manifest lives at [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) for one-click registration.
+
+---
+
+## 30-second quickstart
 
 ```bash
 pip install oh-no-my-claudecode
-onmc setup
+cd your-repo
+onmc setup          # wizard: ingest git history, generate CLAUDE.md, install hooks + MCP
 ```
 
-That's it. `onmc setup` reads your git history, extracts architectural decisions and invariants, generates `CLAUDE.md`, and connects to Claude Code — all in one interactive wizard.
+`onmc setup` detects your repo shape, optionally runs LLM-assisted extraction, generates `CLAUDE.md`, and wires Claude Code hooks and `.mcp.json` in one pass. Use `--no-llm` if you want a fully offline first run.
 
----
-
-## What it does
-
-Your coding agent starts every session like it has never seen your codebase before. It doesn't know why the code looks the way it does, what was tried and failed, or which files are dangerous to change. **ONMC fixes that.**
-
-It reads your git history, docs, and code structure with an LLM and builds a structured memory store. That memory travels with the repo. Every agent — Claude Code, Cursor, Codex — gets it.
-
----
-
-## Install as a Claude Code plugin
-
-ONMC ships a Claude Code plugin manifest. Point Claude Code at this repo and it
-registers the MCP server and hooks automatically:
+Then commit the brain so it travels with the repo:
 
 ```bash
-# 1. Install the package
-pip install oh-no-my-claudecode
-
-# 2. Run setup (generates CLAUDE.md, installs hooks, registers MCP)
-onmc setup
-
-# 3. Or add to .mcp.json manually (the MCP server entry)
-#    command: onmc  args: ["serve", "--mcp"]
+onmc sync --commit
+git add .agent-memory/ CLAUDE.md
+git commit -m "chore: add onmc agent brain"
 ```
 
-The plugin manifest lives at [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json).
-A single-plugin marketplace entry is at [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)
-for registering this repo as a Claude Code plugin source.
+On a fresh clone or cloud agent container:
+
+```bash
+onmc init && onmc sync --restore   # full memory, zero re-discovery
+```
 
 ---
 
@@ -64,8 +101,7 @@ for registering this repo as a Claude Code plugin source.
 
 MCP tools exposed by `onmc serve --mcp`: **`search_memory`**, **`guard_task`**, **`get_brief`**.
 
-See [Agent-Native Workflows](docs/agent-native-workflows.md) for the supported
-Claude Code, Codex, MCP, and cloud-agent boundaries.
+See [Agent-Native Workflows](docs/agent-native-workflows.md) and [CLI Reference](docs/cli-reference.md) for full detail.
 
 ---
 
