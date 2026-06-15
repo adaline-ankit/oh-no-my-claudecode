@@ -6,15 +6,6 @@ from oh_no_my_claudecode.utils.text import shorten, tokenize
 # Maximum token budget for the entire boot digest.
 BOOT_DIGEST_MAX_TOKENS = 400
 
-# Memory kinds considered highest-signal for the digest, in display order.
-_HIGH_SIGNAL_KINDS = (
-    MemoryKind.INVARIANT,
-    MemoryKind.DECISION,
-    MemoryKind.VALIDATION_RULE,
-    MemoryKind.HOTSPOT,
-    MemoryKind.GOTCHA,
-    MemoryKind.FAILED_APPROACH,
-)
 # How many entries to include per high-signal section.
 _MAX_INVARIANTS = 3
 _MAX_HOTSPOTS = 3

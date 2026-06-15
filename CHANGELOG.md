@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-15
+
 ### Fixed
 
 - **Claude Code hooks now target the real hook API.** The previous integration registered a `PostCompact` event that does not exist in Claude Code, wrote the continuation brief to a file nothing reads, and installed hooks globally so they fired in every repo. Hooks are now project-scoped (`.claude/settings.json`): `PreCompact` plus `SessionStart` with matcher `"compact"`, with context injected through the documented `hookSpecificOutput.additionalContext` stdout contract. Hook commands read the JSON payload Claude Code passes on stdin, and `pre-compact` enriches the compaction snapshot from the live session transcript — no manual task journaling required. Uninstall is surgical and also cleans up legacy global installs.
@@ -20,6 +22,9 @@ All notable changes to this project are documented here.
 - **MCP tools.** `onmc serve --mcp` now exposes `search_memory`, `get_brief`, `record_attempt`, `record_memory`, and `list_tasks` alongside the existing read-only resources, plus a `--repo` flag so the server no longer depends on its working directory.
 - **LLM call retries.** Provider calls retry up to 3 attempts with exponential backoff and jitter on 429/5xx/timeouts, honoring `Retry-After`.
 - **End-to-end test suite** (`tests/test_e2e.py`) drives the real `onmc` binary as a subprocess through the full memory lifecycle, the Claude Code hook stdin/stdout contracts, transcript-mining discovery, a `sync`→clone→`restore` roundtrip, and a real MCP stdio client/server handshake.
+- **FTS5 full-text search** on memory artifacts for fast keyword queries across stored knowledge.
+- **Staleness detection** marks memory entries as stale when the files they reference have changed since ingest.
+- **Boot digest** (`onmc hooks session-start`) compiles a compact ≤400-token repo brain summary injected at every Claude Code session start.
 
 ### Changed
 
