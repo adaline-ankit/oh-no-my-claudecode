@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
@@ -27,6 +28,68 @@ from oh_no_my_claudecode.models import (
 from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime
 
 _SCHEMA_VERSION_KEY = "schema_version"
+
+# Cached FTS5 capability detection — computed once per process.
+_fts5_available_cache: bool | None = None
+
+
+def fts5_available(conn: sqlite3.Connection) -> bool:
+    """Return True if this sqlite3 build has FTS5 compiled in.
+
+    The result is cached after the first call so later calls inside the same
+    process incur no round-trip.
+    """
+    global _fts5_available_cache  # noqa: PLW0603
+    if _fts5_available_cache is not None:
+        return _fts5_available_cache
+    try:
+        # PRAGMA compile_options lists ENABLE_FTS5 when available.
+        options = {str(row[0]) for row in conn.execute("PRAGMA compile_options")}
+        if "ENABLE_FTS5" in options:
+            _fts5_available_cache = True
+            return True
+        # Fallback: try creating a temp FTS5 table directly.
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS _fts5_probe USING fts5(x)"
+        )
+        conn.execute("DROP TABLE IF EXISTS _fts5_probe")
+        _fts5_available_cache = True
+    except sqlite3.OperationalError:
+        _fts5_available_cache = False
+    return _fts5_available_cache
+
+
+# Regex that extracts pure alphanumeric substrings — the atoms FTS5 unicode61
+# tokenizes to.  We split on anything that is not a letter or digit so that
+# a source word like "full-text" produces two safe tokens: "full" and "text".
+_FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def _sanitize_fts_query(query: str) -> str | None:
+    """Convert free-text *query* into a safe FTS5 MATCH expression.
+
+    Each alphanumeric run extracted from the query is individually double-quoted
+    so that FTS5 treats it as a literal term rather than a boolean operator.
+    Raw user text is never interpolated unquoted — this prevents injection of
+    FTS5 operators like AND/OR/NOT/NEAR.
+
+    Multiple quoted terms are joined with OR so that a query like "cache
+    invalidation" returns entries that match either word (broader recall) —
+    the downstream token-overlap reranker then applies strict relevance
+    ordering.  This mirrors how an incremental-search UX behaves.
+
+    Returns None when the query contains no usable terms (caller falls back
+    to a full-table LIKE scan).
+    """
+    terms: list[str] = []
+    for word in _FTS_TOKEN_RE.findall(query):
+        if len(word) >= 2:  # skip single-char runs — low signal
+            escaped = word.replace('"', '""')
+            terms.append(f'"{escaped}"')
+    if not terms:
+        return None
+    # OR broadens recall; the reranker handles precision.
+    return " OR ".join(terms)
 
 
 def _ensure_memory_column(conn: sqlite3.Connection, column: str, ddl: str) -> None:
@@ -58,7 +121,71 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
     )
 
 
-_MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = ((1, _migrate_v1),)
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """Add FTS5 full-text index over memories (title, summary, details, tags).
+
+    Strategy: external-content FTS5 table pointing at the *memories* table,
+    with INSERT/UPDATE/DELETE triggers to keep the index in sync automatically.
+    Falls back silently when FTS5 is unavailable so existing DBs are unaffected.
+
+    Idempotency: each CREATE statement uses IF NOT EXISTS.  The backfill INSERT
+    uses INSERT OR REPLACE into the FTS table, so re-running on a DB that already
+    ran this migration is harmless.
+    """
+    if not fts5_available(conn):
+        return  # graceful degradation — no FTS5, no index
+
+    conn.executescript(
+        """
+        -- External-content FTS5 table; content= links it to the memories table.
+        -- tokenize = "unicode61" is the default and handles punctuation well.
+        CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
+        USING fts5(
+            title,
+            summary,
+            details,
+            tags,
+            content='memories',
+            content_rowid='rowid',
+            tokenize='unicode61 remove_diacritics 1'
+        );
+
+        -- Keep the FTS index in sync via triggers on the memories table.
+        CREATE TRIGGER IF NOT EXISTS memories_fts_insert
+        AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, title, summary, details, tags)
+            VALUES (new.rowid, new.title, new.summary, new.details, new.tags_json);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS memories_fts_delete
+        AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, title, summary, details, tags)
+            VALUES ('delete', old.rowid, old.title, old.summary, old.details, old.tags_json);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS memories_fts_update
+        AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, title, summary, details, tags)
+            VALUES ('delete', old.rowid, old.title, old.summary, old.details, old.tags_json);
+            INSERT INTO memories_fts(rowid, title, summary, details, tags)
+            VALUES (new.rowid, new.title, new.summary, new.details, new.tags_json);
+        END;
+        """
+    )
+
+    # Backfill existing rows so the index covers data inserted before this migration.
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO memories_fts(rowid, title, summary, details, tags)
+        SELECT rowid, title, summary, details, tags_json FROM memories
+        """
+    )
+
+
+_MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
+    (1, _migrate_v1),
+    (2, _migrate_v2),
+)
 
 
 class SQLiteStorage:
@@ -326,6 +453,89 @@ class SQLiteStorage:
         with self._connection() as conn:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_memory(row) for row in rows]
+
+    def search_memories(
+        self,
+        query: str,
+        *,
+        kind: MemoryKind | None = None,
+        source_type: SourceType | None = None,
+        limit: int = 50,
+    ) -> list[MemoryEntry]:
+        """Return memories matching *query*, ranked by relevance.
+
+        When FTS5 is available the search uses an FTS5 MATCH query (BM25
+        ordering) so results are ranked by textual relevance.  When FTS5 is
+        unavailable the method falls back to a case-insensitive LIKE scan over
+        title, summary, details, and tags_json.
+
+        Optional *kind* and *source_type* filters are applied in both paths.
+        The raw user query is never interpolated unquoted into SQL or the FTS
+        MATCH expression — each token is individually double-quoted.
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+        if kind is not None:
+            conditions.append("kind = ?")
+            params.append(kind.value)
+        if source_type is not None:
+            conditions.append("source_type = ?")
+            params.append(source_type.value)
+
+        with self._connection() as conn:
+            if fts5_available(conn):
+                match_expr = _sanitize_fts_query(query)
+                if match_expr is not None:
+                    # FTS5 path: join memories_fts with memories to get full rows,
+                    # ordered by BM25 score (lower = more relevant in FTS5).
+                    # where_clause is built exclusively from static column names —
+                    # no user data flows into the SQL text.
+                    fts_extra = (
+                        " AND m." + " AND m.".join(conditions) if conditions else ""
+                    )
+                    # fts_extra and all sql_fts parts are static strings or
+                    # static column names — no user data is embedded in SQL text;
+                    # user query flows only through the bound MATCH parameter.
+                    sql_parts = [
+                        "SELECT m.* FROM memories m",
+                        "JOIN memories_fts f ON m.rowid = f.rowid",
+                        "WHERE memories_fts MATCH ?",
+                    ]
+                    if fts_extra:
+                        sql_parts.append(fts_extra)
+                    sql_parts.append("ORDER BY bm25(memories_fts) LIMIT ?")
+                    sql_fts = " ".join(sql_parts)
+                    fts_params: list[Any] = [match_expr, *params, limit]
+                    rows = conn.execute(sql_fts, fts_params).fetchall()
+                    return [self._row_to_memory(row) for row in rows]
+                # query had no usable terms — fall through to LIKE scan
+
+            # LIKE fallback (FTS5 unavailable or empty sanitized query).
+            # All SQL fragments in like_conditions are static strings; user text
+            # flows only through bound ? parameters (like_pattern).
+            like_pattern = f"%{query.lower()}%"
+            like_conditions = [
+                *conditions,
+                "(LOWER(title) LIKE ? OR LOWER(summary) LIKE ?"
+                " OR LOWER(details) LIKE ? OR LOWER(tags_json) LIKE ?)",
+            ]
+            like_params: list[Any] = [
+                *params,
+                like_pattern,
+                like_pattern,
+                like_pattern,
+                like_pattern,
+                limit,
+            ]
+            where_like = " AND ".join(like_conditions)
+            sql_like_parts = [
+                "SELECT * FROM memories WHERE",
+                where_like,
+                "ORDER BY updated_at DESC, title ASC LIMIT ?",
+            ]
+            sql_like = " ".join(sql_like_parts)
+            rows = conn.execute(sql_like, like_params).fetchall()
+            return [self._row_to_memory(row) for row in rows]
 
     def get_memory(self, memory_id: str) -> MemoryEntry | None:
         with self._connection() as conn:

@@ -19,6 +19,11 @@ from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.text import shorten, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import utc_now
 
+# Minimum query length (chars) below which FTS candidate retrieval is skipped
+# and we fall back entirely to the token-overlap scorer.  Short strings like
+# "" or a single punctuation char produce no usable FTS terms anyway.
+_MIN_QUERY_FOR_FTS = 3
+
 BUG_TOKENS = {"bug", "fix", "flaky", "regression", "error", "failure"}
 DOC_TOKENS = {"docs", "readme", "architecture", "guide"}
 
@@ -38,7 +43,9 @@ def compile_brief(
     hints = detect_project_hints(repo_root, repo_files)
     meta = storage.all_meta()
 
-    selected_memories = score_memories(task, memories, limit=max(config.brief.max_memories, 30))
+    selected_memories = score_memories(
+        task, memories, storage=storage, limit=max(config.brief.max_memories, 30)
+    )
     relevance_reasons: dict[str, str] = {}
     if provider is not None and log_path is not None:
         reranked, relevance_reasons = rerank_memories_with_llm(
@@ -84,10 +91,47 @@ def compile_brief(
     )
 
 
-def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) -> list[MemoryEntry]:
+def score_memories(
+    task: str,
+    memories: list[MemoryEntry],
+    *,
+    storage: SQLiteStorage | None = None,
+    limit: int = 8,
+) -> list[MemoryEntry]:
+    """Rank *memories* by relevance to *task* using a hybrid scorer.
+
+    When *storage* is provided and the query is long enough, FTS5 candidate
+    retrieval is used to surface memories that purely token-overlap scoring
+    might miss (e.g. because the query uses synonyms the tokenizer breaks
+    differently).  The FTS candidates are merged with the full *memories* list
+    so that the existing token-overlap + confidence + feedback reranker always
+    operates over the union — FTS5 results are never returned raw.
+
+    When *storage* is None or FTS5 returns nothing the function behaves
+    identically to the original pure-Python implementation.
+    """
+    # Hybrid: expand candidate set via FTS5 when possible.
+    candidate_ids: set[str] = set()
+    extra_candidates: list[MemoryEntry] = []
+    if storage is not None and len(task) >= _MIN_QUERY_FOR_FTS:
+        try:
+            fts_hits = storage.search_memories(query=task, limit=limit * 4)
+            # Build a set of already-known ids so we only append truly new rows.
+            known_ids = {m.id for m in memories}
+            for hit in fts_hits:
+                candidate_ids.add(hit.id)
+                if hit.id not in known_ids:
+                    extra_candidates.append(hit)
+                    known_ids.add(hit.id)
+        except Exception:  # noqa: BLE001, S110
+            # Defensive: FTS failure must never break brief compilation.
+            pass
+
+    candidate_pool = memories + extra_candidates
+
     task_tokens = set(tokenize(task))
     ranked: list[tuple[float, MemoryEntry]] = []
-    for memory in memories:
+    for memory in candidate_pool:
         if memory.feedback_score <= -0.5:
             continue
         if memory.confidence <= 0.0:
@@ -117,6 +161,10 @@ def score_memories(task: str, memories: list[MemoryEntry], *, limit: int = 8) ->
             score += 1.0
         if any(token in memory.source_ref.lower() for token in task_tokens):
             score += 2.0
+        # Small bonus for memories surfaced by FTS — they passed relevance
+        # matching that the token tokenizer alone may not have caught.
+        if memory.id in candidate_ids:
+            score += 1.0
         score += memory.confidence + (memory.feedback_score * 0.2)
         ranked.append((score, memory))
 

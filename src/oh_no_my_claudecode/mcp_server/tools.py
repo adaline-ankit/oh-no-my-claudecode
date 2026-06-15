@@ -9,6 +9,9 @@ from oh_no_my_claudecode.api import OnmcRepo
 from oh_no_my_claudecode.models import AttemptKind, AttemptStatus, MemoryEntry, MemoryKind
 from oh_no_my_claudecode.utils.text import tokenize
 
+# Minimum query length below which FTS candidate pre-retrieval is skipped.
+_MIN_QUERY_FOR_FTS = 3
+
 MEMORY_KIND_VALUES = sorted(kind.value for kind in MemoryKind)
 ATTEMPT_KIND_VALUES = sorted(kind.value for kind in AttemptKind)
 ATTEMPT_STATUS_VALUES = sorted(status.value for status in AttemptStatus)
@@ -234,13 +237,37 @@ def _search_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:
         msg = "Argument 'limit' must be a positive integer."
         raise ValueError(msg)
 
+    from oh_no_my_claudecode.models import MemoryKind as _MemoryKind
+
     records = repo.memory.list(kind=kind) if kind else repo.memory.list()
     memories = [record for record in records if isinstance(record, MemoryEntry)]
+
+    # Hybrid candidate retrieval: use FTS5-backed search_memories to surface
+    # additional candidates beyond the full list, then rerank with score_memory.
+    fts_ids: set[str] = set()
+    if len(query) >= _MIN_QUERY_FOR_FTS:
+        try:
+            _, _, storage = repo._service._load_context()
+            kind_filter = _MemoryKind(kind) if kind else None
+            fts_hits = storage.search_memories(query=query, kind=kind_filter, limit=limit * 4)
+            known_ids = {m.id for m in memories}
+            for hit in fts_hits:
+                fts_ids.add(hit.id)
+                if hit.id not in known_ids:
+                    memories.append(hit)
+                    known_ids.add(hit.id)
+        except Exception:  # noqa: BLE001, S110
+            # FTS failure must never break MCP responses.
+            pass
+
     ranked: list[tuple[float, MemoryEntry]] = []
     for memory in memories:
         if memory.feedback_score <= -0.5 or memory.confidence <= 0.0:
             continue
-        ranked.append((score_memory(query, files, memory), memory))
+        base_score = score_memory(query, files, memory)
+        # Small bonus for FTS-surfaced memories to reflect the relevance signal.
+        adjusted = base_score + (1.0 if memory.id in fts_ids else 0.0)
+        ranked.append((adjusted, memory))
     ranked.sort(key=lambda item: (-item[0], item[1].title))
 
     results = [
