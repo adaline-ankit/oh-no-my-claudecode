@@ -78,6 +78,10 @@ class OnmcRepo:
             truncated=True,
         )
 
+    def report(self) -> str:
+        """Return a markdown agent-readiness report for the repo."""
+        return self._service.agent_readiness_report()
+
     @property
     def memory(self) -> MemoryAPI:
         """Return memory operations for this repo."""

@@ -74,6 +74,17 @@ def test_task_api_start_and_end(sample_repo: Path, monkeypatch: object) -> None:
     assert ended.final_summary == "Fixed at the shared cache boundary."
 
 
+def test_repo_report_returns_markdown(sample_repo: Path, monkeypatch: object) -> None:
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    report = repo.report()
+
+    assert "# ONMC Agent Readiness Report" in report
+    assert "Agent readiness:" in report
+
+
 def test_sync_api_commit_and_restore_round_trip(sample_repo: Path, monkeypatch: object) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)

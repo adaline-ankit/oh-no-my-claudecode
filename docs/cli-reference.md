@@ -22,6 +22,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ ingest     Ingest repo knowledge into local structured memory.               │
 │ brief      Compile a task-specific context brief.                            │
 │ status     Show local ONMC status.                                           │
+│ report     Generate a shareable agent-readiness report.                      │
 │ sync       Export, restore, or hook git-portable ONMC memory state.          │
 │ serve      Serve ONMC over the requested runtime protocol.                   │
 │ solve      Compile repo-aware context and ask the configured LLM for the     │
@@ -106,6 +107,19 @@ Usage: onmc status [OPTIONS]
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc report`
+
+```text
+Usage: onmc report [OPTIONS]                                                   
+                                                                                
+ Generate a shareable agent-readiness report.                                   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --output  -o      PATH  Write the markdown report to this path.              │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
