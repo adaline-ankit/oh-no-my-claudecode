@@ -7,6 +7,7 @@ from typing import Any
 from mcp.types import TextContent, Tool
 
 from oh_no_my_claudecode.api import OnmcRepo
+from oh_no_my_claudecode.embeddings.rerank import rerank_with_embeddings
 from oh_no_my_claudecode.models import AttemptKind, AttemptStatus, MemoryEntry, MemoryKind
 from oh_no_my_claudecode.serialize import to_toon
 from oh_no_my_claudecode.utils.text import tokenize
@@ -276,6 +277,33 @@ def _search_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:
         ranked.append((adjusted, memory))
     ranked.sort(key=lambda item: (-item[0], item[1].title))
 
+    # Apply semantic reranking when embeddings are enabled.  The reranker
+    # selects the most relevant memories from the candidate pool; we then
+    # re-sort by raw lexical score so the "relevance" field in the JSON output
+    # remains a monotone descending sequence (preserving the existing API
+    # contract for callers who rely on sorted relevance scores).
+    positive = [(score, memory) for score, memory in ranked if score > 0]
+    # Build a score lookup from the pre-rerank lexical scores (used to emit a
+    # monotone-descending "relevance" field in the JSON output regardless of
+    # the order introduced by semantic reranking).
+    score_by_id: dict[str, float] = {m.id: s for s, m in positive}
+    if positive:
+        pos_memories = [m for _, m in positive]
+        pos_scores = [s for s, _ in positive]
+        try:
+            _, _, storage = repo._service._load_context()
+            pos_memories = rerank_with_embeddings(pos_memories, query, pos_scores, storage)
+        except Exception:  # noqa: BLE001, S110
+            pass  # rerank failure must never break MCP responses
+        # Re-sort the reranked selection by raw lexical score so that the
+        # "relevance" field stays monotone-descending in the JSON output.
+        top_memories = sorted(
+            pos_memories[:limit],
+            key=lambda m: (-score_by_id.get(m.id, 0.0), m.title),
+        )
+    else:
+        top_memories = []
+
     results = [
         {
             "id": memory.id,
@@ -285,11 +313,10 @@ def _search_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:
             "source_ref": memory.source_ref,
             "confidence": memory.confidence,
             "feedback_score": memory.feedback_score,
-            "relevance": round(score, 3),
+            "relevance": round(score_by_id.get(memory.id, score_memory(query, files, memory)), 3),
         }
-        for score, memory in ranked
-        if score > 0
-    ][:limit]
+        for memory in top_memories
+    ]
     return _json_text(results)
 
 

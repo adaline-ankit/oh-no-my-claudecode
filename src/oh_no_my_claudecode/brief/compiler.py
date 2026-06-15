@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextlib
 from collections import Counter, defaultdict
 from pathlib import Path
 
 from oh_no_my_claudecode.brief.llm_ranker import rerank_memories_with_llm
+from oh_no_my_claudecode.embeddings.rerank import rerank_with_embeddings
 from oh_no_my_claudecode.ingest.repo_tree import detect_project_hints
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.models import (
@@ -169,7 +171,14 @@ def score_memories(
         ranked.append((score, memory))
 
     ranked.sort(key=lambda item: (-item[0], item[1].title))
-    top = [memory for score, memory in ranked if score > 0][:limit]
+    top_pairs = [(score, memory) for score, memory in ranked if score > 0][:limit]
+    top = [memory for _, memory in top_pairs]
+    top_scores = [score for score, _ in top_pairs]
+
+    if top and storage is not None:
+        with contextlib.suppress(Exception):  # noqa: BLE001
+            top = rerank_with_embeddings(top, task, top_scores, storage)
+
     if top:
         return top
     return [memory for _, memory in ranked[: min(limit, 5)]]

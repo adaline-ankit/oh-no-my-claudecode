@@ -256,12 +256,40 @@ def _migrate_v5(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v6(conn: sqlite3.Connection) -> None:
+    """Add the memory_vectors table (migration v6).
+
+    Caches per-memory embedding vectors for semantic reranking.  Each row
+    stores the memory id, embedder identifier (used for cache invalidation
+    when the embedder changes), a short content hash (used to detect when
+    the memory text has changed), the vector as a JSON array of floats, and
+    the vector dimensionality for quick validity checks.
+
+    Idempotent: uses CREATE TABLE/INDEX IF NOT EXISTS.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS memory_vectors (
+            memory_id TEXT PRIMARY KEY,
+            embedder_id TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            dim INTEGER NOT NULL,
+            vector_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_vectors_embedder
+            ON memory_vectors(embedder_id);
+        """
+    )
+
+
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
     (4, _migrate_v4),
     (5, _migrate_v5),
+    (6, _migrate_v6),
 )
 
 
@@ -1390,6 +1418,90 @@ class SQLiteStorage:
         with self._connection() as conn:
             cursor = conn.execute("DELETE FROM memory_edges WHERE id = ?", (edge_id,))
         return int(cursor.rowcount) > 0
+
+    # ── Memory vector cache (v6) ──────────────────────────────────────────────
+
+    def get_memory_vector(
+        self,
+        memory_id: str,
+        *,
+        embedder_id: str,
+        content_hash: str,
+    ) -> list[float] | None:
+        """Return the cached vector for *memory_id*, or None on cache miss.
+
+        A miss is returned when:
+        - No row exists for *memory_id*.
+        - The stored ``embedder_id`` does not match (embedder was swapped).
+        - The stored ``content_hash`` does not match (memory text changed).
+        """
+        with self._connection() as conn:
+            row = conn.execute(
+                """
+                SELECT embedder_id, content_hash, vector_json
+                FROM memory_vectors
+                WHERE memory_id = ?
+                """,
+                (memory_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        if str(row["embedder_id"]) != embedder_id or str(row["content_hash"]) != content_hash:
+            return None
+        return json.loads(row["vector_json"])  # type: ignore[no-any-return]
+
+    def upsert_memory_vector(
+        self,
+        memory_id: str,
+        *,
+        embedder_id: str,
+        content_hash: str,
+        dim: int,
+        vector: list[float],
+        created_at: str,
+    ) -> None:
+        """Insert or replace a memory vector cache entry."""
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_vectors
+                    (memory_id, embedder_id, content_hash, dim, vector_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(memory_id) DO UPDATE SET
+                    embedder_id=excluded.embedder_id,
+                    content_hash=excluded.content_hash,
+                    dim=excluded.dim,
+                    vector_json=excluded.vector_json,
+                    created_at=excluded.created_at
+                """,
+                (
+                    memory_id,
+                    embedder_id,
+                    content_hash,
+                    dim,
+                    json.dumps(vector),
+                    created_at,
+                ),
+            )
+
+    def delete_memory_vectors_for_embedder(self, embedder_id: str) -> int:
+        """Delete all cached vectors for a given embedder id.
+
+        Useful when switching embedder models or running ``onmc memory embed``
+        with ``--reset``.  Returns the count of rows deleted.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM memory_vectors WHERE embedder_id = ?",
+                (embedder_id,),
+            )
+        return int(cursor.rowcount)
+
+    def memory_vector_count(self) -> int:
+        """Return the total number of cached vectors across all embedders."""
+        with self._connection() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM memory_vectors").fetchone()
+        return int(row["count"])
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:

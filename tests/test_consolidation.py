@@ -64,7 +64,7 @@ def test_migration_v5_creates_memory_edges_table(tmp_path: Path) -> None:
     storage.initialize()
 
     # Schema version must be "5" after a fresh init.
-    assert storage.get_meta("schema_version") == "5"
+    assert storage.get_meta("schema_version") == "6"
 
     # The memory_edges table must exist.
     with sqlite3.connect(db_path) as conn:
@@ -81,9 +81,9 @@ def test_migration_v5_idempotent(tmp_path: Path) -> None:
     db_path = tmp_path / "test.db"
     storage = SQLiteStorage(db_path)
     storage.initialize()
-    # Second initialize must not raise and must leave schema_version at "5".
+    # Second initialize must not raise and must leave schema_version at "6".
     storage.initialize()
-    assert storage.get_meta("schema_version") == "5"
+    assert storage.get_meta("schema_version") == "6"
 
 
 # ── edge CRUD ─────────────────────────────────────────────────────────────────
