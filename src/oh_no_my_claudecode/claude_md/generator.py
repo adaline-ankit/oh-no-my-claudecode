@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,7 @@ from oh_no_my_claudecode.models import (
     TaskRecord,
 )
 from oh_no_my_claudecode.storage import SQLiteStorage
-from oh_no_my_claudecode.utils.text import shorten
+from oh_no_my_claudecode.utils.text import shorten_to_sentence, strip_markdown_noise
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 
 SECTION_ORDER = [
@@ -175,6 +176,34 @@ def _generation_request(
     )
 
 
+def _clean_summary(raw: str, max_chars: int = 160) -> str:
+    """Strip markdown noise from *raw* and truncate at a sentence/word boundary."""
+    return shorten_to_sentence(strip_markdown_noise(raw), max_chars)
+
+
+def _clean_title(raw_title: str) -> str:
+    """Return the semantic part of a memory title, dropping file-source prefixes.
+
+    Titles ingested from docs look like ``"README.md: Architecture"`` or
+    ``"docs/arch.md: Decision"``.  We keep only the meaningful label after the
+    last colon that follows a filename pattern (``*.ext:``), so the output is
+    just ``"Architecture"`` or ``"Decision"``.
+    """
+    # Match an optional leading path+filename prefix like "README.md: " or
+    # "docs/arch.md: " and return whatever comes after.
+    cleaned = re.sub(r"^[\w./\\-]+\.\w+:\s*", "", raw_title).strip()
+    return cleaned if cleaned else raw_title
+
+
+def _memory_bullet(title: str, summary: str, max_chars: int = 160) -> str:
+    """Build a single clean bullet string from a memory's title and summary."""
+    label = _clean_title(title)
+    body = _clean_summary(summary, max_chars)
+    if label and body:
+        return f"{label}: {body}"
+    return label or body
+
+
 def _deterministic_sections(
     memories: list[MemoryEntry],
     artifacts: list[MemoryArtifactRecord],
@@ -184,47 +213,47 @@ def _deterministic_sections(
         "Project overview": _project_overview(memories),
         "Critical invariants": _bullets(
             [
-                f"{memory.title}: {memory.summary}"
+                _memory_bullet(memory.title, memory.summary)
                 for memory in memories
                 if memory.kind.value == "invariant"
             ],
         ),
         "Architecture decisions": _bullets(
             [
-                f"{memory.title}: {memory.summary}"
+                _memory_bullet(memory.title, memory.summary)
                 for memory in memories
                 if memory.kind.value == "decision"
             ],
         ),
         "Hotspot areas": _bullets(
             [
-                f"{memory.title}: {memory.summary}"
+                _memory_bullet(memory.title, memory.summary)
                 for memory in memories
                 if memory.kind.value == "hotspot"
             ],
         ),
         "Known bad approaches": _bullets(
             [
-                f"{artifact.title}: {artifact.summary}"
+                _memory_bullet(artifact.title, artifact.summary)
                 for artifact in artifacts
                 if artifact.type.value in {"did_not_work", "design_conflict"}
             ]
             + [
-                f"{memory.title}: {memory.summary}"
+                _memory_bullet(memory.title, memory.summary)
                 for memory in memories
                 if memory.kind.value in {"failed_approach", "design_conflict", "gotcha"}
             ],
         ),
         "Validation": _bullets(
             [
-                f"{memory.title}: {memory.summary}"
+                _memory_bullet(memory.title, memory.summary)
                 for memory in memories
                 if memory.kind.value == "validation_rule"
             ],
         ),
         "Current active tasks": _bullets(
             [
-                f"{task.title}: {shorten(task.description, max_length=100)}"
+                f"{task.title}: {shorten_to_sentence(task.description, 100)}"
                 for task in active_tasks
             ],
         ),
@@ -234,10 +263,11 @@ def _deterministic_sections(
 
 def _project_overview(memories: list[MemoryEntry]) -> str:
     candidates = [
-        memory.summary
+        _clean_summary(memory.summary)
         for memory in memories
         if memory.kind == MemoryKind.DOC_FACT
     ]
+    candidates = [c for c in candidates if c]
     if not candidates:
         return ""
     return " ".join(candidates[:3])

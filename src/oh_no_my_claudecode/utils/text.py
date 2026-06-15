@@ -69,6 +69,69 @@ def shorten(value: str, *, max_length: int = 160) -> str:
     return collapsed[: max_length - 3].rstrip() + "..."
 
 
+def shorten_to_sentence(text: str, max_chars: int) -> str:
+    """Truncate *text* at a sentence or word boundary, never mid-word.
+
+    Priority: last sentence end (``[.!?]``) within *max_chars*, then last
+    word boundary, then hard cut.  Appends ``...`` only when truncated.
+    Collapses runs of whitespace before measuring.
+    """
+    collapsed = re.sub(r"\s+", " ", text).strip()
+    if len(collapsed) <= max_chars:
+        return collapsed
+    # Search for a sentence boundary (. ! ?) followed by whitespace or end-of-string.
+    sentence_end = re.compile(r"[.!?](?=\s|$)")
+    best_sentence = -1
+    for match in sentence_end.finditer(collapsed, 0, max_chars):
+        best_sentence = match.end()
+    if best_sentence > 0:
+        return collapsed[:best_sentence].rstrip()
+    # Fall back to last whitespace boundary.
+    truncated = collapsed[:max_chars]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        return truncated[:last_space].rstrip() + "..."
+    # Hard cut (single very-long token).
+    return truncated.rstrip() + "..."
+
+
+def strip_markdown_noise(text: str) -> str:
+    """Remove code fences and stray backtick runs from *text*.
+
+    Handles both multi-line fences (triple-backtick blocks with newlines) and
+    collapsed single-line fences (``` ... ```) that result from whitespace
+    normalisation at ingest time.  Fenced content is replaced with a short
+    breadcrumb like ``[bash code]`` so the caller gets clean prose.  Inline
+    code spans (single backtick pairs) are unwrapped.  Resulting whitespace is
+    normalised to a single space.
+    """
+    # Match triple-backtick fences in both forms:
+    #   multi-line:  ```lang\n...\n```
+    #   collapsed:   ```lang ... ```  (all on one line, as stored after shorten())
+    def _replace_fence(match: re.Match[str]) -> str:
+        lang = (match.group(1) or "").strip()
+        return f"[{lang} code]" if lang else "[code]"
+
+    # Multi-line form first (DOTALL so . matches newlines).
+    stripped = re.sub(
+        r"```([\w.-]*)\s[\s\S]*?```",
+        _replace_fence,
+        text,
+    )
+    # Same for tilde fences.
+    stripped = re.sub(
+        r"~~~([\w.-]*)\s[\s\S]*?~~~",
+        _replace_fence,
+        stripped,
+    )
+    # Remove inline code spans (single backtick pairs).
+    stripped = re.sub(r"`([^`]+)`", r"\1", stripped)
+    # Strip stray lone backticks.
+    stripped = stripped.replace("`", "")
+    # Collapse whitespace.
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
 def limit_markdown_tokens(markdown: str, max_tokens: int) -> str:
     """Trim markdown by whitespace token budget while preserving line order."""
     if max_tokens <= 0:
