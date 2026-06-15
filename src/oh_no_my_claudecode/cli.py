@@ -39,6 +39,9 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_detail,
     render_memory_list,
     render_mine_result,
+    render_playbook_detail,
+    render_playbook_generate_summary,
+    render_playbook_list,
     render_review_output,
     render_solve_output,
     render_status,
@@ -68,12 +71,17 @@ claude_md_app = typer.Typer(
     no_args_is_help=False,
     invoke_without_command=True,
 )
+playbook_app = typer.Typer(
+    help="Synthesize and manage memory-derived playbooks.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(llm_app, name="llm")
 app.add_typer(hooks_app, name="hooks")
 app.add_typer(claude_md_app, name="claude-md")
+app.add_typer(playbook_app, name="playbook")
 
 
 @app.command("setup")
@@ -1186,6 +1194,60 @@ def attempt_update_command(
     except (FileNotFoundError, LookupError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_attempt_updated(attempt)
+
+
+@playbook_app.command("generate")
+def playbook_generate_command(
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip the optional LLM polish pass; deterministic only."),
+    ] = False,
+) -> None:
+    """Synthesize playbooks from stored memory, persist, and write artifacts."""
+    try:
+        _, playbooks, artifact_paths = _service().generate_playbooks(no_llm=no_llm)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if not playbooks:
+        console.print(
+            "[yellow]No playbooks generated. Ingest more memory first "
+            "(`onmc ingest` / `onmc memory confirm`).[/yellow]"
+        )
+        return
+    render_playbook_generate_summary(playbooks, artifact_paths)
+
+
+@playbook_app.command("list")
+def playbook_list_command() -> None:
+    """List all persisted playbooks."""
+    try:
+        playbooks = _service().list_playbooks()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_playbook_list(playbooks)
+
+
+@playbook_app.command("show")
+def playbook_show_command(
+    playbook_id: Annotated[str, typer.Argument(help="Playbook ID (or prefix) to show.")],
+) -> None:
+    """Show a single playbook with steps and provenance."""
+    try:
+        playbooks = _service().list_playbooks()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    # Support prefix match for convenience.
+    matches = [pb for pb in playbooks if pb.id.startswith(playbook_id)]
+    if not matches:
+        raise typer.Exit(code=_fatal(f"Playbook not found: {playbook_id}"))
+    if len(matches) > 1:
+        raise typer.Exit(
+            code=_fatal(
+                f"Ambiguous prefix '{playbook_id}' matches {len(matches)} playbooks. "
+                "Provide a longer prefix."
+            )
+        )
+    render_playbook_detail(matches[0])
 
 
 def _fatal(message: str) -> int:

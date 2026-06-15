@@ -44,6 +44,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ llm        Configure optional LLM providers.                                 │
 │ hooks      Install and run Claude Code compaction hooks.                     │
 │ claude-md  Generate and maintain CLAUDE.md from ONMC memory.                 │
+│ playbook   Synthesize and manage memory-derived playbooks.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -830,5 +831,63 @@ Usage: onmc attempt update [OPTIONS] ATTEMPT_ID
 │                                                      paths.                  │
 │    --help                                            Show this message and   │
 │                                                      exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc playbook`
+
+```text
+Usage: onmc playbook [OPTIONS] COMMAND [ARGS]...                               
+                                                                                
+ Synthesize and manage memory-derived playbooks.                                
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ generate  Synthesize playbooks from stored memory, persist, and write        │
+│           artifacts.                                                         │
+│ list      List all persisted playbooks.                                      │
+│ show      Show a single playbook with steps and provenance.                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc playbook generate`
+
+```text
+Usage: onmc playbook generate [OPTIONS]                                        
+                                                                                
+ Synthesize playbooks from stored memory, persist, and write artifacts.         
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --no-llm          Skip the optional LLM polish pass; deterministic only.     │
+│ --help            Show this message and exit.                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc playbook list`
+
+```text
+Usage: onmc playbook list [OPTIONS]                                            
+                                                                                
+ List all persisted playbooks.                                                  
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc playbook show`
+
+```text
+Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID                                
+                                                                                
+ Show a single playbook with steps and provenance.                              
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    playbook_id      TEXT  Playbook ID (or prefix) to show. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

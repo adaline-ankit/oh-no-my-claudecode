@@ -81,6 +81,7 @@ from oh_no_my_claudecode.models import (
     MemoryArtifactType,
     MemoryEntry,
     MemoryKind,
+    Playbook,
     ProjectConfig,
     RepoFileRecord,
     ReviewModeOutput,
@@ -93,6 +94,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.playbook.compiler import compile_playbooks
 from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync import export_agent_memory, restore_agent_memory
@@ -1437,6 +1439,107 @@ class OnmcService:
         ).strip() + "\n"
         output_path.write_text(markdown, encoding="utf-8")
         return output_path
+
+    # ── Playbook methods ───────────────────────────────────────────────────────
+
+    def generate_playbooks(
+        self,
+        *,
+        no_llm: bool = False,
+        write_artifacts: bool = True,
+    ) -> tuple[Path, list[Playbook], list[str]]:
+        """Synthesize playbooks from stored memory, persist them, and write artifacts.
+
+        Returns ``(repo_root, playbooks, artifact_paths)``.
+        """
+        repo_root, config, storage = self._load_context()
+        memories = storage.list_memories()
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        playbooks = compile_playbooks(
+            memories,
+            provider=provider,
+            no_llm=no_llm,
+            log_path=self._llm_log_path(repo_root, config),
+        )
+
+        # Persist to storage (upsert so regeneration is idempotent).
+        storage.upsert_playbooks(playbooks)
+
+        artifact_paths: list[str] = []
+        if write_artifacts and playbooks:
+            artifact_paths = self._write_playbook_artifacts(
+                repo_root=repo_root,
+                config=config,
+                playbooks=playbooks,
+            )
+
+        return repo_root, playbooks, artifact_paths
+
+    def list_playbooks(self) -> list[Playbook]:
+        """Return all persisted playbooks ordered by confidence."""
+        _, _, storage = self._load_context()
+        return storage.list_playbooks()
+
+    def get_playbook(self, playbook_id: str) -> Playbook | None:
+        """Return a single playbook by id."""
+        _, _, storage = self._load_context()
+        return storage.get_playbook(playbook_id)
+
+    @staticmethod
+    def _write_playbook_artifacts(
+        *,
+        repo_root: Path,
+        config: ProjectConfig,
+        playbooks: list[Playbook],
+    ) -> list[str]:
+        """Write playbook artifacts to .onmc/compiled/ and .agent-memory/playbooks/."""
+        import json as _json
+
+        written: list[str] = []
+
+        # .onmc/compiled/ — human-readable markdown for review.
+        compiled = compiled_dir(config, repo_root)
+        compiled.mkdir(parents=True, exist_ok=True)
+        timestamp = utc_now().strftime("%Y%m%d-%H%M%S")
+        md_path = compiled / f"{timestamp}-playbooks.md"
+        lines = ["# Generated Playbooks", ""]
+        for pb in playbooks:
+            lines.extend(
+                [
+                    f"## {pb.title}",
+                    "",
+                    f"**ID:** `{pb.id}`  ",
+                    f"**Confidence:** {pb.confidence:.2f}  ",
+                    f"**When to use:** {pb.trigger}",
+                    "",
+                    "### Steps",
+                    "",
+                    *[f"{i}. {step}" for i, step in enumerate(pb.steps, 1)],
+                    "",
+                    "### Grounded In",
+                    "",
+                    *[
+                        f"- [{item.kind}] `{item.memory_id[:16]}`  {item.title}"
+                        for item in pb.grounded_in
+                    ],
+                    "",
+                ]
+            )
+        md_path.write_text("\n".join(lines), encoding="utf-8")
+        written.append(md_path.as_posix())
+
+        # .agent-memory/playbooks/ — JSON for git portability.
+        playbooks_dir = repo_root / ".agent-memory" / "playbooks"
+        playbooks_dir.mkdir(parents=True, exist_ok=True)
+        for pb in playbooks:
+            target = playbooks_dir / f"{pb.id}.json"
+            target.write_text(
+                _json.dumps(pb.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            written.append(target.as_posix())
+
+        return written
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)

@@ -18,6 +18,8 @@ from oh_no_my_claudecode.models import (
     MemoryArtifactType,
     MemoryEntry,
     MemoryKind,
+    Playbook,
+    PlaybookProvenanceItem,
     RepoFileRecord,
     SourceType,
     TaskOutputRecord,
@@ -200,10 +202,35 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    """Add the playbooks table (migration v4).
+
+    Idempotent: uses CREATE TABLE IF NOT EXISTS so re-running on an already-
+    migrated database is a no-op.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS playbooks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            trigger TEXT NOT NULL,
+            steps_json TEXT NOT NULL,
+            grounded_in_json TEXT NOT NULL,
+            tags_json TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_playbooks_confidence
+            ON playbooks(confidence DESC);
+        """
+    )
+
+
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
+    (4, _migrate_v4),
 )
 
 
@@ -1209,6 +1236,65 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM compaction_snapshots").fetchone()
         return int(row["count"])
 
+    def upsert_playbooks(self, playbooks: list[Playbook]) -> int:
+        """Insert or replace playbooks; returns the count written."""
+        if not playbooks:
+            return 0
+        with self._connection() as conn:
+            conn.executemany(
+                """
+                INSERT INTO playbooks (
+                    id, title, trigger, steps_json,
+                    grounded_in_json, tags_json, confidence, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title=excluded.title,
+                    trigger=excluded.trigger,
+                    steps_json=excluded.steps_json,
+                    grounded_in_json=excluded.grounded_in_json,
+                    tags_json=excluded.tags_json,
+                    confidence=excluded.confidence,
+                    created_at=excluded.created_at
+                """,
+                [
+                    (
+                        pb.id,
+                        pb.title,
+                        pb.trigger,
+                        json.dumps(pb.steps),
+                        json.dumps([item.model_dump(mode="json") for item in pb.grounded_in]),
+                        json.dumps(pb.tags),
+                        pb.confidence,
+                        isoformat_utc(pb.created_at),
+                    )
+                    for pb in playbooks
+                ],
+            )
+        return len(playbooks)
+
+    def list_playbooks(self) -> list[Playbook]:
+        """Return all playbooks ordered by confidence descending, then title."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM playbooks ORDER BY confidence DESC, title ASC"
+            ).fetchall()
+        return [self._row_to_playbook(row) for row in rows]
+
+    def get_playbook(self, playbook_id: str) -> Playbook | None:
+        """Return a single playbook by id, or None if not found."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM playbooks WHERE id = ?",
+                (playbook_id,),
+            ).fetchone()
+        return None if row is None else self._row_to_playbook(row)
+
+    def delete_all_playbooks(self) -> int:
+        """Delete all generated playbooks; returns count deleted."""
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM playbooks")
+        return int(cursor.rowcount)
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Yield a connection that commits on success, rolls back on error, and closes."""
@@ -1428,6 +1514,24 @@ class SQLiteStorage:
             output.content_json,
             output.markdown_path,
             isoformat_utc(output.created_at),
+        )
+
+    @staticmethod
+    def _row_to_playbook(row: sqlite3.Row) -> Playbook:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Playbook row is missing created_at."
+            raise ValueError(msg)
+        grounded_raw: list[dict[str, Any]] = json.loads(row["grounded_in_json"])
+        return Playbook(
+            id=row["id"],
+            title=row["title"],
+            trigger=row["trigger"],
+            steps=json.loads(row["steps_json"]),
+            grounded_in=[PlaybookProvenanceItem(**item) for item in grounded_raw],
+            tags=json.loads(row["tags_json"]),
+            confidence=float(row["confidence"]),
+            created_at=created_at,
         )
 
     @staticmethod

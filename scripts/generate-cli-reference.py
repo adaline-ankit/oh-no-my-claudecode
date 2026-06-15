@@ -60,6 +60,10 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc attempt list", ["attempt", "list"]),
     ("onmc attempt show", ["attempt", "show"]),
     ("onmc attempt update", ["attempt", "update"]),
+    ("onmc playbook", ["playbook"]),
+    ("onmc playbook generate", ["playbook", "generate"]),
+    ("onmc playbook list", ["playbook", "list"]),
+    ("onmc playbook show", ["playbook", "show"]),
 ]
 
 
