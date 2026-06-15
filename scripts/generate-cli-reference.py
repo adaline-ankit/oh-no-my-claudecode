@@ -77,9 +77,13 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc user list", ["user", "list"]),
     ("onmc user show", ["user", "show"]),
     ("onmc user remove", ["user", "remove"]),
+    ("onmc spec", ["spec"]),
+    ("onmc spec print", ["spec", "print"]),
+    ("onmc spec validate", ["spec", "validate"]),
     ("onmc tui", ["tui"]),
     ("onmc bench", ["bench"]),
     ("onmc wiki", ["wiki"]),
+    ("onmc plug", ["plug"]),
 ]
 
 

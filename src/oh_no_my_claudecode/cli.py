@@ -68,6 +68,9 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
+spec_app = typer.Typer(
+    help="Inspect and validate the Agent Memory open spec.", no_args_is_help=True
+)
 task_app = typer.Typer(help="Manage task lifecycle state.", no_args_is_help=True)
 attempt_app = typer.Typer(help="Track task-scoped attempts.", no_args_is_help=True)
 llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=True)
@@ -86,6 +89,7 @@ user_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(memory_app, name="memory")
+app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
 app.add_typer(llm_app, name="llm")
@@ -1563,6 +1567,50 @@ def user_remove_command(memory_id: str) -> None:
     render_user_memory_removed(memory_id, found=found)
 
 
+@spec_app.command("print")
+def spec_print_command() -> None:
+    """Print the Agent Memory Spec version and schema summary."""
+    summary = _service().spec_print()
+    console.print(summary, markup=False)
+
+
+@spec_app.command("validate")
+def spec_validate_command(
+    path: Annotated[
+        Path | None,
+        typer.Option(
+            "--path",
+            help=(
+                "Path to the .agent-memory/ directory to validate. "
+                "Defaults to .agent-memory/ in the current repo root."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Validate that a .agent-memory/ directory conforms to the open spec.
+
+    Checks manifest presence and field completeness, validates all memory and
+    task record files, and verifies enum values against the spec. Exits with
+    code 1 if any errors are found.
+    """
+    try:
+        _, report = _service().spec_validate(path=path)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    for line in report.summary_lines():
+        if line.startswith("  ERROR:"):
+            console.print(f"[red]{line}[/red]")
+        elif line.startswith("  WARN:"):
+            console.print(f"[yellow]{line}[/yellow]")
+        else:
+            status_color = "green" if report.passed else "red"
+            console.print(f"[{status_color}]{line}[/{status_color}]")
+
+    if not report.passed:
+        raise typer.Exit(code=1)
+
+
 @app.command("bench")
 def bench_command(
     repo_memory: Annotated[
@@ -1711,6 +1759,54 @@ def bench_command(
         console.print(f"[green]Wrote bench artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write is best-effort; bench still exits 0
+
+
+@app.command("plug")
+def plug_command(
+    target: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Agent to wire onmc into. "
+                "Choices: claude-code, codex, cursor, omc, omx, all."
+            )
+        ),
+    ],
+) -> None:
+    """Wire onmc into a target coding agent (one-shot idempotent wizard).
+
+    \b
+    Targets
+    -------
+    claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).
+    codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief
+                  and onmc guard at session start.
+    cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).
+    omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.
+    omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.
+    all           Apply claude-code + codex + cursor (safe subset).
+
+    All writes are idempotent — running twice never duplicates stanzas.
+    """
+    from oh_no_my_claudecode.integrations.plug import SUPPORTED_TARGETS
+
+    if target not in SUPPORTED_TARGETS:
+        known = ", ".join(SUPPORTED_TARGETS)
+        raise typer.Exit(code=_fatal(f"Unknown target {target!r}. Supported: {known}"))
+
+    try:
+        result = _service().plug(target)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    for path in result.files_written:
+        console.print(f"[green]wrote:[/green] {path}")
+    for path in result.files_skipped:
+        console.print(f"[dim]skipped (already up to date):[/dim] {path}")
+    for note in result.notes:
+        console.print(f"  {note}")
+    if not result.files_written and not result.files_skipped:
+        console.print(f"[green]onmc plug {target}: done.[/green]")
 
 
 def _fatal(message: str) -> int:

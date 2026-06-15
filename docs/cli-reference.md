@@ -50,7 +50,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ wiki         Generate a browsable multi-page markdown wiki from stored       │
 │              memory.                                                         │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
+│ plug         Wire onmc into a target coding agent (one-shot idempotent       │
+│              wizard).                                                        │
 │ memory       Inspect stored memory.                                          │
+│ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
 │ attempt      Track task-scoped attempts.                                     │
 │ llm          Configure optional LLM providers.                               │
@@ -1132,6 +1135,53 @@ Usage: onmc user remove [OPTIONS] MEMORY_ID
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc spec`
+
+```text
+Usage: onmc spec [OPTIONS] COMMAND [ARGS]...                                   
+                                                                                
+ Inspect and validate the Agent Memory open spec.                               
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ print     Print the Agent Memory Spec version and schema summary.            │
+│ validate  Validate that a .agent-memory/ directory conforms to the open      │
+│           spec.                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc spec print`
+
+```text
+Usage: onmc spec print [OPTIONS]                                               
+                                                                                
+ Print the Agent Memory Spec version and schema summary.                        
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc spec validate`
+
+```text
+Usage: onmc spec validate [OPTIONS]                                            
+                                                                                
+ Validate that a .agent-memory/ directory conforms to the open spec.            
+                                                                                
+ Checks manifest presence and field completeness, validates all memory and      
+ task record files, and verifies enum values against the spec. Exits with       
+ code 1 if any errors are found.                                                
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --path        PATH  Path to the .agent-memory/ directory to validate.        │
+│                     Defaults to .agent-memory/ in the current repo root.     │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc tui`
 
 ```text
@@ -1179,5 +1229,35 @@ Usage: onmc wiki [OPTIONS]
 │                       .onmc/wiki/ (gitignored). Pass e.g. docs/wiki to       │
 │                       produce a committable copy.                            │
 │ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc plug`
+
+```text
+Usage: onmc plug [OPTIONS] TARGET                                              
+                                                                                
+ Wire onmc into a target coding agent (one-shot idempotent wizard).             
+                                                                                
+                                                                                
+ Targets                                                                        
+ -------                                                                        
+ claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).          
+ codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief       
+               and onmc guard at session start.                                 
+ cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).      
+ omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.    
+ omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.    
+ all           Apply claude-code + codex + cursor (safe subset).                
+                                                                                
+ All writes are idempotent — running twice never duplicates stanzas.            
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    target      TEXT  Agent to wire onmc into. Choices: claude-code, codex, │
+│                        cursor, omc, omx, all.                                │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

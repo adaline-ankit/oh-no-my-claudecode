@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.guard.compiler import GuardResult
+    from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
 
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
@@ -366,6 +368,17 @@ class OnmcService:
             last_pre_compact_at=meta.get("last_pre_compact_at"),
             last_session_start_at=meta.get("last_session_start_at"),
         )
+
+    def plug(self, target: str) -> PlugResult:
+        """Wire onmc into *target* coding agent for the current repo.
+
+        Supported targets: claude-code, codex, cursor, omc, omx, all.
+        Returns a :class:`PlugResult` describing what was written.
+        """
+        from oh_no_my_claudecode.integrations.plug import plug_target
+
+        repo_root = discover_repo_root(self.cwd)
+        return plug_target(target, repo_root=repo_root)
 
     def pre_compact(self, *, transcript_path: Path | None = None) -> CompactionSnapshotRecord:
         """Capture task state (plus live transcript context) into a compaction snapshot."""
@@ -787,6 +800,36 @@ class OnmcService:
             )
             raise FileNotFoundError(msg)
         return repo_root, restore_agent_memory(input_dir=source_dir, storage=storage)
+
+    def spec_validate(self, path: Path | None = None) -> tuple[Path, SpecValidationReport]:
+        """Validate that a .agent-memory/ directory conforms to the open spec."""
+        from oh_no_my_claudecode.spec.validator import validate_agent_memory_dir
+
+        repo_root = discover_repo_root(self.cwd)
+        target = path or repo_root / ".agent-memory"
+        report = validate_agent_memory_dir(target)
+        return repo_root, report
+
+    def spec_print(self) -> str:
+        """Return a summary of the Agent Memory Spec version and schema."""
+        from oh_no_my_claudecode.spec.validator import (
+            _MEMORY_KIND_VALUES,
+            _SOURCE_TYPE_VALUES,
+            _TASK_STATUS_VALUES,
+            SPEC_VERSION,
+        )
+
+        lines = [
+            f"Agent Memory Format Specification  version={SPEC_VERSION}",
+            "",
+            "MemoryKind values:    " + ", ".join(sorted(_MEMORY_KIND_VALUES)),
+            "SourceType values:    " + ", ".join(sorted(_SOURCE_TYPE_VALUES)),
+            "TaskStatus values:    " + ", ".join(sorted(_TASK_STATUS_VALUES)),
+            "",
+            "Full spec: AGENT-MEMORY-SPEC.md",
+            "Reference implementation: onmc (oh-no-my-claudecode)",
+        ]
+        return "\n".join(lines)
 
     def install_sync_hook(self) -> tuple[Path, Path]:
         """Install a post-commit hook that exports ONMC memory to .agent-memory."""
