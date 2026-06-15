@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "```text\nUsage: onmc [OPTIONS] COMMAND [ARGS]...                                        \n                                                                                \n Repo-native memory and context compiler for coding agents.                     \n                                                                                \n\u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 --install-completion          Install completion for the current shell.      \u2502\n\u2502 --show-completion             Show completion for the current shell, to copy \u2502\n\u2502                               it or customize the installation.              \u2502\n\u2502 --help                        Show this message and exit.                    \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\u256d\u2500 Commands \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 tui          Open the interactive terminal brain-browser for memory          \u2502\n\u2502              curation.                                                       \u2502\n\u2502 setup        Run the interactive ONMC onboarding wizard.                     \u2502\n\u2502 init         Initialize ONMC state in the current git rep",
+    "feedback_score": 0.0,
+    "id": "doc_fact-529ee34621d5",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/cli-reference.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "```text Usage: onmc [OPTIONS] COMMAND [ARGS]... Repo-native memory and context compiler for coding agents. \u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500...",
+    "tags": [
+      "docs",
+      "cli",
+      "reference",
+      "md",
+      "onmc"
+    ],
+    "title": "cli-reference.md: `onmc`",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

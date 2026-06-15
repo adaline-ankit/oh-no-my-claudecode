@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Claude Code should receive repo guidance through:\n\n- `CLAUDE.md` for source-controlled project instructions\n- `onmc hooks install` for compaction/session context\n- `onmc serve --mcp` for mid-session memory lookup\n- `onmc mine` for extracting useful memories from prior Claude Code transcripts\n\nContributors changing this path should test hook installation, hook status, generated\npayload shape, and MCP resource/tool behavior.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-5a748f0430c3",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Claude Code should receive repo guidance through: - `CLAUDE.md` for source-controlled project instructions - `onmc hooks install` for compaction/session cont...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "claude",
+      "code"
+    ],
+    "title": "agent-native-workflows.md: Claude Code",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Use these commands when a coding agent is running hot on tokens:\n\n```bash\nonmc brief --task \"...\" --style compact --max-tokens 600 --stdout\nonmc brief --task \"...\" --style caveman --max-tokens 400 --stdout\nonmc codegraph --max-files 25\n```\n\n- `compact` keeps normal wording but drops low-value prose.\n- `caveman` uses terse labels and short bullets for maximum compression.\n- `codegraph` shows directories and hot files from the ingested repo index so agents inspect likely files first instead of loading the whole repository.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-7d26baa2a9e0",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/prompt-compiler.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Use these commands when a coding agent is running hot on tokens: ```bash onmc brief --task \"...\" --style compact --max-tokens 600 --stdout onmc brief --task...",
+    "tags": [
+      "docs",
+      "prompt",
+      "compiler",
+      "md",
+      "token",
+      "efficient",
+      "context"
+    ],
+    "title": "prompt-compiler.md: Token-Efficient Context",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

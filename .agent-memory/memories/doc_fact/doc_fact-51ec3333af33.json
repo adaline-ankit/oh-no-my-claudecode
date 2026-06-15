@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "ONMC compiles a task-specific deterministic brief:\n\n```bash\nonmc brief --task \"fix flaky Redis cache invalidation bug\"\nonmc brief --task \"fix flaky Redis cache invalidation bug\" --style compact --max-tokens 600 --stdout\nonmc brief --task \"fix flaky Redis cache invalidation bug\" --style caveman --max-tokens 400 --stdout\nonmc codegraph --max-files 25\n```\n\nThe brief includes:\n\n- task summary\n- repo overview\n- relevant memory\n- likely impacted areas\n- files to inspect first\n- risk notes\n- validation checklist\n- provenance\n\nThe markdown artifact is written to `.onmc/compiled/<timestamp>-brief.md`.\n\nWhen a provider is configured, ONMC reranks the final candidate memory set with an LLM and stores\none-sentence relevance reasons in the brief output.\n\nFor Codex and other token-sensitive agents, `--style compact` and `--style caveman` render smaller\npaste-ready briefs. `--max-tokens` trims the markdown output to a hard budget, and `--stdout` avoids\nterminal tables so the output can be pasted directly into an agent context.\n\n`onmc codegraph` emits a compact directory and hot-file map from the ingested repo index. It is meant\nto reduce broad file dumping by giving agents a small navigation grap",
+    "feedback_score": 0.0,
+    "id": "doc_fact-51ec3333af33",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/shipped-capabilities.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "ONMC compiles a task-specific deterministic brief: ```bash onmc brief --task \"fix flaky Redis cache invalidation bug\" onmc brief --task \"fix flaky Redis cach...",
+    "tags": [
+      "docs",
+      "shipped",
+      "capabilities",
+      "md",
+      "brief",
+      "compilation"
+    ],
+    "title": "shipped-capabilities.md: 6. Brief Compilation",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "memory": {
+    "confidence": 0.75,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "The `publish` job uses OIDC trusted publishing \u2014 no API token is required or stored.\nThe job is **disabled by default** via a repository variable gate and must be enabled\nonce after the PyPI project side is configured. Follow these steps exactly once:",
+    "feedback_score": 0.0,
+    "id": "invariant-105c4af2cadb",
+    "kind": "invariant",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "The `publish` job uses OIDC trusted publishing \u2014 no API token is required or stored. The job is **disabled by default** via a repository variable gate and mu...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "pypi",
+      "trusted",
+      "publishing",
+      "one",
+      "time"
+    ],
+    "title": "RELEASING.md: PyPI trusted publishing (one-time setup)",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

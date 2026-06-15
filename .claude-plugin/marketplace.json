@@ -1,0 +1,23 @@
+{
+  "marketplace_schema_version": "1",
+  "plugins": [
+    {
+      "id": "oh-no-my-claudecode",
+      "name": "ONMC — Repo-Native Agent Memory",
+      "description": "Repo-native memory for AI coding agents. Builds a structured memory store from git history, surfaces architectural decisions and known dead-ends via CLAUDE.md, Claude Code lifecycle hooks, and MCP tools (search_memory, guard_task, get_brief).",
+      "version": "0.5.0",
+      "author": "ONMC Contributors",
+      "homepage": "https://github.com/adaline-ankit/oh-no-my-claudecode",
+      "repository": "https://github.com/adaline-ankit/oh-no-my-claudecode",
+      "license": "MIT",
+      "keywords": ["memory", "context", "coding-agents", "claude-code", "mcp", "developer-tools"],
+      "install": {
+        "type": "pip",
+        "package": "oh-no-my-claudecode",
+        "post_install": "onmc setup"
+      },
+      "plugin_manifest": ".claude-plugin/plugin.json",
+      "categories": ["memory", "context", "developer-tools"]
+    }
+  ]
+}

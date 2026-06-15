@@ -1,0 +1,21 @@
+{
+  "memory": {
+    "confidence": 0.6,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Observed source-like directories from the current file tree: .agent-memory, .agent-memory/memories, .claude-plugin, ., scripts. Use this as a navigation hint...",
+    "feedback_score": 0.0,
+    "id": "doc_fact-a5ad9557e9ce",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "repo_tree",
+    "source_type": "code",
+    "staleness": null,
+    "summary": "Primary source directories include .agent-memory, .agent-memory/memories, .claude-plugin, ., scripts.",
+    "tags": [
+      "layout",
+      "source"
+    ],
+    "title": "Primary source layout",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

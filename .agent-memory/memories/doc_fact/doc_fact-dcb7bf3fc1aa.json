@@ -1,0 +1,27 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Rule-file integrations should consume `onmc brief` output or committed memory exports.\nAvoid adding provider-specific prompt packs unless they are thin adapters over ONMC's\nstructured memory.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-dcb7bf3fc1aa",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Rule-file integrations should consume `onmc brief` output or committed memory exports. Avoid adding provider-specific prompt packs unless they are thin adapt...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "cursor",
+      "rule",
+      "based"
+    ],
+    "title": "agent-native-workflows.md: Cursor and Rule-Based Agents",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

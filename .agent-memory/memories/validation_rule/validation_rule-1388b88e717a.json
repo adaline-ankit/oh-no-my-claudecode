@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.0,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "```text\nUsage: onmc brief [OPTIONS]                                                    \n                                                                                \n Compile a task-specific context brief.                                         \n                                                                                \n\u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 *  --task              TEXT                    Task description to compile a \u2502\n\u2502                                                brief for.                    \u2502\n\u2502                                                [required]                    \u2502\n\u2502    --no-llm                                    Skip the optional LLM         \u2502\n\u2502                                                reranking pass.               \u2502\n\u2502    --style             [full|compact|caveman]  Brief rendering style.        \u2502\n\u2502                                                [default: full]               \u2502\n\u2502    --max-tokens        INTEGER RANGE [x>=1]    Trim markdown output to a     \u2502\n\u2502                                                token budget.                 \u2502\n\u2502    --stdout                                    Print mark",
+    "feedback_score": 0.0,
+    "id": "validation_rule-1388b88e717a",
+    "kind": "validation_rule",
+    "last_verified_at": null,
+    "source_ref": "docs/cli-reference.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "```text Usage: onmc brief [OPTIONS] Compile a task-specific context brief. \u256d\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e \u2502...",
+    "tags": [
+      "docs",
+      "cli",
+      "reference",
+      "md",
+      "onmc",
+      "brief"
+    ],
+    "title": "cli-reference.md: `onmc brief`",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

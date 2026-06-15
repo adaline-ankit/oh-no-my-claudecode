@@ -1,0 +1,22 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "For full generated help output, see [CLI Reference](docs/cli-reference.md).",
+    "feedback_score": 0.0,
+    "id": "doc_fact-9ab360b89316",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "README.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "For full generated help output, see [CLI Reference](docs/cli-reference.md).",
+    "tags": [
+      "readme",
+      "md",
+      "commands"
+    ],
+    "title": "README.md: Commands",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

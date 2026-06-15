@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "In the repository at **Settings \u2192 Environments**, ensure an environment named `pypi`\nexists and has a deployment branch rule matching `refs/tags/v*.*.*` (tag-only deploys).",
+    "feedback_score": 0.0,
+    "id": "doc_fact-1b9146a8f8cb",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "In the repository at **Settings \u2192 Environments**, ensure an environment named `pypi` exists and has a deployment branch rule matching `refs/tags/v*.*.*` (tag...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "step",
+      "configure",
+      "github",
+      "environment"
+    ],
+    "title": "RELEASING.md: Step 2 \u2014 Configure the GitHub environment",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

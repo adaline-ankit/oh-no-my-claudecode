@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "This document is the authoritative guide for cutting a release. The pipeline uses\n**PyPI trusted publishing (OIDC)** \u2014 no API token secrets are stored in GitHub.\n\n---",
+    "feedback_score": 0.0,
+    "id": "doc_fact-cbab5e7d3482",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "This document is the authoritative guide for cutting a release. The pipeline uses **PyPI trusted publishing (OIDC)** \u2014 no API token secrets are stored in Git...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "oh",
+      "no",
+      "my",
+      "claudecode"
+    ],
+    "title": "RELEASING.md: Releasing oh-no-my-claudecode",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

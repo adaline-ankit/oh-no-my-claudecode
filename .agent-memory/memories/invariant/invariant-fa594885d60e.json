@@ -1,0 +1,27 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Codex and ephemeral cloud agents should receive repo context through:\n\n- `AGENTS.md` for source-controlled project instructions\n- `onmc sync --restore` for portable `.agent-memory/`\n- `onmc brief --task \"...\"` for task-scoped context\n\nCloud-agent flows must not assume access to the developer's local `.onmc/` database.\nThey should work from committed docs plus `.agent-memory/` exports.",
+    "feedback_score": 0.0,
+    "id": "invariant-fa594885d60e",
+    "kind": "invariant",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Codex and ephemeral cloud agents should receive repo context through: - `AGENTS.md` for source-controlled project instructions - `onmc sync --restore` for po...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "codex",
+      "cloud",
+      "agents"
+    ],
+    "title": "agent-native-workflows.md: Codex and Cloud Agents",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

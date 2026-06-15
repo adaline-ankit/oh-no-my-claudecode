@@ -3,6 +3,39 @@
 This file gives Codex, cloud coding agents, and other repository-aware agents the
 same maintainer expectations that Claude Code receives from `CLAUDE.md`.
 
+## Using ONMC in a session (start here)
+
+ONMC ships repo-native memory to every agent. Use these three commands at session
+start — they are fast, read-only, and require no LLM call:
+
+```bash
+# 1. Get a task-focused context brief (relevant files, past decisions, warnings)
+onmc brief --task "your task description here" --stdout
+
+# 2. Surface known dead-ends so you don't repeat recorded failures
+onmc guard --task "your task description here"
+
+# 3. (Optional) Start the MCP server for tool access mid-session
+onmc serve --mcp
+```
+
+### MCP tools (available when `onmc serve --mcp` is running)
+
+| Tool | What it does |
+|---|---|
+| `search_memory` | Semantic search over the memory store — returns relevant decisions, gotchas, and hotspots |
+| `guard_task` | Returns recorded failed approaches for a task so the agent skips known dead-ends |
+| `get_brief` | Compiles a task-specific brief (files + context) on demand |
+
+### On a fresh clone / cloud container
+
+```bash
+onmc init && onmc sync --restore
+onmc brief --task "..." --stdout
+```
+
+This restores the committed `.agent-memory/` export instantly — no re-ingestion needed.
+
 ## Mission
 
 Improve ONMC as a local-first memory layer for coding agents. Keep the package narrow:

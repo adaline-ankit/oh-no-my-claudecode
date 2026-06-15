@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`, which runs these jobs:\n\n```\ngate  \u2192  build  \u2192  publish        (PyPI \u2014 only when PYPI_TRUSTED_PUBLISHING=true)\n               \u2570\u2192  github-release (always, independent of publish)\n```\n\n| Job | `needs` | What it does |\n|---|---|---|\n| `gate` | \u2014 | Full quality gate across Python 3.11\u20133.13: ruff, mypy, pytest (\u226580% coverage) |\n| `build` | `gate` | `python -m build` (sdist + wheel) + `twine check`; uploads dist as workflow artifact |\n| `publish` | `build` | Uploads to PyPI via OIDC trusted publishing. **Skipped** unless the repo variable `PYPI_TRUSTED_PUBLISHING=true` is set (see below). |\n| `github-release` | `build` | Creates a GitHub Release with auto-generated notes + dist assets attached. Runs whenever the build passes on a tag push \u2014 **not** gated on `publish`. |\n\nThe `publish` and `github-release` jobs only fire on tag pushes or manually-published\nGitHub Releases \u2014 `workflow_dispatch` alone does **not** publish to PyPI or create a\nrelease.\n\n**Key design principle:** the GitHub Release and the PyPI upload are independent.\nA missing or failed PyPI publish will never block the GitHub Release from being created.\n\n---",
+    "feedback_score": 0.0,
+    "id": "validation_rule-20350d993121",
+    "kind": "validation_rule",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`, which runs these jobs: ``` gate \u2192 build \u2192 publish (PyPI \u2014 only when PYPI_TRUSTED_PUBLISHING=...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "pipeline",
+      "works"
+    ],
+    "title": "RELEASING.md: How the pipeline works",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

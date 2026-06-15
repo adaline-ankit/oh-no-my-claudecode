@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.8,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Agent-facing changes must preserve these properties:\n\n- local-first: no hosted service is required for the core workflow\n- provenance-aware: memory records retain source references and confidence\n- reviewable: committed memory exports are readable and diffable\n- bounded: repo instructions cannot silently override maintainer policy\n- portable: fresh machines can restore from committed exports\n- safe-by-default: secrets and local databases stay out of git",
+    "feedback_score": 0.0,
+    "id": "validation_rule-69cfa780c228",
+    "kind": "validation_rule",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Agent-facing changes must preserve these properties: - local-first: no hosted service is required for the core workflow - provenance-aware: memory records re...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "guardrails"
+    ],
+    "title": "agent-native-workflows.md: Guardrails",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

@@ -1,13 +1,15 @@
 {
   "memory": {
     "confidence": 0.55,
-    "created_at": "2026-03-31T10:10:54Z",
+    "created_at": "2026-06-15T16:11:25Z",
     "details": "A working approach worth reusing.\n\nExamples:\n\n- route worker refresh changes through the shared cache boundary",
     "feedback_score": 0.0,
     "id": "doc_fact-329697eb7720",
     "kind": "doc_fact",
+    "last_verified_at": null,
     "source_ref": "docs/memory-model.md",
     "source_type": "doc",
+    "staleness": null,
     "summary": "A working approach worth reusing. Examples: - route worker refresh changes through the shared cache boundary",
     "tags": [
       "docs",
@@ -17,6 +19,6 @@
       "fix"
     ],
     "title": "memory-model.md: `fix`",
-    "updated_at": "2026-03-31T10:10:54Z"
+    "updated_at": "2026-06-15T16:11:25Z"
   }
 }
