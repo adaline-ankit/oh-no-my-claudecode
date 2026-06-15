@@ -16,6 +16,7 @@ from oh_no_my_claudecode.models import (
     MemoryArtifactRecord,
     MemoryArtifactType,
     MemoryEntry,
+    Playbook,
     ProjectConfig,
     ReviewModeOutput,
     SolveModeOutput,
@@ -785,3 +786,67 @@ def render_why_report(report: WhyReport) -> None:
         console.print(Markdown("## Recent commits"))
         for subject in report.git_history.recent_subjects:
             console.print(f"  - {subject}")
+
+
+# ── Playbook rendering ─────────────────────────────────────────────────────────
+
+
+def render_playbook_list(playbooks: list[Playbook]) -> None:
+    """Render a compact summary table of generated playbooks."""
+    if not playbooks:
+        console.print("[yellow]No playbooks found. Run `onmc playbook generate` first.[/yellow]")
+        return
+    table = Table(title=f"Playbooks ({len(playbooks)})")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Title", min_width=30)
+    table.add_column("Steps", justify="right", no_wrap=True)
+    table.add_column("Sources", justify="right", no_wrap=True)
+    table.add_column("Conf", justify="right", no_wrap=True)
+    for pb in playbooks:
+        table.add_row(
+            pb.id[:16],
+            shorten(pb.title, max_length=40),
+            str(len(pb.steps)),
+            str(len(pb.grounded_in)),
+            f"{pb.confidence:.2f}",
+        )
+    console.print(table)
+
+
+def render_playbook_detail(playbook: Playbook) -> None:
+    """Render a single playbook with steps and provenance."""
+    header_lines = [
+        f"[bold]{playbook.title}[/bold]",
+        f"ID: {playbook.id}",
+        f"Confidence: {playbook.confidence:.2f}",
+        f"Tags: {', '.join(playbook.tags) if playbook.tags else '-'}",
+        "",
+        f"[italic]When to use:[/italic] {playbook.trigger}",
+    ]
+    console.print(Panel.fit("\n".join(header_lines), title="Playbook"))
+
+    if playbook.steps:
+        console.print(Markdown("## Steps"))
+        for i, step in enumerate(playbook.steps, 1):
+            console.print(f"  {i}. {step}")
+
+    if playbook.grounded_in:
+        console.print(Markdown("## Grounded In"))
+        for item in playbook.grounded_in:
+            console.print(f"  [{item.kind}] {item.memory_id[:16]}  {item.title}")
+
+
+def render_playbook_generate_summary(
+    playbooks: list[Playbook],
+    artifacts_written: list[str],
+) -> None:
+    """Render a post-generate summary panel."""
+    lines = [
+        f"Generated: [bold]{len(playbooks)} playbooks[/bold]",
+        "",
+        *[f"  • {pb.title} ({len(pb.steps)} steps, conf={pb.confidence:.2f})" for pb in playbooks],
+        "",
+        f"Artifacts written: {len(artifacts_written)}",
+        *[f"  {path}" for path in artifacts_written],
+    ]
+    console.print(Panel.fit("\n".join(lines), title="Playbook Generate Complete"))

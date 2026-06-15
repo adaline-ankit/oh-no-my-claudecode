@@ -25,6 +25,7 @@ from oh_no_my_claudecode.models.memory_artifact import (
     MemoryArtifactRecord,
     MemoryArtifactType,
 )
+from oh_no_my_claudecode.models.playbook import Playbook, PlaybookProvenanceItem
 from oh_no_my_claudecode.models.prompt import (
     AgentMode,
     CompiledPrompt,
@@ -63,6 +64,8 @@ __all__ = [
     "MemoryArtifactRecord",
     "MemoryArtifactType",
     "MemoryKind",
+    "Playbook",
+    "PlaybookProvenanceItem",
     "ProjectConfig",
     "ProjectHints",
     "RepoFileRecord",
