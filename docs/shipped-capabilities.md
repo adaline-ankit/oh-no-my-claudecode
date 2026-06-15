@@ -330,11 +330,17 @@ Exposed resources:
 
 ```bash
 onmc doctor
+onmc report
+onmc report --output .agent-memory/readiness.md
 ```
 
 The doctor command audits initialization, ingest freshness, provider setup, Claude integration,
 `CLAUDE.md`, `.agent-memory/`, and post-commit hooks, and returns a nonzero exit code only for
 actual errors.
+
+The report command turns the same state into a shareable markdown artifact with readiness score,
+memory/task counts, integration state, recommended next actions, and a short snippet maintainers can
+paste into PRs or handoffs.
 
 ### 12. Public Python API
 

@@ -20,6 +20,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc ingest", ["ingest"]),
     ("onmc brief", ["brief"]),
     ("onmc status", ["status"]),
+    ("onmc report", ["report"]),
     ("onmc sync", ["sync"]),
     ("onmc serve", ["serve"]),
     ("onmc solve", ["solve"]),

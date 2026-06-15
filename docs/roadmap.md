@@ -23,6 +23,7 @@ Shipped in this repo:
 - `CLAUDE.md` generation, update, and watch mode
 - Claude Code transcript mining
 - `onmc doctor` health check
+- `onmc report` shareable agent-readiness report
 - incremental ingest for selected files + post-commit hook
 - memory inspection commands
 - tests, linting, coverage reporting, CI, and packaging scaffolding

@@ -167,6 +167,26 @@ def status_command() -> None:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
 
+@app.command("report")
+def report_command(
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write the markdown report to this path."),
+    ] = None,
+) -> None:
+    """Generate a shareable agent-readiness report."""
+    try:
+        report = _service().agent_readiness_report()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if output is None:
+        console.print(report.rstrip(), markup=False)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(report, encoding="utf-8")
+    typer.echo(f"Wrote report: {output}")
+
+
 @app.command("sync")
 def sync_command(
     commit: Annotated[bool, typer.Option("--commit", help="Export to .agent-memory/.")] = False,
