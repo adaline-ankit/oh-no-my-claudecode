@@ -21,6 +21,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init       Initialize ONMC state in the current git repository.              │
 │ ingest     Ingest repo knowledge into local structured memory.               │
 │ brief      Compile a task-specific context brief.                            │
+│ why        Explain why a file looks the way it does, from memory + git       │
+│            history.                                                          │
 │ status     Show local ONMC status.                                           │
 │ report     Generate a shareable agent-readiness report.                      │
 │ sync       Export, restore, or hook git-portable ONMC memory state.          │
