@@ -53,6 +53,31 @@ def test_brief_cli_stdout_can_trim_for_paste_budget(
     assert "Task Brief" not in result.stdout
 
 
+def test_brief_cli_style_without_stdout_does_not_double_render(
+    sample_repo: Path, monkeypatch: object
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest()
+
+    result = runner.invoke(
+        app,
+        [
+            "brief",
+            "--task",
+            "fix flaky cache invalidation bug",
+            "--style",
+            "compact",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "# ONMC Compact Brief" in result.stdout
+    assert "Task Brief" not in result.stdout
+
+
 def test_codegraph_cli_returns_compact_repo_map(
     sample_repo: Path, monkeypatch: object
 ) -> None:

@@ -173,8 +173,7 @@ def brief_command(
         if max_tokens is not None:
             markdown = limit_markdown_tokens(markdown, max_tokens)
         console.print(markdown.rstrip(), markup=False)
-        if stdout:
-            return
+        return
     render_brief(artifact)
     console.print(f"[green]Wrote brief:[/green] {artifact.output_path}")
 
