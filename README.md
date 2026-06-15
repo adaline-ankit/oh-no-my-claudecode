@@ -103,6 +103,8 @@ onmc attempt list / show / update
 
 ```bash
 onmc brief --task "fix the cache invalidation bug"
+onmc brief --task "fix the cache invalidation bug" --style caveman --max-tokens 400 --stdout
+onmc codegraph --max-files 25
 # LLM-ranked, annotated with relevance reasons
 # Written to .onmc/compiled/ and rendered in terminal
 ```
@@ -149,6 +151,8 @@ import onmc
 repo = onmc.init(".")
 repo.ingest()
 brief = repo.brief(task="fix the cache invalidation bug")
+compact = repo.brief(task="fix the cache invalidation bug", style="compact", max_tokens=500)
+graph = repo.codegraph(max_files=25)
 memories = repo.memory.search(files=["src/cache.py"])
 report = repo.report()
 task = repo.task.start(title="Fix cache bug")

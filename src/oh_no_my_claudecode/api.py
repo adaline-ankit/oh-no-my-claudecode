@@ -9,6 +9,7 @@ from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptRecord,
     AttemptStatus,
+    BriefStyle,
     HookStatus,
     IngestResult,
     MemoryArtifactRecord,
@@ -19,7 +20,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
 )
 from oh_no_my_claudecode.sync.schema import SyncResult
-from oh_no_my_claudecode.utils.text import tokenize
+from oh_no_my_claudecode.utils.text import limit_markdown_tokens, tokenize
 
 MemoryRecord = MemoryEntry | MemoryArtifactRecord
 MemoryRecordList = list[MemoryRecord]
@@ -57,10 +58,15 @@ class OnmcRepo:
         """Ingest repo knowledge into ONMC memory."""
         return self._service.ingest()[1]
 
-    def brief(self, task: str, max_tokens: int = 2000) -> BriefResult:
+    def brief(
+        self,
+        task: str,
+        max_tokens: int = 2000,
+        style: BriefStyle | str = BriefStyle.FULL,
+    ) -> BriefResult:
         """Compile a task brief and return markdown plus token metadata."""
         artifact = self._service.compile_brief(task)[1]
-        markdown = artifact.to_markdown()
+        markdown = artifact.to_markdown(style=style)
         token_count = len(tokenize(markdown))
         if token_count <= max_tokens:
             return BriefResult(
@@ -70,7 +76,7 @@ class OnmcRepo:
                 truncated=False,
             )
 
-        limited = _limit_markdown(markdown, max_tokens)
+        limited = limit_markdown_tokens(markdown, max_tokens)
         return BriefResult(
             artifact_path=artifact.output_path,
             markdown=limited,
@@ -81,6 +87,10 @@ class OnmcRepo:
     def report(self) -> str:
         """Return a markdown agent-readiness report for the repo."""
         return self._service.agent_readiness_report()
+
+    def codegraph(self, max_files: int = 40, max_dirs: int = 12) -> str:
+        """Return a compact markdown codegraph for token-efficient navigation."""
+        return self._service.codegraph(max_files=max_files, max_dirs=max_dirs)
 
     @property
     def memory(self) -> MemoryAPI:
@@ -285,28 +295,6 @@ class SyncAPI:
     def install_hook(self) -> None:
         """Install the post-commit ONMC sync hook."""
         self._repo._service.install_sync_hook()
-
-
-def _limit_markdown(markdown: str, max_tokens: int) -> str:
-    lines_out: list[str] = []
-    used = 0
-    for line in markdown.splitlines():
-        tokens = line.split()
-        if not tokens:
-            lines_out.append("")
-            continue
-        remaining = max_tokens - used
-        if remaining <= 0:
-            break
-        if len(tokens) <= remaining:
-            lines_out.append(line)
-            used += len(tokens)
-            continue
-        lines_out.append(" ".join(tokens[:remaining]) + " ...")
-        used += remaining
-        break
-    lines_out.extend(["", "[truncated to fit token budget]"])
-    return "\n".join(lines_out).strip() + "\n"
 
 
 def _record_updated_at(record: MemoryRecord) -> datetime:

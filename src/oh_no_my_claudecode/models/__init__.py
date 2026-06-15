@@ -4,7 +4,7 @@ from oh_no_my_claudecode.models.attempt import (
     AttemptRecord,
     AttemptStatus,
 )
-from oh_no_my_claudecode.models.brief import BriefArtifact
+from oh_no_my_claudecode.models.brief import BriefArtifact, BriefStyle
 from oh_no_my_claudecode.models.compaction import CompactionSnapshotRecord, HookStatus
 from oh_no_my_claudecode.models.config import (
     BriefSettings,
@@ -47,6 +47,7 @@ __all__ = [
     "AgentMode",
     "BriefArtifact",
     "BriefSettings",
+    "BriefStyle",
     "CompactionSnapshotRecord",
     "CompiledPrompt",
     "FileStat",

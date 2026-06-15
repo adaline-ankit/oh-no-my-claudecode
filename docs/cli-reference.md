@@ -21,6 +21,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init       Initialize ONMC state in the current git repository.              │
 │ ingest     Ingest repo knowledge into local structured memory.               │
 │ brief      Compile a task-specific context brief.                            │
+│ codegraph  Generate a compact codegraph for token-efficient agent            │
+│            navigation.                                                       │
 │ status     Show local ONMC status.                                           │
 │ report     Generate a shareable agent-readiness report.                      │
 │ sync       Export, restore, or hook git-portable ONMC memory state.          │
@@ -92,9 +94,37 @@ Usage: onmc brief [OPTIONS]
  Compile a task-specific context brief.                                         
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task          TEXT  Task description to compile a brief for. [required] │
-│    --no-llm              Skip the optional LLM reranking pass.               │
-│    --help                Show this message and exit.                         │
+│ *  --task              TEXT                    Task description to compile a │
+│                                                brief for.                    │
+│                                                [required]                    │
+│    --no-llm                                    Skip the optional LLM         │
+│                                                reranking pass.               │
+│    --style             [full|compact|caveman]  Brief rendering style.        │
+│                                                [default: full]               │
+│    --max-tokens        INTEGER RANGE [x>=1]    Trim markdown output to a     │
+│                                                token budget.                 │
+│    --stdout                                    Print markdown only,          │
+│                                                optimized for agent paste     │
+│                                                context.                      │
+│    --help                                      Show this message and exit.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph`
+
+```text
+Usage: onmc codegraph [OPTIONS]                                                
+                                                                                
+ Generate a compact codegraph for token-efficient agent navigation.             
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --max-files          INTEGER RANGE [x>=1]  Maximum hot files to include.     │
+│                                            [default: 40]                     │
+│ --max-dirs           INTEGER RANGE [x>=1]  Maximum directories to include.   │
+│                                            [default: 12]                     │
+│ --output     -o      PATH                  Write the markdown codegraph to   │
+│                                            this path.                        │
+│ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
