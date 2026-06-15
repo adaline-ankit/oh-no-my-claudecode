@@ -6,6 +6,9 @@ it never touches stdin/stdout directly.
 
 from __future__ import annotations
 
+import contextlib
+
+from oh_no_my_claudecode.embeddings.rerank import rerank_with_embeddings
 from oh_no_my_claudecode.models import MemoryEntry
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.text import tokenize
@@ -136,13 +139,21 @@ def compile_prompt_recall(
     # Sort descending by score, then title for deterministic tie-breaking.
     scored.sort(key=lambda item: (-item[0], item[1].title))
 
+    # Step 2b — Optional embeddings rerank (applied to the top candidates
+    # before token-budget truncation so the most semantically relevant entries
+    # survive the budget cut).
+    top_candidates = [m for _, m in scored[:limit]]
+    top_scores = [s for s, _ in scored[:limit]]
+    with contextlib.suppress(Exception):  # noqa: BLE001
+        top_candidates = rerank_with_embeddings(top_candidates, prompt, top_scores, storage)
+
     # Step 3 — Build markdown within the token budget.
     header = "## Relevant repo memory\n\n"
     token_used = _count_tokens(header)
     lines: list[str] = [header]
     included = 0
 
-    for _score, memory in scored[:limit]:
+    for memory in top_candidates:
         entry_lines = [
             f"**{memory.title}** ({memory.kind.value})",
             f"  {memory.summary}",
