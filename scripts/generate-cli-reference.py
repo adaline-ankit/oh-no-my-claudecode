@@ -20,6 +20,8 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc ingest", ["ingest"]),
     ("onmc brief", ["brief"]),
     ("onmc codegraph", ["codegraph"]),
+    ("onmc why", ["why"]),
+    ("onmc memory-diff", ["memory-diff"]),
     ("onmc guard", ["guard"]),
     ("onmc status", ["status"]),
     ("onmc statusline", ["statusline"]),
@@ -77,6 +79,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc user remove", ["user", "remove"]),
     ("onmc tui", ["tui"]),
     ("onmc bench", ["bench"]),
+    ("onmc wiki", ["wiki"]),
 ]
 
 

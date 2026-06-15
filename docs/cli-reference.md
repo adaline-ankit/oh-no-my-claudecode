@@ -27,6 +27,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              navigation.                                                     │
 │ why          Explain why a file looks the way it does, from memory + git     │
 │              history.                                                        │
+│ memory-diff  Show what repo knowledge changed between two commits.           │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
 │ status       Show local ONMC status.                                         │
 │ statusline   Print a compact one-line brain health string for Claude Code    │
@@ -46,6 +47,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ mine         Mine Claude Code session transcripts into ONMC memory.          │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
+│ wiki         Generate a browsable multi-page markdown wiki from stored       │
+│              memory.                                                         │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ memory       Inspect stored memory.                                          │
 │ task         Manage task lifecycle state.                                    │
@@ -139,6 +142,52 @@ Usage: onmc codegraph [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc why`
+
+```text
+Usage: onmc why [OPTIONS] PATH                                                 
+                                                                                
+ Explain why a file looks the way it does, from memory + git history.           
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    path      TEXT  File path to explain (repo-relative or absolute).       │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --no-llm              Skip the optional LLM narrative; deterministic only.   │
+│ --at            TEXT  Bound the git-history section to this commit-ish       │
+│                       (hash, tag, or branch). Memory entries reflect the     │
+│                       current store and are NOT time-bounded.                │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memory-diff`
+
+```text
+Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B                            
+                                                                                
+ Show what repo knowledge changed between two commits.                          
+                                                                                
+ Diffs the committed `.agent-memory/` JSON snapshots at commitA and commitB.    
+ Reports added, removed, and changed memory entries by id and title.            
+                                                                                
+ When `.agent-memory/` is not committed at either point, falls back to a plain  
+ git diff of changed files and clearly labels the output as fallback mode.      
+                                                                                
+ Run `onmc sync --commit` and commit `.agent-memory/` to unlock full diffs.     
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    commit_a      TEXT  Older commit-ish (hash, tag, or branch name).       │
+│                          [required]                                          │
+│ *    commit_b      TEXT  Newer commit-ish (hash, tag, or branch name).       │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1115,5 +1164,20 @@ Usage: onmc bench [OPTIONS]
 │                        instead of built-in scenario.                         │
 │ --json                 Print machine-readable JSON summary to stdout.        │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki`
+
+```text
+Usage: onmc wiki [OPTIONS]                                                     
+                                                                                
+ Generate a browsable multi-page markdown wiki from stored memory.              
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --output        PATH  Directory to write wiki pages into. Defaults to        │
+│                       .onmc/wiki/ (gitignored). Pass e.g. docs/wiki to       │
+│                       produce a committable copy.                            │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
