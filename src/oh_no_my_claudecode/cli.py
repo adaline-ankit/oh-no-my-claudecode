@@ -38,6 +38,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_llm_status,
     render_memory_artifact_added,
     render_memory_detail,
+    render_memory_diff,
     render_memory_list,
     render_mine_result,
     render_playbook_detail,
@@ -248,14 +249,60 @@ def why_command(
         bool,
         typer.Option("--no-llm", help="Skip the optional LLM narrative; deterministic only."),
     ] = False,
+    at: Annotated[
+        str,
+        typer.Option(
+            "--at",
+            help=(
+                "Bound the git-history section to this commit-ish (hash, tag, or branch). "
+                "Memory entries reflect the current store and are NOT time-bounded."
+            ),
+        ),
+    ] = "",
 ) -> None:
     """Explain why a file looks the way it does, from memory + git history."""
     try:
-        _, report = _service().why(path, no_llm=no_llm)
+        _, report = _service().why(path, no_llm=no_llm, at_commit=at)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
     render_why_report(report)
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
+
+
+@app.command("memory-diff")
+def memory_diff_command(
+    commit_a: Annotated[
+        str,
+        typer.Argument(help="Older commit-ish (hash, tag, or branch name)."),
+    ],
+    commit_b: Annotated[
+        str,
+        typer.Argument(help="Newer commit-ish (hash, tag, or branch name)."),
+    ],
+) -> None:
+    """Show what repo knowledge changed between two commits.
+
+    Diffs the committed `.agent-memory/` JSON snapshots at commitA and commitB.
+    Reports added, removed, and changed memory entries by id and title.
+
+    When `.agent-memory/` is not committed at either point, falls back to a plain
+    git diff of changed files and clearly labels the output as fallback mode.
+
+    Run `onmc sync --commit` and commit `.agent-memory/` to unlock full diffs.
+    """
+    try:
+        _, result = _service().memory_diff(commit_a, commit_b)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_memory_diff(result)
+    from oh_no_my_claudecode.timetravel.memory_diff import memory_diff_to_markdown
+
+    markdown = memory_diff_to_markdown(result)
+    console.print(
+        "[green]Wrote memory-diff artifact:[/green] "
+        "(see .onmc/compiled/ for the markdown)"
+    )
+    _ = markdown  # artifact already written by service.memory_diff()
 
 
 @app.command("guard")
@@ -910,6 +957,41 @@ def doctor_command() -> None:
     ok, report = _service().doctor()
     render_doctor_report(ok, report)
     raise typer.Exit(code=0 if ok else 1)
+
+
+@app.command("wiki")
+def wiki_command(
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            help=(
+                "Directory to write wiki pages into."
+                " Defaults to .onmc/wiki/ (gitignored)."
+                " Pass e.g. docs/wiki to produce a committable copy."
+            ),
+        ),
+    ] = None,
+) -> None:
+    """Generate a browsable multi-page markdown wiki from stored memory."""
+    try:
+        repo_root, written = _service().generate_wiki(output_dir=output)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if not written:
+        console.print("[yellow]No wiki pages were generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    index_path = next((p for p in written if p.name == "index.md"), written[0])
+    console.print(f"[green]Wiki generated:[/green] {len(written)} page(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    console.print(f"\n[bold]Index:[/bold] {index_path}")
 
 
 @memory_app.command("list")

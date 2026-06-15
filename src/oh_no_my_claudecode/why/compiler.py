@@ -8,6 +8,7 @@ from pathlib import Path
 from oh_no_my_claudecode.models import FileStat, MemoryArtifactRecord, MemoryEntry, MemoryKind
 from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.timetravel.git_at import GitHistoryAt, fetch_git_history_at
 
 # Memory kinds considered "why it looks this way"
 _DECISION_KINDS = {MemoryKind.DECISION, MemoryKind.INVARIANT}
@@ -69,6 +70,12 @@ class WhyReport:
 
     # Path to the written markdown artifact
     output_path: str = ""
+
+    # Time-travel: when --at <commit> is given, the bounded git history replaces
+    # git_history and this label is non-empty (e.g. "abc1234 (2026-03-01 ...)").
+    at_commit: str = ""
+    at_label: str = ""
+    git_history_at: GitHistoryAt | None = None
 
 
 def _normalize_path(repo_root: Path, raw_path: str) -> str:
@@ -151,12 +158,19 @@ def compile_why(
     repo_root: Path,
     storage: SQLiteStorage,
     raw_path: str,
+    *,
+    at_commit: str = "",
 ) -> WhyReport:
     """Assemble a WhyReport for *raw_path* from existing store + git history.
 
     This is entirely offline — no LLM calls, no network.  The optional LLM
     narrative layer is handled by the caller (service / CLI) so the core stays
     deterministic and testable.
+
+    When *at_commit* is given the git-history portion is bounded to that
+    commit-ish (``git log <commit> -- <path>``).  The in-memory SQLite store is
+    NOT time-bounded — memories don't carry a commit anchor — so the report is
+    honest about this limitation by labelling the bounded section clearly.
     """
     rel_path = _normalize_path(repo_root, raw_path)
 
@@ -194,7 +208,13 @@ def compile_why(
     # ── related artifacts ─────────────────────────────────────────────────
     related_artifacts = [a for a in artifacts if _artifact_references_path(a, rel_path)]
 
-    # ── git history ───────────────────────────────────────────────────────
+    # ── git history (optionally time-bounded) ────────────────────────────
+    git_history_at: GitHistoryAt | None = None
+    at_label = ""
+    if at_commit:
+        git_history_at = fetch_git_history_at(repo_root, rel_path, at_commit)
+        if git_history_at is not None and git_history_at.at_short:
+            at_label = f"{git_history_at.at_short} ({git_history_at.at_date})"
     git_history = _fetch_git_history(repo_root, rel_path)
 
     # ── risk verdict ──────────────────────────────────────────────────────
@@ -241,6 +261,9 @@ def compile_why(
         git_history=git_history,
         memory_edges=memory_edges,
         has_data=has_data,
+        at_commit=at_commit,
+        at_label=at_label,
+        git_history_at=git_history_at,
     )
 
 
@@ -249,6 +272,15 @@ def why_report_to_markdown(report: WhyReport) -> str:
     lines: list[str] = []
     lines.append(f"# Why does `{report.path}` look this way?")
     lines.append("")
+    if report.at_label:
+        lines.append(f"**As of:** `{report.at_label}`")
+        lines.append("")
+        lines.append(
+            "> **Note:** Git history is bounded to this commit. "
+            "Memory entries (decisions, hotspots, etc.) reflect the current store — "
+            "they are not time-bounded because memories do not carry a commit anchor."
+        )
+        lines.append("")
     lines.append(f"**Risk verdict:** {report.risk_verdict}")
     lines.append("")
 
@@ -320,8 +352,18 @@ def why_report_to_markdown(report: WhyReport) -> str:
             )
         lines.append("")
 
-    # ── Recent commits ────────────────────────────────────────────────────
-    if report.git_history and report.git_history.recent_subjects:
+    # ── Recent commits (bounded if --at was given) ────────────────────────
+    if report.git_history_at is not None and report.at_label:
+        # Time-travel mode: show the bounded history
+        lines.append(f"## Recent commits (as of `{report.at_label}`)")
+        lines.append("")
+        if report.git_history_at.recent_subjects:
+            for subject in report.git_history_at.recent_subjects:
+                lines.append(f"- {subject}")
+        else:
+            lines.append(f"_(no commits for this file at `{report.at_label}`)_")
+        lines.append("")
+    elif report.git_history and report.git_history.recent_subjects:
         lines.append("## Recent commits")
         lines.append("")
         for subject in report.git_history.recent_subjects:

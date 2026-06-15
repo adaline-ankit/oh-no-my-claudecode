@@ -106,9 +106,11 @@ from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync import export_agent_memory, restore_agent_memory
 from oh_no_my_claudecode.sync.schema import SyncResult
+from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult, diff_memory_at_commits
 from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 from oh_no_my_claudecode.why.compiler import WhyReport, compile_why, why_report_to_markdown
+from oh_no_my_claudecode.wiki import build_wiki
 
 StructuredOutputT = TypeVar(
     "StructuredOutputT",
@@ -203,10 +205,21 @@ class OnmcService:
         artifact.output_path = output_path.as_posix()
         return repo_root, artifact
 
-    def why(self, path: str, *, no_llm: bool = False) -> tuple[Path, WhyReport]:
-        """Compile a `why` report for a file from stored memory + git history."""
+    def why(
+        self,
+        path: str,
+        *,
+        no_llm: bool = False,
+        at_commit: str = "",
+    ) -> tuple[Path, WhyReport]:
+        """Compile a `why` report for a file from stored memory + git history.
+
+        When *at_commit* is given, the git-history section is bounded to that
+        commit-ish.  Memory entries are not time-bounded (they reflect the current
+        store) — the report is labelled clearly when this flag is used.
+        """
         repo_root, config, storage = self._load_context()
-        report = compile_why(repo_root, storage, path)
+        report = compile_why(repo_root, storage, path, at_commit=at_commit)
         if report.has_data and not no_llm:
             report.llm_narrative = self._why_narrative(
                 report=report, config=config, repo_root=repo_root, no_llm=no_llm
@@ -217,6 +230,64 @@ class OnmcService:
         output_path.write_text(why_report_to_markdown(report), encoding="utf-8")
         report.output_path = output_path.as_posix()
         return repo_root, report
+
+    def memory_diff(
+        self,
+        commit_a: str,
+        commit_b: str,
+    ) -> tuple[Path, MemoryDiffResult]:
+        """Diff committed `.agent-memory/` snapshots between two commits.
+
+        Reads the ``.agent-memory/memories/`` JSON tree at each commit via
+        ``git show`` — does not touch live SQLite storage.  When the snapshot
+        is absent at either commit, falls back to a plain ``git diff --name-only``
+        and marks ``result.fallback_mode=True``.
+        """
+        repo_root, config, _ = self._load_context()
+        result = diff_memory_at_commits(repo_root, commit_a, commit_b)
+        from oh_no_my_claudecode.timetravel.memory_diff import memory_diff_to_markdown
+
+        output_name = (
+            f"{utc_now().strftime('%Y%m%d-%H%M%S')}"
+            f"-memory-diff-{commit_a[:8]}-{commit_b[:8]}.md"
+        )
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(memory_diff_to_markdown(result), encoding="utf-8")
+        return repo_root, result
+
+    def generate_wiki(
+        self,
+        *,
+        output_dir: Path | None = None,
+    ) -> tuple[Path, list[Path]]:
+        """Generate a multi-page markdown wiki from stored memory and write it to disk.
+
+        Parameters
+        ----------
+        output_dir:
+            Directory to write wiki pages into.  Defaults to
+            ``<repo_root>/.onmc/wiki/``.  Pass an explicit path (e.g.
+            ``docs/wiki``) to produce a committable copy.
+
+        Returns
+        -------
+        tuple[Path, list[Path]]
+            ``(repo_root, written_paths)`` where *written_paths* lists every
+            page file that was written (may be empty when the store has no data
+            and even the minimal index is written as a single entry).
+        """
+        repo_root, config, storage = self._load_context()
+        out_dir = output_dir if output_dir is not None else (repo_root / ".onmc" / "wiki")
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        pages = build_wiki(storage, repo_root)
+        written: list[Path] = []
+        for rel_path, content in sorted(pages.items()):
+            dest = out_dir / rel_path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(content, encoding="utf-8")
+            written.append(dest)
+        return repo_root, written
 
     def _why_narrative(
         self,

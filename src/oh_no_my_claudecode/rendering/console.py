@@ -27,6 +27,7 @@ from oh_no_my_claudecode.models import (
 )
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
+from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult
 from oh_no_my_claudecode.utils.text import shorten
 from oh_no_my_claudecode.why.compiler import WhyReport
 
@@ -722,13 +723,19 @@ def _memory_artifact_type_label(artifact_type: MemoryArtifactType) -> str:
 def render_why_report(report: WhyReport) -> None:
     """Render a WhyReport to the terminal using rich panels and tables."""
     verdict_color = "red" if "hotspot" in report.risk_verdict else "green"
-    console.print(
-        Panel.fit(
-            f"[bold]{report.path}[/bold]\n"
-            f"Risk verdict: [{verdict_color}]{report.risk_verdict}[/{verdict_color}]",
-            title="onmc why",
+    panel_lines = [
+        f"[bold]{report.path}[/bold]",
+        f"Risk verdict: [{verdict_color}]{report.risk_verdict}[/{verdict_color}]",
+    ]
+    if report.at_label:
+        panel_lines.append(f"[dim]As of: {report.at_label}[/dim]")
+    console.print(Panel.fit("\n".join(panel_lines), title="onmc why"))
+
+    if report.at_label:
+        console.print(
+            "[yellow]Note:[/yellow] git history is bounded to the given commit. "
+            "Memory entries reflect the [italic]current[/italic] store."
         )
-    )
 
     if report.llm_narrative:
         console.print(Markdown("## Narrative"))
@@ -783,7 +790,14 @@ def render_why_report(report: WhyReport) -> None:
                 f"{artifact.summary}"
             )
 
-    if report.git_history and report.git_history.recent_subjects:
+    if report.git_history_at is not None and report.at_label:
+        console.print(Markdown(f"## Recent commits (as of `{report.at_label}`)"))
+        if report.git_history_at.recent_subjects:
+            for subject in report.git_history_at.recent_subjects:
+                console.print(f"  - {subject}")
+        else:
+            console.print(f"  [dim](no commits for this file at {report.at_label})[/dim]")
+    elif report.git_history and report.git_history.recent_subjects:
         console.print(Markdown("## Recent commits"))
         for subject in report.git_history.recent_subjects:
             console.print(f"  - {subject}")
@@ -972,3 +986,69 @@ def render_hud(health: MemoryHealth) -> None:
     ]
 
     console.print(Panel("\n".join(lines), title="ONMC Memory HUD", border_style="blue"))
+
+
+def render_memory_diff(result: MemoryDiffResult) -> None:
+    """Render a :class:`MemoryDiffResult` to the terminal using rich tables."""
+    label_a = f"{result.short_a} ({result.date_a})" if result.short_a else result.commit_a
+    label_b = f"{result.short_b} ({result.date_b})" if result.short_b else result.commit_b
+
+    console.print(
+        Panel.fit(
+            f"From: [bold]{label_a}[/bold]\nTo:   [bold]{label_b}[/bold]",
+            title="onmc memory-diff",
+        )
+    )
+
+    if result.fallback_mode:
+        console.print(f"[yellow]Fallback mode:[/yellow] {result.fallback_reason}")
+        if result.files_changed:
+            console.print(Markdown("## Files changed between commits"))
+            for path in result.files_changed:
+                console.print(f"  `{path}`")
+        else:
+            console.print("[dim]No file changes detected.[/dim]")
+        return
+
+    summary = (
+        f"[green]+{len(result.added)} added[/green]  "
+        f"[red]-{len(result.removed)} removed[/red]  "
+        f"[yellow]~{len(result.changed)} changed[/yellow]"
+    )
+    console.print(summary)
+
+    if result.added:
+        table = Table(title="Added knowledge", show_header=True)
+        table.add_column("Kind", style="dim", width=14)
+        table.add_column("Title", min_width=30)
+        table.add_column("Summary", min_width=40)
+        for entry in result.added:
+            table.add_row(entry.kind, entry.title, shorten(entry.summary, max_length=60))
+        console.print(table)
+
+    if result.removed:
+        table = Table(title="Removed / invalidated knowledge", show_header=True)
+        table.add_column("Kind", style="dim", width=14)
+        table.add_column("Title", min_width=30)
+        table.add_column("Summary", min_width=40)
+        for entry in result.removed:
+            table.add_row(entry.kind, entry.title, shorten(entry.summary, max_length=60))
+        console.print(table)
+
+    if result.changed:
+        table = Table(title="Changed knowledge", show_header=True)
+        table.add_column("Kind", style="dim", width=14)
+        table.add_column("Title", min_width=30)
+        table.add_column("Before", min_width=32)
+        table.add_column("After", min_width=32)
+        for change in result.changed:
+            table.add_row(
+                change.kind,
+                change.new_title,
+                shorten(change.old_summary, max_length=40),
+                shorten(change.new_summary, max_length=40),
+            )
+        console.print(table)
+
+    if not result.added and not result.removed and not result.changed:
+        console.print("[dim]No differences in committed memory snapshots.[/dim]")
