@@ -1,3 +1,4 @@
+from oh_no_my_claudecode.hooks.boot_digest import compile_boot_digest
 from oh_no_my_claudecode.hooks.brief_compiler import compile_continuation_brief
 from oh_no_my_claudecode.hooks.installer import (
     HookInstallResult,
@@ -14,12 +15,14 @@ from oh_no_my_claudecode.hooks.installer import (
 from oh_no_my_claudecode.hooks.pre_compact import build_compaction_snapshot
 from oh_no_my_claudecode.hooks.session_start import (
     session_start_context_json,
+    write_boot_digest_artifact,
     write_continuation_brief_artifact,
 )
 
 __all__ = [
     "HookInstallResult",
     "build_compaction_snapshot",
+    "compile_boot_digest",
     "compile_continuation_brief",
     "hooks_installed",
     "install_claude_hooks",
@@ -31,5 +34,6 @@ __all__ = [
     "session_start_context_json",
     "uninstall_claude_hooks",
     "user_settings_path",
+    "write_boot_digest_artifact",
     "write_continuation_brief_artifact",
 ]

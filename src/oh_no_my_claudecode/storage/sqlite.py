@@ -121,6 +121,24 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """Add staleness tracking columns to memories (migration v3).
+
+    Idempotent: each ALTER is guarded by a column-existence check via
+    _ensure_memory_column so re-running on an already-migrated DB is safe.
+    """
+    _ensure_memory_column(
+        conn,
+        "staleness",
+        "ALTER TABLE memories ADD COLUMN staleness TEXT",
+    )
+    _ensure_memory_column(
+        conn,
+        "last_verified_at",
+        "ALTER TABLE memories ADD COLUMN last_verified_at TEXT",
+    )
+
+
 def _migrate_v2(conn: sqlite3.Connection) -> None:
     """Add FTS5 full-text index over memories (title, summary, details, tags).
 
@@ -185,6 +203,7 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
+    (3, _migrate_v3),
 )
 
 
@@ -575,6 +594,33 @@ class SQLiteStorage:
                     memory.id,
                 ),
             )
+
+    def set_memory_staleness(
+        self,
+        memory_id: str,
+        staleness: str,
+        verified_at: str,
+    ) -> None:
+        """Update the staleness label and last_verified_at timestamp for one memory row."""
+        with self._connection() as conn:
+            conn.execute(
+                "UPDATE memories SET staleness = ?, last_verified_at = ? WHERE id = ?",
+                (staleness, verified_at, memory_id),
+            )
+
+    def delete_orphaned_generated_memories(self) -> int:
+        """Delete non-protected memories whose staleness is 'orphaned'.
+
+        Manual and manual_seed source types are never deleted (protected).
+        Returns the number of rows deleted.
+        """
+        with self._connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM memories WHERE staleness = 'orphaned' "
+                "AND source_type NOT IN (?, ?)",
+                tuple(self._protected_memory_source_values()),
+            )
+        return int(cursor.rowcount)
 
     def replace_repo_files(self, records: list[RepoFileRecord]) -> None:
         with self._connection() as conn:
@@ -1199,11 +1245,18 @@ class SQLiteStorage:
 
     @staticmethod
     def _row_to_memory(row: sqlite3.Row) -> MemoryEntry:
+        from oh_no_my_claudecode.models.memory import StalenessLabel
+
         created_at = parse_datetime(row["created_at"])
         updated_at = parse_datetime(row["updated_at"])
         if created_at is None or updated_at is None:
             msg = "Memory row is missing timestamps."
             raise ValueError(msg)
+        keys = row.keys()
+        raw_staleness: str | None = row["staleness"] if "staleness" in keys else None
+        staleness: StalenessLabel | None = None
+        if raw_staleness in ("fresh", "stale", "orphaned", "unanchored"):
+            staleness = raw_staleness  # type: ignore[assignment]
         return MemoryEntry(
             id=row["id"],
             kind=MemoryKind(row["kind"]),
@@ -1219,6 +1272,12 @@ class SQLiteStorage:
             ),
             created_at=created_at,
             updated_at=updated_at,
+            staleness=staleness,
+            last_verified_at=(
+                parse_datetime(row["last_verified_at"])
+                if "last_verified_at" in keys and row["last_verified_at"] is not None
+                else None
+            ),
         )
 
     @staticmethod

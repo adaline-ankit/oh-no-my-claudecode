@@ -6,6 +6,7 @@ from pathlib import Path
 from oh_no_my_claudecode.models import CompactionSnapshotRecord
 
 CONTINUATION_BRIEF_FILENAME = "continuation-brief.md"
+BOOT_DIGEST_FILENAME = "boot-digest.md"
 
 
 def session_start_context_json(continuation_brief_md: str) -> str:
@@ -24,6 +25,23 @@ def session_start_context_json(continuation_brief_md: str) -> str:
             }
         }
     )
+
+
+def write_boot_digest_artifact(
+    *,
+    state_dir: Path,
+    boot_digest_md: str,
+) -> Path:
+    """Persist the boot digest as a debug artifact under ``.onmc/``.
+
+    The file (``.onmc/boot-digest.md``) is written only for inspection — the
+    actual injection happens via the hook's stdout JSON payload. The file is
+    overwritten on every session start so it always reflects the latest digest.
+    """
+    state_dir.mkdir(parents=True, exist_ok=True)
+    artifact_path = state_dir / BOOT_DIGEST_FILENAME
+    artifact_path.write_text(boot_digest_md, encoding="utf-8")
+    return artifact_path
 
 
 def write_continuation_brief_artifact(
