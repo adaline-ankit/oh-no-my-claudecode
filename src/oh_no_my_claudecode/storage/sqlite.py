@@ -27,6 +27,7 @@ from oh_no_my_claudecode.models import (
     TaskRecord,
     TaskStatus,
 )
+from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime
 
 _SCHEMA_VERSION_KEY = "schema_version"
@@ -226,11 +227,41 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v5(conn: sqlite3.Connection) -> None:
+    """Add the memory_edges table (migration v5).
+
+    Stores directed edges between memory entries for the consolidation graph:
+    supersedes, contradicts, relates, duplicate_of.
+
+    Idempotent: uses CREATE TABLE/INDEX IF NOT EXISTS so re-running on an
+    already-migrated database is a no-op.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS memory_edges (
+            id TEXT PRIMARY KEY,
+            from_memory_id TEXT NOT NULL,
+            to_memory_id TEXT NOT NULL,
+            edge_type TEXT NOT NULL,
+            confidence REAL NOT NULL DEFAULT 1.0,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_edges_from
+            ON memory_edges(from_memory_id);
+        CREATE INDEX IF NOT EXISTS idx_memory_edges_to
+            ON memory_edges(to_memory_id);
+        CREATE INDEX IF NOT EXISTS idx_memory_edges_type
+            ON memory_edges(edge_type);
+        """
+    )
+
+
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
     (3, _migrate_v3),
     (4, _migrate_v4),
+    (5, _migrate_v5),
 )
 
 
@@ -1295,6 +1326,71 @@ class SQLiteStorage:
             cursor = conn.execute("DELETE FROM playbooks")
         return int(cursor.rowcount)
 
+    # ── Memory edge CRUD (v5) ─────────────────────────────────────────────────
+
+    def upsert_memory_edge(self, edge: MemoryEdge) -> None:
+        """Insert or replace a memory edge.
+
+        Uses the edge ``id`` as the conflict key so the same logical
+        relationship is idempotent across repeated consolidation runs.
+        """
+        with self._connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO memory_edges (
+                    id, from_memory_id, to_memory_id,
+                    edge_type, confidence, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    from_memory_id=excluded.from_memory_id,
+                    to_memory_id=excluded.to_memory_id,
+                    edge_type=excluded.edge_type,
+                    confidence=excluded.confidence,
+                    created_at=excluded.created_at
+                """,
+                (
+                    edge.id,
+                    edge.from_memory_id,
+                    edge.to_memory_id,
+                    edge.edge_type.value,
+                    edge.confidence,
+                    isoformat_utc(edge.created_at),
+                ),
+            )
+
+    def list_memory_edges(
+        self,
+        *,
+        memory_id: str | None = None,
+        edge_type: EdgeType | None = None,
+    ) -> list[MemoryEdge]:
+        """Return memory edges, optionally filtered by memory id or edge type.
+
+        When *memory_id* is given, returns all edges where *memory_id* appears
+        as either the source (``from_memory_id``) or target (``to_memory_id``).
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+        if memory_id is not None:
+            conditions.append("(from_memory_id = ? OR to_memory_id = ?)")
+            params.extend([memory_id, memory_id])
+        if edge_type is not None:
+            conditions.append("edge_type = ?")
+            params.append(edge_type.value)
+        query = "SELECT * FROM memory_edges"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at DESC"
+        with self._connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [self._row_to_memory_edge(row) for row in rows]
+
+    def delete_memory_edge(self, edge_id: str) -> bool:
+        """Delete a memory edge by id.  Returns ``True`` if a row was deleted."""
+        with self._connection() as conn:
+            cursor = conn.execute("DELETE FROM memory_edges WHERE id = ?", (edge_id,))
+        return int(cursor.rowcount) > 0
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Yield a connection that commits on success, rolls back on error, and closes."""
@@ -1530,6 +1626,21 @@ class SQLiteStorage:
             steps=json.loads(row["steps_json"]),
             grounded_in=[PlaybookProvenanceItem(**item) for item in grounded_raw],
             tags=json.loads(row["tags_json"]),
+            confidence=float(row["confidence"]),
+            created_at=created_at,
+        )
+
+    @staticmethod
+    def _row_to_memory_edge(row: sqlite3.Row) -> MemoryEdge:
+        created_at = parse_datetime(row["created_at"])
+        if created_at is None:
+            msg = "Memory edge row is missing created_at."
+            raise ValueError(msg)
+        return MemoryEdge(
+            id=row["id"],
+            from_memory_id=row["from_memory_id"],
+            to_memory_id=row["to_memory_id"],
+            edge_type=EdgeType(row["edge_type"]),
             confidence=float(row["confidence"]),
             created_at=created_at,
         )

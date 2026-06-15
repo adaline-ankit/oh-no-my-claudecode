@@ -39,6 +39,8 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc hooks pre-compact", ["hooks", "pre-compact"]),
     ("onmc hooks session-start", ["hooks", "session-start"]),
     ("onmc hooks prompt-recall", ["hooks", "prompt-recall"]),
+    ("onmc hooks session-end", ["hooks", "session-end"]),
+    ("onmc consolidate", ["consolidate"]),
     ("onmc claude-md", ["claude-md"]),
     ("onmc claude-md generate", ["claude-md", "generate"]),
     ("onmc claude-md update", ["claude-md", "update"]),
@@ -70,6 +72,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc user list", ["user", "list"]),
     ("onmc user show", ["user", "show"]),
     ("onmc user remove", ["user", "remove"]),
+    ("onmc tui", ["tui"]),
 ]
 
 
