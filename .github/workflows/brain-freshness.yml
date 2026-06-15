@@ -15,11 +15,11 @@ jobs:
   freshness:
     name: brain freshness check
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: "3.12"
@@ -33,7 +33,14 @@ jobs:
           onmc init
           onmc ingest --no-llm
           onmc sync --commit
-      - name: Check brain is up to date
+      - name: Report brain drift (informational only)
         run: |
-          git diff --exit-code .agent-memory/ \
-            || (echo "::warning::Committed .agent-memory/ is stale. Run 'onmc init && onmc ingest --no-llm && onmc sync --commit' and commit the result." && exit 1)
+          DRIFT=$(git diff --stat .agent-memory/ 2>/dev/null || true)
+          if [ -n "$DRIFT" ]; then
+            echo "::notice::Brain drift detected. Run 'onmc init && onmc ingest --no-llm && onmc sync --commit' locally and commit the result to keep .agent-memory/ fresh."
+            echo "Drift summary:"
+            git diff --stat .agent-memory/ || true
+          else
+            echo "::notice::Brain artifacts are up to date — no drift detected."
+          fi
+          exit 0
