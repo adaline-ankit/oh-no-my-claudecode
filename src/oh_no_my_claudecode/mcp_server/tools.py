@@ -173,6 +173,33 @@ def list_onmc_tools() -> list[Tool]:
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="guard_task",
+            title="Guard task against known dead-ends",
+            description=(
+                "Surface recorded dead-ends (failed_approach memories and did_not_work "
+                "artifacts) for a task. Call this before acting to avoid repeating known "
+                "failures. Returns a ranked list of what was tried and why it failed."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "string",
+                        "description": "The task description to check for known dead-ends.",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 8,
+                        "description": "Maximum number of dead-end entries to return.",
+                    },
+                },
+                "required": ["task"],
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -193,6 +220,8 @@ def call_onmc_tool(
         text = _record_memory(repo, args)
     elif name == "list_tasks":
         text = _list_tasks(repo)
+    elif name == "guard_task":
+        text = _guard_task(repo, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
@@ -389,6 +418,37 @@ def _list_tasks(repo: OnmcRepo) -> str:
         for task in repo.task.list()
     ]
     return _json_text(tasks)
+
+
+def _guard_task(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.guard.compiler import compile_guard
+
+    task = _require_str(args, "task")
+    limit = _optional_int(args, "limit", default=8)
+    if limit < 1:
+        msg = "Argument 'limit' must be a positive integer."
+        raise ValueError(msg)
+
+    _, _, storage = repo._service._load_context()
+    result = compile_guard(storage, task, limit=limit)
+
+    payload = {
+        "task": result.task,
+        "has_dead_ends": result.has_dead_ends,
+        "entries": [
+            {
+                "memory_id": entry.memory_id,
+                "title": entry.title,
+                "what_was_tried": entry.what_was_tried,
+                "why_it_failed": entry.why_it_failed,
+                "related_files": entry.related_files,
+                "source_ref": entry.source_ref,
+                "confidence": entry.confidence,
+            }
+            for entry in result.entries
+        ],
+    }
+    return _json_text(payload)
 
 
 def _is_json_format() -> bool:

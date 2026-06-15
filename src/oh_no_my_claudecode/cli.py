@@ -31,6 +31,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_brief,
     render_doctor_report,
     render_hook_status,
+    render_hud,
     render_ingest_result,
     render_init_summary,
     render_llm_configured,
@@ -257,6 +258,51 @@ def why_command(
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
 
+@app.command("guard")
+def guard_command(
+    task: Annotated[str, typer.Option("--task", help="Task description to check for dead-ends.")],
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of dead-end entries to return."),
+    ] = 8,
+) -> None:
+    """Surface recorded dead-ends so you never repeat a known failure."""
+    from oh_no_my_claudecode.config import compiled_dir, load_config
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    try:
+        repo_root, result = _service().guard(task, limit=limit)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    markdown = result.to_markdown()
+
+    if result.has_dead_ends:
+        from rich.panel import Panel
+
+        console.print(
+            Panel.fit(
+                markdown.rstrip(),
+                title="[bold red]Guard: DO NOT retry these dead-ends[/bold red]",
+                border_style="red",
+            )
+        )
+    else:
+        console.print("[green]Guard: no recorded dead-ends match this task.[/green]")
+
+    # Write artifact to .onmc/compiled/<ts>-guard.md
+    try:
+        config = load_config(repo_root)
+        out_dir = compiled_dir(config, repo_root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = utc_now().strftime("%Y%m%d-%H%M%S")
+        artifact_path = out_dir / f"{ts}-guard.md"
+        artifact_path.write_text(markdown, encoding="utf-8")
+        console.print(f"[green]Wrote guard artifact:[/green] {artifact_path}")
+    except Exception:  # noqa: BLE001, S110
+        pass  # artifact write failure must not break the command
+
+
 @app.command("status")
 def status_command() -> None:
     """Show local ONMC status."""
@@ -264,6 +310,29 @@ def status_command() -> None:
         render_status(_service().status())
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+
+@app.command("statusline")
+def statusline_command() -> None:
+    """Print a compact one-line brain health string for Claude Code statusLine.
+
+    Example output: 🧠 142 mem · 87% fresh · 3 stale · 12k tok/day
+
+    Wire into Claude Code by adding to your settings.json:
+      \"statusLine\": \"onmc statusline\"
+    """
+    svc = _service()
+    typer.echo(svc.statusline())
+
+
+@app.command("hud")
+def hud_command() -> None:
+    """Display a rich multi-line memory health HUD panel."""
+    try:
+        health = _service().memory_health()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_hud(health)
 
 
 @app.command("report")

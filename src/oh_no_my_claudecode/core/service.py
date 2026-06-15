@@ -8,7 +8,11 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast
+
+if TYPE_CHECKING:
+    from oh_no_my_claudecode.guard.compiler import GuardResult
+    from oh_no_my_claudecode.stats.health import MemoryHealth
 
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
 from oh_no_my_claudecode.claude_md import (
@@ -1293,6 +1297,35 @@ class OnmcService:
             "max_brief_memories": str(config.brief.max_memories),
         }
 
+    def memory_health(self) -> MemoryHealth:
+        """Compute a :class:`MemoryHealth` snapshot for this repo."""
+        from oh_no_my_claudecode.stats.health import compute_memory_health
+
+        repo_root, config, storage = self._load_context()
+        log_path = self._llm_log_path(repo_root, config)
+        return compute_memory_health(storage, repo_root, log_path)
+
+    def statusline(self) -> str:
+        """Return a compact one-line health string for Claude Code statusLine.
+
+        Never raises — degrades to a minimal string when not initialised.
+        """
+        try:
+            h = self.memory_health()
+            tok_k = h.recent_cost.total_tokens // 1000
+            raw_tok = h.recent_cost.total_tokens
+            tok_label = f"{tok_k}k tok/day" if tok_k >= 1 else f"{raw_tok} tok/day"
+            return (
+                f"🧠 {h.total_memories} mem"
+                f" · {h.freshness_pct:.0f}% fresh"
+                f" · {h.stale_count} stale"
+                f" · {tok_label}"
+            )
+        except (FileNotFoundError, LookupError):
+            return "🧠 onmc not initialized"
+        except Exception:  # noqa: BLE001
+            return "🧠 onmc error"
+
     def _run_llm_mode(
         self,
         *,
@@ -1634,6 +1667,20 @@ class OnmcService:
             return self._user_storage(home=home).list_memories()
         except Exception:
             return []
+
+    def guard(self, task: str, *, limit: int = 8) -> tuple[Path, GuardResult]:
+        """Surface recorded dead-ends relevant to *task*.
+
+        Returns ``(repo_root, GuardResult)`` where ``GuardResult.entries``
+        contains ranked ``GuardEntry`` items from ``FAILED_APPROACH`` memories
+        and ``did_not_work`` artifacts.  An empty result is valid and means no
+        relevant dead-ends have been recorded for this task.
+        """
+        from oh_no_my_claudecode.guard.compiler import compile_guard
+
+        repo_root, _, storage = self._load_context()
+        result = compile_guard(storage, task, limit=limit)
+        return repo_root, result
 
     def consolidate(self, *, dry_run: bool = False) -> tuple[Path, ConsolidationResult]:
         """Run the memory consolidation pass (dedup, merge, promote, demote, graph).

@@ -20,6 +20,7 @@ EXPECTED_TOOL_NAMES = {
     "record_attempt",
     "record_memory",
     "list_tasks",
+    "guard_task",
 }
 
 
