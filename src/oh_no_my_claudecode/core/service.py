@@ -28,6 +28,7 @@ from oh_no_my_claudecode.config import (
     load_config,
     logs_dir,
     state_dir,
+    user_database_path,
     write_config,
 )
 from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root, path_bucket
@@ -48,6 +49,7 @@ from oh_no_my_claudecode.hooks import (
     write_boot_digest_artifact,
     write_continuation_brief_artifact,
 )
+from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
 from oh_no_my_claudecode.ingest.pipeline import run_ingest, run_ingest_files
 from oh_no_my_claudecode.llm import (
     MarkdownEnvelope,
@@ -344,7 +346,7 @@ class OnmcService:
         self._refresh_claude_md_if_stale(storage=storage, home=home)
         return updated_snapshot, brief_md
 
-    def boot_digest(self) -> tuple[str, int]:
+    def boot_digest(self, *, home: Path | None = None) -> tuple[str, int]:
         """Compile a boot digest for session startup/resume/clear injection.
 
         Returns ``(digest_md, token_count)``. When the store has no meaningful
@@ -353,14 +355,18 @@ class OnmcService:
 
         The digest is also written to ``.onmc/boot-digest.md`` as a debug
         artifact.
+
+        *home* is injectable for tests (default: ``Path.home()``).
         """
         repo_root, config, storage = self._load_context()
         memories = storage.list_memories()
         tasks = storage.list_tasks()
+        user_memories = self._load_user_memories(home=home)
         digest_md, token_count = compile_boot_digest(
             memories=memories,
             tasks=tasks,
             repo_name=repo_root.name,
+            user_memories=user_memories,
         )
         if digest_md:
             write_boot_digest_artifact(
@@ -369,6 +375,27 @@ class OnmcService:
             )
         storage.set_meta("last_session_start_at", isoformat_utc(utc_now()))
         return digest_md, token_count
+
+    def prompt_recall(self, prompt: str) -> str:
+        """Return a relevance-ranked memory markdown block for *prompt*.
+
+        Loads the onmc context, runs FTS candidate retrieval, reranks by token
+        overlap + confidence + feedback score (with staleness penalty), and
+        returns a tight markdown block bounded to ~300 tokens.
+
+        Returns an empty string when onmc is not initialised, the store is
+        empty, or no memories are relevant to the prompt.  Never raises.
+        """
+        try:
+            repo_root, config, storage = self._load_context()
+            recall_md, _ = compile_prompt_recall(storage, prompt)
+            if recall_md:
+                sd = state_dir(config, repo_root)
+                sd.mkdir(parents=True, exist_ok=True)
+                (sd / "prompt-recall.md").write_text(recall_md, encoding="utf-8")
+            return recall_md
+        except Exception:  # noqa: BLE001
+            return ""
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""
@@ -1540,6 +1567,72 @@ class OnmcService:
             written.append(target.as_posix())
 
         return written
+
+    # ── User-scope (cross-repo) memory ────────────────────────────────────────
+
+    def add_user_memory(
+        self,
+        *,
+        title: str,
+        summary: str,
+        home: Path | None = None,
+    ) -> MemoryEntry:
+        """Add a durable user-scope preference to ``~/.onmc/user.db``.
+
+        User memories are not repo-scoped — they travel with the developer
+        across all repositories and appear in every boot digest.  They use
+        the ``MANUAL`` source type so they are protected from automated
+        replacement.
+        """
+        storage = self._user_storage(home=home)
+        now = utc_now()
+        entry = MemoryEntry(
+            id=stable_id("user", title, summary, "user:manual", prefix="user"),
+            kind=MemoryKind.DECISION,
+            title=title,
+            summary=summary,
+            details=summary,
+            source_type=SourceType.MANUAL,
+            source_ref="user:manual",
+            tags=["user-pref"],
+            confidence=0.9,
+            created_at=now,
+            updated_at=now,
+        )
+        storage.upsert_memories([entry])
+        return storage.get_memory(entry.id) or entry
+
+    def list_user_memories(self, *, home: Path | None = None) -> list[MemoryEntry]:
+        """Return all user-scope preferences from ``~/.onmc/user.db``."""
+        storage = self._user_storage(home=home)
+        return storage.list_memories()
+
+    def get_user_memory(self, memory_id: str, *, home: Path | None = None) -> MemoryEntry | None:
+        """Return a single user-scope memory by id."""
+        storage = self._user_storage(home=home)
+        return storage.get_memory(memory_id)
+
+    def remove_user_memory(self, memory_id: str, *, home: Path | None = None) -> bool:
+        """Delete a user-scope memory by id.  Returns ``True`` if a row was deleted."""
+        storage = self._user_storage(home=home)
+        with storage._connection() as conn:  # noqa: SLF001
+            cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        return cursor.rowcount > 0
+
+    @staticmethod
+    def _user_storage(*, home: Path | None = None) -> SQLiteStorage:
+        """Return an initialised SQLiteStorage pointing at ``~/.onmc/user.db``."""
+        db_path = user_database_path(home)
+        storage = SQLiteStorage(db_path)
+        storage.initialize()
+        return storage
+
+    def _load_user_memories(self, *, home: Path | None = None) -> list[MemoryEntry]:
+        """Load user-scope memories; return an empty list on any error."""
+        try:
+            return self._user_storage(home=home).list_memories()
+        except Exception:
+            return []
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)

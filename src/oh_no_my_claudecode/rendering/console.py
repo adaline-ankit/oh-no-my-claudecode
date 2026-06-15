@@ -850,3 +850,68 @@ def render_playbook_generate_summary(
         *[f"  {path}" for path in artifacts_written],
     ]
     console.print(Panel.fit("\n".join(lines), title="Playbook Generate Complete"))
+
+
+# ---------------------------------------------------------------------------
+# User-scope memory rendering
+# ---------------------------------------------------------------------------
+
+
+def render_user_memory_added(memory: MemoryEntry) -> None:
+    """Render confirmation that a user-scope preference was stored."""
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"ID: [bold]{memory.id}[/bold]",
+                    f"Title: {memory.title}",
+                    "",
+                    memory.summary,
+                    "",
+                    "Store: ~/.onmc/user.db  (travels across all repos)",
+                ]
+            ),
+            title="User Preference Saved",
+        )
+    )
+
+
+def render_user_memory_list(memories: list[MemoryEntry]) -> None:
+    """Render a table of user-scope preference memories."""
+    if not memories:
+        console.print("[yellow]No user preferences found. Use `onmc user add` to add one.[/yellow]")
+        return
+    table = Table(title="Your Preferences (~/.onmc/user.db)")
+    table.add_column("ID", style="dim", width=24)
+    table.add_column("Title", min_width=28, no_wrap=False)
+    table.add_column("Summary", min_width=40, no_wrap=False)
+    for memory in memories:
+        table.add_row(memory.id, memory.title, shorten(memory.summary, max_length=60))
+    console.print(table)
+
+
+def render_user_memory_detail(memory: MemoryEntry) -> None:
+    """Render a single user-scope preference."""
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]{memory.title}[/bold]",
+                    f"ID: {memory.id}",
+                    f"Confidence: {memory.confidence:.2f}",
+                    f"Created: {memory.created_at.isoformat()}",
+                    "",
+                    memory.summary,
+                ]
+            ),
+            title="User Preference Detail",
+        )
+    )
+
+
+def render_user_memory_removed(memory_id: str, *, found: bool) -> None:
+    """Render confirmation (or not-found notice) after removing a user preference."""
+    if found:
+        console.print(f"[green]Removed user preference:[/green] {memory_id}")
+    else:
+        console.print(f"[yellow]User preference not found:[/yellow] {memory_id}")
