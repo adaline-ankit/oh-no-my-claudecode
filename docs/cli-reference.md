@@ -42,6 +42,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ mine         Mine Claude Code session transcripts into ONMC memory.          │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
+│ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ memory       Inspect stored memory.                                          │
 │ task         Manage task lifecycle state.                                    │
 │ attempt      Track task-scoped attempts.                                     │
@@ -543,6 +544,7 @@ Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
 │          staleness.                                                          │
 │ prune    Remove orphaned generated memories (manual memories are always      │
 │          preserved).                                                         │
+│ embed    Pre-build semantic embedding vectors for all memories.              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1039,5 +1041,28 @@ Usage: onmc tui [OPTIONS]
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bench`
+
+```text
+Usage: onmc bench [OPTIONS]                                                    
+                                                                                
+ Measure whether onmc memory actually reduces wasted work.                      
+                                                                                
+ Runs a deterministic proof harness comparing two conditions: without onmc      
+ memory vs with onmc memory (brief/recall injected).  Default uses a            
+ built-in synthetic scenario that works on any repo with no init needed.        
+                                                                                
+ The harness is a deterministic simulation — no LLM is called.  Results are     
+ reproducible in CI.  See the bench/harness.py module docstring for the full    
+ methodology.                                                                   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --repo-memory          Run against the current repo's real memory store      │
+│                        instead of built-in scenario.                         │
+│ --json                 Print machine-readable JSON summary to stdout.        │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

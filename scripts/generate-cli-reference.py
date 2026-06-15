@@ -73,6 +73,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc user show", ["user", "show"]),
     ("onmc user remove", ["user", "remove"]),
     ("onmc tui", ["tui"]),
+    ("onmc bench", ["bench"]),
 ]
 
 

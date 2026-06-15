@@ -1088,6 +1088,31 @@ def memory_prune_command(
     console.print(f"[red]Deleted {deleted} orphaned generated memories.[/red]")
 
 
+@memory_app.command("embed")
+def memory_embed_command(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Recompute vectors even when a valid cache entry exists."),
+    ] = False,
+) -> None:
+    """Pre-build semantic embedding vectors for all memories.
+
+    Vectors are cached in the local SQLite database (migration v6).  Subsequent
+    searches use the cache, so this command is optional — vectors are also built
+    lazily on first search when embeddings are enabled.  Run it to warm the
+    cache or after switching to a different real-model embedder.
+    """
+    from oh_no_my_claudecode.embeddings.rerank import build_vectors_for_all_memories
+
+    try:
+        _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    written = build_vectors_for_all_memories(storage, force=force)
+    console.print(f"[green]Embedded {written} memor{'y' if written == 1 else 'ies'}.[/green]")
+
+
 @task_app.command("start")
 def task_start_command(
     title: Annotated[str, typer.Option("--title", help="Short task title.")],
@@ -1385,6 +1410,156 @@ def user_remove_command(memory_id: str) -> None:
     """Remove a user preference by ID."""
     found = _service().remove_user_memory(memory_id)
     render_user_memory_removed(memory_id, found=found)
+
+
+@app.command("bench")
+def bench_command(
+    repo_memory: Annotated[
+        bool,
+        typer.Option(
+            "--repo-memory",
+            help="Run against the current repo's real memory store instead of built-in scenario.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON summary to stdout."),
+    ] = False,
+) -> None:
+    """Measure whether onmc memory actually reduces wasted work.
+
+    Runs a deterministic proof harness comparing two conditions: without onmc
+    memory vs with onmc memory (brief/recall injected).  Default uses a
+    built-in synthetic scenario that works on any repo with no init needed.
+
+    The harness is a deterministic simulation — no LLM is called.  Results are
+    reproducible in CI.  See the bench/harness.py module docstring for the full
+    methodology.
+    """
+    import json as _json
+
+    from rich.table import Table
+
+    from oh_no_my_claudecode.bench.harness import (
+        BUILTIN_SCENARIO,
+        BenchScenario,
+        MemoryRecord,
+        run_benchmark,
+    )
+    from oh_no_my_claudecode.config import compiled_dir
+    from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
+
+    scenario: BenchScenario
+
+    if repo_memory:
+        try:
+            _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+        except FileNotFoundError as exc:
+            raise typer.Exit(code=_fatal(str(exc))) from exc
+
+        memories_raw = storage.list_memories()
+        repo_memories = [
+            MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[])
+            for m in memories_raw
+        ]
+        # Re-use built-in tasks but replace the memory store with real repo memories
+        scenario = BenchScenario(
+            name="onmc-repo-memory",
+            description="Built-in tasks run against this repo's real memory store.",
+            tasks=list(BUILTIN_SCENARIO.tasks),
+            memories=repo_memories,
+            baseline_context_tokens=BUILTIN_SCENARIO.baseline_context_tokens,
+        )
+    else:
+        scenario = BUILTIN_SCENARIO
+
+    result = run_benchmark(scenario)
+
+    if json_output:
+        import dataclasses
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "scenario": result.scenario_name,
+                    "without_memory": dataclasses.asdict(result.without_memory),
+                    "with_memory": dataclasses.asdict(result.with_memory),
+                    "deltas": {
+                        "repeated_failure_rate": round(
+                            result.repeated_failure_rate_delta, 4
+                        ),
+                        "wasted_attempts": result.wasted_attempts_delta,
+                        "context_tokens_pct_reduction": round(
+                            result.context_tokens_pct_reduction, 1
+                        ),
+                        "tasks_resolved": result.tasks_resolved_delta,
+                    },
+                },
+                indent=2,
+            )
+        )
+        return
+
+    # Rich comparison table
+    table = Table(title=f"onmc bench — {result.scenario_name}", show_lines=True)
+    table.add_column("Metric", style="bold")
+    table.add_column("Without memory", justify="right")
+    table.add_column("With memory", justify="right")
+    table.add_column("Delta", justify="right")
+
+    w = result.without_memory
+    m = result.with_memory
+
+    table.add_row(
+        "Repeated-failure rate",
+        f"{w.repeated_failure_rate:.0%}",
+        f"{m.repeated_failure_rate:.0%}",
+        f"[green]-{result.repeated_failure_rate_delta:.0%}[/green]",
+    )
+    table.add_row(
+        "Wasted attempts",
+        str(w.wasted_attempts),
+        str(m.wasted_attempts),
+        f"[green]-{result.wasted_attempts_delta}[/green]",
+    )
+    table.add_row(
+        "Context tokens (proxy)",
+        str(w.context_tokens),
+        str(m.context_tokens),
+        f"[green]-{result.context_tokens_pct_reduction:.0f}%[/green]",
+    )
+    table.add_row(
+        "Tasks resolved",
+        str(w.tasks_resolved),
+        str(m.tasks_resolved),
+        f"[green]+{result.tasks_resolved_delta}[/green]",
+    )
+    console.print(table)
+
+    console.print(
+        f"\n[bold]Headline deltas:[/bold] "
+        f"repeated-failure rate: "
+        f"{w.repeated_failure_rate:.0%} → {m.repeated_failure_rate:.0%}"
+        f"  |  context tokens: -{result.context_tokens_pct_reduction:.0f}%"
+        f"  |  wasted attempts: -{result.wasted_attempts_delta}"
+    )
+    console.print(
+        "[dim]Methodology: deterministic simulation — no LLM calls. "
+        "Results are identical across runs. See bench/harness.py for details.[/dim]"
+    )
+
+    # Write artifact
+    try:
+        svc = _service()
+        _repo_root, _config, _storage = svc._load_context()  # noqa: SLF001
+        artifact_dir = compiled_dir(_config, _repo_root)
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        ts = isoformat_utc(utc_now()).replace(":", "-").replace("+", "Z")
+        artifact_path = artifact_dir / f"{ts}-bench.md"
+        artifact_path.write_text(result.to_markdown(), encoding="utf-8")
+        console.print(f"[green]Wrote bench artifact:[/green] {artifact_path}")
+    except Exception:  # noqa: BLE001, S110
+        pass  # artifact write is best-effort; bench still exits 0
 
 
 def _fatal(message: str) -> int:
