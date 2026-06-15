@@ -338,8 +338,8 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │ status         Show current Claude hook installation and snapshot status.    │
 │ pre-compact    Capture a compaction snapshot before Claude Code compacts     │
 │                context.                                                      │
-│ session-start  Inject the continuation brief when a session starts after     │
-│                compaction.                                                   │
+│ session-start  Inject context at session start: boot digest on startup,      │
+│                continuation brief after compaction.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -398,7 +398,8 @@ Usage: onmc hooks pre-compact [OPTIONS]
 ```text
 Usage: onmc hooks session-start [OPTIONS]                                      
                                                                                 
- Inject the continuation brief when a session starts after compaction.          
+ Inject context at session start: boot digest on startup, continuation brief    
+ after compaction.                                                              
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -480,6 +481,10 @@ Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
 │ confirm  Mark a memory record as verified useful.                            │
 │ reject   Mark a memory record as wrong or stale.                             │
 │ edit     Edit a memory summary and reset its feedback score.                 │
+│ verify   Re-check anchored memories against the filesystem and record        │
+│          staleness.                                                          │
+│ prune    Remove orphaned generated memories (manual memories are always      │
+│          preserved).                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
