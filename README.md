@@ -91,17 +91,31 @@ onmc init && onmc sync --restore   # full memory, zero re-discovery
 
 ## Works with every coding agent
 
-| Agent | Integration |
-|---|---|
-| **Claude Code** | `CLAUDE.md` + `onmc hooks install` + `onmc serve --mcp` + [plugin manifest](.claude-plugin/plugin.json) |
-| **Cursor** | Pipe `onmc brief` output to `.cursorrules` |
-| **Codex / other agents** | [`AGENTS.md`](AGENTS.md) — run `onmc brief`, `onmc guard`, `onmc serve --mcp` at session start |
-| **Cloud agents** (Codex, GitHub Coding Agent) | `onmc sync --restore` in container startup |
-| **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` |
+Run `onmc plug <agent>` to wire onmc into your agent in one idempotent command:
+
+```bash
+onmc plug claude-code   # hooks + .mcp.json
+onmc plug codex         # AGENTS.md stanza
+onmc plug cursor        # .cursor/rules/onmc.md
+onmc plug omc           # copy-paste OMC adapter
+onmc plug omx           # copy-paste OMX adapter
+onmc plug all           # claude-code + codex + cursor
+```
+
+| Agent | `onmc plug` | Manual integration |
+|---|---|---|
+| **Claude Code** | `onmc plug claude-code` | `CLAUDE.md` + `onmc hooks install` + `onmc serve --mcp` + [plugin manifest](.claude-plugin/plugin.json) |
+| **Cursor** | `onmc plug cursor` | Pipe `onmc brief` output to `.cursorrules` |
+| **Codex / GitHub Coding Agent** | `onmc plug codex` | [`AGENTS.md`](AGENTS.md) — run `onmc brief`, `onmc guard`, `onmc serve --mcp` at session start |
+| **oh-my-claudecode (OMC)** | `onmc plug omc` | Copy-paste adapter in [docs/integrations/omc.md](docs/integrations/omc.md) |
+| **oh-my-codex (OMX)** | `onmc plug omx` | Copy-paste adapter in [docs/integrations/omx.md](docs/integrations/omx.md) |
+| **Cloud agents** (GitHub Coding Agent) | — | `onmc sync --restore` in container startup |
+| **Gitpod / Codespaces** | — | Add `onmc sync --restore` to `.gitpod.yml` |
 
 MCP tools exposed by `onmc serve --mcp`: **`search_memory`**, **`guard_task`**, **`get_brief`**.
 
-See [Agent-Native Workflows](docs/agent-native-workflows.md) and [CLI Reference](docs/cli-reference.md) for full detail.
+See [Integration Guides](docs/integrations/README.md), [Agent-Native Workflows](docs/agent-native-workflows.md),
+and [CLI Reference](docs/cli-reference.md) for full detail.
 
 ---
 
