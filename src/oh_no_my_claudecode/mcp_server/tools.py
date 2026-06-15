@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from mcp.types import TextContent, Tool
 
 from oh_no_my_claudecode.api import OnmcRepo
 from oh_no_my_claudecode.models import AttemptKind, AttemptStatus, MemoryEntry, MemoryKind
+from oh_no_my_claudecode.serialize import to_toon
 from oh_no_my_claudecode.utils.text import tokenize
+
+# When set to "json", MCP tool responses are emitted as indented JSON instead
+# of the default TOON compact format.
+_ENV_FORMAT = "ONMC_MCP_FORMAT"
 
 # Minimum query length below which FTS candidate pre-retrieval is skipped.
 _MIN_QUERY_FOR_FTS = 3
@@ -358,8 +364,20 @@ def _list_tasks(repo: OnmcRepo) -> str:
     return _json_text(tasks)
 
 
+def _is_json_format() -> bool:
+    """Return True when the caller has opted into JSON output via env var."""
+    return os.environ.get(_ENV_FORMAT, "").strip().lower() == "json"
+
+
+def _serialize(payload: object) -> str:
+    """Serialize *payload* to TOON (default) or JSON (opt-in)."""
+    if _is_json_format():
+        return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    return to_toon(payload)
+
+
 def _json_text(payload: object) -> str:
-    return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    return _serialize(payload)
 
 
 def _require_str(args: dict[str, Any], key: str) -> str:

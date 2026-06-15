@@ -7,22 +7,26 @@ This document is the authoritative guide for cutting a release. The pipeline use
 
 ## How the pipeline works
 
-Pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`, which runs four
-sequential jobs:
+Pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`, which runs these jobs:
 
 ```
-gate  →  build  →  publish  →  github-release
+gate  →  build  →  publish        (PyPI — only when PYPI_TRUSTED_PUBLISHING=true)
+               ╰→  github-release (always, independent of publish)
 ```
 
-| Job | What it does |
-|---|---|
-| `gate` | Full quality gate across Python 3.11–3.13: ruff, mypy, pytest (≥80% coverage) |
-| `build` | `python -m build` (sdist + wheel) + `twine check` |
-| `publish` | Uploads to PyPI via OIDC trusted publishing (no token needed) |
-| `github-release` | Creates a GitHub Release with auto-generated notes + dist assets attached |
+| Job | `needs` | What it does |
+|---|---|---|
+| `gate` | — | Full quality gate across Python 3.11–3.13: ruff, mypy, pytest (≥80% coverage) |
+| `build` | `gate` | `python -m build` (sdist + wheel) + `twine check`; uploads dist as workflow artifact |
+| `publish` | `build` | Uploads to PyPI via OIDC trusted publishing. **Skipped** unless the repo variable `PYPI_TRUSTED_PUBLISHING=true` is set (see below). |
+| `github-release` | `build` | Creates a GitHub Release with auto-generated notes + dist assets attached. Runs whenever the build passes on a tag push — **not** gated on `publish`. |
 
-The `publish` and `github-release` jobs only run on tag pushes or manually-published
-GitHub Releases — `workflow_dispatch` alone does **not** publish to PyPI.
+The `publish` and `github-release` jobs only fire on tag pushes or manually-published
+GitHub Releases — `workflow_dispatch` alone does **not** publish to PyPI or create a
+release.
+
+**Key design principle:** the GitHub Release and the PyPI upload are independent.
+A missing or failed PyPI publish will never block the GitHub Release from being created.
 
 ---
 
@@ -86,16 +90,48 @@ python -m venv /tmp/onmc-release-check
 
 ---
 
-## Trusted publishing setup (one-time, already configured)
+## PyPI trusted publishing (one-time setup)
 
-The PyPI trusted publisher is registered under the `pypi` GitHub Actions environment.
-No API token is stored. If you ever need to reconfigure it:
+The `publish` job uses OIDC trusted publishing — no API token is required or stored.
+The job is **disabled by default** via a repository variable gate and must be enabled
+once after the PyPI project side is configured. Follow these steps exactly once:
+
+### Step 1 — Register the trusted publisher on PyPI
 
 1. Go to https://pypi.org/manage/project/oh-no-my-claudecode/settings/publishing/
-2. Add a publisher: GitHub — repo `adaline-ankit/oh-no-my-claudecode`, workflow
-   `release.yml`, environment `pypi`.
-3. The GitHub environment `pypi` must exist in repo Settings → Environments with
-   the deployment branch rule set to `refs/tags/v*.*.*`.
+   (create the project first via https://pypi.org/manage/projects/ if it does not
+   exist yet — PyPI requires at least one manual upload to create a project, or you
+   can use the "pending publisher" feature to pre-register before any upload).
+2. Under **Add a new pending publisher** (or **Trusted Publisher Management**), add:
+   - **Publisher:** GitHub Actions
+   - **Repository owner:** `adaline-ankit`
+   - **Repository name:** `oh-no-my-claudecode`
+   - **Workflow name:** `release.yml`
+   - **Environment name:** `pypi`
+
+### Step 2 — Configure the GitHub environment
+
+In the repository at **Settings → Environments**, ensure an environment named `pypi`
+exists and has a deployment branch rule matching `refs/tags/v*.*.*` (tag-only deploys).
+
+### Step 3 — Enable the publish job
+
+In **Settings → Variables → Actions**, add (or set) a repository variable:
+
+```
+PYPI_TRUSTED_PUBLISHING = true
+```
+
+Once this variable is set, every subsequent `vX.Y.Z` tag push will upload to PyPI.
+
+### Until then
+
+Until Step 3 is complete, pushing a `vX.Y.Z` tag still:
+- Runs the full quality gate (ruff, mypy, pytest)
+- Builds the sdist + wheel
+- Creates a GitHub Release with the dist assets attached
+
+The PyPI upload is simply skipped — the rest of the pipeline is unaffected.
 
 ---
 

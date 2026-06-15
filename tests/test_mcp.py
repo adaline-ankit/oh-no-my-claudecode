@@ -23,6 +23,12 @@ EXPECTED_TOOL_NAMES = {
 }
 
 
+@pytest.fixture()
+def json_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force MCP output to JSON for tests that need to parse structured data."""
+    monkeypatch.setenv("ONMC_MCP_FORMAT", "json")
+
+
 def _resource_text(repo_path: Path, uri: str) -> str:
     repo = init(repo_path)
     contents = read_onmc_resource(repo, uri)
@@ -39,7 +45,9 @@ def test_mcp_server_initializes_without_error(sample_repo: Path, monkeypatch: ob
     assert server is not None
 
 
-def test_status_resource_returns_valid_json(sample_repo: Path, monkeypatch: object) -> None:
+def test_status_resource_returns_valid_json(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, json_format: None
+) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
     repo.ingest()
@@ -49,7 +57,9 @@ def test_status_resource_returns_valid_json(sample_repo: Path, monkeypatch: obje
     assert payload["repo_root"] == sample_repo.as_posix()
 
 
-def test_memory_list_resource_returns_valid_json(sample_repo: Path, monkeypatch: object) -> None:
+def test_memory_list_resource_returns_valid_json(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, json_format: None
+) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
     repo.ingest()
@@ -128,7 +138,9 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert by_name["list_tasks"].inputSchema["properties"] == {}
 
 
-def test_search_memory_ranks_seeded_store(sample_repo: Path, monkeypatch: object) -> None:
+def test_search_memory_ranks_seeded_store(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, json_format: None
+) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
     repo.ingest()
@@ -152,7 +164,8 @@ def test_search_memory_ranks_seeded_store(sample_repo: Path, monkeypatch: object
 
 def test_search_memory_respects_kind_filter_and_limit(
     sample_repo: Path,
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
 ) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
@@ -187,7 +200,8 @@ def test_get_brief_returns_markdown(sample_repo: Path, monkeypatch: object) -> N
 
 def test_record_attempt_round_trips_through_storage(
     sample_repo: Path,
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
 ) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
@@ -216,7 +230,8 @@ def test_record_attempt_round_trips_through_storage(
 
 def test_record_memory_round_trips_as_protected_manual_entry(
     sample_repo: Path,
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
 ) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
@@ -241,7 +256,8 @@ def test_record_memory_round_trips_as_protected_manual_entry(
 
 def test_list_tasks_returns_id_title_status_branch(
     sample_repo: Path,
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
 ) -> None:
     monkeypatch.chdir(sample_repo)
     repo = init(sample_repo)
@@ -283,3 +299,184 @@ def test_invalid_tool_arguments_raise_clean_errors(
         )
     with pytest.raises(ValueError, match="Argument 'files' must be an array of strings."):
         call_onmc_tool(repo, "search_memory", {"query": "cache", "files": "src/cache.py"})
+
+
+# ---------------------------------------------------------------------------
+# TOON default + JSON opt-in tests
+# ---------------------------------------------------------------------------
+
+
+def test_tools_return_toon_by_default(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """search_memory and list_tasks return TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+    repo.memory.add(
+        type="gotcha",
+        title="Cache invalidation gotcha",
+        summary="Workers must always go through the cache boundary for invalidation.",
+    )
+
+    search_text = _tool_text(repo, "search_memory", {"query": "cache invalidation boundary"})
+    # TOON tabular output contains KEYS/ROW markers, not JSON punctuation.
+    assert "KEYS" in search_text or search_text.strip().startswith("[")
+    # Should NOT be valid top-level JSON array/object
+    try:
+        json.loads(search_text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+
+    task = repo.task.start(title="Test task")
+    tasks_text = _tool_text(repo, "list_tasks", {})
+    assert "KEYS" in tasks_text or "ROW" in tasks_text or task.task_id in tasks_text
+    # Confirm it's not JSON
+    try:
+        json.loads(tasks_text)
+        is_json_tasks = True
+    except json.JSONDecodeError:
+        is_json_tasks = False
+    assert not is_json_tasks, "list_tasks default output should be TOON, not JSON"
+
+
+def test_tools_return_json_when_env_set(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, json_format: None
+) -> None:
+    """Tools return valid JSON when ONMC_MCP_FORMAT=json is set."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+    repo.memory.add(
+        type="gotcha",
+        title="Cache gotcha",
+        summary="A gotcha about caching.",
+    )
+
+    search_text = _tool_text(repo, "search_memory", {"query": "cache gotcha"})
+    parsed = json.loads(search_text)
+    assert isinstance(parsed, list)
+
+    task = repo.task.start(title="JSON task")
+    tasks_text = _tool_text(repo, "list_tasks", {})
+    tasks_parsed = json.loads(tasks_text)
+    assert isinstance(tasks_parsed, list)
+    assert any(t["id"] == task.task_id for t in tasks_parsed)
+
+
+def test_resources_return_toon_by_default(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Memory-list and tasks resources return TOON, not JSON, by default."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    memory_text = _resource_text(sample_repo, "onmc://memory/list")
+    # Should not be valid JSON at top level
+    try:
+        json.loads(memory_text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "memory/list default should be TOON, not JSON"
+
+    # Check mime type is text/plain for TOON
+    repo2 = init(sample_repo)
+    contents = read_onmc_resource(repo2, "onmc://memory/list")
+    assert contents[0].mime_type == "text/plain"
+
+
+def test_resources_return_json_with_format_query_param(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resources return valid JSON when ?format=json is appended to the URI."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    # Use ?format=json query param
+    contents = read_onmc_resource(repo, "onmc://memory/list?format=json")
+    text = contents[0].content
+    payload = json.loads(text)
+    assert "memories" in payload
+    assert contents[0].mime_type == "application/json"
+
+    # Tasks resource
+    task = repo.task.start(title="Format param task")
+    contents2 = read_onmc_resource(repo, "onmc://tasks?format=json")
+    tasks_payload = json.loads(contents2[0].content)
+    assert "tasks" in tasks_payload
+    assert any(t["task_id"] == task.task_id for t in tasks_payload["tasks"])
+
+
+def test_resources_return_json_with_env_var(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, json_format: None
+) -> None:
+    """Resources return JSON when ONMC_MCP_FORMAT=json env var is set."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    contents = read_onmc_resource(repo, "onmc://status")
+    payload = json.loads(contents[0].content)
+    assert "repo_root" in payload
+    assert contents[0].mime_type == "application/json"
+
+
+def test_brief_resource_always_returns_markdown(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """get_brief and the brief resource always return markdown regardless of format env."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    # Brief tool — always markdown
+    brief_text = _tool_text(repo, "get_brief", {"task": "fix cache"})
+    assert "# ONMC Task Brief" in brief_text
+
+    # Brief resource — always markdown
+    contents = read_onmc_resource(repo, "onmc://brief")
+    assert "# ONMC Task Brief" in contents[0].content
+    assert contents[0].mime_type == "text/markdown"
+
+
+def test_record_attempt_toon_contains_ids(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """record_attempt returns a TOON dict containing the attempt and task IDs."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    task = repo.task.start(title="TOON task")
+
+    text = _tool_text(
+        repo,
+        "record_attempt",
+        {"task_id": task.task_id, "summary": "Testing TOON output."},
+    )
+    # TOON dict output has "key: value" lines
+    assert task.task_id in text
+    assert "attempt_id" in text or "attempt" in text
+
+
+def test_record_memory_toon_contains_id(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """record_memory returns TOON dict containing the memory_id field."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+
+    text = _tool_text(
+        repo,
+        "record_memory",
+        {"kind": "decision", "title": "TOON is better", "summary": "Saves tokens."},
+    )
+    assert "memory_id" in text
+    assert "manual" in text  # source_type

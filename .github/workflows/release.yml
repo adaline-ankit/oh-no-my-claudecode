@@ -91,9 +91,16 @@ jobs:
     needs: [build]
     # Only publish on actual tag pushes or manually-published GitHub Releases.
     # workflow_dispatch without a tag does NOT publish.
+    #
+    # PYPI_TRUSTED_PUBLISHING gate: this job is intentionally skipped until the
+    # PyPI trusted publisher is configured for this repository. Once the one-time
+    # setup is complete (see docs/RELEASING.md § "PyPI trusted publishing"),
+    # set the repository variable PYPI_TRUSTED_PUBLISHING=true to enable this job.
+    # Until then, tagging vX.Y.Z still produces a GitHub Release (see job below).
     if: |
       always() &&
       needs.build.result == 'success' &&
+      vars.PYPI_TRUSTED_PUBLISHING == 'true' &&
       (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release')
     permissions:
       contents: read
@@ -115,12 +122,15 @@ jobs:
   github-release:
     name: create GitHub Release
     runs-on: ubuntu-latest
-    needs: [publish]
+    # Depends on build only — NOT on publish. The GitHub Release is independent
+    # of PyPI. A skipped or failed publish must not block the release from being
+    # created. The build artifact (sdist + wheel) is always attached.
+    needs: [build]
     # Only create a release on tag pushes (not on `release: published` events,
     # which already have a release).
     if: |
       always() &&
-      needs.publish.result == 'success' &&
+      needs.build.result == 'success' &&
       startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write

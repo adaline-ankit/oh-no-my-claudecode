@@ -11,8 +11,11 @@ configured, and rollback procedures — see **[docs/RELEASING.md](docs/RELEASING
 git tag vX.Y.Z
 git push origin vX.Y.Z
 # The release workflow runs automatically:
-#   gate (quality 3.11/3.12/3.13) → build → publish (PyPI OIDC) → GitHub Release
+#   gate (quality 3.11/3.12/3.13) → build → github-release (always)
+#                                         ↘ publish (PyPI OIDC — only when
+#                                             repo variable PYPI_TRUSTED_PUBLISHING=true)
 ```
 
-The GitHub environment must be named `pypi` and match the PyPI trusted publisher
-configuration. No API token is required or stored.
+The GitHub Release is created independently of the PyPI publish — a missing or
+failed publish will never block the release. See **[docs/RELEASING.md](docs/RELEASING.md)**
+for the one-time PyPI trusted publishing setup instructions.
