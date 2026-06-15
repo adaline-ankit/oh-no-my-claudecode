@@ -1,0 +1,39 @@
+name: brain-freshness
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brain-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freshness:
+    name: brain freshness check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install onmc
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Regenerate brain artifacts
+        run: |
+          onmc init
+          onmc ingest --no-llm
+          onmc sync --commit
+      - name: Check brain is up to date
+        run: |
+          git diff --exit-code .agent-memory/ \
+            || (echo "::warning::Committed .agent-memory/ is stale. Run 'onmc init && onmc ingest --no-llm && onmc sync --commit' and commit the result." && exit 1)

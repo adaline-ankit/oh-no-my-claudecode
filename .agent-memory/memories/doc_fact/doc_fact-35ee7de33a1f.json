@@ -1,0 +1,27 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "1. Go to https://pypi.org/manage/project/oh-no-my-claudecode/settings/publishing/\n   (create the project first via https://pypi.org/manage/projects/ if it does not\n   exist yet \u2014 PyPI requires at least one manual upload to create a project, or you\n   can use the \"pending publisher\" feature to pre-register before any upload).\n2. Under **Add a new pending publisher** (or **Trusted Publisher Management**), add:\n   - **Publisher:** GitHub Actions\n   - **Repository owner:** `adaline-ankit`\n   - **Repository name:** `oh-no-my-claudecode`\n   - **Workflow name:** `release.yml`\n   - **Environment name:** `pypi`",
+    "feedback_score": 0.0,
+    "id": "doc_fact-35ee7de33a1f",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "1. Go to https://pypi.org/manage/project/oh-no-my-claudecode/settings/publishing/ (create the project first via https://pypi.org/manage/projects/ if it does...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "step",
+      "register",
+      "trusted",
+      "publisher",
+      "pypi"
+    ],
+    "title": "RELEASING.md: Step 1 \u2014 Register the trusted publisher on PyPI",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

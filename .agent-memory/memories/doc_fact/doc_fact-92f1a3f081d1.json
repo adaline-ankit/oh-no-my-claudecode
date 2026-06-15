@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "- manual memory CRUD\n- stale-entry pruning by source fingerprint\n- richer test-mapping heuristics\n- branch-aware briefing\n- richer Claude Code session-state capture beyond compaction snapshots\n- smarter transcript-to-task linking\n- richer `CLAUDE.md` merge semantics\n- provider-side model validation and discovery\n- turn Windows smoke coverage into full Windows support\n- add release notes automation around `CHANGELOG.md`",
+    "feedback_score": 0.0,
+    "id": "doc_fact-92f1a3f081d1",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/roadmap.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "- manual memory CRUD - stale-entry pruning by source fingerprint - richer test-mapping heuristics - branch-aware briefing - richer Claude Code session-state...",
+    "tags": [
+      "docs",
+      "roadmap",
+      "md",
+      "p1"
+    ],
+    "title": "roadmap.md: P1",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

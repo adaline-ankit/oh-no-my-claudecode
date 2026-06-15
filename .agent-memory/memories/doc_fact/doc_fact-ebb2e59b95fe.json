@@ -1,13 +1,15 @@
 {
   "memory": {
     "confidence": 0.55,
-    "created_at": "2026-03-31T10:10:54Z",
+    "created_at": "2026-06-15T16:11:25Z",
     "details": "- `open`\n- `active`\n- `blocked`\n- `solved`\n- `abandoned`\n\nP0 task creation starts tasks in `active`, since the initial CLI entrypoint is `onmc task start`.",
     "feedback_score": 0.0,
     "id": "doc_fact-ebb2e59b95fe",
     "kind": "doc_fact",
+    "last_verified_at": null,
     "source_ref": "docs/task-lifecycle.md",
     "source_type": "doc",
+    "staleness": null,
     "summary": "- `open` - `active` - `blocked` - `solved` - `abandoned` P0 task creation starts tasks in `active`, since the initial CLI entrypoint is `onmc task start`.",
     "tags": [
       "docs",
@@ -17,6 +19,6 @@
       "statuses"
     ],
     "title": "task-lifecycle.md: Statuses",
-    "updated_at": "2026-03-31T10:10:54Z"
+    "updated_at": "2026-06-15T16:11:25Z"
   }
 }

@@ -1,0 +1,23 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "This file is generated from Typer help output.\nRun `python scripts/generate-cli-reference.py` after changing CLI commands.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-008d7383b9c3",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/cli-reference.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "This file is generated from Typer help output. Run `python scripts/generate-cli-reference.py` after changing CLI commands.",
+    "tags": [
+      "docs",
+      "cli",
+      "reference",
+      "md"
+    ],
+    "title": "cli-reference.md: CLI Reference",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

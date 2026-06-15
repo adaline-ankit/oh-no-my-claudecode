@@ -1,13 +1,15 @@
 {
   "memory": {
     "confidence": 0.55,
-    "created_at": "2026-03-31T10:10:54Z",
+    "created_at": "2026-06-15T16:11:25Z",
     "details": "- environment detection for repo + Claude Code\n- interactive onboarding wizard",
     "feedback_score": 0.0,
     "id": "doc_fact-646f69ccf710",
     "kind": "doc_fact",
+    "last_verified_at": null,
     "source_ref": "docs/architecture.md",
     "source_type": "doc",
+    "staleness": null,
     "summary": "- environment detection for repo + Claude Code - interactive onboarding wizard",
     "tags": [
       "docs",
@@ -16,6 +18,6 @@
       "setup"
     ],
     "title": "architecture.md: `setup/`",
-    "updated_at": "2026-03-31T10:10:54Z"
+    "updated_at": "2026-06-15T16:11:25Z"
   }
 }

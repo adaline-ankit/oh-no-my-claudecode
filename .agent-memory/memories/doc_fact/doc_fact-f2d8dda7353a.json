@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Edit these in a single PR merged to `main` before tagging:\n\n- **`pyproject.toml`** \u2014 bump `version = \"X.Y.Z\"`\n- **`CHANGELOG.md`** \u2014 rename `[Unreleased]` to `[X.Y.Z] \u2014 YYYY-MM-DD`, add a fresh `[Unreleased]` stub at the top\n- **`README.md`** \u2014 update if commands, install steps, or integrations changed\n- **`docs/cli-reference.md`** \u2014 regenerate if CLI help changed (`python scripts/generate-cli-reference.py`)",
+    "feedback_score": 0.0,
+    "id": "doc_fact-f2d8dda7353a",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Edit these in a single PR merged to `main` before tagging: - **`pyproject.toml`** \u2014 bump `version = \"X.Y.Z\"` - **`CHANGELOG.md`** \u2014 rename `[Unreleased]` to...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "update",
+      "release",
+      "facing",
+      "files"
+    ],
+    "title": "RELEASING.md: 3. Update release-facing files",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

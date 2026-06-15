@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "MCP clients should use ONMC resources and tools for lookup, not direct SQLite access.\nThe MCP boundary lets ONMC preserve provenance, filtering, and future schema changes.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-da153365c7bd",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "MCP clients should use ONMC resources and tools for lookup, not direct SQLite access. The MCP boundary lets ONMC preserve provenance, filtering, and future s...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "mcp",
+      "clients"
+    ],
+    "title": "agent-native-workflows.md: MCP Clients",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

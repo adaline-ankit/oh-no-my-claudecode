@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "```bash\ngh run list --repo adaline-ankit/oh-no-my-claudecode --branch main --limit 5\n```\n\nAll CI jobs (quality, windows-smoke, package, security) must be passing.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-4d8fc93c1199",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "```bash gh run list --repo adaline-ankit/oh-no-my-claudecode --branch main --limit 5 ``` All CI jobs (quality, windows-smoke, package, security) must be pass...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "verify",
+      "main",
+      "green"
+    ],
+    "title": "RELEASING.md: 1. Verify `main` is green",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

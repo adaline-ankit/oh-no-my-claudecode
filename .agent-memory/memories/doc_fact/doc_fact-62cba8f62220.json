@@ -1,0 +1,24 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "ONMC is designed to make coding agents start with useful repo memory instead of a\nblank context window. This document defines the supported agent surfaces and the\nguardrails contributors should preserve.",
+    "feedback_score": 0.0,
+    "id": "doc_fact-62cba8f62220",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "ONMC is designed to make coding agents start with useful repo memory instead of a blank context window. This document defines the supported agent surfaces an...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md"
+    ],
+    "title": "agent-native-workflows.md: Agent-Native Workflows",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

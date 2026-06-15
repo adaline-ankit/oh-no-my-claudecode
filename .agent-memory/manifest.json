@@ -2,11 +2,11 @@
   "counts": {
     "artifacts": 0,
     "attempts": 0,
-    "memories": 78,
+    "memories": 93,
     "tasks": 0
   },
-  "exported_at": "2026-03-31T10:12:15.507445Z",
-  "onmc_version": "0.3.0",
+  "exported_at": "2026-06-15T16:11:31.672472Z",
+  "onmc_version": "0.5.0",
   "repo_root": ".",
   "version": "1"
 }

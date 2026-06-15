@@ -1,13 +1,15 @@
 {
   "memory": {
     "confidence": 0.55,
-    "created_at": "2026-03-31T10:10:54Z",
+    "created_at": "2026-06-15T16:11:25Z",
     "details": "- Claude Code settings installation and merge logic\n- compaction snapshot capture\n- continuation brief compilation after compaction",
     "feedback_score": 0.0,
     "id": "doc_fact-988668092e85",
     "kind": "doc_fact",
+    "last_verified_at": null,
     "source_ref": "docs/architecture.md",
     "source_type": "doc",
+    "staleness": null,
     "summary": "- Claude Code settings installation and merge logic - compaction snapshot capture - continuation brief compilation after compaction",
     "tags": [
       "docs",
@@ -16,6 +18,6 @@
       "hooks"
     ],
     "title": "architecture.md: `hooks/`",
-    "updated_at": "2026-03-31T10:10:54Z"
+    "updated_at": "2026-06-15T16:11:25Z"
   }
 }

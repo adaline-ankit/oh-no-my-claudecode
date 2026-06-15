@@ -1,0 +1,26 @@
+{
+  "memory": {
+    "confidence": 0.6000000000000001,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "Use this checklist when changing hooks, MCP, sync, prompts, or generated files:\n\n- update tests for the affected agent surface\n- run `onmc doctor` or the closest test fixture when setup behavior changes\n- document new commands or payload expectations\n- avoid adding new long-running background processes\n- explain how the change behaves in a fresh clone or cloud container",
+    "feedback_score": 0.0,
+    "id": "doc_fact-8757a52be854",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/agent-native-workflows.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "Use this checklist when changing hooks, MCP, sync, prompts, or generated files: - update tests for the affected agent surface - run `onmc doctor` or the clos...",
+    "tags": [
+      "docs",
+      "agent",
+      "native",
+      "workflows",
+      "md",
+      "contribution",
+      "checklist"
+    ],
+    "title": "agent-native-workflows.md: Contribution Checklist",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}

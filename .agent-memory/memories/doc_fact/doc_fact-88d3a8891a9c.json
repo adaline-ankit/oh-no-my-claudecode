@@ -1,0 +1,25 @@
+{
+  "memory": {
+    "confidence": 0.55,
+    "created_at": "2026-06-15T16:11:25Z",
+    "details": "From a clean checkout on the commit you intend to tag:\n\n```bash\nruff check .\nmypy src\npytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-under=80\npython -m build\npython -m twine check dist/*\npython scripts/generate-cli-reference.py --check\n```",
+    "feedback_score": 0.0,
+    "id": "doc_fact-88d3a8891a9c",
+    "kind": "doc_fact",
+    "last_verified_at": null,
+    "source_ref": "docs/RELEASING.md",
+    "source_type": "doc",
+    "staleness": null,
+    "summary": "From a clean checkout on the commit you intend to tag: ```bash ruff check . mypy src pytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-un...",
+    "tags": [
+      "docs",
+      "releasing",
+      "md",
+      "run",
+      "local",
+      "gate"
+    ],
+    "title": "RELEASING.md: 2. Run the local gate",
+    "updated_at": "2026-06-15T16:11:25Z"
+  }
+}
