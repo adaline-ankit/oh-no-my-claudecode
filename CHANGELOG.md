@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-16
+
+### Added
+
+- **`onmc plug <claude-code|codex|cursor|omc|omx|all>`** — one command wires onmc into a target agent (Claude Code hooks + `.mcp.json`, a Codex `AGENTS.md` stanza, a Cursor rules file, copy-paste adapters for oh-my-claudecode / oh-my-codex). Idempotent; plus `docs/integrations/` guides. Other agents adopt onmc's memory (`onmc brief`, `onmc guard`) without changing their workflow.
+- **`AGENT-MEMORY-SPEC.md`** — an open, versioned specification for the `.agent-memory/` format (directory layout, record schemas + enums, identity/provenance/staleness semantics, forward-compat, conformance), so any tool can read and write one shared brain.
+- **`onmc spec print` / `onmc spec validate`** — make the spec executable: validate that a `.agent-memory/` directory conforms (pass/fail with specific errors).
+
 ## [0.7.0] — 2026-06-15
 
 ### Added
