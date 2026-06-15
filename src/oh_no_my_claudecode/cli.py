@@ -93,6 +93,22 @@ app.add_typer(playbook_app, name="playbook")
 app.add_typer(user_app, name="user")
 
 
+@app.command("tui")
+def tui_command() -> None:
+    """Open the interactive terminal brain-browser for memory curation."""
+    from rich.console import Console
+
+    from oh_no_my_claudecode.tui import run_tui
+
+    try:
+        svc = _service()
+        # Trigger _load_context early to give a friendly error if not initialised.
+        svc.status()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    run_tui(svc, console=Console())
+
+
 @app.command("setup")
 def setup_command(
     yes: Annotated[
@@ -650,6 +666,40 @@ def hooks_prompt_recall_command() -> None:
             )
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
+
+
+@hooks_app.command("session-end")
+def hooks_session_end_command() -> None:
+    """Run memory consolidation on SessionEnd.
+
+    Called automatically by the Claude Code SessionEnd hook.  Reads the event
+    payload from stdin (session_id, cwd, reason), runs a best-effort
+    consolidation pass, and exits 0.  Errors are swallowed; stdout is never
+    written (SessionEnd hooks cannot inject context).
+    """
+    try:
+        _read_hook_payload()  # consume stdin; payload not used today
+        _service().consolidate(dry_run=False)
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@app.command("consolidate")
+def consolidate_command(
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Compute the consolidation plan without writing anything."),
+    ] = False,
+) -> None:
+    """Clean and strengthen the memory store (dedup, merge, promote/demote, edge graph)."""
+    try:
+        _, result = _service().consolidate(dry_run=dry_run)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    label = "[yellow]dry-run — no writes[/yellow]" if dry_run else "[green]done[/green]"
+    console.print(f"[bold]Memory consolidation[/bold] {label}")
+    for line in result.summary_lines():
+        console.print(f"  {line}")
 
 
 @claude_md_app.callback(invoke_without_command=True)

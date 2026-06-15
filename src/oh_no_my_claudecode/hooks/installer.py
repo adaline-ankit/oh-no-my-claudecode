@@ -7,15 +7,22 @@ from typing import Any
 
 PRE_COMPACT_COMMAND = "onmc hooks pre-compact"
 SESSION_START_COMMAND = "onmc hooks session-start"
+SESSION_END_COMMAND = "onmc hooks session-end"
 PROMPT_RECALL_COMMAND = "onmc hooks prompt-recall"
 LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
 MCP_SERVER_NAME = "onmc"
 
 _ONMC_COMMANDS = frozenset(
-    {PRE_COMPACT_COMMAND, SESSION_START_COMMAND, PROMPT_RECALL_COMMAND, LEGACY_POST_COMPACT_COMMAND}
+    {
+        PRE_COMPACT_COMMAND,
+        SESSION_START_COMMAND,
+        SESSION_END_COMMAND,
+        PROMPT_RECALL_COMMAND,
+        LEGACY_POST_COMPACT_COMMAND,
+    }
 )
 # "PostCompact" is not a real Claude Code event; earlier onmc versions registered it.
-_HOOK_EVENTS = ("PreCompact", "PostCompact", "SessionStart", "UserPromptSubmit")
+_HOOK_EVENTS = ("PreCompact", "PostCompact", "SessionStart", "SessionEnd", "UserPromptSubmit")
 
 
 def project_settings_path(repo_root: Path) -> Path:
@@ -112,6 +119,12 @@ def install_claude_hooks(
         matcher="",
         command=PROMPT_RECALL_COMMAND,
     )
+    _merge_command_hook(
+        hooks,
+        event_name="SessionEnd",
+        matcher="",
+        command=SESSION_END_COMMAND,
+    )
     _write_json(settings_path, settings)
     if register_mcp:
         _register_mcp_server(mcp_path)
@@ -177,6 +190,12 @@ def hooks_installed(*, settings_path: Path) -> bool:
             event_name="UserPromptSubmit",
             matcher="",
             command=PROMPT_RECALL_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="SessionEnd",
+            matcher="",
+            command=SESSION_END_COMMAND,
         )
     )
 

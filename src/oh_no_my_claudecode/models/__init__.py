@@ -25,6 +25,7 @@ from oh_no_my_claudecode.models.memory_artifact import (
     MemoryArtifactRecord,
     MemoryArtifactType,
 )
+from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.models.playbook import Playbook, PlaybookProvenanceItem
 from oh_no_my_claudecode.models.prompt import (
     AgentMode,
@@ -60,6 +61,8 @@ __all__ = [
     "LLMProviderType",
     "LLMSettings",
     "LLMStatus",
+    "EdgeType",
+    "MemoryEdge",
     "MemoryEntry",
     "MemoryArtifactRecord",
     "MemoryArtifactType",

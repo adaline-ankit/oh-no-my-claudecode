@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from oh_no_my_claudecode.models import FileStat, MemoryArtifactRecord, MemoryEntry, MemoryKind
+from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.storage import SQLiteStorage
 
 # Memory kinds considered "why it looks this way"
@@ -56,6 +57,9 @@ class WhyReport:
 
     # Git history surface
     git_history: GitHistory | None = None
+
+    # Memory edges for the relevant memories (contradicts, relates, etc.)
+    memory_edges: list[MemoryEdge] = field(default_factory=list)
 
     # Whether the store has any data at all for this path
     has_data: bool = False
@@ -159,6 +163,7 @@ def compile_why(
     memories = storage.list_memories()
     file_stats = storage.list_file_stats()
     artifacts = storage.list_memory_artifacts()
+    all_edges = storage.list_memory_edges()
 
     # ── file stat ──────────────────────────────────────────────────────────
     file_stat: FileStat | None = next(
@@ -202,6 +207,18 @@ def compile_why(
     else:
         risk_verdict = "stable"
 
+    # ── memory edges for relevant memories ───────────────────────────────────
+    relevant_ids = {
+        m.id
+        for m in (decisions + failed_approaches + hotspot_memories + context_memories)
+    }
+    memory_edges = [
+        edge
+        for edge in all_edges
+        if (edge.from_memory_id in relevant_ids or edge.to_memory_id in relevant_ids)
+        and edge.edge_type in {EdgeType.CONTRADICTS, EdgeType.RELATES}
+    ]
+
     has_data = bool(
         decisions
         or failed_approaches
@@ -222,6 +239,7 @@ def compile_why(
         context_memories=context_memories,
         related_artifacts=related_artifacts,
         git_history=git_history,
+        memory_edges=memory_edges,
         has_data=has_data,
     )
 
@@ -308,6 +326,19 @@ def why_report_to_markdown(report: WhyReport) -> str:
         lines.append("")
         for subject in report.git_history.recent_subjects:
             lines.append(f"- {subject}")
+        lines.append("")
+
+    # ── Memory graph edges (contradictions / relations) ───────────────────
+    if report.memory_edges:
+        lines.append("## Memory relationships")
+        lines.append("")
+        for edge in report.memory_edges:
+            lines.append(
+                f"- `{edge.from_memory_id[:12]}` "
+                f"**{edge.edge_type.value}** "
+                f"`{edge.to_memory_id[:12]}` "
+                f"(confidence {edge.confidence:.2f})"
+            )
         lines.append("")
 
     return "\n".join(lines)

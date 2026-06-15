@@ -823,3 +823,107 @@ def test_post_compact_alias_delegates_to_session_start(
     assert result.exit_code == 0
     parsed = json.loads(result.stdout)
     assert parsed["hookSpecificOutput"]["hookEventName"] == "SessionStart"
+
+
+# ── SessionEnd hook ───────────────────────────────────────────────────────────
+
+
+def test_install_claude_hooks_registers_session_end(
+    sample_repo: Path,
+    fake_home: Path,
+) -> None:
+    """install_claude_hooks must write a SessionEnd entry for onmc hooks session-end."""
+    import json as _json
+
+    settings_path = sample_repo / ".claude" / "settings.json"
+    install_claude_hooks(repo_root=sample_repo, register_mcp=False)
+
+    settings = _json.loads(settings_path.read_text(encoding="utf-8"))
+    hooks = settings.get("hooks", {})
+    session_end_entries = hooks.get("SessionEnd", [])
+    found = any(
+        isinstance(entry, dict)
+        and any(
+            isinstance(item, dict)
+            and item.get("command") == "onmc hooks session-end"
+            for item in entry.get("hooks", [])
+        )
+        for entry in session_end_entries
+    )
+    assert found, "SessionEnd hook for 'onmc hooks session-end' not found in settings.json"
+
+
+def test_uninstall_removes_session_end_hook(
+    sample_repo: Path,
+    fake_home: Path,
+) -> None:
+    import json as _json
+
+    install_claude_hooks(repo_root=sample_repo, register_mcp=False)
+    uninstall_claude_hooks(repo_root=sample_repo)
+
+    settings_path = sample_repo / ".claude" / "settings.json"
+    if not settings_path.exists():
+        return  # fully removed — pass
+    settings = _json.loads(settings_path.read_text(encoding="utf-8"))
+    hooks = settings.get("hooks", {})
+    session_end_entries = hooks.get("SessionEnd", [])
+    found = any(
+        isinstance(entry, dict)
+        and any(
+            isinstance(item, dict)
+            and item.get("command") == "onmc hooks session-end"
+            for item in entry.get("hooks", [])
+        )
+        for entry in session_end_entries
+    )
+    assert not found, "SessionEnd hook was not removed by uninstall"
+
+
+def test_session_end_hook_exits_zero_on_initialized_repo(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """hooks session-end must exit 0 and run consolidate on a seeded store."""
+    runner = _cli_runner()
+    monkeypatch.chdir(sample_repo)
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest()
+
+    payload = json.dumps({"session_id": "sess-abc", "cwd": str(sample_repo), "reason": "exit"})
+    result = runner.invoke(app, ["hooks", "session-end"], input=payload)
+
+    assert result.exit_code == 0
+    # stdout must be empty (SessionEnd cannot inject context)
+    assert result.stdout.strip() == ""
+
+
+def test_session_end_hook_exits_zero_on_uninitialized_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """hooks session-end must exit 0 even when onmc is not initialized."""
+    import subprocess
+
+    runner = _cli_runner()
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "t@t.com"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "T"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    payload = json.dumps({"session_id": "sess-xyz", "cwd": str(tmp_path), "reason": "exit"})
+    result = runner.invoke(app, ["hooks", "session-end"], input=payload)
+
+    assert result.exit_code == 0
+    assert result.stdout.strip() == ""

@@ -61,6 +61,7 @@ from oh_no_my_claudecode.llm import (
 from oh_no_my_claudecode.llm.base import BaseLLMProvider
 from oh_no_my_claudecode.llm.providers import validate_provider_api_key
 from oh_no_my_claudecode.memory.catalog import MemoryCatalog
+from oh_no_my_claudecode.memory.consolidation import ConsolidationResult, consolidate_memories
 from oh_no_my_claudecode.mine import mine_github_prs, mine_transcripts
 from oh_no_my_claudecode.models import (
     TERMINAL_ATTEMPT_STATUSES,
@@ -1633,6 +1634,31 @@ class OnmcService:
             return self._user_storage(home=home).list_memories()
         except Exception:
             return []
+
+    def consolidate(self, *, dry_run: bool = False) -> tuple[Path, ConsolidationResult]:
+        """Run the memory consolidation pass (dedup, merge, promote, demote, graph).
+
+        When *dry_run* is True the function computes the full plan but writes
+        nothing — no memory updates and no edge upserts — so the result can be
+        inspected without side effects.
+
+        Returns ``(repo_root, ConsolidationResult)`` with action counts.
+        """
+        repo_root, _, storage = self._load_context()
+        memories = storage.list_memories()
+        existing_edges = storage.list_memory_edges()
+        existing_edge_ids = {edge.id for edge in existing_edges}
+        changed_memories, new_edges, result = consolidate_memories(
+            memories,
+            repo_root,
+            existing_edge_ids=existing_edge_ids,
+        )
+        if not dry_run:
+            for memory in changed_memories:
+                storage.update_memory(memory)
+            for edge in new_edges:
+                storage.upsert_memory_edge(edge)
+        return repo_root, result
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)

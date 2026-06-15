@@ -194,14 +194,14 @@ class TestPlaybookStorage:
         db_path = tmp_path / "memory.db"
         storage = SQLiteStorage(db_path)
         storage.initialize()
-        assert storage.get_meta("schema_version") == "4"
+        assert storage.get_meta("schema_version") == "5"
 
     def test_migration_v4_is_idempotent(self, tmp_path: Path) -> None:
         db_path = tmp_path / "memory.db"
         storage = SQLiteStorage(db_path)
         storage.initialize()
         storage.initialize()  # second call must not fail
-        assert storage.get_meta("schema_version") == "4"
+        assert storage.get_meta("schema_version") == "5"
 
     def test_upsert_and_list_playbooks(
         self, tmp_path: Path, seeded_memories: list[MemoryEntry]

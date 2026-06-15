@@ -17,36 +17,40 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ --help                        Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ setup      Run the interactive ONMC onboarding wizard.                       │
-│ init       Initialize ONMC state in the current git repository.              │
-│ ingest     Ingest repo knowledge into local structured memory.               │
-│ brief      Compile a task-specific context brief.                            │
-│ codegraph  Generate a compact codegraph for token-efficient agent            │
-│            navigation.                                                       │
-│ why        Explain why a file looks the way it does, from memory + git       │
-│            history.                                                          │
-│ status     Show local ONMC status.                                           │
-│ report     Generate a shareable agent-readiness report.                      │
-│ sync       Export, restore, or hook git-portable ONMC memory state.          │
-│ serve      Serve ONMC over the requested runtime protocol.                   │
-│ solve      Compile repo-aware context and ask the configured LLM for the     │
-│            next best approach.                                               │
-│ review     Compile repo-aware review context and critique the proposed       │
-│            approach.                                                         │
-│ teach      Compile repo-aware teaching context and generate a learning       │
-│            artifact.                                                         │
-│ mine       Mine Claude Code session transcripts into ONMC memory.            │
-│ doctor     Run a health check over repo state, memory, provider setup, and   │
-│            integrations.                                                     │
-│ memory     Inspect stored memory.                                            │
-│ task       Manage task lifecycle state.                                      │
-│ attempt    Track task-scoped attempts.                                       │
-│ llm        Configure optional LLM providers.                                 │
-│ hooks      Install and run Claude Code compaction hooks.                     │
-│ claude-md  Generate and maintain CLAUDE.md from ONMC memory.                 │
-│ playbook   Synthesize and manage memory-derived playbooks.                   │
-│ user       Manage cross-repo user preferences (stored in ~/.onmc, not        │
-│            repo-scoped).                                                     │
+│ tui          Open the interactive terminal brain-browser for memory          │
+│              curation.                                                       │
+│ setup        Run the interactive ONMC onboarding wizard.                     │
+│ init         Initialize ONMC state in the current git repository.            │
+│ ingest       Ingest repo knowledge into local structured memory.             │
+│ brief        Compile a task-specific context brief.                          │
+│ codegraph    Generate a compact codegraph for token-efficient agent          │
+│              navigation.                                                     │
+│ why          Explain why a file looks the way it does, from memory + git     │
+│              history.                                                        │
+│ status       Show local ONMC status.                                         │
+│ report       Generate a shareable agent-readiness report.                    │
+│ sync         Export, restore, or hook git-portable ONMC memory state.        │
+│ serve        Serve ONMC over the requested runtime protocol.                 │
+│ solve        Compile repo-aware context and ask the configured LLM for the   │
+│              next best approach.                                             │
+│ review       Compile repo-aware review context and critique the proposed     │
+│              approach.                                                       │
+│ teach        Compile repo-aware teaching context and generate a learning     │
+│              artifact.                                                       │
+│ consolidate  Clean and strengthen the memory store (dedup, merge,            │
+│              promote/demote, edge graph).                                    │
+│ mine         Mine Claude Code session transcripts into ONMC memory.          │
+│ doctor       Run a health check over repo state, memory, provider setup, and │
+│              integrations.                                                   │
+│ memory       Inspect stored memory.                                          │
+│ task         Manage task lifecycle state.                                    │
+│ attempt      Track task-scoped attempts.                                     │
+│ llm          Configure optional LLM providers.                               │
+│ hooks        Install and run Claude Code compaction hooks.                   │
+│ claude-md    Generate and maintain CLAUDE.md from ONMC memory.               │
+│ playbook     Synthesize and manage memory-derived playbooks.                 │
+│ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
+│              repo-scoped).                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -345,6 +349,7 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │                continuation brief after compaction.                          │
 │ prompt-recall  Inject the most relevant repo memories for the current user   │
 │                prompt.                                                       │
+│ session-end    Run memory consolidation on SessionEnd.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -425,6 +430,37 @@ Usage: onmc hooks prompt-recall [OPTIONS]
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks session-end`
+
+```text
+Usage: onmc hooks session-end [OPTIONS]                                        
+                                                                                
+ Run memory consolidation on SessionEnd.                                        
+                                                                                
+ Called automatically by the Claude Code SessionEnd hook.  Reads the event      
+ payload from stdin (session_id, cwd, reason), runs a best-effort               
+ consolidation pass, and exits 0.  Errors are swallowed; stdout is never        
+ written (SessionEnd hooks cannot inject context).                              
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc consolidate`
+
+```text
+Usage: onmc consolidate [OPTIONS]                                              
+                                                                                
+ Clean and strengthen the memory store (dedup, merge, promote/demote, edge      
+ graph).                                                                        
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run          Compute the consolidation plan without writing anything.  │
+│ --help             Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -989,6 +1025,18 @@ Usage: onmc user remove [OPTIONS] MEMORY_ID
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc tui`
+
+```text
+Usage: onmc tui [OPTIONS]                                                      
+                                                                                
+ Open the interactive terminal brain-browser for memory curation.               
+                                                                                
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
