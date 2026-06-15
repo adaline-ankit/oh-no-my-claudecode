@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-15
+
+### Added
+
+- **`onmc guard`** — failure-aware loop: surfaces recorded `failed_approach` / `did_not_work` memory for a task as explicit "DO NOT retry these dead-ends" guidance, as a CLI command and a `guard_task` MCP tool, so an agent never repeats a recorded mistake.
+- **`onmc statusline` / `onmc hud`** — memory-health observability: a compact one-line statusline (mem count, freshness %, stale count, tokens/day) for Claude Code's `statusLine`, and a richer HUD panel (counts by kind, freshness bar, coverage proxy, recent LLM cost aggregated from the call log).
+- **`onmc bench`** — a deterministic, reproducible proof harness comparing an agent with vs without onmc memory (built-in scenario: repeated-failure rate 100% → 0%, context tokens −97%).
+- **Local embeddings rerank** — opt-in hybrid retrieval layering semantic cosine similarity over FTS5, with a dependency-free deterministic default embedder (vectors cached in SQLite, migration v6); gated by `ONMC_EMBEDDINGS`.
+- **Claude Code plugin + marketplace manifest** (`.claude-plugin/`), an enhanced **AGENTS.md**, and an AI-Ready badge.
+- **Dogfooding**: the repo now ships its own committed `.agent-memory/` brain plus a brain-freshness CI check.
+
 ## [0.5.0] — 2026-06-15
 
 ### Added
