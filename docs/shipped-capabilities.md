@@ -339,8 +339,8 @@ The doctor command audits initialization, ingest freshness, provider setup, Clau
 actual errors.
 
 The report command turns the same state into a shareable markdown artifact with readiness score,
-memory/task counts, integration state, recommended next actions, and a short snippet maintainers can
-paste into PRs or handoffs.
+memory/task counts, integration state, recommended next actions, and a short snippet that maintainers
+can paste into PRs or handoffs.
 
 ### 12. Public Python API
 

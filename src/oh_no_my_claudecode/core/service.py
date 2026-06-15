@@ -6,6 +6,7 @@ import re
 import secrets
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar, cast
 
@@ -102,6 +103,35 @@ StructuredOutputT = TypeVar(
     TeachModeOutput,
 )
 MAX_PROMPT_CHARS = 24_000
+HEALTH_SECTION_ORDER = ("repo", "memory", "provider", "claude", "sync")
+
+
+@dataclass(slots=True)
+class AgentReadinessSummary:
+    ok: bool
+    readiness_label: str
+    generated_at: str
+    repo_name: str
+    repo_root: str
+    branch: str
+    passed_checks: int
+    total_checks: int
+    health: dict[str, list[str]]
+    health_sections: list[str]
+    warnings: list[str]
+    errors: list[str]
+    memory_count: int
+    task_count: int
+    attempt_count: int
+    memory_artifact_count: int
+    task_output_count: int
+    last_ingest_at: str
+    active_tasks: list[TaskRecord]
+    claude_md_exists: bool
+    hooks: HookStatus
+    manifest_exists: bool
+    sync_hook_installed: bool
+    provider_label: str
 
 
 class OnmcService:
@@ -446,94 +476,47 @@ class OnmcService:
 
     def agent_readiness_report(self) -> str:
         """Generate a shareable markdown report for agent readiness."""
+        return _agent_readiness_markdown(self._build_agent_readiness_summary())
+
+    def _build_agent_readiness_summary(self) -> AgentReadinessSummary:
         repo_root, config, storage = self._load_context()
         ok, health = self.doctor()
         tasks = storage.list_tasks()
         active_tasks = [task for task in tasks if task.status == TaskStatus.ACTIVE]
         warnings = health.get("warnings", [])
         errors = health.get("errors", [])
-        check_sections = ["repo", "memory", "provider", "claude", "sync"]
-        passed_checks = sum(len(health.get(section, [])) for section in check_sections)
+        health_sections = _health_sections(health)
+        passed_checks = sum(len(health.get(section, [])) for section in health_sections)
         issue_count = len(warnings) + len(errors)
         total_checks = passed_checks + issue_count
-        readiness_label = "ready" if ok and not warnings else "needs attention"
-        generated_at = isoformat_utc(utc_now())
         manifest_path = repo_root / ".agent-memory" / "manifest.json"
-        claude_md_exists = claude_md_path(repo_root).exists()
-        hooks = self.hooks_status()
-
         sync_hook_path = repo_root / ".git" / "hooks" / "post-commit"
-        readiness_score = (
-            f"- Agent readiness: **{readiness_label}** "
-            f"({passed_checks}/{total_checks} checks passing)"
+        return AgentReadinessSummary(
+            ok=ok,
+            readiness_label="ready" if ok and not warnings else "needs attention",
+            generated_at=isoformat_utc(utc_now()),
+            repo_name=repo_root.name,
+            repo_root=repo_root.as_posix(),
+            branch=current_branch(repo_root),
+            passed_checks=passed_checks,
+            total_checks=total_checks,
+            health=health,
+            health_sections=health_sections,
+            warnings=warnings,
+            errors=errors,
+            memory_count=storage.memory_count(),
+            task_count=storage.task_count(),
+            attempt_count=storage.attempt_count(),
+            memory_artifact_count=storage.memory_artifact_count(),
+            task_output_count=storage.task_output_count(),
+            last_ingest_at=storage.all_meta().get("last_ingest_at", "never"),
+            active_tasks=active_tasks,
+            claude_md_exists=claude_md_path(repo_root).exists(),
+            hooks=self.hooks_status(),
+            manifest_exists=manifest_path.exists(),
+            sync_hook_installed=sync_hook_path.exists(),
+            provider_label=_provider_label(config),
         )
-
-        lines = [
-            "# ONMC Agent Readiness Report",
-            "",
-            f"- Generated: {generated_at}",
-            f"- Repository: `{repo_root.name}`",
-            f"- Root: `{repo_root.as_posix()}`",
-            f"- Branch: `{current_branch(repo_root)}`",
-            readiness_score,
-            "",
-            "## Memory and Task State",
-            "",
-            f"- Memory records: {storage.memory_count()}",
-            f"- Tasks: {storage.task_count()}",
-            f"- Attempts: {storage.attempt_count()}",
-            f"- Memory artifacts: {storage.memory_artifact_count()}",
-            f"- Task outputs: {storage.task_output_count()}",
-            f"- Last ingest: {storage.all_meta().get('last_ingest_at', 'never')}",
-            _active_task_line(active_tasks),
-            "",
-            "## Agent Integration",
-            "",
-            f"- CLAUDE.md: {'present' if claude_md_exists else 'missing'}",
-            f"- Claude hooks: {'installed' if hooks.installed else 'not installed'}",
-            f"- MCP server: {'registered' if hooks.mcp_registered else 'not registered'}",
-            f"- Portable export: {'present' if manifest_path.exists() else 'missing'}",
-            f"- Sync hook: {'installed' if sync_hook_path.exists() else 'not installed'}",
-            f"- LLM provider: {_provider_label(config)}",
-            "",
-            "## Health Signals",
-            "",
-        ]
-        for section in check_sections:
-            items = health.get(section, [])
-            if not items:
-                continue
-            lines.extend([f"### {section.title()}", ""])
-            lines.extend(f"- {item}" for item in items)
-            lines.append("")
-
-        if errors:
-            lines.extend(["### Errors", ""])
-            lines.extend(f"- {item}" for item in errors)
-            lines.append("")
-        if warnings:
-            lines.extend(["### Recommended Next Actions", ""])
-            lines.extend(f"- {item}" for item in warnings)
-            lines.append("")
-        if not errors and not warnings:
-            lines.extend(
-                ["### Recommended Next Actions", "", "- No immediate action required.", ""]
-            )
-
-        lines.extend(
-            [
-                "## Share Snippet",
-                "",
-                (
-                    f"ONMC-ready repo: {passed_checks}/{total_checks} checks passing, "
-                    f"{storage.memory_count()} memories, {storage.task_count()} tasks, "
-                    f"{len(active_tasks)} active handoffs."
-                ),
-                "",
-                "Generated by `onmc report`.",
-            ]
-        )
-        return "\n".join(lines) + "\n"
 
     def sync_commit(self, output_dir: Path | None = None) -> tuple[Path, SyncResult]:
         """Export ONMC memory and task state to a git-portable directory."""
@@ -1506,6 +1489,135 @@ def _provider_label(config: ProjectConfig) -> str:
     if config.llm.provider is None or config.llm.model is None:
         return "not configured"
     return f"{config.llm.provider.value} ({config.llm.model})"
+
+
+def _health_sections(health: dict[str, list[str]]) -> list[str]:
+    handled = {"warnings", "errors"}
+    ordered = [section for section in HEALTH_SECTION_ORDER if section in health]
+    remaining = sorted(section for section in health if section not in {*ordered, *handled})
+    return ordered + remaining
+
+
+def _agent_readiness_markdown(summary: AgentReadinessSummary) -> str:
+    lines: list[str] = []
+    _append_report_header(lines, summary)
+    _append_report_memory_and_tasks(lines, summary)
+    _append_report_agent_integration(lines, summary)
+    _append_report_health_sections(lines, summary)
+    _append_report_recommendations(lines, summary)
+    _append_report_share_snippet(lines, summary)
+    return "\n".join(lines) + "\n"
+
+
+def _append_report_header(lines: list[str], summary: AgentReadinessSummary) -> None:
+    lines.extend(
+        [
+            "# ONMC Agent Readiness Report",
+            "",
+            f"- Generated: {summary.generated_at}",
+            f"- Repository: `{summary.repo_name}`",
+            f"- Root: `{summary.repo_root}`",
+            f"- Branch: `{summary.branch}`",
+            (
+                f"- Agent readiness: **{summary.readiness_label}** "
+                f"({summary.passed_checks}/{summary.total_checks} checks passing)"
+            ),
+            "",
+        ]
+    )
+
+
+def _append_report_memory_and_tasks(
+    lines: list[str], summary: AgentReadinessSummary
+) -> None:
+    lines.extend(
+        [
+            "## Memory and Task State",
+            "",
+            f"- Memory records: {summary.memory_count}",
+            f"- Tasks: {summary.task_count}",
+            f"- Attempts: {summary.attempt_count}",
+            f"- Memory artifacts: {summary.memory_artifact_count}",
+            f"- Task outputs: {summary.task_output_count}",
+            f"- Last ingest: {summary.last_ingest_at}",
+            _active_task_line(summary.active_tasks),
+            "",
+        ]
+    )
+
+
+def _append_report_agent_integration(
+    lines: list[str], summary: AgentReadinessSummary
+) -> None:
+    lines.extend(
+        [
+            "## Agent Integration",
+            "",
+            f"- CLAUDE.md: {'present' if summary.claude_md_exists else 'missing'}",
+            (
+                "- Claude hooks: "
+                f"{'installed' if summary.hooks.installed else 'not installed'}"
+            ),
+            (
+                "- MCP server: "
+                f"{'registered' if summary.hooks.mcp_registered else 'not registered'}"
+            ),
+            f"- Portable export: {'present' if summary.manifest_exists else 'missing'}",
+            (
+                "- Sync hook: "
+                f"{'installed' if summary.sync_hook_installed else 'not installed'}"
+            ),
+            f"- LLM provider: {summary.provider_label}",
+            "",
+        ]
+    )
+
+
+def _append_report_health_sections(
+    lines: list[str], summary: AgentReadinessSummary
+) -> None:
+    lines.extend(["## Health Signals", ""])
+    for section in summary.health_sections:
+        items = summary.health.get(section, [])
+        if not items:
+            continue
+        lines.extend([f"### {section.title()}", ""])
+        lines.extend(f"- {item}" for item in items)
+        lines.append("")
+
+
+def _append_report_recommendations(
+    lines: list[str], summary: AgentReadinessSummary
+) -> None:
+    if summary.errors:
+        lines.extend(["### Errors", ""])
+        lines.extend(f"- {item}" for item in summary.errors)
+        lines.append("")
+
+    lines.extend(["### Recommended Next Actions", ""])
+    if summary.warnings:
+        lines.extend(f"- {item}" for item in summary.warnings)
+    else:
+        lines.append("- No immediate action required.")
+    lines.append("")
+
+
+def _append_report_share_snippet(
+    lines: list[str], summary: AgentReadinessSummary
+) -> None:
+    lines.extend(
+        [
+            "## Share Snippet",
+            "",
+            (
+                f"ONMC-ready repo: {summary.passed_checks}/{summary.total_checks} "
+                f"checks passing, {summary.memory_count} memories, "
+                f"{summary.task_count} tasks, {len(summary.active_tasks)} active handoffs."
+            ),
+            "",
+            "Generated by `onmc report`.",
+        ]
+    )
 
 
 def _git_count(repo_root: Path) -> int:
