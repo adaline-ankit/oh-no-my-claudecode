@@ -10,6 +10,7 @@ BOOT_DIGEST_MAX_TOKENS = 400
 _MAX_INVARIANTS = 3
 _MAX_HOTSPOTS = 3
 _MAX_ACTIVE_TASKS = 2
+_MAX_USER_PREFS = 5
 
 
 def compile_boot_digest(
@@ -17,6 +18,7 @@ def compile_boot_digest(
     memories: list[MemoryEntry],
     tasks: list[TaskRecord],
     repo_name: str,
+    user_memories: list[MemoryEntry] | None = None,
 ) -> tuple[str, int]:
     """Compile a compact boot digest from repo memory for session startup injection.
 
@@ -24,9 +26,13 @@ def compile_boot_digest(
     rather than a full brief. It is emitted on every session start (startup / resume /
     clear) so agents always boot with the repo brain.
 
+    *user_memories* is an optional list of user-scope preference memories (from
+    ``~/.onmc/user.db``).  Up to ``_MAX_USER_PREFS`` are prepended as a small
+    "Your preferences" section so they travel with the developer across all repos.
+
     Returns ``(markdown, token_count)``. When there is nothing to say (empty
-    memories and no active tasks) the function returns ``("", 0)`` so callers can
-    skip injection entirely.
+    memories, no active tasks, and no user prefs) the function returns ``("", 0)``
+    so callers can skip injection entirely.
     """
     invariants = _select_kind(
         memories, {MemoryKind.INVARIANT, MemoryKind.DECISION, MemoryKind.VALIDATION_RULE}
@@ -35,11 +41,18 @@ def compile_boot_digest(
         memories, {MemoryKind.HOTSPOT, MemoryKind.GOTCHA, MemoryKind.FAILED_APPROACH}
     )
     active_tasks = [t for t in tasks if t.status == TaskStatus.ACTIVE]
+    prefs = [m for m in (user_memories or []) if m.feedback_score > -0.5]
 
-    if not invariants and not hotspots and not active_tasks:
+    if not invariants and not hotspots and not active_tasks and not prefs:
         return "", 0
 
     lines: list[str] = [f"## Repo brain: {repo_name}", ""]
+
+    if prefs:
+        lines.append("### Your preferences")
+        for memory in prefs[:_MAX_USER_PREFS]:
+            lines.append(f"- **{memory.title}**: {shorten(memory.summary, max_length=100)}")
+        lines.append("")
 
     if invariants:
         lines.append("### Key invariants & decisions")
@@ -71,6 +84,7 @@ def compile_boot_digest(
         hotspots=hotspots,
         active_tasks=active_tasks,
         repo_name=repo_name,
+        prefs=prefs,
     )
     return markdown, len(tokenize(markdown))
 
@@ -88,9 +102,16 @@ def _trim_boot_digest(
     hotspots: list[MemoryEntry],
     active_tasks: list[TaskRecord],
     repo_name: str,
+    prefs: list[MemoryEntry] | None = None,
 ) -> str:
     """Produce a hard-trimmed version that fits within the token budget."""
     lines: list[str] = [f"## Repo brain: {repo_name}", ""]
+
+    if prefs:
+        lines.append("### Your preferences")
+        for memory in (prefs or [])[:3]:
+            lines.append(f"- **{memory.title}**: {shorten(memory.summary, max_length=80)}")
+        lines.append("")
 
     if invariants:
         lines.append("### Key invariants & decisions")

@@ -45,6 +45,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ hooks      Install and run Claude Code compaction hooks.                     │
 │ claude-md  Generate and maintain CLAUDE.md from ONMC memory.                 │
 │ playbook   Synthesize and manage memory-derived playbooks.                   │
+│ user       Manage cross-repo user preferences (stored in ~/.onmc, not        │
+│            repo-scoped).                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -341,6 +343,8 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │                context.                                                      │
 │ session-start  Inject context at session start: boot digest on startup,      │
 │                continuation brief after compaction.                          │
+│ prompt-recall  Inject the most relevant repo memories for the current user   │
+│                prompt.                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -401,6 +405,23 @@ Usage: onmc hooks session-start [OPTIONS]
                                                                                 
  Inject context at session start: boot digest on startup, continuation brief    
  after compaction.                                                              
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks prompt-recall`
+
+```text
+Usage: onmc hooks prompt-recall [OPTIONS]                                      
+                                                                                
+ Inject the most relevant repo memories for the current user prompt.            
+                                                                                
+ Reads the UserPromptSubmit JSON payload from stdin, extracts the ``prompt``    
+ field, searches stored memory for relevant entries, and writes the             
+ UserPromptSubmit additionalContext JSON to stdout.  Stdout is always pure      
+ JSON or empty — never mixed with diagnostics.  Always exits 0.                 
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -886,6 +907,87 @@ Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
                                                                                 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    playbook_id      TEXT  Playbook ID (or prefix) to show. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc user`
+
+```text
+Usage: onmc user [OPTIONS] COMMAND [ARGS]...                                   
+                                                                                
+ Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).       
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add     Add a cross-repo user preference (stored in ~/.onmc, not             │
+│         git-tracked).                                                        │
+│ list    List all cross-repo user preferences.                                │
+│ show    Show a single user preference by ID.                                 │
+│ remove  Remove a user preference by ID.                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc user add`
+
+```text
+Usage: onmc user add [OPTIONS]                                                 
+                                                                                
+ Add a cross-repo user preference (stored in ~/.onmc, not git-tracked).         
+                                                                                
+ User preferences travel with you across all repositories and appear at the     
+ top of every session boot digest so your coding style is always applied.       
+ Examples: "always use pytest", "run ruff before committing".                   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --title          TEXT  Short preference title. [required]                 │
+│ *  --summary        TEXT  Full description of the preference or              │
+│                           working-style fact.                                │
+│                           [required]                                         │
+│    --help                 Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc user list`
+
+```text
+Usage: onmc user list [OPTIONS]                                                
+                                                                                
+ List all cross-repo user preferences.                                          
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc user show`
+
+```text
+Usage: onmc user show [OPTIONS] MEMORY_ID                                      
+                                                                                
+ Show a single user preference by ID.                                           
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc user remove`
+
+```text
+Usage: onmc user remove [OPTIONS] MEMORY_ID                                    
+                                                                                
+ Remove a user preference by ID.                                                
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │

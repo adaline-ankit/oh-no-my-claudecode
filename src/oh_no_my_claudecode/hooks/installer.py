@@ -7,14 +7,15 @@ from typing import Any
 
 PRE_COMPACT_COMMAND = "onmc hooks pre-compact"
 SESSION_START_COMMAND = "onmc hooks session-start"
+PROMPT_RECALL_COMMAND = "onmc hooks prompt-recall"
 LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
 MCP_SERVER_NAME = "onmc"
 
 _ONMC_COMMANDS = frozenset(
-    {PRE_COMPACT_COMMAND, SESSION_START_COMMAND, LEGACY_POST_COMPACT_COMMAND}
+    {PRE_COMPACT_COMMAND, SESSION_START_COMMAND, PROMPT_RECALL_COMMAND, LEGACY_POST_COMPACT_COMMAND}
 )
 # "PostCompact" is not a real Claude Code event; earlier onmc versions registered it.
-_HOOK_EVENTS = ("PreCompact", "PostCompact", "SessionStart")
+_HOOK_EVENTS = ("PreCompact", "PostCompact", "SessionStart", "UserPromptSubmit")
 
 
 def project_settings_path(repo_root: Path) -> Path:
@@ -69,6 +70,9 @@ def install_claude_hooks(
       branches internally on the ``source`` field of the stdin payload: it
       injects a boot digest for startup/resume/clear and the continuation brief
       for post-compaction sessions.
+    - ``UserPromptSubmit`` (matcher ``""``) runs ``onmc hooks prompt-recall``
+      on every user prompt, injecting only the memories most relevant to that
+      specific prompt.
 
     MCP registration is merged into ``<repo>/.mcp.json`` (Claude Code does not
     read MCP servers from settings.json). A backup of the pre-install settings
@@ -101,6 +105,12 @@ def install_claude_hooks(
         event_name="SessionStart",
         matcher="",
         command=SESSION_START_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="UserPromptSubmit",
+        matcher="",
+        command=PROMPT_RECALL_COMMAND,
     )
     _write_json(settings_path, settings)
     if register_mcp:
@@ -149,16 +159,25 @@ def hooks_installed(*, settings_path: Path) -> bool:
     """Return whether the project-scoped onmc hooks are present in settings.json."""
     settings = _load_json(settings_path)
     hooks = settings.get("hooks", {})
-    return _has_command_hook(
-        hooks,
-        event_name="PreCompact",
-        matcher="",
-        command=PRE_COMPACT_COMMAND,
-    ) and _has_command_hook(
-        hooks,
-        event_name="SessionStart",
-        matcher="",
-        command=SESSION_START_COMMAND,
+    return (
+        _has_command_hook(
+            hooks,
+            event_name="PreCompact",
+            matcher="",
+            command=PRE_COMPACT_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="SessionStart",
+            matcher="",
+            command=SESSION_START_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="UserPromptSubmit",
+            matcher="",
+            command=PROMPT_RECALL_COMMAND,
+        )
     )
 
 

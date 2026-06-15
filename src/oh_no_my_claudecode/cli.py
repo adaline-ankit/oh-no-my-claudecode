@@ -51,6 +51,10 @@ from oh_no_my_claudecode.rendering.console import (
     render_task_started,
     render_task_updated,
     render_teach_output,
+    render_user_memory_added,
+    render_user_memory_detail,
+    render_user_memory_list,
+    render_user_memory_removed,
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
@@ -75,6 +79,10 @@ playbook_app = typer.Typer(
     help="Synthesize and manage memory-derived playbooks.",
     no_args_is_help=True,
 )
+user_app = typer.Typer(
+    help="Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(task_app, name="task")
 app.add_typer(attempt_app, name="attempt")
@@ -82,6 +90,7 @@ app.add_typer(llm_app, name="llm")
 app.add_typer(hooks_app, name="hooks")
 app.add_typer(claude_md_app, name="claude-md")
 app.add_typer(playbook_app, name="playbook")
+app.add_typer(user_app, name="user")
 
 
 @app.command("setup")
@@ -609,6 +618,38 @@ def hooks_session_start_command() -> None:
 def hooks_post_compact_command() -> None:
     """Deprecated alias for `onmc hooks session-start`."""
     _run_session_start_hook()
+
+
+@hooks_app.command("prompt-recall")
+def hooks_prompt_recall_command() -> None:
+    """Inject the most relevant repo memories for the current user prompt.
+
+    Reads the UserPromptSubmit JSON payload from stdin, extracts the ``prompt``
+    field, searches stored memory for relevant entries, and writes the
+    UserPromptSubmit additionalContext JSON to stdout.  Stdout is always pure
+    JSON or empty — never mixed with diagnostics.  Always exits 0.
+    """
+    try:
+        payload = _read_hook_payload()
+        raw_prompt = payload.get("prompt", "")
+        prompt = raw_prompt if isinstance(raw_prompt, str) else ""
+        if not prompt.strip():
+            return
+        recall_md = _service().prompt_recall(prompt)
+        if recall_md:
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "hookSpecificOutput": {
+                            "hookEventName": "UserPromptSubmit",
+                            "additionalContext": recall_md,
+                        }
+                    }
+                )
+                + "\n"
+            )
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
 
 
 @claude_md_app.callback(invoke_without_command=True)
@@ -1248,6 +1289,52 @@ def playbook_show_command(
             )
         )
     render_playbook_detail(matches[0])
+
+
+# ---------------------------------------------------------------------------
+# User-scope (cross-repo) memory commands
+# ---------------------------------------------------------------------------
+
+
+@user_app.command("add")
+def user_add_command(
+    title: Annotated[str, typer.Option("--title", help="Short preference title.")],
+    summary: Annotated[
+        str,
+        typer.Option("--summary", help="Full description of the preference or working-style fact."),
+    ],
+) -> None:
+    """Add a cross-repo user preference (stored in ~/.onmc, not git-tracked).
+
+    User preferences travel with you across all repositories and appear at the
+    top of every session boot digest so your coding style is always applied.
+    Examples: "always use pytest", "run ruff before committing".
+    """
+    memory = _service().add_user_memory(title=title, summary=summary)
+    render_user_memory_added(memory)
+
+
+@user_app.command("list")
+def user_list_command() -> None:
+    """List all cross-repo user preferences."""
+    memories = _service().list_user_memories()
+    render_user_memory_list(memories)
+
+
+@user_app.command("show")
+def user_show_command(memory_id: str) -> None:
+    """Show a single user preference by ID."""
+    memory = _service().get_user_memory(memory_id)
+    if memory is None:
+        raise typer.Exit(code=_fatal(f"User preference not found: {memory_id}"))
+    render_user_memory_detail(memory)
+
+
+@user_app.command("remove")
+def user_remove_command(memory_id: str) -> None:
+    """Remove a user preference by ID."""
+    found = _service().remove_user_memory(memory_id)
+    render_user_memory_removed(memory_id, found=found)
 
 
 def _fatal(message: str) -> int:

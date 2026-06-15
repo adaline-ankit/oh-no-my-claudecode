@@ -8,6 +8,28 @@ from oh_no_my_claudecode.models import ProjectConfig
 
 CONFIG_FILE_NAME = "config.yaml"
 
+# ---------------------------------------------------------------------------
+# User-scope (cross-repo) helpers — paths inside ~/.onmc
+# ---------------------------------------------------------------------------
+
+_USER_STATE_DIR_NAME = ".onmc"
+_USER_DB_NAME = "user.db"
+
+
+def user_state_dir(home: Path | None = None) -> Path:
+    """Return the user-scope state directory (``~/.onmc``).
+
+    The *home* parameter is injectable for tests so they never touch the real
+    ``~`` directory.
+    """
+    base = home or Path.home()
+    return base / _USER_STATE_DIR_NAME
+
+
+def user_database_path(home: Path | None = None) -> Path:
+    """Return the path to the user-scope SQLite database (``~/.onmc/user.db``)."""
+    return user_state_dir(home) / _USER_DB_NAME
+
 
 def default_config(repo_root: Path) -> ProjectConfig:
     return ProjectConfig(repo_root=repo_root.as_posix())
