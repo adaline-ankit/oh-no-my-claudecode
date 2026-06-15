@@ -4,6 +4,24 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-15
+
+### Added
+
+- **`onmc consolidate` (memory "dreaming")** — a manual command plus a SessionEnd hook that self-improves the store between sessions: dedups near-duplicate memories, merges and promotes high-feedback ones, demotes/flags stale, and builds a memory-edge graph (migration v5: `supersedes` / `contradicts` / `relates` / `duplicate_of`) surfaced in `onmc why`. Manual memories are never deleted; `--dry-run` previews.
+- **`onmc tui`** — a `rich`-based interactive brain browser (Memories / Playbooks / Tasks / Status) with inline confirm/reject.
+- **`onmc playbook`** — memory-derived, provenance-tracked, git-portable reusable playbooks synthesized from high-signal memory (migration v4).
+- **`onmc why`** — explains why a file looks the way it does from memory + git history (deterministic core, optional LLM narrative).
+- **Per-prompt surgical recall** — a UserPromptSubmit hook injecting only the memory relevant to the current prompt.
+- **Dual-scope user memory** — a `~/.onmc/user.db` layer (`onmc user`) of durable preferences that travels across all repos and leads the SessionStart boot digest.
+- **FTS5 hybrid memory search** and **provenance staleness** (`onmc memory verify` / `prune`, migration v3).
+- **SessionStart boot digest** injecting a compact repo-memory digest at session start.
+
+### Changed
+
+- **MCP output is now TOON by default** (~50% fewer tokens than JSON for record lists); JSON via `ONMC_MCP_FORMAT=json` or `?format=json`. SQLite and `.agent-memory/` export stay JSON.
+- **Tag-driven release pipeline**: pushing `vX.Y.Z` runs the gate, builds, and creates a GitHub Release; the PyPI publish job is gated behind `vars.PYPI_TRUSTED_PUBLISHING` and skips (does not fail the run) until trusted publishing is configured. See `docs/RELEASING.md`.
+
 ## [0.4.0] — 2026-06-15
 
 ### Fixed
