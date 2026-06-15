@@ -568,14 +568,22 @@ def _run_session_start_hook() -> None:
     """Emit the SessionStart additionalContext JSON.
 
     Stdout must contain ONLY the hook JSON — Claude Code parses it verbatim to
-    inject the continuation brief into model context. Diagnostics go to stderr
-    and the command always exits 0 so a failure never blocks the session.
+    inject context into the model. Diagnostics go to stderr and the command
+    always exits 0 so a failure never blocks the session.
+
+    Branches on the ``source`` field from the stdin payload:
+    - ``"compact"`` or absent/unknown: emit the continuation brief.
+    - ``"startup"``, ``"resume"``, ``"clear"``: emit the boot digest.
     """
     try:
         payload = _read_hook_payload()
-        source = payload.get("source")
-        if isinstance(source, str) and source and source != "compact":
+        source = payload.get("source", "")
+        if isinstance(source, str) and source in {"startup", "resume", "clear"}:
+            digest_md, _ = _service().boot_digest()
+            if digest_md:
+                sys.stdout.write(session_start_context_json(digest_md) + "\n")
             return
+        # source == "compact" or absent/unknown -- emit continuation brief.
         _, brief_md = _service().session_start()
         sys.stdout.write(session_start_context_json(brief_md) + "\n")
     except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
@@ -584,7 +592,8 @@ def _run_session_start_hook() -> None:
 
 @hooks_app.command("session-start")
 def hooks_session_start_command() -> None:
-    """Inject the continuation brief when a session starts after compaction."""
+    """Inject context at session start: boot digest on startup, continuation brief after compaction.
+    """
     _run_session_start_hook()
 
 
@@ -903,6 +912,81 @@ def memory_edit_command(memory_id: str) -> None:
         return
     updated = _service().edit_memory(memory_id, edited.strip())
     render_memory_detail(updated)
+
+
+@memory_app.command("verify")
+def memory_verify_command() -> None:
+    """Re-check anchored memories against the filesystem and record staleness."""
+    from rich.table import Table
+
+    from oh_no_my_claudecode.memory.staleness import classify_staleness
+    from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
+
+    try:
+        repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    memories = storage.list_memories()
+    counts: dict[str, int] = {"fresh": 0, "stale": 0, "orphaned": 0, "unanchored": 0}
+    verified_at = isoformat_utc(utc_now())
+
+    for memory in memories:
+        label = classify_staleness(repo_root, memory)
+        storage.set_memory_staleness(memory.id, label, verified_at)
+        counts[label] += 1
+
+    table = Table(title="Memory Staleness Report")
+    table.add_column("Status")
+    table.add_column("Count", justify="right")
+    color_map = {"fresh": "green", "stale": "yellow", "orphaned": "red", "unanchored": "dim"}
+    for status, count in counts.items():
+        color = color_map[status]
+        table.add_row(f"[{color}]{status}[/{color}]", str(count))
+    console.print(table)
+    console.print(f"[green]Verified {len(memories)} memories.[/green]")
+
+
+@memory_app.command("prune")
+def memory_prune_command(
+    orphaned: Annotated[
+        bool,
+        typer.Option("--orphaned", help="Remove memories whose anchor file no longer exists."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be deleted without deleting."),
+    ] = False,
+) -> None:
+    """Remove orphaned generated memories (manual memories are always preserved)."""
+    if not orphaned:
+        raise typer.Exit(code=_fatal("Specify --orphaned to select which memories to prune."))
+    try:
+        _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    candidates = [
+        m
+        for m in storage.list_memories()
+        if m.staleness == "orphaned"
+        and m.source_type not in (SourceType.MANUAL, SourceType.MANUAL_SEED)
+    ]
+    if not candidates:
+        console.print("[green]No orphaned generated memories found.[/green]")
+        return
+
+    for memory in candidates:
+        console.print(f"  [red]orphaned[/red] {memory.id[:12]}  {memory.title[:60]}")
+
+    if dry_run:
+        console.print(
+            f"[yellow]Dry run: would delete {len(candidates)} orphaned memories.[/yellow]"
+        )
+        return
+
+    deleted = storage.delete_orphaned_generated_memories()
+    console.print(f"[red]Deleted {deleted} orphaned generated memories.[/red]")
 
 
 @task_app.command("start")

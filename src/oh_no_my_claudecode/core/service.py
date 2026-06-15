@@ -34,6 +34,7 @@ from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root, pa
 from oh_no_my_claudecode.hooks import (
     HookInstallResult,
     build_compaction_snapshot,
+    compile_boot_digest,
     compile_continuation_brief,
     hooks_installed,
     install_claude_hooks,
@@ -44,6 +45,7 @@ from oh_no_my_claudecode.hooks import (
     project_settings_path,
     uninstall_claude_hooks,
     user_settings_path,
+    write_boot_digest_artifact,
     write_continuation_brief_artifact,
 )
 from oh_no_my_claudecode.ingest.pipeline import run_ingest, run_ingest_files
@@ -339,6 +341,32 @@ class OnmcService:
         storage.set_meta("last_session_start_at", isoformat_utc(utc_now()))
         self._refresh_claude_md_if_stale(storage=storage, home=home)
         return updated_snapshot, brief_md
+
+    def boot_digest(self) -> tuple[str, int]:
+        """Compile a boot digest for session startup/resume/clear injection.
+
+        Returns ``(digest_md, token_count)``. When the store has no meaningful
+        memory, returns ``("", 0)`` — callers must emit nothing on stdout in
+        that case so the session is never blocked.
+
+        The digest is also written to ``.onmc/boot-digest.md`` as a debug
+        artifact.
+        """
+        repo_root, config, storage = self._load_context()
+        memories = storage.list_memories()
+        tasks = storage.list_tasks()
+        digest_md, token_count = compile_boot_digest(
+            memories=memories,
+            tasks=tasks,
+            repo_name=repo_root.name,
+        )
+        if digest_md:
+            write_boot_digest_artifact(
+                state_dir=state_dir(config, repo_root),
+                boot_digest_md=digest_md,
+            )
+        storage.set_meta("last_session_start_at", isoformat_utc(utc_now()))
+        return digest_md, token_count
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""

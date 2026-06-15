@@ -64,8 +64,11 @@ def install_claude_hooks(
     Hooks are merged into ``<repo>/.claude/settings.json``:
 
     - ``PreCompact`` (matcher ``""``) runs ``onmc hooks pre-compact``.
-    - ``SessionStart`` (matcher ``"compact"``) runs ``onmc hooks session-start``,
-      which injects the continuation brief after compaction.
+    - ``SessionStart`` (matcher ``""``) runs ``onmc hooks session-start`` on
+      every session start (startup, resume, clear, and compact). The command
+      branches internally on the ``source`` field of the stdin payload: it
+      injects a boot digest for startup/resume/clear and the continuation brief
+      for post-compaction sessions.
 
     MCP registration is merged into ``<repo>/.mcp.json`` (Claude Code does not
     read MCP servers from settings.json). A backup of the pre-install settings
@@ -96,7 +99,7 @@ def install_claude_hooks(
     _merge_command_hook(
         hooks,
         event_name="SessionStart",
-        matcher="compact",
+        matcher="",
         command=SESSION_START_COMMAND,
     )
     _write_json(settings_path, settings)
@@ -154,7 +157,7 @@ def hooks_installed(*, settings_path: Path) -> bool:
     ) and _has_command_hook(
         hooks,
         event_name="SessionStart",
-        matcher="compact",
+        matcher="",
         command=SESSION_START_COMMAND,
     )
 

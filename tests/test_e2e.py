@@ -278,7 +278,7 @@ def test_hooks_install_writes_project_scoped_config(e2e_env: tuple[Path, Path]) 
     pre_cmd = events["PreCompact"][0]["hooks"][0]["command"]
     assert pre_cmd == "onmc hooks pre-compact"
     session = events["SessionStart"]
-    assert any(e.get("matcher") == "compact" for e in session)
+    assert any(e.get("matcher") == "" for e in session)
     assert session[0]["hooks"][0]["command"] == "onmc hooks session-start"
 
     # MCP registration belongs in .mcp.json, NOT settings.json.

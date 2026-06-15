@@ -272,7 +272,7 @@ def test_installer_writes_project_scoped_hooks_and_mcp(tmp_path: Path) -> None:
     ]
     assert hooks["SessionStart"] == [
         {
-            "matcher": "compact",
+            "matcher": "",
             "hooks": [{"type": "command", "command": "onmc hooks session-start"}],
         }
     ]
@@ -319,7 +319,7 @@ def test_installer_merges_without_destroying_other_settings(tmp_path: Path) -> N
     hooks = payload["hooks"]
     assert isinstance(hooks, dict)
     assert {entry["matcher"] for entry in hooks["PreCompact"]} == {"python", ""}
-    assert {entry["matcher"] for entry in hooks["SessionStart"]} == {"startup", "compact"}
+    assert {entry["matcher"] for entry in hooks["SessionStart"]} == {"startup", ""}
     mcp_payload = _read_json(tmp_path / ".mcp.json")
     servers = mcp_payload["mcpServers"]
     assert isinstance(servers, dict)
@@ -747,10 +747,11 @@ def test_session_start_writes_debug_artifact_under_state_dir(
     assert "## Where we are" in artifact.read_text(encoding="utf-8")
 
 
-def test_session_start_skips_injection_for_non_compact_sources(
+def test_session_start_startup_emits_boot_digest_not_continuation_brief(
     sample_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """source == 'startup' now emits a boot digest, not the continuation brief."""
     runner = _cli_runner()
     monkeypatch.chdir(sample_repo)
     _prepare_snapshot(sample_repo)
@@ -762,7 +763,12 @@ def test_session_start_skips_injection_for_non_compact_sources(
     )
 
     assert result.exit_code == 0
-    assert result.stdout == ""
+    parsed = json.loads(result.stdout)
+    hook_output = parsed["hookSpecificOutput"]
+    assert hook_output["hookEventName"] == "SessionStart"
+    # Boot digest has a different heading than the continuation brief
+    assert "Repo brain" in hook_output["additionalContext"]
+    assert "## Where we are" not in hook_output["additionalContext"]
 
 
 def test_session_start_is_permissive_when_stdin_is_missing(

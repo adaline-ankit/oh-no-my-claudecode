@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+StalenessLabel = Literal["fresh", "stale", "orphaned", "unanchored"]
 
 
 class MemoryKind(StrEnum):
@@ -42,3 +45,5 @@ class MemoryEntry(BaseModel):
     feedback_score: float = 0.0
     created_at: datetime
     updated_at: datetime
+    staleness: StalenessLabel | None = None
+    last_verified_at: datetime | None = None
