@@ -10,6 +10,21 @@ It does not run an agent loop. It compiles a structured prompt so a provider-bac
 - inject repo-specific memory before model reasoning
 - separate instructions, task context, negative memory, and output contracts
 - avoid large unstructured dumps
+- support compact paste budgets for Codex and other token-sensitive coding agents
+
+## Token-Efficient Context
+
+Use these commands when a coding agent is running hot on tokens:
+
+```bash
+onmc brief --task "..." --style compact --max-tokens 600 --stdout
+onmc brief --task "..." --style caveman --max-tokens 400 --stdout
+onmc codegraph --max-files 25
+```
+
+- `compact` keeps normal wording but drops low-value prose.
+- `caveman` uses terse labels and short bullets for maximum compression.
+- `codegraph` shows directories and hot files from the ingested repo index so agents inspect likely files first instead of loading the whole repository.
 
 ## Modes
 

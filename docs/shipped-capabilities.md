@@ -157,6 +157,9 @@ ONMC compiles a task-specific deterministic brief:
 
 ```bash
 onmc brief --task "fix flaky Redis cache invalidation bug"
+onmc brief --task "fix flaky Redis cache invalidation bug" --style compact --max-tokens 600 --stdout
+onmc brief --task "fix flaky Redis cache invalidation bug" --style caveman --max-tokens 400 --stdout
+onmc codegraph --max-files 25
 ```
 
 The brief includes:
@@ -174,6 +177,13 @@ The markdown artifact is written to `.onmc/compiled/<timestamp>-brief.md`.
 
 When a provider is configured, ONMC reranks the final candidate memory set with an LLM and stores
 one-sentence relevance reasons in the brief output.
+
+For Codex and other token-sensitive agents, `--style compact` and `--style caveman` render smaller
+paste-ready briefs. `--max-tokens` trims the markdown output to a hard budget, and `--stdout` avoids
+terminal tables so the output can be pasted directly into an agent context.
+
+`onmc codegraph` emits a compact directory and hot-file map from the ingested repo index. It is meant
+to reduce broad file dumping by giving agents a small navigation graph before they inspect source.
 
 ### 7. Optional LLM Layer
 

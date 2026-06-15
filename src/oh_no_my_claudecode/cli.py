@@ -14,6 +14,7 @@ from oh_no_my_claudecode.mcp_server import run_mcp_server
 from oh_no_my_claudecode.models import (
     AttemptKind,
     AttemptStatus,
+    BriefStyle,
     LLMProviderType,
     MemoryArtifactType,
     MemoryKind,
@@ -49,6 +50,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_teach_output,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
+from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 
 app = typer.Typer(
     help="Repo-native memory and context compiler for coding agents.",
@@ -148,14 +150,61 @@ def brief_command(
         bool,
         typer.Option("--no-llm", help="Skip the optional LLM reranking pass."),
     ] = False,
+    style: Annotated[
+        BriefStyle,
+        typer.Option("--style", help="Brief rendering style."),
+    ] = BriefStyle.FULL,
+    max_tokens: Annotated[
+        int | None,
+        typer.Option("--max-tokens", min=1, help="Trim markdown output to a token budget."),
+    ] = None,
+    stdout: Annotated[
+        bool,
+        typer.Option("--stdout", help="Print markdown only, optimized for agent paste context."),
+    ] = False,
 ) -> None:
     """Compile a task-specific context brief."""
     try:
         _, artifact = _service().compile_brief(task, no_llm=no_llm)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+    if stdout or style != BriefStyle.FULL or max_tokens is not None:
+        markdown = artifact.to_markdown(style=style)
+        if max_tokens is not None:
+            markdown = limit_markdown_tokens(markdown, max_tokens)
+        console.print(markdown.rstrip(), markup=False)
+        if stdout:
+            return
     render_brief(artifact)
     console.print(f"[green]Wrote brief:[/green] {artifact.output_path}")
+
+
+@app.command("codegraph")
+def codegraph_command(
+    max_files: Annotated[
+        int,
+        typer.Option("--max-files", min=1, help="Maximum hot files to include."),
+    ] = 40,
+    max_dirs: Annotated[
+        int,
+        typer.Option("--max-dirs", min=1, help="Maximum directories to include."),
+    ] = 12,
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Write the markdown codegraph to this path."),
+    ] = None,
+) -> None:
+    """Generate a compact codegraph for token-efficient agent navigation."""
+    try:
+        markdown = _service().codegraph(max_files=max_files, max_dirs=max_dirs)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if output is None:
+        console.print(markdown.rstrip(), markup=False)
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(markdown, encoding="utf-8")
+    typer.echo(f"Wrote codegraph: {output}")
 
 
 @app.command("status")

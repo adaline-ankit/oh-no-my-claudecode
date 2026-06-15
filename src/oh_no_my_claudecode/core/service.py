@@ -30,7 +30,7 @@ from oh_no_my_claudecode.config import (
     state_dir,
     write_config,
 )
-from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root
+from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root, path_bucket
 from oh_no_my_claudecode.hooks import (
     HookInstallResult,
     build_compaction_snapshot,
@@ -68,6 +68,7 @@ from oh_no_my_claudecode.models import (
     BriefArtifact,
     CompactionSnapshotRecord,
     CompiledPrompt,
+    FileStat,
     HookStatus,
     IngestResult,
     LLMGenerationRequest,
@@ -79,6 +80,7 @@ from oh_no_my_claudecode.models import (
     MemoryEntry,
     MemoryKind,
     ProjectConfig,
+    RepoFileRecord,
     ReviewModeOutput,
     SolveModeOutput,
     SourceType,
@@ -477,6 +479,61 @@ class OnmcService:
     def agent_readiness_report(self) -> str:
         """Generate a shareable markdown report for agent readiness."""
         return _agent_readiness_markdown(self._build_agent_readiness_summary())
+
+    def codegraph(self, *, max_files: int = 40, max_dirs: int = 12) -> str:
+        """Generate a compact repo codegraph from ingested file metadata."""
+        repo_root, _, storage = self._load_context()
+        repo_files = storage.list_repo_files()
+        if not repo_files:
+            msg = "No repo file index found. Run `onmc ingest` first."
+            raise FileNotFoundError(msg)
+        file_stats = storage.list_file_stats()
+        stats_by_path = {stat.path: stat for stat in file_stats}
+        dir_stats = _codegraph_dirs(repo_files, file_stats)
+        hot_files = sorted(
+            repo_files,
+            key=lambda record: _codegraph_file_score(record, stats_by_path.get(record.path)),
+            reverse=True,
+        )[:max_files]
+
+        lines = [
+            "# ONMC Codegraph",
+            "",
+            f"- Repo: `{repo_root.name}`",
+            f"- Files indexed: {len(repo_files)}",
+            f"- Hot files shown: {len(hot_files)}",
+            "",
+            "## Directories",
+            "",
+        ]
+        for item in dir_stats[:max_dirs]:
+            lines.append(
+                "- "
+                f"`{item['path']}` files={item['files']} tests={item['tests']} "
+                f"churn={item['churn']} bytes={item['bytes']}"
+            )
+        lines.extend(["", "## Hot Files", ""])
+        for record in hot_files:
+            stat = stats_by_path.get(record.path)
+            change_count = stat.change_count if stat else 0
+            recent_count = stat.recent_change_count if stat else 0
+            kind = "test" if record.is_test else "src"
+            lines.append(
+                f"- `{record.path}` {kind} churn={change_count} "
+                f"recent={recent_count} bytes={record.size_bytes}"
+            )
+        lines.extend(
+            [
+                "",
+                "## Codex Use",
+                "",
+                "- Read hot files first; avoid dumping entire repo.",
+                "- Pair source file with nearby test file before broad search.",
+                "- Use `onmc brief --style caveman --max-tokens 400 --stdout` for paste budget.",
+                "",
+            ]
+        )
+        return "\n".join(lines)
 
     def _build_agent_readiness_summary(self) -> AgentReadinessSummary:
         repo_root, config, storage = self._load_context()
@@ -1489,6 +1546,37 @@ def _provider_label(config: ProjectConfig) -> str:
     if config.llm.provider is None or config.llm.model is None:
         return "not configured"
     return f"{config.llm.provider.value} ({config.llm.model})"
+
+
+def _codegraph_file_score(record: RepoFileRecord, stat: FileStat | None) -> float:
+    churn = float(stat.change_count if stat else 0)
+    recent = float(stat.recent_change_count if stat else 0)
+    size_weight = min(record.size_bytes / 4096.0, 8.0)
+    source_weight = 0.0 if record.is_test else 2.0
+    return recent * 5.0 + churn * 3.0 + size_weight + source_weight
+
+
+def _codegraph_dirs(
+    repo_files: list[RepoFileRecord],
+    file_stats: list[FileStat],
+) -> list[dict[str, int | str]]:
+    churn_by_path = {stat.path: stat.change_count + stat.recent_change_count for stat in file_stats}
+    grouped: dict[str, dict[str, int | str]] = {}
+    for record in repo_files:
+        bucket = path_bucket(record.path)
+        current = grouped.setdefault(
+            bucket,
+            {"path": bucket, "files": 0, "tests": 0, "churn": 0, "bytes": 0},
+        )
+        current["files"] = int(current["files"]) + 1
+        current["tests"] = int(current["tests"]) + (1 if record.is_test else 0)
+        current["churn"] = int(current["churn"]) + churn_by_path.get(record.path, 0)
+        current["bytes"] = int(current["bytes"]) + record.size_bytes
+    return sorted(
+        grouped.values(),
+        key=lambda item: (int(item["churn"]), int(item["files"]), int(item["bytes"])),
+        reverse=True,
+    )
 
 
 def _health_sections(health: dict[str, list[str]]) -> list[str]:

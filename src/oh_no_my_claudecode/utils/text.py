@@ -69,6 +69,33 @@ def shorten(value: str, *, max_length: int = 160) -> str:
     return collapsed[: max_length - 3].rstrip() + "..."
 
 
+def limit_markdown_tokens(markdown: str, max_tokens: int) -> str:
+    """Trim markdown by whitespace token budget while preserving line order."""
+    if max_tokens <= 0:
+        msg = "max_tokens must be greater than 0"
+        raise ValueError(msg)
+    used = 0
+    lines_out: list[str] = []
+    for line in markdown.splitlines():
+        tokens = line.split()
+        if not tokens:
+            lines_out.append(line)
+            continue
+        remaining = max_tokens - used
+        if remaining <= 0:
+            break
+        if len(tokens) <= remaining:
+            lines_out.append(line)
+            used += len(tokens)
+            continue
+        lines_out.append(" ".join(tokens[:remaining]) + " ...")
+        used = max_tokens
+        break
+    if used >= max_tokens:
+        lines_out.extend(["", f"[trimmed to {max_tokens} tokens]"])
+    return "\n".join(lines_out)
+
+
 def stable_id(*parts: str, prefix: str) -> str:
     digest = hashlib.sha256("||".join(parts).encode("utf-8")).hexdigest()[:12]
     return f"{prefix}-{digest}"
