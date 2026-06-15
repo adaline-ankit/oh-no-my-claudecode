@@ -23,6 +23,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ brief      Compile a task-specific context brief.                            │
 │ codegraph  Generate a compact codegraph for token-efficient agent            │
 │            navigation.                                                       │
+│ why        Explain why a file looks the way it does, from memory + git       │
+│            history.                                                          │
 │ status     Show local ONMC status.                                           │
 │ report     Generate a shareable agent-readiness report.                      │
 │ sync       Export, restore, or hook git-portable ONMC memory state.          │
