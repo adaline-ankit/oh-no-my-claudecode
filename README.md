@@ -30,15 +30,39 @@ It reads your git history, docs, and code structure with an LLM and builds a str
 
 ---
 
+## Install as a Claude Code plugin
+
+ONMC ships a Claude Code plugin manifest. Point Claude Code at this repo and it
+registers the MCP server and hooks automatically:
+
+```bash
+# 1. Install the package
+pip install oh-no-my-claudecode
+
+# 2. Run setup (generates CLAUDE.md, installs hooks, registers MCP)
+onmc setup
+
+# 3. Or add to .mcp.json manually (the MCP server entry)
+#    command: onmc  args: ["serve", "--mcp"]
+```
+
+The plugin manifest lives at [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json).
+A single-plugin marketplace entry is at [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)
+for registering this repo as a Claude Code plugin source.
+
+---
+
 ## Works with every coding agent
 
 | Agent | Integration |
 |---|---|
-| **Claude Code** | `CLAUDE.md` + `onmc hooks install` + `onmc serve --mcp` |
+| **Claude Code** | `CLAUDE.md` + `onmc hooks install` + `onmc serve --mcp` + [plugin manifest](.claude-plugin/plugin.json) |
 | **Cursor** | Pipe `onmc brief` output to `.cursorrules` |
-| **Codex CLI** | `AGENTS.md` + `onmc brief` output |
+| **Codex / other agents** | [`AGENTS.md`](AGENTS.md) — run `onmc brief`, `onmc guard`, `onmc serve --mcp` at session start |
 | **Cloud agents** (Codex, GitHub Coding Agent) | `onmc sync --restore` in container startup |
 | **Gitpod / Codespaces** | Add `onmc sync --restore` to `.gitpod.yml` |
+
+MCP tools exposed by `onmc serve --mcp`: **`search_memory`**, **`guard_task`**, **`get_brief`**.
 
 See [Agent-Native Workflows](docs/agent-native-workflows.md) for the supported
 Claude Code, Codex, MCP, and cloud-agent boundaries.
