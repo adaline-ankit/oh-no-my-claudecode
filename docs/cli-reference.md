@@ -27,7 +27,11 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              navigation.                                                     │
 │ why          Explain why a file looks the way it does, from memory + git     │
 │              history.                                                        │
+│ guard        Surface recorded dead-ends so you never repeat a known failure. │
 │ status       Show local ONMC status.                                         │
+│ statusline   Print a compact one-line brain health string for Claude Code    │
+│              statusLine.                                                     │
+│ hud          Display a rich multi-line memory health HUD panel.              │
 │ report       Generate a shareable agent-readiness report.                    │
 │ sync         Export, restore, or hook git-portable ONMC memory state.        │
 │ serve        Serve ONMC over the requested runtime protocol.                 │
@@ -138,12 +142,59 @@ Usage: onmc codegraph [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc guard`
+
+```text
+Usage: onmc guard [OPTIONS]                                                    
+                                                                                
+ Surface recorded dead-ends so you never repeat a known failure.                
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --task         TEXT                  Task description to check for        │
+│                                         dead-ends.                           │
+│                                         [required]                           │
+│    --limit        INTEGER RANGE [x>=1]  Maximum number of dead-end entries   │
+│                                         to return.                           │
+│                                         [default: 8]                         │
+│    --help                               Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc status`
 
 ```text
 Usage: onmc status [OPTIONS]                                                   
                                                                                 
  Show local ONMC status.                                                        
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc statusline`
+
+```text
+Usage: onmc statusline [OPTIONS]                                               
+                                                                                
+ Print a compact one-line brain health string for Claude Code statusLine.       
+                                                                                
+ Example output: 🧠 142 mem · 87% fresh · 3 stale · 12k tok/day                 
+                                                                                
+ Wire into Claude Code by adding to your settings.json:                         
+   "statusLine": "onmc statusline"                                              
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hud`
+
+```text
+Usage: onmc hud [OPTIONS]                                                      
+                                                                                
+ Display a rich multi-line memory health HUD panel.                             
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │

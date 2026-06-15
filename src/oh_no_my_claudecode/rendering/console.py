@@ -25,6 +25,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.utils.text import shorten
 from oh_no_my_claudecode.why.compiler import WhyReport
@@ -915,3 +916,59 @@ def render_user_memory_removed(memory_id: str, *, found: bool) -> None:
         console.print(f"[green]Removed user preference:[/green] {memory_id}")
     else:
         console.print(f"[yellow]User preference not found:[/yellow] {memory_id}")
+
+
+def render_hud(health: MemoryHealth) -> None:
+    """Render a rich multi-line HUD panel with brain observability data."""
+    # --- freshness bar ---
+    bar_width = 20
+    if health.total_memories > 0:
+        filled = round(health.freshness_pct / 100 * bar_width)
+    else:
+        filled = bar_width
+    bar = "█" * filled + "░" * (bar_width - filled)
+    freshness_color = (
+        "green"
+        if health.freshness_pct >= 80
+        else ("yellow" if health.freshness_pct >= 50 else "red")
+    )
+
+    # --- token summary ---
+    rc = health.recent_cost
+    tok_k = rc.total_tokens // 1000
+    tok_label = f"{tok_k}k" if tok_k >= 1 else str(rc.total_tokens)
+    latency_s = rc.total_latency_ms / 1000.0
+
+    lines: list[str] = [
+        f"Total memories:  [bold]{health.total_memories}[/bold]",
+        "",
+        "[underline]By kind[/underline]",
+    ]
+    for kind, count in sorted(health.counts_by_kind.items(), key=lambda kv: -kv[1]):
+        lines.append(f"  {kind:<20} {count}")
+
+    lines += [
+        "",
+        "[underline]Freshness[/underline]",
+        f"  [{freshness_color}]{bar}[/{freshness_color}]  {health.freshness_pct:.0f}%",
+        f"  Fresh: {health.fresh_count}  Stale: {health.stale_count}"
+        f"  Orphaned: {health.orphaned_count}  Unanchored: {health.unanchored_count}",
+    ]
+
+    if health.stale_titles:
+        lines += ["", "[underline]Stale memories[/underline]"]
+        for title in health.stale_titles:
+            lines.append(f"  · {shorten(title, max_length=70)}")
+
+    lines += [
+        "",
+        "[underline]Coverage proxy[/underline]",
+        f"  {health.covered_files}/{health.top_churn_files} top-churn files"
+        f" covered — {health.coverage_pct:.0f}%",
+        "",
+        f"[underline]LLM activity (last {rc.window_hours}h)[/underline]",
+        f"  Calls: {rc.call_count}  Tokens: {tok_label}"
+        f"  Latency: {latency_s:.1f}s total",
+    ]
+
+    console.print(Panel("\n".join(lines), title="ONMC Memory HUD", border_style="blue"))
