@@ -26,6 +26,7 @@ from oh_no_my_claudecode.models import (
 )
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.utils.text import shorten
+from oh_no_my_claudecode.why.compiler import WhyReport
 
 console = Console()
 
@@ -714,3 +715,73 @@ def _memory_artifact_type_label(artifact_type: MemoryArtifactType) -> str:
         MemoryArtifactType.VALIDATION: "[cyan]validation[/cyan]",
     }
     return styles[artifact_type]
+
+
+def render_why_report(report: WhyReport) -> None:
+    """Render a WhyReport to the terminal using rich panels and tables."""
+    verdict_color = "red" if "hotspot" in report.risk_verdict else "green"
+    console.print(
+        Panel.fit(
+            f"[bold]{report.path}[/bold]\n"
+            f"Risk verdict: [{verdict_color}]{report.risk_verdict}[/{verdict_color}]",
+            title="onmc why",
+        )
+    )
+
+    if report.llm_narrative:
+        console.print(Markdown("## Narrative"))
+        console.print(report.llm_narrative)
+
+    if not report.has_data:
+        console.print(
+            "[yellow]Nothing is known about this file yet.[/yellow]\n"
+            "Run [bold]onmc ingest[/bold] to index git history and docs, "
+            "then [bold]onmc mine[/bold] to extract memories from session transcripts."
+        )
+        return
+
+    if report.decisions:
+        console.print(Markdown("## Why it looks this way"))
+        for memory in report.decisions:
+            console.print(f"  [bold]{memory.title}[/bold] [{memory.kind.value}]")
+            console.print(f"  {memory.summary}")
+
+    if report.failed_approaches:
+        console.print(Markdown("## What was tried and failed"))
+        for memory in report.failed_approaches:
+            console.print(f"  [bold]{memory.title}[/bold]")
+            console.print(f"  {memory.summary}")
+
+    danger_lines: list[str] = []
+    for memory in report.hotspot_memories:
+        danger_lines.append(f"{memory.title}: {memory.summary}")
+    if report.file_stat and report.file_stat.change_count > 0:
+        danger_lines.append(
+            f"Churn: {report.file_stat.change_count} modifying commits; "
+            f"{report.file_stat.recent_change_count} in the last 30 days."
+        )
+    if report.git_history and report.git_history.commit_count > 0:
+        danger_lines.append(
+            f"Git history: {report.git_history.commit_count} commits touch this file."
+        )
+    if danger_lines:
+        console.print(Markdown("## Dangerous to change because"))
+        for line in danger_lines:
+            console.print(f"  - {line}")
+
+    if report.context_memories or report.related_artifacts:
+        console.print(Markdown("## Related context"))
+        for memory in report.context_memories:
+            console.print(
+                f"  [{memory.kind.value}] [bold]{memory.title}[/bold]: {memory.summary}"
+            )
+        for artifact in report.related_artifacts:
+            console.print(
+                f"  [artifact/{artifact.type.value}] [bold]{artifact.title}[/bold]: "
+                f"{artifact.summary}"
+            )
+
+    if report.git_history and report.git_history.recent_subjects:
+        console.print(Markdown("## Recent commits"))
+        for subject in report.git_history.recent_subjects:
+            console.print(f"  - {subject}")
