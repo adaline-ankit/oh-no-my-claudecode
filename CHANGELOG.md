@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-15
+
+### Added
+
+- **`onmc why --at <commit>`** — time-travel: recompute a file's why-report as of a past commit (git history bounded to the commit; memory entries are labeled as reflecting the current store).
+- **`onmc memory-diff <commitA> <commitB>`** — diff the committed `.agent-memory/` export between two commits (added / removed / changed memories), with a file-name-diff fallback when no brain is committed.
+- **`onmc wiki [--output DIR]`** — generate a browsable multi-page knowledge wiki (index, per-subsystem pages, relationship graph) from memory + the memory-edge graph.
+
+### Changed
+
+- `onmc claude-md generate` now produces clean, coherent output (sentence-boundary truncation, code fences reduced to breadcrumbs, deduped source labels).
+- A memory-grounded PR bot posts `onmc why` / `onmc guard` context on pull requests; the brain-freshness check is now informational (no longer shows a failing status).
+
 ## [0.6.0] — 2026-06-15
 
 ### Added
