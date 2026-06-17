@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-06-16
+
+### Fixed
+
+- **Claude Code plugin manifests now match the real spec** (`code.claude.com/docs`): `displayName`, an `author` object, `mcpServers`→`./.mcp.json` and `hooks`→`./hooks/hooks.json` path refs, and a marketplace entry with the required `name`/`owner`/`source` fields. Adds plugin-root `.mcp.json` and `hooks/hooks.json` so a one-step `/plugin marketplace add` + `/plugin install` actually works.
+
+### Added
+
+- **First-class Codex integration** — `AGENTS.md` stanza + a real `~/.codex/config.toml` MCP block (`codex mcp add onmc -- onmc serve --mcp`).
+- **Terse injection mode** — `ONMC_TERSE=1` / `--terse` emit only high-signal tokens (compact `INVARIANT:` / `FAILED(don't retry):` / `FIX(worked):` lines, hard token budget, top-ranked only). Terse is the default for the per-prompt recall and boot-digest hooks (full output via `ONMC_VERBOSE=1`) — ~90% fewer characters of injected context.
+- **Fast, never-blocking hooks** — the per-prompt and session-start hooks now run under a time budget (emit-ready-or-nothing, always exit 0), with lazy imports for fast startup, bounded + cached candidate retrieval, and graceful degradation to lexical. Any exception emits nothing and exits 0 — the host agent is never blocked or slowed.
+
 ## [0.8.0] — 2026-06-16
 
 ### Added
