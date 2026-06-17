@@ -126,6 +126,10 @@ def _plug_claude_code(*, repo_root: Path) -> PlugResult:
         "Claude Code hooks installed: PreCompact, SessionStart, UserPromptSubmit, SessionEnd."
     )
     result.notes.append("MCP server registered in .mcp.json as 'onmc'.")
+    result.notes.append(
+        "Tip: users can also install via plugin marketplace — "
+        "see docs/integrations/claude-code.md for the /plugin command."
+    )
     result.notes.append(f"See {_CLAUDE_CODE_DOCS_PATH} for details.")
     return result
 
@@ -155,6 +159,18 @@ _CODEX_STANZA = textwrap.dedent("""\
     # 3. (Optional) MCP tools mid-session
     onmc serve --mcp &
     ```
+
+    ### MCP server — Codex config.toml (copy-paste)
+
+    Add to `~/.codex/config.toml` or `.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.onmc]
+    command = "onmc serve --mcp"
+    enabled = true
+    ```
+
+    Or run: `codex mcp add onmc -- onmc serve --mcp`
 
     ### MCP tools (when `onmc serve --mcp` is running)
 

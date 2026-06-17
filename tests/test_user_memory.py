@@ -138,11 +138,13 @@ def test_boot_digest_includes_user_prefs_section() -> None:
         _make_user_pref("Prefers pytest", "Always use pytest."),
         _make_user_pref("Run ruff first", "Run ruff before committing."),
     ]
+    # terse=False: verify the full markdown output has the section header.
     digest, tokens = compile_boot_digest(
         memories=[],
         tasks=[],
         repo_name="my-repo",
         user_memories=prefs,
+        terse=False,
     )
     assert "### Your preferences" in digest
     assert "Prefers pytest" in digest
@@ -186,11 +188,13 @@ def test_boot_digest_user_prefs_appear_before_invariants() -> None:
         updated_at=now,
     )
     pref = _make_user_pref("Prefers pytest", "Always use pytest.")
+    # terse=False: ordering check uses full markdown section headers.
     digest, _ = compile_boot_digest(
         memories=[inv],
         tasks=[],
         repo_name="my-repo",
         user_memories=[pref],
+        terse=False,
     )
     prefs_idx = digest.find("Your preferences")
     inv_idx = digest.find("Key invariants")
@@ -299,5 +303,6 @@ def test_boot_digest_service_includes_user_prefs(
 
     digest_md, token_count = svc.boot_digest(home=tmp_path)
     assert token_count > 0
-    assert "Your preferences" in digest_md
+    # In terse mode: "PREF: Always ruff"; in full mode: "### Your preferences" + title.
+    # Either way, the user preference title must appear.
     assert "Always ruff" in digest_md

@@ -766,9 +766,10 @@ def test_session_start_startup_emits_boot_digest_not_continuation_brief(
     parsed = json.loads(result.stdout)
     hook_output = parsed["hookSpecificOutput"]
     assert hook_output["hookEventName"] == "SessionStart"
-    # Boot digest has a different heading than the continuation brief
-    assert "Repo brain" in hook_output["additionalContext"]
-    assert "## Where we are" not in hook_output["additionalContext"]
+    # Boot digest (terse mode: [onmc:...], full mode: "Repo brain") differs from brief.
+    ctx = hook_output["additionalContext"]
+    assert "onmc" in ctx.lower() or "Repo brain" in ctx
+    assert "## Where we are" not in ctx
 
 
 def test_session_start_is_permissive_when_stdin_is_missing(

@@ -27,6 +27,24 @@ onmc serve --mcp
 | `guard_task` | Returns recorded failed approaches for a task so the agent skips known dead-ends |
 | `get_brief` | Compiles a task-specific brief (files + context) on demand |
 
+### MCP server configuration for Codex
+
+To give Codex access to onmc MCP tools mid-session, add this to
+`~/.codex/config.toml` (user-level) or `.codex/config.toml` (project-level):
+
+```toml
+# onmc — repo-native memory MCP server
+[mcp_servers.onmc]
+command = "onmc serve --mcp"
+enabled = true
+```
+
+Or use the CLI:
+
+```bash
+codex mcp add onmc -- onmc serve --mcp
+```
+
 ### On a fresh clone / cloud container
 
 ```bash

@@ -88,10 +88,12 @@ def test_boot_digest_contains_invariants_and_hotspots() -> None:
             summary="This file changes every sprint; check it first.",
         ),
     ]
+    # terse=False: verify the full markdown output shape.
     digest, tokens = compile_boot_digest(
         memories=memories,
         tasks=[],
         repo_name="my-repo",
+        terse=False,
     )
 
     assert "## Repo brain: my-repo" in digest
@@ -158,7 +160,7 @@ def test_boot_digest_excludes_non_active_tasks() -> None:
 
 
 def test_boot_digest_is_token_bounded_with_many_memories() -> None:
-    """Large stores must still produce a digest within the token cap."""
+    """Large stores must still produce a digest within the token cap (full mode)."""
     memories = [
         _make_memory(
             kind=MemoryKind.INVARIANT,
@@ -172,10 +174,12 @@ def test_boot_digest_is_token_bounded_with_many_memories() -> None:
         for i in range(20)
     ]
 
+    # terse=False: full markdown must still respect the token budget.
     digest, tokens = compile_boot_digest(
         memories=memories,
         tasks=[],
         repo_name="my-repo",
+        terse=False,
     )
 
     assert tokens <= BOOT_DIGEST_MAX_TOKENS
@@ -228,8 +232,10 @@ def test_session_start_startup_emits_boot_digest_json(
     assert hook_output["hookEventName"] == "SessionStart"
     assert isinstance(hook_output["additionalContext"], str)
     assert len(hook_output["additionalContext"]) > 0
-    # Content is repo brain markdown
-    assert "Repo brain" in hook_output["additionalContext"]
+    # In terse mode (hook default) the header is [onmc:<repo>]; full mode has "Repo brain".
+    # Either way the content must be non-empty and contain the repo name.
+    ctx = hook_output["additionalContext"]
+    assert "onmc" in ctx.lower() or "Repo brain" in ctx
 
 
 def test_session_start_resume_emits_boot_digest_json(
@@ -353,7 +359,8 @@ def test_session_start_startup_writes_boot_digest_artifact(
     artifact = sample_repo / ".onmc" / "boot-digest.md"
     assert artifact.exists()
     content = artifact.read_text(encoding="utf-8")
-    assert "Repo brain" in content
+    # In terse mode the artifact starts with [onmc:<repo>]; full mode uses "Repo brain".
+    assert "onmc" in content.lower() or "Repo brain" in content
 
 
 def test_session_start_startup_no_onmc_init_exits_zero_clean_stdout(

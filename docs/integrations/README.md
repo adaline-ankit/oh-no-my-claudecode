@@ -3,6 +3,36 @@
 Use `onmc plug <agent>` to wire onmc into your coding agent in one command.
 All writes are idempotent — re-running never duplicates stanzas.
 
+## Quickstart
+
+### Claude Code (one step via plugin marketplace)
+
+```shell
+# Inside Claude Code:
+/plugin marketplace add adaline-ankit/oh-no-my-claudecode
+/plugin install oh-no-my-claudecode@onmc
+/reload-plugins
+```
+
+The plugin activates four lifecycle hooks and the `onmc` MCP server automatically.
+See [claude-code.md](claude-code.md) for the alternative `onmc plug claude-code` path.
+
+### Codex (two steps)
+
+```bash
+# Write the AGENTS.md stanza Codex reads at every session start:
+onmc plug codex
+
+# Register the MCP server in ~/.codex/config.toml:
+codex mcp add onmc -- onmc serve --mcp
+```
+
+See [codex.md](codex.md) for the full `~/.codex/config.toml` format.
+
+---
+
+## All plug targets
+
 ```bash
 onmc plug claude-code   # hooks + .mcp.json for Claude Code
 onmc plug codex         # AGENTS.md stanza for Codex / GitHub Coding Agent

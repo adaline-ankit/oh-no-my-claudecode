@@ -202,12 +202,25 @@ def brief_command(
         bool,
         typer.Option("--stdout", help="Print markdown only, optimized for agent paste context."),
     ] = False,
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
 ) -> None:
     """Compile a task-specific context brief."""
+    from oh_no_my_claudecode.serialize.terse import is_terse, render_memories_terse
+
     try:
         _, artifact = _service().compile_brief(task, no_llm=no_llm)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        memories = list(artifact.relevant_memories)
+        console.print(render_memories_terse(memories), markup=False)
+        return
+
     if stdout or style != BriefStyle.FULL or max_tokens is not None:
         markdown = artifact.to_markdown(style=style)
         if max_tokens is not None:
@@ -263,12 +276,24 @@ def why_command(
             ),
         ),
     ] = "",
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
 ) -> None:
     """Explain why a file looks the way it does, from memory + git history."""
+    from oh_no_my_claudecode.serialize.terse import is_terse, render_why_terse
+
     try:
         _, report = _service().why(path, no_llm=no_llm, at_commit=at)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        console.print(render_why_terse(report), markup=False)
+        return
+
     render_why_report(report)
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
@@ -316,15 +341,25 @@ def guard_command(
         int,
         typer.Option("--limit", min=1, help="Maximum number of dead-end entries to return."),
     ] = 8,
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
 ) -> None:
     """Surface recorded dead-ends so you never repeat a known failure."""
     from oh_no_my_claudecode.config import compiled_dir, load_config
+    from oh_no_my_claudecode.serialize.terse import is_terse, render_guard_terse
     from oh_no_my_claudecode.utils.time import utc_now
 
     try:
         repo_root, result = _service().guard(task, limit=limit)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        console.print(render_guard_terse(result.entries, task, max_items=limit), markup=False)
+        return
 
     markdown = result.to_markdown()
 
@@ -771,14 +806,22 @@ def hooks_prompt_recall_command() -> None:
         prompt = raw_prompt if isinstance(raw_prompt, str) else ""
         if not prompt.strip():
             return
-        recall_md = _service().prompt_recall(prompt)
-        if recall_md:
+        # Use the safe wrapper that enforces a timeout budget and swallows all
+        # exceptions — hooks must never block or crash the host agent session.
+        from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall_safe
+
+        try:
+            _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            return
+        recall_text, _ = compile_prompt_recall_safe(storage, prompt)
+        if recall_text:
             sys.stdout.write(
                 json.dumps(
                     {
                         "hookSpecificOutput": {
                             "hookEventName": "UserPromptSubmit",
-                            "additionalContext": recall_md,
+                            "additionalContext": recall_text,
                         }
                     }
                 )
