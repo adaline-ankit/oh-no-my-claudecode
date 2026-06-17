@@ -1,9 +1,13 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "oh-no-my-claudecode",
-  "display_name": "ONMC — Repo-Native Agent Memory",
+  "displayName": "ONMC — Repo-Native Agent Memory",
   "description": "Repo-native memory for AI coding agents. Builds a structured memory store from git history, extracts architectural decisions and invariants, and surfaces them via CLAUDE.md, Claude Code hooks, and MCP tools (search_memory, guard_task, get_brief).",
   "version": "0.5.0",
-  "author": "ONMC Contributors",
+  "author": {
+    "name": "ONMC Contributors",
+    "url": "https://github.com/adaline-ankit/oh-no-my-claudecode"
+  },
   "homepage": "https://github.com/adaline-ankit/oh-no-my-claudecode",
   "repository": "https://github.com/adaline-ankit/oh-no-my-claudecode",
   "license": "MIT",
@@ -15,24 +19,6 @@
     "mcp",
     "developer-tools"
   ],
-  "engines": {
-    "claude-code": ">=1.0.0"
-  },
-  "mcp_servers": {
-    "onmc": {
-      "command": "onmc",
-      "args": ["serve", "--mcp"],
-      "description": "ONMC MCP server — exposes search_memory, guard_task, get_brief, and memory resources to Claude Code mid-session.",
-      "env": {}
-    }
-  },
-  "hooks": {
-    "install_command": "onmc hooks install",
-    "description": "Installs PreCompact, SessionStart, UserPromptSubmit, and SessionEnd hooks so context survives every compaction and memory stays fresh."
-  },
-  "setup": {
-    "command": "onmc setup",
-    "description": "Interactive onboarding wizard — reads git history, generates CLAUDE.md, and connects Claude Code hooks and MCP."
-  },
-  "categories": ["memory", "context", "developer-tools"]
+  "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json"
 }

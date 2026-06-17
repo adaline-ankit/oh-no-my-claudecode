@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "onmc": {
+      "command": "onmc",
+      "args": ["serve", "--mcp"]
+    }
+  }
+}
