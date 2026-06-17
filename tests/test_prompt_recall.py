@@ -113,11 +113,13 @@ def _seed_storage(db_path: Path) -> SQLiteStorage:
 def test_compile_prompt_recall_returns_relevant_memories(tmp_path: Path) -> None:
     storage = _seed_storage(tmp_path / "memory.db")
 
+    # terse=False: verify the full markdown output format.
     markdown, token_count = compile_prompt_recall(
         storage,
         "fix the cache invalidation bug",
         limit=5,
         budget_tokens=300,
+        terse=False,
     )
 
     assert markdown != ""
@@ -189,11 +191,13 @@ def test_compile_prompt_recall_token_budget_respected(tmp_path: Path) -> None:
     storage = _seed_storage(tmp_path / "memory.db")
 
     tiny_budget = 20
+    # terse=False: token budget only applies to the full markdown renderer.
     markdown, token_count = compile_prompt_recall(
         storage,
         "cache invalidation boundary worker",
         limit=10,
         budget_tokens=tiny_budget,
+        terse=False,
     )
 
     # At most one entry fits in 20 tokens — token count must be ≤ budget * 2
@@ -281,7 +285,9 @@ def test_hooks_prompt_recall_emits_valid_json_contract(
         hook_out = parsed["hookSpecificOutput"]
         assert hook_out["hookEventName"] == "UserPromptSubmit"
         assert isinstance(hook_out["additionalContext"], str)
-        assert "Relevant repo memory" in hook_out["additionalContext"]
+        # In terse mode (hook default) there's no "## Relevant repo memory" header;
+        # content is compact lines.  Either way the context must be non-empty.
+        assert len(hook_out["additionalContext"]) > 0
 
 
 def test_hooks_prompt_recall_empty_store_exits_zero_empty_stdout(

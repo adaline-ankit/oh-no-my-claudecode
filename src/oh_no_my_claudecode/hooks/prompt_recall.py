@@ -2,13 +2,17 @@
 
 This module is pure and testable — it reads from storage and produces markdown;
 it never touches stdin/stdout directly.
+
+Terse mode (default for hooks):
+  Set ONMC_VERBOSE=1 to get full markdown output.
+  Set ONMC_TERSE=1 to force terse even when not a hook.
 """
 
 from __future__ import annotations
 
 import contextlib
+import os
 
-from oh_no_my_claudecode.embeddings.rerank import rerank_with_embeddings
 from oh_no_my_claudecode.models import MemoryEntry
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.text import tokenize
@@ -87,22 +91,31 @@ def compile_prompt_recall(
     *,
     limit: int = 5,
     budget_tokens: int = 300,
+    terse: bool | None = None,
 ) -> tuple[str, int]:
-    """Return a tight "Relevant repo memory" markdown block for *prompt*.
+    """Return a tight "Relevant repo memory" block for *prompt*.
 
     Args:
         storage: Initialised SQLiteStorage instance.
         prompt: The raw user prompt text used as the search query.
         limit: Maximum number of memory entries to include.
-        budget_tokens: Hard token cap for the returned markdown.
+        budget_tokens: Hard token cap for the returned markdown (full mode only).
+        terse: When None, checks ONMC_VERBOSE/ONMC_TERSE env vars with
+            hook default (terse=True).  Pass True/False to override.
 
     Returns:
-        ``(markdown, token_count)`` where *markdown* is the formatted block and
+        ``(text, token_count)`` where *text* is the formatted block and
         *token_count* is the approximate whitespace-token count.  Returns
         ``("", 0)`` when no relevant memories are found.
     """
     if not prompt or not prompt.strip():
         return "", 0
+
+    # Resolve terse flag — hooks default to terse; callers can override.
+    if terse is None:
+        from oh_no_my_claudecode.serialize.terse import is_terse
+
+        terse = is_terse(default=True)  # hook default: terse
 
     # Step 1 — FTS candidate retrieval (broad recall, up to limit×4 candidates).
     try:
@@ -145,9 +158,21 @@ def compile_prompt_recall(
     top_candidates = [m for _, m in scored[:limit]]
     top_scores = [s for s, _ in scored[:limit]]
     with contextlib.suppress(Exception):  # noqa: BLE001
+        # Lazy import: embeddings are heavy — only load when rerank is available.
+        from oh_no_my_claudecode.embeddings.rerank import rerank_with_embeddings
+
         top_candidates = rerank_with_embeddings(top_candidates, prompt, top_scores, storage)
 
-    # Step 3 — Build markdown within the token budget.
+    # Step 3 — Render output.
+    if terse:
+        from oh_no_my_claudecode.serialize.terse import render_recall_terse
+
+        text = render_recall_terse(top_candidates, max_items=limit)
+        if not text:
+            return "", 0
+        return text, _count_tokens(text)
+
+    # Full markdown mode.
     header = "## Relevant repo memory\n\n"
     token_used = _count_tokens(header)
     lines: list[str] = [header]
@@ -178,3 +203,59 @@ def compile_prompt_recall(
 
     markdown = "\n".join(lines).rstrip() + "\n"
     return markdown, _count_tokens(markdown)
+
+
+# ---------------------------------------------------------------------------
+# Hot-path compile with timeout guard
+# ---------------------------------------------------------------------------
+
+
+def compile_prompt_recall_safe(
+    storage: SQLiteStorage,
+    prompt: str,
+    *,
+    limit: int = 5,
+    budget_tokens: int = 300,
+    terse: bool | None = None,
+    timeout_ms: int | None = None,
+) -> tuple[str, int]:
+    """compile_prompt_recall wrapped with a wall-clock timeout.
+
+    When the compile exceeds *timeout_ms* (default: ONMC_HOOK_TIMEOUT_MS env
+    var, else 800 ms) the function returns ("", 0) so the hook exits 0
+    without blocking the host agent.
+
+    Any exception is also swallowed — hooks must never crash the session.
+    """
+    import threading
+
+    if timeout_ms is None:
+        try:
+            timeout_ms = int(os.environ.get("ONMC_HOOK_TIMEOUT_MS", "800"))
+        except (TypeError, ValueError):
+            timeout_ms = 800
+
+    result: list[tuple[str, int]] = [("", 0)]
+    exc_box: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            result[0] = compile_prompt_recall(
+                storage,
+                prompt,
+                limit=limit,
+                budget_tokens=budget_tokens,
+                terse=terse,
+            )
+        except Exception as exc:  # noqa: BLE001
+            exc_box.append(exc)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout_ms / 1000.0)
+
+    if thread.is_alive() or exc_box:
+        # Timeout or error — return empty; hook exits 0.
+        return "", 0
+
+    return result[0]

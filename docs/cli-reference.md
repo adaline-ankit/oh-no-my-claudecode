@@ -126,6 +126,9 @@ Usage: onmc brief [OPTIONS]
 │    --stdout                                    Print markdown only,          │
 │                                                optimized for agent paste     │
 │                                                context.                      │
+│    --terse                                     Emit compact terse output     │
+│                                                (overrides ONMC_TERSE env     │
+│                                                var).                         │
 │    --help                                      Show this message and exit.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -164,6 +167,8 @@ Usage: onmc why [OPTIONS] PATH
 │ --at            TEXT  Bound the git-history section to this commit-ish       │
 │                       (hash, tag, or branch). Memory entries reflect the     │
 │                       current store and are NOT time-bounded.                │
+│ --terse               Emit compact terse output (overrides ONMC_TERSE env    │
+│                       var).                                                  │
 │ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -208,6 +213,8 @@ Usage: onmc guard [OPTIONS]
 │    --limit        INTEGER RANGE [x>=1]  Maximum number of dead-end entries   │
 │                                         to return.                           │
 │                                         [default: 8]                         │
+│    --terse                              Emit compact terse output (overrides │
+│                                         ONMC_TERSE env var).                 │
 │    --help                               Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
