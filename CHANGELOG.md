@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-06-23
+
+### Added
+
+- **`onmc savings` — a "Memory Wrapped" token-ROI card.** A shareable, screenshot-worthy terminal card proving onmc's value: headline context-token reduction %, memories/skills/playbooks inventory, repeated-failure drop, wasted-attempts saved, and top hotspots covered. Reuses the deterministic bench harness + coverage compiler; every simulation/estimate metric is honestly labelled. `--json` for machine output.
+- The **statusline** now also carries a compact `N mem · M skills · ~X% ctx saved (sim)` memory-health segment.
+
 ## [0.20.0] — 2026-06-23
 
 ### Added
