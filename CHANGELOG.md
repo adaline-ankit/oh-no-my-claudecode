@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-06-23
+
+### Added
+
+- **`onmc import` — adopt other tools' knowledge into the portable brain.** The flip-side of `onmc plug`: plug wires an agent to *use* onmc; import pulls another tool's existing knowledge *in*. `onmc import omc` ingests `.omc/skills/*.md` (project) and `~/.omc/skills/*.md` (user) as portable Skills tagged `imported:omc`; `onmc import hermes` ingests `MEMORY.md`/`USER.md` as MemoryEntry records tagged `imported:hermes`; `onmc import <path> [--as skill|memory]` is a generic markdown importer. Dedup by stable id → idempotent re-import; `--dry-run`, `--json`.
+
 ## [0.21.0] — 2026-06-23
 
 ### Added
