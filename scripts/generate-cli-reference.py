@@ -23,6 +23,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc why", ["why"]),
     ("onmc memory-diff", ["memory-diff"]),
     ("onmc guard", ["guard"]),
+    ("onmc recall", ["recall"]),
     ("onmc status", ["status"]),
     ("onmc statusline", ["statusline"]),
     ("onmc hud", ["hud"]),
