@@ -31,6 +31,11 @@ message telling the caller how to populate the brain (``onmc mine``).
 
 from __future__ import annotations
 
-from oh_no_my_claudecode.recall.compiler import RecallEntry, RecallResult, compile_recall
+from oh_no_my_claudecode.recall.compiler import (
+    RecallEntry,
+    RecallResult,
+    ScoreBreakdown,
+    compile_recall,
+)
 
-__all__ = ["RecallEntry", "RecallResult", "compile_recall"]
+__all__ = ["RecallEntry", "RecallResult", "ScoreBreakdown", "compile_recall"]

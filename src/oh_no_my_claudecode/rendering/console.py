@@ -783,9 +783,7 @@ def render_why_report(report: WhyReport) -> None:
     if report.context_memories or report.related_artifacts:
         console.print(Markdown("## Related context"))
         for memory in report.context_memories:
-            console.print(
-                f"  [{memory.kind.value}] [bold]{memory.title}[/bold]: {memory.summary}"
-            )
+            console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]: {memory.summary}")
         for artifact in report.related_artifacts:
             console.print(
                 f"  [artifact/{artifact.type.value}] [bold]{artifact.title}[/bold]: "
@@ -835,9 +833,7 @@ def render_blame_result(result: BlameResult) -> None:
             line_label = f"  (line {anchor.line})" if anchor.line is not None else ""
             console.print(f"\n  [bold cyan]{anchor.anchor}[/bold cyan]{line_label}")
             for memory in anchor.memories:
-                console.print(
-                    f"    [{memory.kind.value}] [bold]{memory.title}[/bold]"
-                )
+                console.print(f"    [{memory.kind.value}] [bold]{memory.title}[/bold]")
                 console.print(f"    {memory.summary}")
 
     if result.file_level_memories:
@@ -1025,8 +1021,7 @@ def render_hud(health: MemoryHealth) -> None:
         f" covered — {health.coverage_pct:.0f}%",
         "",
         f"[underline]LLM activity (last {rc.window_hours}h)[/underline]",
-        f"  Calls: {rc.call_count}  Tokens: {tok_label}"
-        f"  Latency: {latency_s:.1f}s total",
+        f"  Calls: {rc.call_count}  Tokens: {tok_label}  Latency: {latency_s:.1f}s total",
     ]
 
     console.print(Panel("\n".join(lines), title="ONMC Memory HUD", border_style="blue"))

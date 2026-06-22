@@ -235,14 +235,21 @@ def render_incident_recall_terse(
     """Render incident-recall entries in terse format.
 
     *entries* are ``RecallEntry`` dataclass instances — imported lazily to
-    avoid circular deps.  We access .title, .what_happened, .resolution.
+    avoid circular deps.  We access .title, .what_happened, .resolution,
+    and .citation (compact provenance tag — may be "" if not populated).
     """
     if not entries:
         return f"RECALL: no prior incidents match: {_truncate(query, 60)}"
     lines: list[str] = [f"RECALL(seen before, for: {_truncate(query, 60)}):"]
     for entry in entries[:max_items]:
         resolution = _truncate(str(getattr(entry, "resolution", "")), 80)
-        lines.append(f"  PRIOR: {getattr(entry, 'title', '')} — FIX: {resolution}")
+        citation = str(getattr(entry, "citation", "")).strip()
+        # Terse citation: keep it bracket-short, e.g. "[transcript·abc123]"
+        if citation and not citation.startswith("["):
+            # Convert "(x · y)" → "[x · y]" for terse compactness
+            citation = "[" + citation[1:-1] + "]" if citation.startswith("(") else citation
+        suffix = f" {citation}" if citation else ""
+        lines.append(f"  PRIOR: {getattr(entry, 'title', '')} — FIX: {resolution}{suffix}")
     return "\n".join(lines)
 
 

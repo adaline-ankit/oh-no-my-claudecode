@@ -25,6 +25,18 @@ Architecture
    - INVARIANT:       ×1.2 — invariant violated triggers errors
    - Others:          ×1.0 — general context
 
+   The overlap fraction is normalised by the query token count so that a
+   large noisy query with incidental matches does not crowd out a small
+   precise match.  Component scores are blended then boosted:
+
+     overlap_ratio = |overlap| / |query_tokens|          # [0, 1]
+     base = overlap_ratio + (confidence × 0.3) + (feedback_score × 0.1)
+     raw  = base × kind_boost
+
+   Sort order: descending raw score; ties broken by (confidence desc,
+   created_at desc) — more confident and more recent memories win ties
+   deterministically across runs.
+
 4. **Fix extraction**: the resolution text comes from:
    - ``did_not_work``/``fix`` memory artifact ``evidence`` (richest)
    - ``MemoryArtifactRecord.summary`` (fallback artifact text)
@@ -35,6 +47,12 @@ Architecture
 
 6. **Honest empty**: if no match meets ``_MIN_SCORE`` we return an empty
    result with a hint to run ``onmc mine``.
+
+7. **Source citations**: every ``RecallEntry`` carries a ``citation`` string
+   derived from the memory's ``source_type`` and ``source_ref`` so callers
+   can trace the provenance of each result.  Missing / empty parts are
+   omitted gracefully.  Short (terse) and full (verbose) forms are available
+   via ``RecallEntry.citation_terse`` and ``RecallEntry.citation``.
 """
 
 from __future__ import annotations
@@ -113,6 +131,18 @@ _FIX_ARTIFACT_TYPES = {MemoryArtifactType.FIX, MemoryArtifactType.DID_NOT_WORK}
 
 
 @dataclass
+class ScoreBreakdown:
+    """Per-component score details for a single recall result."""
+
+    overlap_ratio: float  # |overlap| / |query_tokens| — [0, 1]
+    confidence: float  # memory.confidence — [0, 1]
+    feedback_score: float  # memory.feedback_score
+    kind_boost: float  # kind-specific multiplier
+    stale_penalty: float  # 1.0 = fresh, 0.35 = stale
+    final_score: float  # the score used for ranking
+
+
+@dataclass
 class RecallEntry:
     """One past incident that matches the queried error."""
 
@@ -124,6 +154,8 @@ class RecallEntry:
     confidence: float
     relevance: float  # internal blended score (not raw)
     kind: str  # MemoryKind.value
+    citation: str = ""  # compact provenance string "(source_type · ref_short)"
+    score_breakdown: ScoreBreakdown | None = None
 
 
 @dataclass
@@ -155,9 +187,10 @@ class RecallResult:
             lines.append(f"**Resolution / Fix:** {entry.resolution}")
             lines.append("")
             lines.append(
-                f"_Source: `{entry.source_ref}` | "
-                f"kind: {entry.kind} | "
-                f"confidence: {entry.confidence:.2f}_"
+                f"_kind: {entry.kind} | "
+                f"confidence: {entry.confidence:.2f}"
+                + (f" | provenance: {entry.citation}" if entry.citation else "")
+                + "_"
             )
             lines.append("")
         return "\n".join(lines)
@@ -216,15 +249,33 @@ def normalise_error_text(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _score_memory(memory: MemoryEntry, query_tokens: set[str]) -> float:
-    """Return a relevance score for *memory* against *query_tokens*.
+def _score_memory(
+    memory: MemoryEntry, query_tokens: set[str]
+) -> tuple[float, ScoreBreakdown] | None:
+    """Return a (score, breakdown) pair for *memory* against *query_tokens*.
 
-    Returns 0.0 when the memory is excluded (rejected or zero-confidence).
+    Returns None when the memory is excluded (rejected or zero-confidence).
+
+    Scoring formula
+    ---------------
+    The raw token count from before was replaced by an *overlap ratio*
+    (|overlap| / |query_tokens|) so that a long noisy query with many
+    incidental matches does not outrank a short precise match.  Confidence
+    and feedback are blended in at modest weights so they act as a
+    secondary signal rather than noise:
+
+        overlap_ratio = |overlap| / |query_tokens|   # normalised [0, 1]
+        base          = overlap_ratio
+                        + (confidence × 0.3)
+                        + (feedback_score × 0.1)
+        raw           = base × kind_boost × stale_penalty
+
+    This keeps the scale bounded and the components legible in the breakdown.
     """
     if memory.feedback_score <= -0.5:
-        return 0.0
+        return None
     if memory.confidence <= 0.0:
-        return 0.0
+        return None
 
     haystack = " ".join(
         [
@@ -238,15 +289,58 @@ def _score_memory(memory: MemoryEntry, query_tokens: set[str]) -> float:
     haystack_tokens = set(tokenize(haystack))
     overlap = query_tokens & haystack_tokens
     if not overlap:
-        return 0.0
+        return None
 
-    base = float(len(overlap) * 3) + memory.confidence + (memory.feedback_score * 0.2)
-    boost = _KIND_BOOST.get(memory.kind, 1.0)
-    raw = base * boost
+    overlap_ratio = len(overlap) / len(query_tokens)
+    base = overlap_ratio + (memory.confidence * 0.3) + (memory.feedback_score * 0.1)
+    kind_boost = _KIND_BOOST.get(memory.kind, 1.0)
+    stale_penalty = _STALE_WEIGHT if memory.staleness in _STALE_LABELS else 1.0
+    final = base * kind_boost * stale_penalty
 
-    if memory.staleness in _STALE_LABELS:
-        return raw * _STALE_WEIGHT
-    return raw
+    breakdown = ScoreBreakdown(
+        overlap_ratio=overlap_ratio,
+        confidence=memory.confidence,
+        feedback_score=memory.feedback_score,
+        kind_boost=kind_boost,
+        stale_penalty=stale_penalty,
+        final_score=final,
+    )
+    return final, breakdown
+
+
+# ---------------------------------------------------------------------------
+# Citation builder
+# ---------------------------------------------------------------------------
+
+# Maximum characters for the short reference segment of a citation.
+_CITATION_REF_CHARS = 16
+
+
+def _build_citation(memory: MemoryEntry, *, terse: bool = False) -> str:
+    """Return a compact provenance string for *memory*.
+
+    Full form:  ``(source_type · ref_abbrev)``
+    Terse form: ``[source_type·ref_abbrev]``
+
+    Parts are omitted when they are empty or uninformative.  ``source_ref``
+    is abbreviated to ``_CITATION_REF_CHARS`` characters so long git hashes
+    or file paths do not overwhelm a line.
+    """
+    type_label = memory.source_type.value  # e.g. "git", "transcript"
+    ref = memory.source_ref.strip()
+
+    # Shorten to the first 16 chars — enough to identify a commit sha or file
+    ref_short = ref[:_CITATION_REF_CHARS] if ref else ""
+
+    parts = [p for p in (type_label, ref_short) if p]
+    if not parts:
+        return ""
+
+    sep = "·"
+    inner = f" {sep} ".join(parts)
+    if terse:
+        return f"[{inner}]"
+    return f"({inner})"
 
 
 # ---------------------------------------------------------------------------
@@ -366,17 +460,29 @@ def compile_recall(
             no_data_hint=_NO_DATA_HINT,
         )
 
-    scored: list[tuple[float, MemoryEntry]] = []
+    scored: list[tuple[float, ScoreBreakdown, MemoryEntry]] = []
     seen_score: set[str] = set()
     for memory in fts_candidates:
         if memory.id in seen_score:
             continue
         seen_score.add(memory.id)
-        s = _score_memory(memory, query_tokens)
-        if s >= _MIN_SCORE:
-            scored.append((s, memory))
+        result_pair = _score_memory(memory, query_tokens)
+        if result_pair is not None:
+            s, breakdown = result_pair
+            if s >= _MIN_SCORE:
+                scored.append((s, breakdown, memory))
 
-    scored.sort(key=lambda item: (-item[0], item[1].title))
+    # Sort by score (desc), then confidence (desc), then created_at (desc,
+    # i.e. most recent first).  We negate the timestamp as a float so that a
+    # single tuple of floats can be sorted ascending for all three criteria.
+    def _sort_key(
+        item: tuple[float, ScoreBreakdown, MemoryEntry],
+    ) -> tuple[float, float, float]:
+        s, _, mem = item
+        ts = mem.created_at.timestamp() if mem.created_at is not None else 0.0
+        return (-s, -mem.confidence, -ts)
+
+    scored.sort(key=_sort_key)
     top = scored[:limit]
 
     if not top:
@@ -388,8 +494,9 @@ def compile_recall(
 
     # Step 4 — Build RecallEntry items.
     entries: list[RecallEntry] = []
-    for s, memory in top:
+    for s, breakdown, memory in top:
         resolution = _extract_resolution(memory, artifact_index)
+        citation = _build_citation(memory)
         entries.append(
             RecallEntry(
                 memory_id=memory.id,
@@ -400,6 +507,8 @@ def compile_recall(
                 confidence=memory.confidence,
                 relevance=s,
                 kind=memory.kind.value,
+                citation=citation,
+                score_breakdown=breakdown,
             )
         )
 
