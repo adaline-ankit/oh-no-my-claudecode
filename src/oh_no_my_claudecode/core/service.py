@@ -13,9 +13,11 @@ from typing import TYPE_CHECKING, TypeVar, cast
 if TYPE_CHECKING:
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
 
+from oh_no_my_claudecode.blame.compiler import BlameResult, blame_result_to_markdown, compile_blame
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
 from oh_no_my_claudecode.claude_md import (
     claude_md_path,
@@ -232,6 +234,25 @@ class OnmcService:
         output_path.write_text(why_report_to_markdown(report), encoding="utf-8")
         report.output_path = output_path.as_posix()
         return repo_root, report
+
+    def blame(self, path: str) -> tuple[Path, BlameResult]:
+        """Compile a blame (governance map) for a file from stored memory.
+
+        Maps each top-level symbol in the file to the memories that govern it
+        (invariants, decisions, hotspots, gotchas, etc.).  Memories that
+        reference the file but don't name a specific symbol land in the
+        file-level bucket.
+
+        Entirely offline — no LLM calls, no network access.
+        """
+        repo_root, config, storage = self._load_context()
+        result = compile_blame(repo_root, storage, path)
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", result.path)
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-blame-{safe_name}.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(blame_result_to_markdown(result), encoding="utf-8")
+        result.output_path = output_path.as_posix()
+        return repo_root, result
 
     def memory_diff(
         self,
@@ -1794,6 +1815,21 @@ class OnmcService:
 
         repo_root, _, storage = self._load_context()
         result = compile_guard(storage, task, limit=limit)
+        return repo_root, result
+
+    def recall(self, query: str, *, limit: int = 8) -> tuple[Path, RecallResult]:
+        """Match *query* (error text / stacktrace) against past incidents in memory.
+
+        Returns ``(repo_root, RecallResult)`` where ``RecallResult.entries``
+        contains ranked ``RecallEntry`` items from memories biased toward
+        ``FAILED_APPROACH`` and ``GOTCHA`` kinds.  An empty result is valid and
+        means no relevant incidents have been recorded — the ``no_data_hint``
+        field explains how to populate the brain.
+        """
+        from oh_no_my_claudecode.recall.compiler import compile_recall
+
+        repo_root, _, storage = self._load_context()
+        result = compile_recall(storage, query, limit=limit)
         return repo_root, result
 
     def consolidate(self, *, dry_run: bool = False) -> tuple[Path, ConsolidationResult]:

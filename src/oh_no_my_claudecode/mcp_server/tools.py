@@ -36,6 +36,36 @@ def list_onmc_tools() -> list[Tool]:
     """List the ONMC MCP tools with their JSON-schema inputs."""
     return [
         Tool(
+            name="recall",
+            title="Recall past incidents matching an error",
+            description=(
+                "Search memory for past failures and fixes that match an error message or "
+                "stacktrace. Call this when you hit an error to find out if we have seen it "
+                "before and what fixed it. Returns ranked prior incidents with resolutions."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Error text, exception message, or stacktrace to match against "
+                            "recorded incidents."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": _DEFAULT_SEARCH_LIMIT,
+                        "description": "Maximum number of incident matches to return.",
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
             name="search_memory",
             title="Search ONMC memory",
             description=(
@@ -210,7 +240,9 @@ def call_onmc_tool(
 ) -> list[TextContent]:
     """Dispatch an ONMC MCP tool call and return its text payload."""
     args: dict[str, Any] = arguments or {}
-    if name == "search_memory":
+    if name == "recall":
+        text = _recall(repo, args)
+    elif name == "search_memory":
         text = _search_memory(repo, args)
     elif name == "get_brief":
         text = _get_brief(repo, args)
@@ -259,6 +291,39 @@ def score_memory(query: str, files: list[str], memory: MemoryEntry) -> float:
             score += 4.0
     score += memory.confidence + (memory.feedback_score * 0.2)
     return score
+
+
+def _recall(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.recall.compiler import compile_recall
+
+    query = _require_str(args, "query")
+    limit = _optional_int(args, "limit", default=_DEFAULT_SEARCH_LIMIT)
+    if limit < 1:
+        msg = "Argument 'limit' must be a positive integer."
+        raise ValueError(msg)
+
+    _, _, storage = repo._service._load_context()
+    result = compile_recall(storage, query, limit=limit)
+
+    payload = {
+        "query": result.query,
+        "has_matches": result.has_matches,
+        "no_data_hint": result.no_data_hint if not result.has_matches else "",
+        "entries": [
+            {
+                "memory_id": entry.memory_id,
+                "title": entry.title,
+                "what_happened": entry.what_happened,
+                "resolution": entry.resolution,
+                "source_ref": entry.source_ref,
+                "confidence": entry.confidence,
+                "relevance": round(entry.relevance, 3),
+                "kind": entry.kind,
+            }
+            for entry in result.entries
+        ],
+    }
+    return _json_text(payload)
 
 
 def _search_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:

@@ -28,6 +28,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_detail,
     render_attempt_list,
     render_attempt_updated,
+    render_blame_result,
     render_brief,
     render_doctor_report,
     render_hook_status,
@@ -298,6 +299,53 @@ def why_command(
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
 
+@app.command("blame")
+def blame_command(
+    path: Annotated[str, typer.Argument(help="File path to blame (repo-relative or absolute).")],
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
+) -> None:
+    """Git blame for knowledge: map a file's symbols to the memories that govern them.
+
+    Shows which recorded decisions, invariants, hotspots, and gotchas apply to
+    each top-level symbol / section of the file.  Memories that reference the
+    file but don't name a specific symbol appear in a file-level bucket.
+
+    Symbol extraction is heuristic (regex, not AST) — results are approximate.
+    Supported: .py, .ts, .tsx, .js, .jsx, .mjs, .cjs, .md, .mdx.
+    """
+    from oh_no_my_claudecode.serialize.terse import is_terse
+
+    try:
+        _, result = _service().blame(path)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        # Compact terse: plain text lines
+        lines = [f"blame: {result.path}"]
+        if not result.has_data:
+            lines.append("no recorded knowledge — run onmc ingest/mine")
+        else:
+            for anchor in result.anchors:
+                line_label = f":{anchor.line}" if anchor.line is not None else ""
+                lines.append(f"  {anchor.anchor}{line_label}")
+                for memory in anchor.memories:
+                    lines.append(f"    [{memory.kind.value}] {memory.title}")
+            if result.file_level_memories:
+                lines.append("  (whole file)")
+                for memory in result.file_level_memories:
+                    lines.append(f"    [{memory.kind.value}] {memory.title}")
+        console.print("\n".join(lines), markup=False)
+        return
+
+    render_blame_result(result)
+    console.print(f"[green]Wrote blame report:[/green] {result.output_path}")
+
+
 @app.command("memory-diff")
 def memory_diff_command(
     commit_a: Annotated[
@@ -385,6 +433,97 @@ def guard_command(
         artifact_path = out_dir / f"{ts}-guard.md"
         artifact_path.write_text(markdown, encoding="utf-8")
         console.print(f"[green]Wrote guard artifact:[/green] {artifact_path}")
+    except Exception:  # noqa: BLE001, S110
+        pass  # artifact write failure must not break the command
+
+
+@app.command("recall")
+def recall_command(
+    query: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Error text or stacktrace to search for. "
+                "Omit to read from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`)."
+            ),
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of incident matches to return."),
+    ] = 8,
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
+) -> None:
+    """Search memory for past incidents matching an error or stacktrace.
+
+    Paste an error message or stacktrace as an argument or pipe it via stdin.
+    Returns prior failures/fixes that match, ranked by relevance.
+
+    Examples:
+
+      onmc recall "TypeError: cannot read property x of undefined"
+
+      cat error.log | onmc recall
+    """
+    import sys
+
+    from oh_no_my_claudecode.config import compiled_dir, load_config
+    from oh_no_my_claudecode.serialize.terse import is_terse, render_incident_recall_terse
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    # Resolve query: argument takes priority; fall back to stdin.
+    raw_query: str
+    if query is not None:
+        raw_query = query
+    elif not sys.stdin.isatty():
+        raw_query = sys.stdin.read()
+    else:
+        _fatal("Provide an error/stacktrace as an argument or pipe it via stdin.")
+        raise typer.Exit(code=1)
+
+    try:
+        repo_root, result = _service().recall(raw_query, limit=limit)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        console.print(
+            render_incident_recall_terse(result.entries, raw_query, max_items=limit),
+            markup=False,
+        )
+        return
+
+    markdown = result.to_markdown()
+
+    if result.has_matches:
+        from rich.panel import Panel
+
+        console.print(
+            Panel.fit(
+                markdown.rstrip(),
+                title="[bold cyan]Seen this before?[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+    else:
+        console.print(
+            f"[yellow]Recall: no recorded incidents match this error.[/yellow]\n"
+            f"[dim]{result.no_data_hint}[/dim]"
+        )
+
+    # Write artifact to .onmc/compiled/<ts>-recall.md
+    try:
+        config = load_config(repo_root)
+        out_dir = compiled_dir(config, repo_root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = utc_now().strftime("%Y%m%d-%H%M%S")
+        artifact_path = out_dir / f"{ts}-recall.md"
+        artifact_path.write_text(markdown, encoding="utf-8")
+        console.print(f"[green]Wrote recall artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write failure must not break the command
 

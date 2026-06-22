@@ -27,8 +27,12 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              navigation.                                                     │
 │ why          Explain why a file looks the way it does, from memory + git     │
 │              history.                                                        │
+│ blame        Git blame for knowledge: map a file's symbols to the memories   │
+│              that govern them.                                               │
 │ memory-diff  Show what repo knowledge changed between two commits.           │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
+│ recall       Search memory for past incidents matching an error or           │
+│              stacktrace.                                                     │
 │ check        Flag staged/changed files that touch recorded invariants or     │
 │              dead-ends.                                                      │
 │ status       Show local ONMC status.                                         │
@@ -218,6 +222,36 @@ Usage: onmc guard [OPTIONS]
 │    --terse                              Emit compact terse output (overrides │
 │                                         ONMC_TERSE env var).                 │
 │    --help                               Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc recall`
+
+```text
+Usage: onmc recall [OPTIONS] [QUERY]                                           
+                                                                                
+ Search memory for past incidents matching an error or stacktrace.              
+                                                                                
+ Paste an error message or stacktrace as an argument or pipe it via stdin.      
+ Returns prior failures/fixes that match, ranked by relevance.                  
+                                                                                
+ Examples:                                                                      
+                                                                                
+   onmc recall "TypeError: cannot read property x of undefined"                 
+                                                                                
+   cat error.log | onmc recall                                                  
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
+│                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
+│                                      return.                                 │
+│                                      [default: 8]                            │
+│ --terse                              Emit compact terse output (overrides    │
+│                                      ONMC_TERSE env var).                    │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

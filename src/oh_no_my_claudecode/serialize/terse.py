@@ -226,6 +226,26 @@ def render_why_terse(report: object) -> str:
     return "\n".join(lines)
 
 
+def render_incident_recall_terse(
+    entries: Sequence[object],
+    query: str,
+    *,
+    max_items: int = 5,
+) -> str:
+    """Render incident-recall entries in terse format.
+
+    *entries* are ``RecallEntry`` dataclass instances — imported lazily to
+    avoid circular deps.  We access .title, .what_happened, .resolution.
+    """
+    if not entries:
+        return f"RECALL: no prior incidents match: {_truncate(query, 60)}"
+    lines: list[str] = [f"RECALL(seen before, for: {_truncate(query, 60)}):"]
+    for entry in entries[:max_items]:
+        resolution = _truncate(str(getattr(entry, "resolution", "")), 80)
+        lines.append(f"  PRIOR: {getattr(entry, 'title', '')} — FIX: {resolution}")
+    return "\n".join(lines)
+
+
 # LLM prompt directive: prepend to any LLM call made in terse paths.
 TERSE_LLM_DIRECTIVE = (
     "Respond in terse fragments only. No preamble, no explanation, no filler. "

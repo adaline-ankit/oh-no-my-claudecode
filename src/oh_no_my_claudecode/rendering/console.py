@@ -5,6 +5,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from oh_no_my_claudecode.blame.compiler import BlameResult
 from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
@@ -801,6 +802,48 @@ def render_why_report(report: WhyReport) -> None:
         console.print(Markdown("## Recent commits"))
         for subject in report.git_history.recent_subjects:
             console.print(f"  - {subject}")
+
+
+def render_blame_result(result: BlameResult) -> None:
+    """Render a BlameResult to the terminal using rich panels and tables."""
+    found_label = "yes" if result.file_exists else "[yellow]no (not in working tree)[/yellow]"
+    status_lines = [
+        f"[bold]{result.path}[/bold]",
+        f"File found: {found_label}",
+        f"Symbols extracted: {result.symbol_count}",
+    ]
+    if result.parse_skipped:
+        status_lines.append(f"[dim]Symbol scan skipped: {result.parse_skip_reason}[/dim]")
+    console.print(Panel.fit("\n".join(status_lines), title="onmc blame"))
+    console.print(
+        "[dim]Heuristic: regex symbol extraction + substring attachment. "
+        "Results are approximate.[/dim]"
+    )
+
+    if not result.has_data:
+        console.print(
+            "[yellow]No recorded knowledge for this file.[/yellow]\n"
+            "Run [bold]onmc ingest[/bold] to index git history and docs, "
+            "then [bold]onmc mine[/bold] to extract memories from session transcripts."
+        )
+        return
+
+    if result.anchors:
+        console.print(Markdown("## Symbol-level governance"))
+        for anchor in result.anchors:
+            line_label = f"  (line {anchor.line})" if anchor.line is not None else ""
+            console.print(f"\n  [bold cyan]{anchor.anchor}[/bold cyan]{line_label}")
+            for memory in anchor.memories:
+                console.print(
+                    f"    [{memory.kind.value}] [bold]{memory.title}[/bold]"
+                )
+                console.print(f"    {memory.summary}")
+
+    if result.file_level_memories:
+        console.print(Markdown("## File-level governance (applies to whole file)"))
+        for memory in result.file_level_memories:
+            console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]")
+            console.print(f"  {memory.summary}")
 
 
 # ── Playbook rendering ─────────────────────────────────────────────────────────
