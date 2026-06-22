@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.recall.compiler import RecallResult
+    from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
 
@@ -1715,8 +1716,32 @@ class OnmcService:
         report: _CoverageReport = compile_coverage(storage, repo_root)
         return repo_root, report
 
+    def savings(self) -> tuple[Path, SavingsResult]:
+        """Compute a Memory Wrapped :class:`~oh_no_my_claudecode.savings.compiler.SavingsResult`.
+
+        Entirely offline — no LLM calls, no network access.  Results are
+        deterministic: given the same memory store they always produce the same
+        numbers.  Token-ROI figures are labelled as a simulation; see
+        ``bench/harness.py`` for the methodology.
+
+        Returns
+        -------
+        tuple[Path, SavingsResult]
+            ``(repo_root, result)``
+        """
+        from oh_no_my_claudecode.savings.compiler import SavingsResult as _SavingsResult
+        from oh_no_my_claudecode.savings.compiler import compile_savings
+
+        repo_root, _, storage = self._load_context()
+        now_str = isoformat_utc(utc_now())
+        result: _SavingsResult = compile_savings(storage, repo_root, now=now_str)
+        return repo_root, result
+
     def statusline(self) -> str:
         """Return a compact one-line health string for Claude Code statusLine.
+
+        Includes a memory-health segment: memory count, skill count, and the
+        simulated context-token savings percentage from the bench harness.
 
         Never raises — degrades to a minimal string when not initialised.
         """
@@ -1725,11 +1750,43 @@ class OnmcService:
             tok_k = h.recent_cost.total_tokens // 1000
             raw_tok = h.recent_cost.total_tokens
             tok_label = f"{tok_k}k tok/day" if tok_k >= 1 else f"{raw_tok} tok/day"
+
+            # Memory-health segment: counts + simulated savings %.
+            # Skills count comes from storage directly (cheap read).
+            try:
+                _, _, storage = self._load_context()
+                skills_count = len(storage.list_skills())
+                from oh_no_my_claudecode.bench.harness import (
+                    BUILTIN_SCENARIO,
+                    BenchScenario,
+                    MemoryRecord,
+                    run_benchmark,
+                )
+                repo_memories = [
+                    MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[])
+                    for m in storage.list_memories()
+                ]
+                _scenario = BenchScenario(
+                    name="statusline",
+                    description="",
+                    tasks=list(BUILTIN_SCENARIO.tasks),
+                    memories=repo_memories or list(BUILTIN_SCENARIO.memories),
+                    baseline_context_tokens=BUILTIN_SCENARIO.baseline_context_tokens,
+                )
+                _bench = run_benchmark(_scenario)
+                ctx_pct = _bench.context_tokens_pct_reduction
+                mem_segment = (
+                    f" · {skills_count} skills · ~{ctx_pct:.0f}% ctx saved (sim)"
+                )
+            except Exception:  # noqa: BLE001
+                mem_segment = ""
+
             return (
                 f"🧠 {h.total_memories} mem"
                 f" · {h.freshness_pct:.0f}% fresh"
                 f" · {h.stale_count} stale"
                 f" · {tok_label}"
+                f"{mem_segment}"
             )
         except (FileNotFoundError, LookupError):
             return "🧠 onmc not initialized"

@@ -65,6 +65,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ wiki         Generate a browsable multi-page markdown wiki from stored       │
 │              memory.                                                         │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
+│ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
 │              wizard).                                                        │
 │ feedback     Apply a human trust signal to a stored memory.                  │
@@ -1610,6 +1611,27 @@ Usage: onmc bench [OPTIONS]
 │                        instead of built-in scenario.                         │
 │ --json                 Print machine-readable JSON summary to stdout.        │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc savings`
+
+```text
+Usage: onmc savings [OPTIONS]                                                  
+                                                                                
+ Show a shareable 'Memory Wrapped' token-ROI card.                              
+                                                                                
+ Renders a screenshot-worthy terminal card summarising the memory brain:        
+ memories / skills / playbooks stored, the simulated context-token savings      
+ percentage, repeated-failure rate improvement, and hotspot coverage.           
+                                                                                
+ Token-ROI numbers come from the same deterministic bench harness as            
+ ``onmc bench`` — no LLM is called.  Results are identical across runs on       
+ the same memory store.  Use ``--json`` for machine-readable output.            
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

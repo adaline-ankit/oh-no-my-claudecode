@@ -51,6 +51,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_generate_summary,
     render_playbook_list,
     render_review_output,
+    render_savings_card,
     render_skill_detail,
     render_skill_list,
     render_skill_promoted,
@@ -2737,6 +2738,55 @@ def bench_command(
         console.print(f"[green]Wrote bench artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write is best-effort; bench still exits 0
+
+
+@app.command("savings")
+def savings_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Show a shareable 'Memory Wrapped' token-ROI card.
+
+    Renders a screenshot-worthy terminal card summarising the memory brain:
+    memories / skills / playbooks stored, the simulated context-token savings
+    percentage, repeated-failure rate improvement, and hotspot coverage.
+
+    Token-ROI numbers come from the same deterministic bench harness as
+    ``onmc bench`` — no LLM is called.  Results are identical across runs on
+    the same memory store.  Use ``--json`` for machine-readable output.
+    """
+    import json as _json
+
+    try:
+        _, result = _service().savings()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(
+            _json.dumps(
+                {
+                    "memories_count": result.memories_count,
+                    "skills_count": result.skills_count,
+                    "playbooks_count": result.playbooks_count,
+                    "context_tokens_pct_reduction": result.context_tokens_pct_reduction,
+                    "repeated_failure_rate_delta": result.repeated_failure_rate_delta,
+                    "wasted_attempts_saved": result.wasted_attempts_saved,
+                    "covered_hotspots": result.covered_hotspots,
+                    "total_hotspots": result.total_hotspots,
+                    "top_covered_names": result.top_covered_names,
+                    "scenario_name": result.scenario_name,
+                    "now": result.now,
+                    "extra_notes": result.extra_notes,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    render_savings_card(result)
 
 
 @app.command("plug")
