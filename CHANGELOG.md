@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-06-22
+
+### Added
+
+- **`onmc feedback <memory-id> up|down`** — a human/agent-in-the-loop trust signal. `up` reinforces a memory (raises `feedback_score` + `confidence`); `down` demotes it toward a 0.15 floor without zeroing it. Both touch `updated_at`, so the signal feeds the v0.16.0 confidence-decay ranking — positive feedback slows a memory's ageing, negative demotes it. `--note`, `--json`.
+- **MCP `get_coverage` + `get_digest` tools** — agents connected over MCP can now query the knowledge-gap dashboard ("where are the blind spots?") and the knowledge changelog ("what did this repo learn since `<ref>`?") without shelling out to the CLI. Compact TOON-default / JSON output; bad refs error cleanly.
+
 ## [0.16.0] — 2026-06-22
 
 ### Added
