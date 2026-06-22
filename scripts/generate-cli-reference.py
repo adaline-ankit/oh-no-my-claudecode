@@ -88,6 +88,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc bench", ["bench"]),
     ("onmc wiki", ["wiki"]),
     ("onmc plug", ["plug"]),
+    ("onmc feedback", ["feedback"]),
 ]
 
 

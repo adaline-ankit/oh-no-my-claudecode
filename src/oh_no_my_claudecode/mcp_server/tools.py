@@ -230,6 +230,51 @@ def list_onmc_tools() -> list[Tool]:
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="get_coverage",
+            title="Knowledge-gap dashboard",
+            description=(
+                "Return a compact knowledge-coverage dashboard: overall coverage %, "
+                "the worst-covered subsystems, and the top uncovered hotspot files. "
+                "Use this to find blind spots — high-churn files with no memory coverage. "
+                "No arguments required."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+        ),
+        Tool(
+            name="get_digest",
+            title="Knowledge changelog since a git ref",
+            description=(
+                "Return a compact knowledge changelog of everything learned since a given "
+                "git ref (tag, branch, or commit SHA). Useful for 'what did this repo "
+                "learn recently?' queries. Returns entries grouped by memory kind."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "since": {
+                        "type": "string",
+                        "description": (
+                            "Git ref (tag, branch, or commit SHA) marking the starting point "
+                            "of the changelog. Example: 'main', 'v1.2.0', or a short SHA."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 200,
+                        "default": 50,
+                        "description": "Maximum number of digest entries to return in total.",
+                    },
+                },
+                "required": ["since"],
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -254,6 +299,10 @@ def call_onmc_tool(
         text = _list_tasks(repo)
     elif name == "guard_task":
         text = _guard_task(repo, args)
+    elif name == "get_coverage":
+        text = _get_coverage(repo)
+    elif name == "get_digest":
+        text = _get_digest(repo, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
@@ -536,6 +585,99 @@ def _guard_task(repo: OnmcRepo, args: dict[str, Any]) -> str:
             for entry in result.entries
         ],
     }
+    return _json_text(payload)
+
+
+def _get_coverage(repo: OnmcRepo) -> str:
+    from oh_no_my_claudecode.coverage.compiler import compile_coverage
+
+    repo_root, _, storage = repo._service._load_context()
+    report = compile_coverage(storage, repo_root)
+
+    # Compact view: overall %, worst subsystems (up to 5), top uncovered hotspots (up to 5).
+    worst_subsystems = [
+        {
+            "subsystem": row.subsystem,
+            "coverage_pct": row.coverage_pct,
+            "covered_files": row.covered_files,
+            "total_files": row.total_files,
+            "total_churn": row.total_churn,
+        }
+        for row in report.subsystem_rows[:5]
+    ]
+    top_gaps = [
+        {
+            "path": gap.path,
+            "subsystem": gap.subsystem,
+            "churn": gap.churn,
+            "recent_churn": gap.recent_churn,
+        }
+        for gap in report.top_gaps[:5]
+    ]
+    payload = {
+        "overall_coverage_pct": report.overall_coverage_pct,
+        "covered_files": report.covered_files,
+        "uncovered_files": report.uncovered_files,
+        "total_files": report.total_files,
+        "memory_count": report.memory_count,
+        "worst_subsystems": worst_subsystems,
+        "top_uncovered_hotspots": top_gaps,
+    }
+    return _json_text(payload)
+
+
+def _get_digest(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.digest.compiler import _KIND_LABELS, _SECTION_ORDER, compile_digest
+
+    since = _require_str(args, "since")
+    limit = _optional_int(args, "limit", default=50)
+    if limit < 1:
+        msg = "Argument 'limit' must be a positive integer."
+        raise ValueError(msg)
+
+    repo_root, _, storage = repo._service._load_context()
+    try:
+        result = compile_digest(repo_root, storage, since)
+    except ValueError as exc:
+        return _json_text({"error": str(exc), "since": since})
+
+    # Compact serialization: meta + grouped entries (truncated to limit).
+    sections: list[dict[str, object]] = []
+    remaining = limit
+    for kind in _SECTION_ORDER:
+        bucket = result.by_kind.get(kind)
+        if not bucket or remaining <= 0:
+            continue
+        truncated_bucket = bucket[:remaining]
+        remaining -= len(truncated_bucket)
+        sections.append(
+            {
+                "kind": kind.value,
+                "label": _KIND_LABELS.get(kind, kind.value),
+                "entries": [
+                    {
+                        "id": entry.id,
+                        "title": entry.title,
+                        "summary": entry.summary,
+                        "change_type": entry.change_type,
+                    }
+                    for entry in truncated_bucket
+                ],
+            }
+        )
+
+    payload: dict[str, object] = {
+        "since_ref": result.since_ref,
+        "since_short": result.since_short,
+        "since_date": result.since_date,
+        "head_short": result.head_short,
+        "head_date": result.head_date,
+        "source": result.source,
+        "total": result.total,
+        "sections": sections,
+    }
+    if result.fallback_reason:
+        payload["fallback_reason"] = result.fallback_reason
     return _json_text(payload)
 
 

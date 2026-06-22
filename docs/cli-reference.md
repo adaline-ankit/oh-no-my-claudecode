@@ -66,6 +66,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
 │              wizard).                                                        │
+│ feedback     Apply a human trust signal to a stored memory.                  │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -1412,5 +1413,38 @@ Usage: onmc plug [OPTIONS] TARGET
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc feedback`
+
+```text
+Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION                             
+                                                                                
+ Apply a human trust signal to a stored memory.                                 
+                                                                                
+ Use 'up' when a recalled memory proved useful; use 'down' when it was          
+ wrong or misleading.  Positive feedback slows confidence decay so              
+ corroborated memories stay ranked higher for longer.  Negative feedback        
+ demotes but does not erase — the memory remains searchable at a lower          
+ rank.                                                                          
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc feedback mem_abc123 up                                                    
+ onmc feedback mem_abc123 down --note "outdated after refactor"                 
+ onmc feedback mem_abc123 up --json                                             
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  Memory ID to apply feedback to. [required]         │
+│ *    direction      TEXT  Trust signal: 'up' (useful) or 'down'              │
+│                           (wrong/misleading).                                │
+│                           [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --note        TEXT  Optional note appended to the memory details.            │
+│ --json              Emit the updated memory as JSON instead of a rich panel. │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
