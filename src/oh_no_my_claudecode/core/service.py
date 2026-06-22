@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
+    from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.savings.compiler import SavingsResult
@@ -2224,6 +2225,51 @@ class OnmcService:
                 pruned.append(updated)
 
         return pruned
+
+    # ── Import from external tool formats ─────────────────────────────────────
+
+    def import_from(
+        self,
+        source: str,
+        path: Path | None = None,
+        *,
+        dry_run: bool = False,
+        as_kind: str = "skill",
+    ) -> ImportResult:
+        """Import skills or memories from an external tool format.
+
+        Parameters
+        ----------
+        source:
+            ``"omc"`` (oh-my-claudecode skills), ``"hermes"`` (Nous hermes-agent
+            context files), or a filesystem path to a ``.md`` file / directory.
+        path:
+            Optional explicit path override (for ``omc`` / ``hermes`` sources).
+        dry_run:
+            Parse and report without writing anything to the store.
+        as_kind:
+            ``"skill"`` or ``"memory"`` — controls how generic markdown paths are
+            imported.  Ignored for ``omc`` (always ``"skill"``) and ``hermes``
+            (always ``"memory"``).
+
+        Returns
+        -------
+        ImportResult
+            Summary: source, as_kind, imported, skipped, dry_run, items.
+        """
+        from oh_no_my_claudecode.importers import ImportResult as _ImportResult
+        from oh_no_my_claudecode.importers import run_import
+
+        _, _, storage = self._load_context()
+        result: _ImportResult = run_import(
+            storage,
+            source,
+            path,
+            dry_run=dry_run,
+            as_kind=as_kind,
+            cwd=self.cwd,
+        )
+        return result
 
     # ── User-scope (cross-repo) memory ────────────────────────────────────────
 
