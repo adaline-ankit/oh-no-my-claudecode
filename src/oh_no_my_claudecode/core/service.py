@@ -4,9 +4,12 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
@@ -633,6 +636,60 @@ class OnmcService:
             since=since,
         )
 
+    def capture_session(
+        self,
+        *,
+        session_id: str | None = None,
+        transcript_path: Path | None = None,
+    ) -> int:
+        """Heuristically capture durable memory from a session transcript.
+
+        Reads the transcript at *transcript_path* (if supplied) or discovers the
+        most-recent transcript for the repo that matches *session_id* (if
+        given).  Extracts high-signal patterns (fixes, decisions, invariants,
+        notes) without any LLM call, deduplicates against the existing store via
+        ``stable_id``, and writes new entries tagged with
+        ``source_type=SourceType.SESSION``.
+
+        Returns the number of new memories written.  Never raises — any error
+        produces 0 writes.
+        """
+        from oh_no_my_claudecode.mine.autocapture import capture_from_transcript
+        from oh_no_my_claudecode.mine.transcript import discover_transcripts
+
+        try:
+            repo_root, _, storage = self._load_context()
+        except Exception:  # noqa: BLE001
+            return 0
+
+        try:
+            if transcript_path is not None:
+                resolved_path: Path = transcript_path
+                resolved_id = session_id or transcript_path.stem
+            else:
+                candidates = discover_transcripts(repo_root, session_id=session_id)
+                if not candidates:
+                    return 0
+                resolved_path = candidates[-1]
+                resolved_id = session_id or resolved_path.stem
+
+            entries = capture_from_transcript(
+                resolved_path,
+                session_id=resolved_id,
+                repo_root=repo_root,
+            )
+        except Exception:  # noqa: BLE001
+            return 0
+
+        if not entries:
+            return 0
+
+        try:
+            inserted, _ = storage.upsert_memories(entries)
+        except Exception:  # noqa: BLE001
+            return 0
+        return inserted
+
     def doctor(self) -> tuple[bool, dict[str, list[str]]]:
         """Run a health check over the repo, memory store, and agent integrations."""
         repo_root, config, storage = self._load_context()
@@ -707,16 +764,48 @@ class OnmcService:
                         report["warnings"].append(
                             f"Could not validate {key_var}: {detail}."
                         )
+        # --- PATH / binary health (check 1 + 2) ---
+        path_checks = _check_onmc_path_health()
+        onmc_resolvable = any(sev == "ok" for sev, _ in path_checks)
+        for severity, message in path_checks:
+            if severity == "ok":
+                report["claude"].append(message)
+            else:
+                report["warnings"].append(message)
+
         hook_status = self.hooks_status()
         report["claude"].append(
             "Compaction hooks "
             f"{'installed' if hook_status.installed else 'not installed'} "
             "(.claude/settings.json)"
         )
+        if hook_status.installed and not onmc_resolvable:
+            report["warnings"].append(
+                "Hooks are installed in .claude/settings.json but the `onmc` binary is "
+                "not resolvable on PATH — hooks will silently fail. "
+                "Fix PATH or reinstall via `pip install oh-no-my-claudecode`."
+            )
+
+        # --- MCP sanity (check 3) ---
+        mcp_registered_ok = hook_status.mcp_registered
         report["claude"].append(
-            f"MCP server {'registered' if hook_status.mcp_registered else 'not registered'} "
+            f"MCP server {'registered' if mcp_registered_ok else 'not registered'} "
             "(.mcp.json)"
         )
+        if mcp_registered_ok:
+            # Verify the MCP entry's command resolves to a working binary.
+            mcp_path = mcp_config_path(repo_root)
+            mcp_command = _read_mcp_command(mcp_path)
+            if mcp_command:
+                mcp_binary = shutil.which(mcp_command)
+                if mcp_binary is None:
+                    report["warnings"].append(
+                        f"MCP server is registered but its command `{mcp_command}` is not "
+                        "resolvable — the MCP server will fail to start."
+                    )
+                else:
+                    report["claude"].append(f"MCP command resolvable ({mcp_binary})")
+
         if hook_status.legacy_global_hooks:
             report["warnings"].append(
                 "Legacy onmc hooks found in ~/.claude/settings.json — "
@@ -2246,6 +2335,111 @@ def _append_report_share_snippet(
             "Generated by `onmc report`.",
         ]
     )
+
+
+_ONMC_PATH_PROBE_TIMEOUT = 5  # seconds
+
+
+def _installed_onmc_version() -> str | None:
+    """Return the importlib.metadata version for oh-no-my-claudecode, or None."""
+    try:
+        return pkg_version("oh-no-my-claudecode")
+    except PackageNotFoundError:
+        return None
+
+
+def _probe_path_onmc() -> tuple[str | None, str | None]:
+    """Return (path_binary, version_string) for the `onmc` binary on PATH.
+
+    Returns (None, None) if the binary is not found or fails to report a version.
+    The probe uses a short hard timeout so it never hangs doctor.
+    """
+    binary = shutil.which("onmc")
+    if binary is None:
+        return None, None
+    try:
+        result = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=_ONMC_PATH_PROBE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return binary, None
+    output = (result.stdout + result.stderr).strip()
+    # Extract trailing semver token, e.g. "onmc 0.10.0" or just "0.10.0"
+    match = re.search(r"(\d+\.\d+\.\d+(?:\.\w+)*)", output)
+    if match:
+        return binary, match.group(1)
+    # Binary ran but produced no parseable version — treat as broken
+    return binary, None
+
+
+def _check_onmc_path_health() -> list[tuple[str, str]]:
+    """Return a list of (severity, message) tuples describing PATH onmc health.
+
+    Severity is one of "ok", "warn", or "error".  Doctor aggregates these into
+    the appropriate report buckets without needing to understand what they mean.
+    """
+    installed_ver = _installed_onmc_version()
+    binary, path_ver = _probe_path_onmc()
+
+    results: list[tuple[str, str]] = []
+
+    if binary is None:
+        results.append(
+            (
+                "warn",
+                "onmc not found on PATH — hooks will fail. "
+                "Add the virtualenv bin/ to PATH or reinstall (`pip install oh-no-my-claudecode`).",
+            )
+        )
+        return results
+
+    if path_ver is None:
+        results.append(
+            (
+                "warn",
+                f"onmc found at {binary} but failed to report a version "
+                f"(binary may be broken). "
+                "Reinstall via `pip install --upgrade oh-no-my-claudecode`.",
+            )
+        )
+        return results
+
+    if installed_ver and path_ver != installed_ver:
+        results.append(
+            (
+                "warn",
+                f"PATH onmc version ({path_ver} at {binary}) differs from installed "
+                f"package version ({installed_ver}) — stale shadow binary detected. "
+                "Run `pip install --upgrade oh-no-my-claudecode` or fix your PATH.",
+            )
+        )
+    else:
+        results.append(("ok", f"onmc {path_ver} on PATH ({binary})"))
+
+    return results
+
+
+def _read_mcp_command(mcp_path: Path) -> str | None:
+    """Return the ``command`` field of the onmc MCP server entry in .mcp.json, or None."""
+    if not mcp_path.exists():
+        return None
+    try:
+        payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    servers = payload.get("mcpServers")
+    if not isinstance(servers, dict):
+        return None
+    onmc_entry = servers.get("onmc")
+    if not isinstance(onmc_entry, dict):
+        return None
+    cmd = onmc_entry.get("command")
+    return cmd if isinstance(cmd, str) else None
 
 
 def _git_count(repo_root: Path) -> int:

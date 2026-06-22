@@ -1271,18 +1271,41 @@ def hooks_prompt_recall_command() -> None:
 
 @hooks_app.command("session-end")
 def hooks_session_end_command() -> None:
-    """Run memory consolidation on SessionEnd.
+    """Run memory consolidation and heuristic auto-capture on SessionEnd.
 
     Called automatically by the Claude Code SessionEnd hook.  Reads the event
-    payload from stdin (session_id, cwd, reason), runs a best-effort
-    consolidation pass, and exits 0.  Errors are swallowed; stdout is never
-    written (SessionEnd hooks cannot inject context).
+    payload from stdin (session_id, transcript_path, cwd, reason), runs a
+    best-effort consolidation pass followed by heuristic auto-capture of
+    durable memory from the just-ended session transcript.  Errors are
+    swallowed; stdout is never written (SessionEnd hooks cannot inject
+    context).
+
+    Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture
+    while keeping consolidation active.
     """
-    try:
-        _read_hook_payload()  # consume stdin; payload not used today
+    import contextlib
+    import os
+
+    payload: dict[str, object] = {}
+    with contextlib.suppress(Exception):
+        payload = _read_hook_payload()
+    with contextlib.suppress(Exception):  # noqa: SIM117
         _service().consolidate(dry_run=False)
-    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
-        pass
+    # Auto-capture — opt-out via env var.
+    if os.environ.get("ONMC_AUTOCAPTURE", "1") == "0":
+        return
+    with contextlib.suppress(Exception):
+        raw_session_id = payload.get("session_id")
+        session_id = (
+            raw_session_id if isinstance(raw_session_id, str) and raw_session_id else None
+        )
+        raw_transcript = payload.get("transcript_path")
+        transcript_path = (
+            Path(raw_transcript)
+            if isinstance(raw_transcript, str) and raw_transcript
+            else None
+        )
+        _service().capture_session(session_id=session_id, transcript_path=transcript_path)
 
 
 # Tools that carry a file_path in tool_input (Edit / Write variants).
@@ -1498,6 +1521,36 @@ def mine_command(
             f"  Review them? [onmc memory list --source {display_source}] or press Enter to skip",
             markup=False,
         )
+
+
+@app.command("capture")
+def capture_command(
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Session ID to capture (default: most recent)."),
+    ] = None,
+    transcript: Annotated[
+        Path | None,
+        typer.Option("--transcript", help="Explicit path to a .jsonl transcript file."),
+    ] = None,
+) -> None:
+    """Heuristically capture durable memory from a session transcript.
+
+    Extracts fixes, decisions, invariants, and notes from the session
+    transcript without any LLM call.  Deduplicated entries are stored
+    with source_type=session so they can be listed or pruned independently.
+
+    Useful for on-demand re-capture or testing the auto-capture path that
+    runs automatically on SessionEnd (set ONMC_AUTOCAPTURE=0 to disable).
+    """
+    try:
+        count = _service().capture_session(session_id=session, transcript_path=transcript)
+        if count:
+            console.print(f"[green]Captured {count} new memory entries from session.[/green]")
+        else:
+            console.print("No new memory entries captured (nothing matched or already stored).")
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
 
 
 @app.command("doctor")

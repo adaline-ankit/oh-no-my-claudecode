@@ -54,6 +54,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ consolidate  Clean and strengthen the memory store (dedup, merge,            │
 │              promote/demote, edge graph).                                    │
 │ mine         Mine Claude Code session transcripts into ONMC memory.          │
+│ capture      Heuristically capture durable memory from a session transcript. │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
 │ wiki         Generate a browsable multi-page markdown wiki from stored       │
@@ -531,7 +532,8 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │                continuation brief after compaction.                          │
 │ prompt-recall  Inject the most relevant repo memories for the current user   │
 │                prompt.                                                       │
-│ session-end    Run memory consolidation on SessionEnd.                       │
+│ session-end    Run memory consolidation and heuristic auto-capture on        │
+│                SessionEnd.                                                   │
 │ pre-tool-use   Inject file-level danger warnings before the agent edits a    │
 │                file.                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -622,12 +624,17 @@ Usage: onmc hooks prompt-recall [OPTIONS]
 ```text
 Usage: onmc hooks session-end [OPTIONS]                                        
                                                                                 
- Run memory consolidation on SessionEnd.                                        
+ Run memory consolidation and heuristic auto-capture on SessionEnd.             
                                                                                 
  Called automatically by the Claude Code SessionEnd hook.  Reads the event      
- payload from stdin (session_id, cwd, reason), runs a best-effort               
- consolidation pass, and exits 0.  Errors are swallowed; stdout is never        
- written (SessionEnd hooks cannot inject context).                              
+ payload from stdin (session_id, transcript_path, cwd, reason), runs a          
+ best-effort consolidation pass followed by heuristic auto-capture of           
+ durable memory from the just-ended session transcript.  Errors are             
+ swallowed; stdout is never written (SessionEnd hooks cannot inject             
+ context).                                                                      
+                                                                                
+ Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture          
+ while keeping consolidation active.                                            
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -748,7 +755,7 @@ Usage: onmc memory list [OPTIONS]
 │ --source                         [git|doc|code|manual  Filter by memory      │
 │                                  |manual_seed|llm_ext  source type.          │
 │                                  racted|transcript|gi                        │
-│                                  thub_pr]                                    │
+│                                  thub_pr|session]                            │
 │ --type                           [fix|did_not_work|de  Filter task-derived   │
 │                                  sign_conflict|gotcha  memory artifacts by   │
 │                                  |invariant|validatio  type.                 │
