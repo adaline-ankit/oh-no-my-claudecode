@@ -9,6 +9,13 @@ Design contract
 - Tiny output: this fires on EVERY edit; markdown must be ≤ ~200 tokens.
 - Empty output: unknown / untracked file → emit nothing (no noise).
 - Never block: any error → empty string (caller exits 0 unconditionally).
+
+Context firewall
+----------------
+When danger signals are found, a ``danger_blocked`` event is emitted to the
+side sink for observability.  The in-context warning is preserved (it carries
+real safety information the model must see).  Set ``ONMC_FIREWALL=0`` to
+disable the sink emit (the in-context warning is always shown regardless).
 """
 
 from __future__ import annotations
@@ -140,4 +147,33 @@ def compile_pretool_warning(
     for m in failed_approaches[:_MAX_ITEMS]:
         lines.append(f"- FAILED BEFORE: {m.title} — {m.summary}")
 
-    return "\n".join(lines), n
+    warning = "\n".join(lines)
+
+    # ── context firewall: emit to side sink ───────────────────────────────
+    # The warning stays in context (it carries real safety information).
+    # We also emit a side-channel event so operators can observe danger hits
+    # without needing to read the model context.
+    from oh_no_my_claudecode.hooks.firewall import firewall_emit
+    from oh_no_my_claudecode.notify import EventKind, EventSeverity, NotifyEvent
+
+    signal_kinds: list[str] = []
+    if is_high_churn:
+        signal_kinds.append("high-churn")
+    if hotspot_memories:
+        signal_kinds.append(f"{len(hotspot_memories)} hotspot(s)")
+    if invariants:
+        signal_kinds.append(f"{len(invariants)} invariant(s)")
+    if failed_approaches:
+        signal_kinds.append(f"{len(failed_approaches)} failed-approach(es)")
+
+    firewall_emit(
+        repo_root,
+        NotifyEvent(
+            kind=EventKind.DANGER_BLOCKED,
+            severity=EventSeverity.ROUTINE,
+            title=f"pre-tool-use: danger signals on {rel_path}",
+            detail=", ".join(signal_kinds),
+        ),
+    )
+
+    return warning, n

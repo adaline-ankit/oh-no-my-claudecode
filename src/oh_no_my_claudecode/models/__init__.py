@@ -9,6 +9,8 @@ from oh_no_my_claudecode.models.compaction import CompactionSnapshotRecord, Hook
 from oh_no_my_claudecode.models.config import (
     BriefSettings,
     IngestSettings,
+    NotifySettings,
+    NotifySinkType,
     ProjectConfig,
     StorageSettings,
 )
@@ -68,6 +70,8 @@ __all__ = [
     "MemoryArtifactRecord",
     "MemoryArtifactType",
     "MemoryKind",
+    "NotifySettings",
+    "NotifySinkType",
     "Playbook",
     "PlaybookProvenanceItem",
     "ProjectConfig",

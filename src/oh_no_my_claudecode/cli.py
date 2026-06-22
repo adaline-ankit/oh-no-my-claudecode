@@ -43,6 +43,8 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_diff,
     render_memory_list,
     render_mine_result,
+    render_notify_status,
+    render_notify_tail,
     render_onboard_summary,
     render_playbook_detail,
     render_playbook_generate_summary,
@@ -99,6 +101,10 @@ skill_app = typer.Typer(
     help="Manage self-improving skills synthesized from playbooks and memory patterns.",
     no_args_is_help=True,
 )
+notify_app = typer.Typer(
+    help="Inspect and test the context firewall notification sink.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -109,6 +115,7 @@ app.add_typer(claude_md_app, name="claude-md")
 app.add_typer(playbook_app, name="playbook")
 app.add_typer(skill_app, name="skill")
 app.add_typer(user_app, name="user")
+app.add_typer(notify_app, name="notify")
 
 
 @app.command("tui")
@@ -2791,6 +2798,76 @@ def feedback_command(
         f"confidence={updated.confidence:.2f}  "
         f"id={updated.id}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Notify / context firewall commands
+# ---------------------------------------------------------------------------
+
+
+@notify_app.command("status")
+def notify_status_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the status as JSON instead of a rich panel."),
+    ] = False,
+) -> None:
+    """Show the active context firewall sink configuration.
+
+    Reads from config.yaml and env vars (env wins).  Displays the active sink
+    type, log path, and masked webhook URLs when configured.
+
+    Environment overrides:
+    - ONMC_NOTIFY_ENABLED=0  disable the firewall entirely.
+    - ONMC_NOTIFY_SINK       "file" | "discord" | "slack" | "none".
+    - ONMC_DISCORD_WEBHOOK   Discord incoming webhook URL.
+    - ONMC_SLACK_WEBHOOK     Slack incoming webhook URL.
+    """
+    status = _service().notify_status()
+    if json_output:
+        typer.echo(json.dumps(status, indent=2))
+        return
+    render_notify_status(status)
+
+
+@notify_app.command("test")
+def notify_test_command(
+    message: Annotated[
+        str,
+        typer.Option("--message", "-m", help="Custom message for the test event."),
+    ] = "test notification from onmc",
+) -> None:
+    """Emit a test event to the active sink and report where it went.
+
+    Useful for verifying that the context firewall is correctly routed before
+    connecting real hooks.  The test event has kind=generic and severity=routine.
+    """
+    result = _service().notify_test(message=message)
+    console.print(f"[green]notify test:[/green] {result}")
+
+
+@notify_app.command("tail")
+def notify_tail_command(
+    n: Annotated[
+        int,
+        typer.Option("-n", "--lines", min=1, help="Number of recent events to show."),
+    ] = 20,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit events as a JSON array."),
+    ] = False,
+) -> None:
+    """Show recent events from the context firewall log (.onmc/notify.log).
+
+    Only the FileSink (the default) produces a readable local log.  Discord and
+    Slack sinks route events to the webhook without storing them locally, but
+    the FileSink always writes a local JSONL copy when enabled.
+    """
+    events = _service().notify_tail(n=n)
+    if json_output:
+        typer.echo(json.dumps(events, indent=2))
+        return
+    render_notify_tail(events)
 
 
 def _fatal(message: str) -> int:

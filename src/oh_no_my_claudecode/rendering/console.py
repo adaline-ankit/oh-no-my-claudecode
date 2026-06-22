@@ -1265,3 +1265,76 @@ def render_coverage_summary(report: CoverageReport) -> None:
         console.print(gap_table)
     else:
         console.print("[green]No uncovered hotspot files — well covered![/green]")
+
+
+# ---------------------------------------------------------------------------
+# Notify / context firewall rendering
+# ---------------------------------------------------------------------------
+
+
+def render_notify_status(status: dict[str, object]) -> None:
+    """Render the notify sink status panel."""
+    enabled = bool(status.get("enabled", True))
+    sink = str(status.get("sink", "file"))
+    log_path = str(status.get("log_path", ""))
+    log_exists = bool(status.get("log_exists", False))
+    discord = status.get("discord_webhook")
+    slack = status.get("slack_webhook")
+
+    enabled_label = "[green]enabled[/green]" if enabled else "[red]disabled[/red]"
+    sink_label = f"[bold]{sink}[/bold]"
+
+    log_state = "[green](exists)[/green]" if log_exists else "[dim](not yet created)[/dim]"
+    lines = [
+        f"Status:  {enabled_label}",
+        f"Sink:    {sink_label}",
+        f"Log:     {log_path}  {log_state}",
+    ]
+    if discord:
+        lines.append(f"Discord: {discord}")
+    if slack:
+        lines.append(f"Slack:   {slack}")
+
+    console.print(
+        Panel.fit(
+            "\n".join(lines),
+            title="onmc notify status",
+        )
+    )
+
+
+def render_notify_tail(events: list[dict[str, object]]) -> None:
+    """Render the last N events from the notify log."""
+    import datetime
+
+    if not events:
+        console.print("[dim]No events in notify log.[/dim]")
+        return
+
+    table = Table(title=f"notify log — last {len(events)} event(s)", show_lines=False)
+    table.add_column("Time", width=19)
+    table.add_column("Sev", width=9)
+    table.add_column("Kind", width=18)
+    table.add_column("Title")
+
+    for ev in events:
+        ts = ev.get("ts")
+        try:
+            dt = datetime.datetime.fromtimestamp(float(ts), tz=datetime.UTC)  # type: ignore[arg-type]
+            time_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:  # noqa: BLE001
+            time_str = str(ts)
+
+        severity = str(ev.get("severity", ""))
+        if severity == "failure":
+            sev_cell = "[red]failure[/red]"
+        elif severity == "approval":
+            sev_cell = "[cyan]approval[/cyan]"
+        else:
+            sev_cell = "[dim]routine[/dim]"
+
+        kind = str(ev.get("kind", ""))
+        title = str(ev.get("title", ""))
+        table.add_row(time_str, sev_cell, kind, title)
+
+    console.print(table)
