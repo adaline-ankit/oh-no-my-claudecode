@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import contextlib
+from pathlib import Path
+
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, TaskRecord, TaskStatus
 from oh_no_my_claudecode.models.skill import Skill
 from oh_no_my_claudecode.utils.text import shorten, tokenize
@@ -25,6 +28,7 @@ def compile_boot_digest(
     user_memories: list[MemoryEntry] | None = None,
     skills: list[Skill] | None = None,
     terse: bool | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, int]:
     """Compile a compact boot digest from repo memory for session startup injection.
 
@@ -43,9 +47,15 @@ def compile_boot_digest(
     *terse*: When None, respects ONMC_VERBOSE / ONMC_TERSE env vars with the hook
     default (terse=True). Pass True/False to override.
 
+    *repo_root*: Optional path used by the context firewall to locate the sink.
+    Defaults to ``Path.cwd()`` when not supplied.
+
     Returns ``(markdown, token_count)``. When there is nothing to say (empty
     memories, no active tasks, no user prefs, and no skills) the function returns
     ``("", 0)`` so callers can skip injection entirely.
+
+    Context firewall: when digest text is produced, a ``recall_surfaced`` event is
+    emitted to the side sink for observability.  Set ``ONMC_FIREWALL=0`` to disable.
     """
     # Resolve terse flag — boot_digest runs as a hook, so default is terse.
     if terse is None:
@@ -86,6 +96,7 @@ def compile_boot_digest(
         if not text:
             return "", 0
         token_count = len(tokenize(text))
+        _firewall_emit_boot_recall(repo_root, token_count)
         return text, token_count
 
     # Full markdown mode.
@@ -125,6 +136,7 @@ def compile_boot_digest(
     token_count = len(tokenize(markdown))
 
     if token_count <= BOOT_DIGEST_MAX_TOKENS:
+        _firewall_emit_boot_recall(repo_root, token_count)
         return markdown, token_count
 
     # Trim to fit the token budget.
@@ -136,7 +148,27 @@ def compile_boot_digest(
         prefs=prefs,
         top_skills=top_skills,
     )
-    return markdown, len(tokenize(markdown))
+    token_count = len(tokenize(markdown))
+    _firewall_emit_boot_recall(repo_root, token_count)
+    return markdown, token_count
+
+
+def _firewall_emit_boot_recall(repo_root: Path | None, token_count: int) -> None:
+    """Emit a recall_surfaced event to the side sink (exception-safe)."""
+    with contextlib.suppress(Exception):
+        from oh_no_my_claudecode.hooks.firewall import firewall_emit
+        from oh_no_my_claudecode.notify import EventKind, EventSeverity, NotifyEvent
+
+        _root = repo_root if repo_root is not None else Path.cwd()
+        firewall_emit(
+            _root,
+            NotifyEvent(
+                kind=EventKind.RECALL_SURFACED,
+                severity=EventSeverity.ROUTINE,
+                title="boot-digest injected into context",
+                detail=f"tokens≈{token_count}",
+            ),
+        )
 
 
 def _select_kind(memories: list[MemoryEntry], kinds: set[MemoryKind]) -> list[MemoryEntry]:

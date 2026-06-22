@@ -1,5 +1,6 @@
 from oh_no_my_claudecode.hooks.boot_digest import compile_boot_digest
 from oh_no_my_claudecode.hooks.brief_compiler import compile_continuation_brief
+from oh_no_my_claudecode.hooks.firewall import firewall_emit, is_firewall_enabled
 from oh_no_my_claudecode.hooks.installer import (
     HookInstallResult,
     hooks_installed,
@@ -24,8 +25,10 @@ __all__ = [
     "build_compaction_snapshot",
     "compile_boot_digest",
     "compile_continuation_brief",
+    "firewall_emit",
     "hooks_installed",
     "install_claude_hooks",
+    "is_firewall_enabled",
     "legacy_global_hooks_present",
     "mcp_config_path",
     "mcp_registered",

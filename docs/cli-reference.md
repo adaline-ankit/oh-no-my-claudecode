@@ -79,6 +79,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              memory patterns.                                                │
 │ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
 │              repo-scoped).                                                   │
+│ notify       Inspect and test the context firewall notification sink.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1395,6 +1396,81 @@ Usage: onmc user remove [OPTIONS] MEMORY_ID
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc notify`
+
+```text
+Usage: onmc notify [OPTIONS] COMMAND [ARGS]...                                 
+                                                                                
+ Inspect and test the context firewall notification sink.                       
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ status  Show the active context firewall sink configuration.                 │
+│ test    Emit a test event to the active sink and report where it went.       │
+│ tail    Show recent events from the context firewall log (.onmc/notify.log). │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc notify status`
+
+```text
+Usage: onmc notify status [OPTIONS]                                            
+                                                                                
+ Show the active context firewall sink configuration.                           
+                                                                                
+ Reads from config.yaml and env vars (env wins).  Displays the active sink      
+ type, log path, and masked webhook URLs when configured.                       
+                                                                                
+ Environment overrides:                                                         
+ - ONMC_NOTIFY_ENABLED=0  disable the firewall entirely.                        
+ - ONMC_NOTIFY_SINK       "file" | "discord" | "slack" | "none".                
+ - ONMC_DISCORD_WEBHOOK   Discord incoming webhook URL.                         
+ - ONMC_SLACK_WEBHOOK     Slack incoming webhook URL.                           
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the status as JSON instead of a rich panel.             │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc notify test`
+
+```text
+Usage: onmc notify test [OPTIONS]                                              
+                                                                                
+ Emit a test event to the active sink and report where it went.                 
+                                                                                
+ Useful for verifying that the context firewall is correctly routed before      
+ connecting real hooks.  The test event has kind=generic and severity=routine.  
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --message  -m      TEXT  Custom message for the test event.                  │
+│                          [default: test notification from onmc]              │
+│ --help                   Show this message and exit.                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc notify tail`
+
+```text
+Usage: onmc notify tail [OPTIONS]                                              
+                                                                                
+ Show recent events from the context firewall log (.onmc/notify.log).           
+                                                                                
+ Only the FileSink (the default) produces a readable local log.  Discord and    
+ Slack sinks route events to the webhook without storing them locally, but      
+ the FileSink always writes a local JSONL copy when enabled.                    
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --lines  -n      INTEGER RANGE [x>=1]  Number of recent events to show.      │
+│                                        [default: 20]                         │
+│ --json                                 Emit events as a JSON array.          │
+│ --help                                 Show this message and exit.           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -1,8 +1,38 @@
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 from oh_no_my_claudecode.models.llm import LLMSettings
+
+
+class NotifySinkType(StrEnum):
+    """Available sink types for the context firewall."""
+
+    FILE = "file"
+    DISCORD = "discord"
+    SLACK = "slack"
+    NONE = "none"
+
+
+class NotifySettings(BaseModel):
+    """Configuration for the context firewall notification subsystem.
+
+    Precedence: env vars > config.yaml > these defaults.
+
+    Env vars
+    --------
+    ``ONMC_NOTIFY_ENABLED`` — "0"/"false"/"no" to disable.
+    ``ONMC_NOTIFY_SINK``    — "file" | "discord" | "slack" | "none".
+    ``ONMC_DISCORD_WEBHOOK`` — Discord incoming webhook URL.
+    ``ONMC_SLACK_WEBHOOK``  — Slack incoming webhook URL.
+    """
+
+    enabled: bool = True
+    sink: NotifySinkType = NotifySinkType.FILE
+    discord_webhook: str | None = None
+    slack_webhook: str | None = None
 
 
 class StorageSettings(BaseModel):
@@ -69,3 +99,4 @@ class ProjectConfig(BaseModel):
     ingest: IngestSettings = Field(default_factory=IngestSettings)
     brief: BriefSettings = Field(default_factory=BriefSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
+    notify: NotifySettings = Field(default_factory=NotifySettings)

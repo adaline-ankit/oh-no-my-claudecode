@@ -12,12 +12,19 @@ Skills injection:
   "Relevant skills" block is appended after the memory block.  The combined
   output is returned by compile_prompt_recall_safe.  A surfaced skill's
   use_count is bumped (fire-and-forget; errors are swallowed).
+
+Context firewall:
+  When memories / skills are recalled, a ``recall_surfaced`` event is emitted
+  to the side sink for observability.  The recalled content itself stays in
+  context (it is high-value signal the model needs).  Set ``ONMC_FIREWALL=0``
+  to disable the sink emit.
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+from pathlib import Path
 
 from oh_no_my_claudecode.models import MemoryEntry
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -324,6 +331,7 @@ def compile_prompt_recall_safe(
     budget_tokens: int = 300,
     terse: bool | None = None,
     timeout_ms: int | None = None,
+    repo_root: Path | None = None,
 ) -> tuple[str, int]:
     """compile_prompt_recall + skills injection wrapped with a wall-clock timeout.
 
@@ -337,6 +345,11 @@ def compile_prompt_recall_safe(
       After the memory recall block, a compact "Relevant skills" section is
       appended when auto_inject skills are relevant to the prompt.  Surfaced
       skills have their use_count bumped (fire-and-forget).
+
+    Context firewall:
+      When recall text is produced, a ``recall_surfaced`` event is emitted to
+      the side sink.  Pass *repo_root* to specify the sink target; defaults to
+      ``Path.cwd()``.  Set ``ONMC_FIREWALL=0`` to disable sink emission.
     """
     import threading
 
@@ -389,4 +402,24 @@ def compile_prompt_recall_safe(
         # Timeout or error — return empty; hook exits 0.
         return "", 0
 
-    return result[0]
+    text, tokens = result[0]
+
+    # Context firewall: emit observability event to side sink when recall
+    # was produced.  The recalled content stays in context unchanged.
+    if text:
+        with contextlib.suppress(Exception):
+            from oh_no_my_claudecode.hooks.firewall import firewall_emit
+            from oh_no_my_claudecode.notify import EventKind, EventSeverity, NotifyEvent
+
+            _root = repo_root if repo_root is not None else Path.cwd()
+            firewall_emit(
+                _root,
+                NotifyEvent(
+                    kind=EventKind.RECALL_SURFACED,
+                    severity=EventSeverity.ROUTINE,
+                    title="prompt-recall: memories injected into context",
+                    detail=f"tokens≈{tokens}",
+                ),
+            )
+
+    return text, tokens

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -2372,6 +2373,111 @@ class OnmcService:
             return latest.isoformat(), task.task_id
 
         return sorted(candidates, key=recency, reverse=True)[0]
+
+    # -----------------------------------------------------------------------
+    # Notify / context firewall
+    # -----------------------------------------------------------------------
+
+    def notify_status(self) -> dict[str, object]:
+        """Return the active notify configuration for the current repo.
+
+        The dict includes ``enabled``, ``sink``, ``log_path`` (absolute),
+        ``discord_webhook`` (masked), ``slack_webhook`` (masked), and a
+        ``log_exists`` bool so callers can show whether the log has entries.
+        """
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = self.cwd
+
+        from oh_no_my_claudecode.notify.router import (  # noqa: PLC2701
+            NotifyRouter,
+            _resolve_notify_config,
+        )
+
+        cfg = _resolve_notify_config(repo_root)
+        router = NotifyRouter(repo_root, config=cfg)
+        log_path = router.file_sink.log_path
+
+        def _mask(url: object) -> str | None:
+            s = str(url) if url else ""
+            if not s:
+                return None
+            return s[:12] + "…" if len(s) > 12 else s
+
+        return {
+            "enabled": cfg.get("enabled", True),
+            "sink": cfg.get("sink", "file"),
+            "log_path": str(log_path),
+            "log_exists": log_path.exists(),
+            "discord_webhook": _mask(cfg.get("discord_webhook")),
+            "slack_webhook": _mask(cfg.get("slack_webhook")),
+        }
+
+    def notify_test(self, message: str = "test notification from onmc") -> str:
+        """Emit a test ``NotifyEvent`` and return a human-readable summary.
+
+        Returns a sentence describing where the event was routed.
+        """
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = self.cwd
+
+        from oh_no_my_claudecode.notify.events import EventKind, EventSeverity, NotifyEvent
+        from oh_no_my_claudecode.notify.router import (  # noqa: PLC2701
+            NotifyRouter,
+            _resolve_notify_config,
+        )
+
+        cfg = _resolve_notify_config(repo_root)
+        router = NotifyRouter(repo_root, config=cfg)
+
+        event = NotifyEvent(
+            kind=EventKind.GENERIC,
+            title=message,
+            severity=EventSeverity.ROUTINE,
+            detail="Emitted by `onmc notify test` to verify the context firewall sink.",
+        )
+        router.emit(event)
+
+        sink_type = str(cfg.get("sink", "file"))
+        if not bool(cfg.get("enabled", True)) or sink_type == "none":
+            return "notify disabled — event dropped."
+        if sink_type == "file":
+            return f"event written to {router.file_sink.log_path}"
+        return f"event written to {router.file_sink.log_path} and dispatched to {sink_type} webhook"
+
+    def notify_tail(self, n: int = 20) -> list[dict[str, object]]:
+        """Return the last *n* events from the JSONL notify log.
+
+        Returns an empty list when the log does not exist or is unreadable.
+        """
+        import json
+
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = self.cwd
+
+        from oh_no_my_claudecode.notify.sinks import FileSink
+
+        log_path = FileSink(repo_root).log_path
+        if not log_path.exists():
+            return []
+        try:
+            lines = log_path.read_text(encoding="utf-8").splitlines()
+            tail_lines = lines[-n:] if n < len(lines) else lines
+            events: list[dict[str, object]] = []
+            for line in tail_lines:
+                line = line.strip()
+                if not line:
+                    continue
+                with contextlib.suppress(Exception):
+                    events.append(json.loads(line))
+            return events
+        except Exception:  # noqa: BLE001
+            return []
 
 
 def _task_matches_text(task: TaskRecord, task_text: str) -> bool:
