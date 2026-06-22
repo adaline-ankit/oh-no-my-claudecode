@@ -11,6 +11,7 @@ from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync.schema import (
     ExportCounts,
     ExportedMemoryRecord,
+    ExportedSkillRecord,
     ExportedTaskRecord,
     SyncManifest,
     SyncResult,
@@ -25,11 +26,12 @@ def export_agent_memory(
     storage: SQLiteStorage,
     output_dir: Path,
 ) -> SyncResult:
-    """Export ONMC memory and task state to a git-portable JSON directory."""
+    """Export ONMC memory, task state, and skills to a git-portable JSON directory."""
     _prepare_output_dir(output_dir)
 
     memories = sorted(storage.list_memories(), key=lambda item: item.id)
     tasks = sorted(storage.list_tasks(), key=lambda item: item.task_id)
+    skills = sorted(storage.list_skills(), key=lambda item: item.id)
     attempts_total = 0
     artifacts_total = 0
 
@@ -55,6 +57,15 @@ def export_agent_memory(
             encoding="utf-8",
         )
 
+    for skill in skills:
+        target = output_dir / "skills" / f"{skill.id}.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        exported_skill = ExportedSkillRecord(skill=skill)
+        target.write_text(
+            json.dumps(exported_skill.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
     latest_brief_path = _copy_latest_brief(
         repo_root=repo_root,
         config=config,
@@ -69,6 +80,7 @@ def export_agent_memory(
             tasks=len(tasks),
             attempts=attempts_total,
             artifacts=artifacts_total,
+            skills=len(skills),
         ),
     )
     (output_dir / "manifest.json").write_text(
@@ -81,13 +93,14 @@ def export_agent_memory(
         task_count=len(tasks),
         attempt_count=attempts_total,
         artifact_count=artifacts_total,
+        skill_count=len(skills),
         latest_brief_path=latest_brief_path,
     )
 
 
 def _prepare_output_dir(output_dir: Path) -> None:
     if output_dir.exists():
-        for child in ("memories", "tasks", "compiled"):
+        for child in ("memories", "tasks", "compiled", "skills"):
             shutil.rmtree(output_dir / child, ignore_errors=True)
         manifest = output_dir / "manifest.json"
         if manifest.exists():

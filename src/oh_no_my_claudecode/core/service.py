@@ -2013,6 +2013,159 @@ class OnmcService:
 
         return written
 
+    # ── Skill management ──────────────────────────────────────────────────────
+
+    # Feedback delta constants for skills (mirrors memory feedback constants).
+    _SKILL_FEEDBACK_UP_CONFIDENCE: float = 0.05
+    _SKILL_FEEDBACK_DOWN_CONFIDENCE: float = 0.05
+    _SKILL_CONFIDENCE_FLOOR: float = 0.10
+
+    def skill_promote(
+        self,
+        playbook_id: str | None = None,
+        *,
+        auto: bool = False,
+        name: str | None = None,
+    ) -> list[object]:
+        """Promote a playbook or recurring patterns to skill(s).
+
+        When *playbook_id* is given, promotes that single playbook to a Skill
+        (raises LookupError when not found, ValueError when already promoted).
+
+        When *auto=True*, detects recurring fail→fix patterns + high-signal tag
+        clusters across all stored memories and returns new Skills (skipping
+        memories already captured by existing skills).
+
+        Returns a list of newly created Skill objects.
+        """
+        from oh_no_my_claudecode.skill.promoter import (
+            auto_promote_recurring,
+            promote_playbook_to_skill,
+        )
+
+        _, _, storage = self._load_context()
+
+        if auto:
+            import contextlib
+
+            skills = auto_promote_recurring(storage)
+            for sk in skills:
+                with contextlib.suppress(ValueError):
+                    storage.add_skill(sk)
+            return list(skills)
+
+        if playbook_id is None:
+            msg = "Provide a playbook_id or pass auto=True."
+            raise ValueError(msg)
+
+        playbook = storage.get_playbook(playbook_id)
+        if playbook is None:
+            msg = f"Playbook not found: {playbook_id}"
+            raise LookupError(msg)
+
+        skill = promote_playbook_to_skill(playbook, name=name)
+        storage.add_skill(skill)
+        return [skill]
+
+    def skill_list(self) -> list[object]:
+        """Return all persisted skills ordered by confidence."""
+        _, _, storage = self._load_context()
+        return storage.list_skills()  # type: ignore[return-value]
+
+    def skill_show(self, skill_id: str) -> object:
+        """Return a single skill by id (or unique prefix); raises LookupError."""
+        _, _, storage = self._load_context()
+        all_skills = storage.list_skills()
+        matches = [sk for sk in all_skills if sk.id.startswith(skill_id)]
+        if not matches:
+            msg = f"Skill not found: {skill_id}"
+            raise LookupError(msg)
+        if len(matches) > 1:
+            ids = ", ".join(sk.id for sk in matches)
+            msg = f"Ambiguous skill prefix '{skill_id}' matches: {ids}"
+            raise LookupError(msg)
+        return matches[0]
+
+    def skill_feedback(self, skill_id: str, direction: str) -> object:
+        """Apply a trust signal to a skill's confidence and success metrics.
+
+        ``direction`` must be ``"up"`` or ``"down"``.
+
+        ``up``   bumps success_count + use_count and nudges confidence up.
+        ``down`` bumps use_count only and nudges confidence down
+                 (clamped at _SKILL_CONFIDENCE_FLOOR so the skill stays visible).
+
+        Returns the updated Skill.
+        """
+        if direction not in ("up", "down"):
+            msg = f"direction must be 'up' or 'down', got {direction!r}"
+            raise ValueError(msg)
+        from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+        _, _, storage = self._load_context()
+        skill_obj = self.skill_show(skill_id)
+        if not isinstance(skill_obj, _Skill):
+            msg = f"Skill not found: {skill_id}"
+            raise LookupError(msg)
+        skill = skill_obj
+        success = direction == "up"
+        updated = storage.record_skill_use(skill.id, success=success)
+        # Also adjust confidence.
+        if direction == "up":
+            new_conf = min(1.0, updated.confidence + self._SKILL_FEEDBACK_UP_CONFIDENCE)
+        else:
+            new_conf = max(
+                self._SKILL_CONFIDENCE_FLOOR,
+                updated.confidence - self._SKILL_FEEDBACK_DOWN_CONFIDENCE,
+            )
+        final = updated.model_copy(update={"confidence": new_conf})
+        storage.update_skill(final)
+        return final
+
+    def skill_prune(self) -> list[object]:
+        """Disable auto_inject on skills with low success rate and long disuse.
+
+        A skill is pruned when ALL of the following hold:
+        - use_count >= 3  (enough signal to judge)
+        - success_rate < 0.3  (failing more than it helps)
+        - OR last_used_at is older than 60 days
+
+        Pruning sets auto_inject=False and nudges confidence down to the floor.
+        Returns the list of Skills that were pruned.
+        """
+        from oh_no_my_claudecode.utils.time import utc_now as _utc_now
+
+        _, _, storage = self._load_context()
+        skills = storage.list_skills()
+        now = _utc_now()
+        pruned: list[object] = []
+
+        for sk in skills:
+            should_prune = False
+            if sk.use_count >= 3 and sk.success_rate < 0.3:
+                should_prune = True
+            if sk.last_used_at is not None:
+                from datetime import UTC
+
+                last = sk.last_used_at
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=UTC)
+                now_aware = now if now.tzinfo else now.replace(tzinfo=UTC)
+                days_since = (now_aware - last).total_seconds() / 86_400
+                if days_since > 60:
+                    should_prune = True
+            if should_prune and sk.auto_inject:
+                updated = sk.model_copy(
+                    update={
+                        "auto_inject": False,
+                        "confidence": max(self._SKILL_CONFIDENCE_FLOOR, sk.confidence - 0.1),
+                    }
+                )
+                storage.update_skill(updated)
+                pruned.append(updated)
+
+        return pruned
+
     # ── User-scope (cross-repo) memory ────────────────────────────────────────
 
     def add_user_memory(

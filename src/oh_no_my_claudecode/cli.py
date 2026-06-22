@@ -48,6 +48,10 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_generate_summary,
     render_playbook_list,
     render_review_output,
+    render_skill_detail,
+    render_skill_list,
+    render_skill_promoted,
+    render_skill_pruned,
     render_solve_output,
     render_status,
     render_sync_result,
@@ -91,6 +95,10 @@ user_app = typer.Typer(
     help="Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).",
     no_args_is_help=True,
 )
+skill_app = typer.Typer(
+    help="Manage self-improving skills synthesized from playbooks and memory patterns.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -99,6 +107,7 @@ app.add_typer(llm_app, name="llm")
 app.add_typer(hooks_app, name="hooks")
 app.add_typer(claude_md_app, name="claude-md")
 app.add_typer(playbook_app, name="playbook")
+app.add_typer(skill_app, name="skill")
 app.add_typer(user_app, name="user")
 
 
@@ -2230,6 +2239,210 @@ def playbook_show_command(
             )
         )
     render_playbook_detail(matches[0])
+
+
+# ---------------------------------------------------------------------------
+# Skill commands
+# ---------------------------------------------------------------------------
+
+
+@skill_app.command("promote")
+def skill_promote_command(
+    playbook_id: Annotated[
+        str | None,
+        typer.Argument(help="Playbook ID (or prefix) to promote to a skill."),
+    ] = None,
+    auto: Annotated[
+        bool,
+        typer.Option("--auto", help="Auto-detect recurring patterns and promote all."),
+    ] = False,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Override the skill name (only used with a playbook-id)."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the new skill(s) as JSON."),
+    ] = False,
+) -> None:
+    """Promote a playbook or recurring patterns to skill(s).
+
+    Provide a playbook ID to lift a single playbook into a named, reusable
+    skill.  Use --auto to scan all stored memories for recurring fail→fix
+    patterns and high-signal tag clusters, promoting each to a skill.
+
+    \b
+    Examples
+    --------
+    onmc skill promote pb_abc123
+    onmc skill promote pb_abc123 --name "Cache Invalidation"
+    onmc skill promote --auto
+    onmc skill promote --auto --json
+    """
+    if not auto and playbook_id is None:
+        raise typer.Exit(code=_fatal("Provide a playbook-id or pass --auto."))
+    try:
+        skills = _service().skill_promote(playbook_id, auto=auto, name=name)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [
+                    sk.model_dump(mode="json") if isinstance(sk, _Skill) else {}
+                    for sk in skills
+                ],
+                indent=2,
+            )
+        )
+        return
+    render_skill_promoted([sk for sk in skills if isinstance(sk, _Skill)])
+
+
+@skill_app.command("list")
+def skill_list_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit skills as JSON array."),
+    ] = False,
+) -> None:
+    """List all persisted skills."""
+    try:
+        skills = _service().skill_list()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [sk.model_dump(mode="json") if isinstance(sk, _Skill) else {} for sk in skills],
+                indent=2,
+            )
+        )
+        return
+    render_skill_list([sk for sk in skills if isinstance(sk, _Skill)])
+
+
+@skill_app.command("show")
+def skill_show_command(
+    skill_id: Annotated[str, typer.Argument(help="Skill ID (or prefix) to show.")],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the skill as JSON."),
+    ] = False,
+) -> None:
+    """Show a single skill with body, trigger, and metadata."""
+    try:
+        skill = _service().skill_show(skill_id)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output and isinstance(skill, _Skill):
+        typer.echo(json.dumps(skill.model_dump(mode="json"), indent=2))
+        return
+    if isinstance(skill, _Skill):
+        render_skill_detail(skill)
+
+
+@skill_app.command("feedback")
+def skill_feedback_command(
+    skill_id: Annotated[str, typer.Argument(help="Skill ID to apply feedback to.")],
+    direction: Annotated[
+        str,
+        typer.Argument(help="Trust signal: 'up' (helped) or 'down' (did not help)."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the updated skill as JSON."),
+    ] = False,
+) -> None:
+    """Apply a trust signal to a stored skill.
+
+    'up' marks the skill as having helped and nudges its confidence upward.
+    'down' records the usage without incrementing success_count and nudges
+    confidence downward (clamped at a floor so the skill remains visible).
+
+    \b
+    Examples
+    --------
+    onmc skill feedback sk_abc123 up
+    onmc skill feedback sk_abc123 down
+    onmc skill feedback sk_abc123 up --json
+    """
+    if direction not in ("up", "down"):
+        raise typer.Exit(
+            code=_fatal(
+                f"direction must be 'up' or 'down', got {direction!r}. "
+                "Usage: onmc skill feedback <skill-id> <up|down>"
+            )
+        )
+    try:
+        updated = _service().skill_feedback(skill_id, direction)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output and isinstance(updated, _Skill):
+        typer.echo(
+            json.dumps(
+                {
+                    "id": updated.id,
+                    "direction": direction,
+                    "use_count": updated.use_count,
+                    "success_count": updated.success_count,
+                    "confidence": round(updated.confidence, 4),
+                }
+            )
+        )
+        return
+    if isinstance(updated, _Skill):
+        arrow = "[green]up[/green]" if direction == "up" else "[yellow]down[/yellow]"
+        console.print(
+            f"[bold]Feedback:[/bold] {arrow}  "
+            f"skill=[dim]{updated.id[:16]}[/dim]  "
+            f"uses={updated.use_count}  "
+            f"conf={updated.confidence:.4f}"
+        )
+
+
+@skill_app.command("prune")
+def skill_prune_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit pruned skills as JSON array."),
+    ] = False,
+) -> None:
+    """Disable auto_inject on low-success, long-unused skills.
+
+    A skill is pruned when it has been used at least 3 times with a success
+    rate below 30%, or has not been used in the last 60 days.  Pruning sets
+    auto_inject=False so the injection layer skips it; the skill remains in
+    storage and can be re-examined or deleted manually.
+    """
+    try:
+        pruned = _service().skill_prune()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [sk.model_dump(mode="json") if isinstance(sk, _Skill) else {} for sk in pruned],
+                indent=2,
+            )
+        )
+        return
+    render_skill_pruned([sk for sk in pruned if isinstance(sk, _Skill)])
 
 
 # ---------------------------------------------------------------------------

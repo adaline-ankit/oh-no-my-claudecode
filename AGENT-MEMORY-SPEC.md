@@ -41,6 +41,8 @@ A **single `.agent-memory/` directory committed to the repo** solves this:
 │       └── <memory-id>.json               # One file per memory entry, grouped by kind.
 ├── tasks/
 │   └── <task-id>.json                     # One file per task bundle (task + attempts + artifacts).
+├── skills/
+│   └── <skill-id>.json                    # One file per skill (portable know-how unit).
 └── compiled/
     └── latest-brief.md                    # Optional. Latest compiled context brief.
 ```
@@ -50,6 +52,7 @@ A **single `.agent-memory/` directory committed to the repo** solves this:
 - `<kind>` — the `MemoryKind` enum value of the memory entry (e.g. `decision`, `invariant`).
 - `<memory-id>` — the stable unique identifier of the memory entry (e.g. `decision-a3f7c1`).
 - `<task-id>` — the stable unique identifier of the task (e.g. `task-b8e2d9`).
+- `<skill-id>` — the stable unique identifier of the skill (e.g. `sk_a3f7c1b2`).
 - File names use the record's `id` field directly: `<id>.json`.
 - All JSON files are encoded UTF-8, pretty-printed with 2-space indent, keys sorted
   alphabetically, and end with a trailing newline.
@@ -72,7 +75,8 @@ The root index. Written by the exporter; validated first by any reader.
     "memories": 3,
     "tasks": 1,
     "attempts": 2,
-    "artifacts": 1
+    "artifacts": 1,
+    "skills": 2
   }
 }
 ```
@@ -87,6 +91,7 @@ The root index. Written by the exporter; validated first by any reader.
 | `counts.tasks` | `integer` | Yes | Total task files in `tasks/`. |
 | `counts.attempts` | `integer` | Yes | Total attempt records across all task files. |
 | `counts.artifacts` | `integer` | Yes | Total artifact records across all task files. |
+| `counts.skills` | `integer` | No (default 0) | Total skill files in `skills/`. Omitted by older writers; readers treat missing as 0. |
 
 **Forward-compatibility rule:** readers MUST ignore unknown top-level fields.
 
@@ -290,7 +295,74 @@ Each file contains a task record, its attempt history, and its memory artifacts.
 
 ---
 
-### 4. `compiled/latest-brief.md` — Compiled Brief (Optional)
+### 4. `skills/<id>.json` — Skill Record
+
+Each file contains a single top-level object with one key `"skill"` and an optional
+`"provenance"` array of source memory summaries.
+
+```json
+{
+  "provenance": [],
+  "skill": {
+    "auto_inject": true,
+    "body": "1. Always route writes through the repository layer.\n2. Validate inputs at the service boundary.",
+    "confidence": 0.85,
+    "created_at": "2026-06-15T10:00:00Z",
+    "files": ["src/"],
+    "id": "sk_a3f7c1b2",
+    "last_used_at": null,
+    "name": "Repository Layer Discipline",
+    "source_memory_ids": ["invariant-a3f7c1b2e4d8", "decision-9b2e44f1c7a0"],
+    "success_count": 0,
+    "tags": ["architecture", "testing"],
+    "trigger": "When working on code that writes to persistent storage or calls the service layer.",
+    "updated_at": "2026-06-15T10:00:00Z",
+    "use_count": 0
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | `string` | Yes | Stable unique identifier. Format: `sk_<hex>`. |
+| `name` | `string` | Yes | Short human-readable skill name. |
+| `body` | `string` | Yes | Actionable know-how: numbered steps or prose. |
+| `trigger` | `string` | Yes | One-sentence "when this applies" relevance hint. |
+| `tags` | `array[string]` | Yes (may be empty) | Free-form labels for relevance matching. |
+| `files` | `array[string]` | Yes (may be empty) | File glob prefixes that signal relevance (e.g. `"src/"`). |
+| `source_memory_ids` | `array[string]` | Yes (may be empty) | IDs of memory entries that contributed to this skill. |
+| `use_count` | `integer` | Yes | How many times this skill was surfaced (injection counter). |
+| `success_count` | `integer` | Yes | How many surfaced uses were marked successful. |
+| `confidence` | `float` [0.0, 1.0] | Yes | Derived relevance score; starts at 0.5 and adjusts via feedback. |
+| `auto_inject` | `boolean` | Yes | When `true`, injection layer may surface this skill automatically. |
+| `created_at` | `string` (ISO 8601 UTC) | Yes | Creation timestamp. |
+| `updated_at` | `string` (ISO 8601 UTC) | Yes | Last modification timestamp. |
+| `last_used_at` | `string` (ISO 8601 UTC) or `null` | Yes | When the skill was last surfaced. `null` if never used. |
+
+#### `provenance` array (optional)
+
+Each element summarises a source memory for readers without database access:
+
+```json
+{
+  "kind": "invariant",
+  "memory_id": "invariant-a3f7c1b2e4d8",
+  "title": "Always use the repository layer"
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `memory_id` | `string` | The full memory `id`. |
+| `title` | `string` | Human-readable memory title. |
+| `kind` | `string` | `MemoryKind` value (e.g. `"invariant"`, `"decision"`). |
+
+**Deduplication rule:** when restoring, a skill with an existing `id` MUST be
+upserted (update-or-insert), not duplicated.
+
+---
+
+### 5. `compiled/latest-brief.md` — Compiled Brief (Optional)
 
 A markdown document containing the most recently compiled context brief. Written by
 `onmc brief` and copied during `onmc sync --commit`. This file is informational and
@@ -426,6 +498,8 @@ A writer MUST:
 │       └── doc_fact-d4474852d160.json
 ├── tasks/
 │   └── task-b8e2d9f1a0.json
+├── skills/
+│   └── sk_a3f7c1b2.json
 └── compiled/
     └── latest-brief.md
 ```

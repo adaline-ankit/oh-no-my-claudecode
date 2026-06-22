@@ -75,6 +75,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ hooks        Install and run Claude Code compaction hooks.                   │
 │ claude-md    Generate and maintain CLAUDE.md from ONMC memory.               │
 │ playbook     Synthesize and manage memory-derived playbooks.                 │
+│ skill        Manage self-improving skills synthesized from playbooks and     │
+│              memory patterns.                                                │
 │ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
 │              repo-scoped).                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1184,6 +1186,133 @@ Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
 │ *    playbook_id      TEXT  Playbook ID (or prefix) to show. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill`
+
+```text
+Usage: onmc skill [OPTIONS] COMMAND [ARGS]...                                  
+                                                                                
+ Manage self-improving skills synthesized from playbooks and memory patterns.   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ promote   Promote a playbook or recurring patterns to skill(s).              │
+│ list      List all persisted skills.                                         │
+│ show      Show a single skill with body, trigger, and metadata.              │
+│ feedback  Apply a trust signal to a stored skill.                            │
+│ prune     Disable auto_inject on low-success, long-unused skills.            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill promote`
+
+```text
+Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]                              
+                                                                                
+ Promote a playbook or recurring patterns to skill(s).                          
+                                                                                
+ Provide a playbook ID to lift a single playbook into a named, reusable         
+ skill.  Use --auto to scan all stored memories for recurring fail→fix          
+ patterns and high-signal tag clusters, promoting each to a skill.              
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc skill promote pb_abc123                                                   
+ onmc skill promote pb_abc123 --name "Cache Invalidation"                       
+ onmc skill promote --auto                                                      
+ onmc skill promote --auto --json                                               
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
+│                                   skill.                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --auto              Auto-detect recurring patterns and promote all.          │
+│ --name        TEXT  Override the skill name (only used with a playbook-id).  │
+│ --json              Emit the new skill(s) as JSON.                           │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill list`
+
+```text
+Usage: onmc skill list [OPTIONS]                                               
+                                                                                
+ List all persisted skills.                                                     
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit skills as JSON array.                                   │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill show`
+
+```text
+Usage: onmc skill show [OPTIONS] SKILL_ID                                      
+                                                                                
+ Show a single skill with body, trigger, and metadata.                          
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill_id      TEXT  Skill ID (or prefix) to show. [required]            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the skill as JSON.                                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill feedback`
+
+```text
+Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION                        
+                                                                                
+ Apply a trust signal to a stored skill.                                        
+                                                                                
+ 'up' marks the skill as having helped and nudges its confidence upward.        
+ 'down' records the usage without incrementing success_count and nudges         
+ confidence downward (clamped at a floor so the skill remains visible).         
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc skill feedback sk_abc123 up                                               
+ onmc skill feedback sk_abc123 down                                             
+ onmc skill feedback sk_abc123 up --json                                        
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill_id       TEXT  Skill ID to apply feedback to. [required]          │
+│ *    direction      TEXT  Trust signal: 'up' (helped) or 'down' (did not     │
+│                           help).                                             │
+│                           [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the updated skill as JSON.                              │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill prune`
+
+```text
+Usage: onmc skill prune [OPTIONS]                                              
+                                                                                
+ Disable auto_inject on low-success, long-unused skills.                        
+                                                                                
+ A skill is pruned when it has been used at least 3 times with a success        
+ rate below 30%, or has not been used in the last 60 days.  Pruning sets        
+ auto_inject=False so the injection layer skips it; the skill remains in        
+ storage and can be re-examined or deleted manually.                            
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit pruned skills as JSON array.                            │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
