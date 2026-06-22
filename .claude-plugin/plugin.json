@@ -20,5 +20,6 @@
     "developer-tools"
   ],
   "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json"
+  "hooks": "./hooks/hooks.json",
+  "commands": "./.claude-plugin/commands"
 }
