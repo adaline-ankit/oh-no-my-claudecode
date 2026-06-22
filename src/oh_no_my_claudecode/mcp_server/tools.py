@@ -275,6 +275,44 @@ def list_onmc_tools() -> list[Tool]:
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="get_skills",
+            title="Discover relevant how-to skills",
+            description=(
+                "Return portable skills stored in the repo brain, optionally ranked against "
+                "a free-text query and/or tags. Use this to pull a relevant how-to skill "
+                "mid-task without shelling out. No query → returns all auto_inject skills "
+                "ordered by confidence. With a query, relevant skills are ranked first."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Optional free-text query (e.g. 'testing cache invalidation'). "
+                            "When supplied, skills are ranked by relevance to the query."
+                        ),
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional tag list to boost skills that share these tags."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 10,
+                        "description": "Maximum number of skills to return.",
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -303,6 +341,8 @@ def call_onmc_tool(
         text = _get_coverage(repo)
     elif name == "get_digest":
         text = _get_digest(repo, args)
+    elif name == "get_skills":
+        text = _get_skills(repo, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
@@ -679,6 +719,45 @@ def _get_digest(repo: OnmcRepo, args: dict[str, Any]) -> str:
     if result.fallback_reason:
         payload["fallback_reason"] = result.fallback_reason
     return _json_text(payload)
+
+
+def _get_skills(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.skill.promoter import rank_skills
+
+    query = _optional_str(args, "query")
+    tags = _optional_str_list(args, "tags")
+    limit = _optional_int(args, "limit", default=10)
+    if limit < 1:
+        msg = "Argument 'limit' must be a positive integer."
+        raise ValueError(msg)
+
+    _, _, storage = repo._service._load_context()
+    all_skills = storage.list_skills()
+
+    if query:
+        # Tokenize query into tags for rank_skills tag-overlap scoring.
+        query_tags = list(tokenize(query)) + tags
+        ranked = rank_skills(all_skills, tags=query_tags, files=[])
+    elif tags:
+        ranked = rank_skills(all_skills, tags=tags, files=[])
+    else:
+        # No query: return only auto_inject skills ordered by confidence (storage default).
+        ranked = [sk for sk in all_skills if sk.auto_inject]
+
+    results = [
+        {
+            "id": sk.id,
+            "name": sk.name,
+            "trigger": sk.trigger,
+            "body": sk.body[:500] if len(sk.body) > 500 else sk.body,
+            "tags": sk.tags,
+            "confidence": sk.confidence,
+            "success_rate": round(sk.success_rate, 3),
+            "auto_inject": sk.auto_inject,
+        }
+        for sk in ranked[:limit]
+    ]
+    return _json_text(results)
 
 
 def _is_json_format() -> bool:

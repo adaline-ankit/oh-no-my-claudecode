@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.ask.compiler import AskResult
     from oh_no_my_claudecode.coverage.compiler import CoverageReport
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
@@ -2260,6 +2261,38 @@ class OnmcService:
 
         repo_root, _, storage = self._load_context()
         result = compile_recall(storage, query, limit=limit)
+        return repo_root, result
+
+    def ask(
+        self,
+        question: str,
+        *,
+        limit: int = 8,
+        synthesize: bool = True,
+    ) -> tuple[Path, AskResult]:
+        """Answer *question* by querying the memory brain.
+
+        Always returns ranked, cited memory entries (offline-safe).  When a
+        provider is configured and *synthesize* is True, also returns a concise
+        LLM-synthesized answer.  Provider failures never raise — the result
+        always contains ranked entries.
+
+        Args:
+            question: Natural-language question to answer from memory.
+            limit: Maximum number of ranked entries to return.
+            synthesize: When True (default) and a provider is configured, run
+                the LLM synthesis pass.  Pass False to force offline-only mode
+                regardless of provider configuration.
+
+        Returns:
+            ``(repo_root, AskResult)`` where ``AskResult.entries`` is always
+            populated (may be empty when the store has no relevant memories).
+        """
+        from oh_no_my_claudecode.ask.compiler import compile_ask
+
+        repo_root, config, storage = self._load_context()
+        provider = self._optional_provider(config=config, no_llm=not synthesize)
+        result = compile_ask(storage, repo_root, question, limit=limit, provider=provider)
         return repo_root, result
 
     def consolidate(self, *, dry_run: bool = False) -> tuple[Path, ConsolidationResult]:

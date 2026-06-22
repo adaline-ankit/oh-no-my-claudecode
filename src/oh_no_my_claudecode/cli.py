@@ -24,6 +24,7 @@ from oh_no_my_claudecode.models import (
 )
 from oh_no_my_claudecode.rendering.console import (
     console,
+    render_ask_result,
     render_attempt_added,
     render_attempt_detail,
     render_attempt_list,
@@ -737,6 +738,55 @@ def recall_command(
         console.print(f"[green]Wrote recall artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write failure must not break the command
+
+
+@app.command("ask")
+def ask_command(
+    question: Annotated[
+        str,
+        typer.Argument(help="Natural-language question to answer from repo memory."),
+    ],
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of memory entries to rank."),
+    ] = 8,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit result as JSON."),
+    ] = False,
+    no_synth: Annotated[
+        bool,
+        typer.Option("--no-synth", help="Skip LLM synthesis and return ranked entries only."),
+    ] = False,
+) -> None:
+    """Ask a natural-language question answered from repo memory.
+
+    Returns the most relevant memories with citations.  When an LLM provider
+    is configured, also synthesizes a concise answer grounded in those memories.
+    Ranking and citations always work offline — synthesis is best-effort and
+    its failure never breaks the command.
+
+    Examples:
+
+      onmc ask "why do we avoid bypassing the cache boundary?"
+
+      onmc ask "what failed when we tried to use X?" --no-synth
+
+      onmc ask "what is the auth decision?" --json
+    """
+    import dataclasses
+
+    try:
+        _, result = _service().ask(question, limit=limit, synthesize=not no_synth)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        # Use sys.stdout.write to avoid Rich's line-wrapping breaking JSON.
+        sys.stdout.write(json.dumps(dataclasses.asdict(result), default=str) + "\n")
+        return
+
+    render_ask_result(result)
 
 
 @app.command("check")

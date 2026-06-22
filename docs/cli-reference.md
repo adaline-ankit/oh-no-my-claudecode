@@ -38,6 +38,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
 │ recall       Search memory for past incidents matching an error or           │
 │              stacktrace.                                                     │
+│ ask          Ask a natural-language question answered from repo memory.      │
 │ check        Flag staged/changed files that touch recorded invariants or     │
 │              dead-ends.                                                      │
 │ status       Show local ONMC status.                                         │
@@ -296,6 +297,42 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ask`
+
+```text
+Usage: onmc ask [OPTIONS] QUESTION                                             
+                                                                                
+ Ask a natural-language question answered from repo memory.                     
+                                                                                
+ Returns the most relevant memories with citations.  When an LLM provider       
+ is configured, also synthesizes a concise answer grounded in those memories.   
+ Ranking and citations always work offline — synthesis is best-effort and       
+ its failure never breaks the command.                                          
+                                                                                
+ Examples:                                                                      
+                                                                                
+   onmc ask "why do we avoid bypassing the cache boundary?"                     
+                                                                                
+   onmc ask "what failed when we tried to use X?" --no-synth                    
+                                                                                
+   onmc ask "what is the auth decision?" --json                                 
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    question      TEXT  Natural-language question to answer from repo       │
+│                          memory.                                             │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit           INTEGER RANGE [x>=1]  Maximum number of memory entries to  │
+│                                         rank.                                │
+│                                         [default: 8]                         │
+│ --json                                  Emit result as JSON.                 │
+│ --no-synth                              Skip LLM synthesis and return ranked │
+│                                         entries only.                        │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
