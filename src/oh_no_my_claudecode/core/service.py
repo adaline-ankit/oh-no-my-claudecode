@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.coverage.compiler import CoverageReport
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
@@ -1622,6 +1623,22 @@ class OnmcService:
         repo_root, config, storage = self._load_context()
         log_path = self._llm_log_path(repo_root, config)
         return compute_memory_health(storage, repo_root, log_path)
+
+    def coverage(self) -> tuple[Path, CoverageReport]:
+        """Compute a knowledge-gap dashboard for this repo.
+
+        Returns ``(repo_root, CoverageReport)`` describing which parts of the
+        repo have memory coverage and which hotspot files are blind spots.
+
+        Entirely offline — no LLM calls, no network access.  Requires an
+        initialised store with at least one ingest run (file stats must exist).
+        """
+        from oh_no_my_claudecode.coverage.compiler import CoverageReport as _CoverageReport
+        from oh_no_my_claudecode.coverage.compiler import compile_coverage
+
+        repo_root, _, storage = self._load_context()
+        report: _CoverageReport = compile_coverage(storage, repo_root)
+        return repo_root, report
 
     def statusline(self) -> str:
         """Return a compact one-line health string for Claude Code statusLine.

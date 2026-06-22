@@ -27,11 +27,22 @@ Architecture
 
    The overlap fraction is normalised by the query token count so that a
    large noisy query with incidental matches does not crowd out a small
-   precise match.  Component scores are blended then boosted:
+   precise match.  Component scores are blended then boosted with an
+   age-based confidence decay:
 
-     overlap_ratio = |overlap| / |query_tokens|          # [0, 1]
-     base = overlap_ratio + (confidence × 0.3) + (feedback_score × 0.1)
-     raw  = base × kind_boost
+     overlap_ratio   = |overlap| / |query_tokens|            # [0, 1]
+     effective_age   = age_days × (1 − 0.5 × clamp(feedback_score, 0, 1))
+     decay_factor    = max(_DECAY_FLOOR, 2 ** (−effective_age / _DECAY_HALF_LIFE_DAYS))
+     base            = overlap_ratio
+                       + (confidence × decay_factor × 0.3)
+                       + (feedback_score × 0.1)
+     raw             = base × kind_boost × stale_penalty
+
+   ``decay_factor`` is 1.0 when the memory was updated today; it halves every
+   90 days (``_DECAY_HALF_LIFE_DAYS``) down to a floor of 0.3
+   (``_DECAY_FLOOR``).  Positive feedback reduces the effective age, so
+   corroborated memories stay trusted longer.  Textual overlap is never
+   penalised by age — only the confidence contribution decays.
 
    Sort order: descending raw score; ties broken by (confidence desc,
    created_at desc) — more confident and more recent memories win ties
@@ -57,8 +68,10 @@ Architecture
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from oh_no_my_claudecode.models import MemoryArtifactType, MemoryEntry, MemoryKind
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -121,6 +134,39 @@ _NO_DATA_HINT = (
     "from session transcripts so the brain can answer this next time."
 )
 
+# ---------------------------------------------------------------------------
+# Confidence-decay constants
+# ---------------------------------------------------------------------------
+
+# A memory's effective confidence is multiplied by a decay factor that depends
+# on how long ago it was last corroborated (updated_at / last_verified_at).
+#
+# Formula (exponential decay):
+#   effective_age   = age_days × (1 − 0.5 × clamp(feedback_score, 0, 1))
+#   decay_factor    = max(_DECAY_FLOOR, 2 ** (−effective_age / _DECAY_HALF_LIFE_DAYS))
+#
+# _DECAY_HALF_LIFE_DAYS = 90 — a memory that has not been touched in 90 days
+#   has its confidence contribution halved.  90 days was chosen because it is
+#   roughly one quarter: recent enough to still feel trustworthy past a
+#   sprint cycle, but decayed enough to deprioritise memories from a prior
+#   major release that were never reconfirmed.
+#
+# _DECAY_FLOOR = 0.3 — decay never drops below 30 % so that an ancient memory
+#   with strong textual overlap can still surface (just well below a fresh one).
+#   Without a floor a 3-year-old memory would become invisible, which loses
+#   legitimate long-lived gotchas.
+#
+# Positive feedback_score reduces effective age: a memory with feedback_score=1.0
+#   ages at half speed (effective_age = age_days × 0.5).  This models
+#   corroboration: if teammates have confirmed this memory recently via feedback
+#   it should stay trusted longer even if its timestamp is old.
+#
+# The decay factor multiplies ONLY the confidence term (confidence × 0.3);
+#   overlap_ratio is never penalised by age — textual relevance is independent
+#   of freshness.
+_DECAY_HALF_LIFE_DAYS: float = 90.0
+_DECAY_FLOOR: float = 0.3
+
 # Artifact types that carry resolution information (preferred over memory.details)
 _FIX_ARTIFACT_TYPES = {MemoryArtifactType.FIX, MemoryArtifactType.DID_NOT_WORK}
 
@@ -140,6 +186,7 @@ class ScoreBreakdown:
     kind_boost: float  # kind-specific multiplier
     stale_penalty: float  # 1.0 = fresh, 0.35 = stale
     final_score: float  # the score used for ranking
+    decay_factor: float = 1.0  # age-based confidence decay — [_DECAY_FLOOR, 1.0]
 
 
 @dataclass
@@ -249,12 +296,44 @@ def normalise_error_text(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _compute_decay_factor(memory: MemoryEntry, now: datetime) -> float:
+    """Return the age-based decay factor for *memory*'s confidence contribution.
+
+    Uses ``last_verified_at`` if present, else ``updated_at``, else ``created_at``
+    as the "last corroboration" timestamp.  Positive ``feedback_score`` halves
+    the effective ageing rate so corroborated memories stay trusted longer.
+
+    The result is bounded to [``_DECAY_FLOOR``, 1.0].
+    """
+    anchor: datetime = memory.last_verified_at or memory.updated_at or memory.created_at
+    # Ensure both are timezone-aware for subtraction.
+    if anchor.tzinfo is None:
+        anchor = anchor.replace(tzinfo=UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    age_days = max(0.0, (now - anchor).total_seconds() / 86_400.0)
+    # Positive feedback slows ageing: feedback_score=1.0 → effective_age halved.
+    feedback_clamp = max(0.0, min(1.0, memory.feedback_score))
+    effective_age = age_days * (1.0 - 0.5 * feedback_clamp)
+    raw_decay = math.pow(2.0, -effective_age / _DECAY_HALF_LIFE_DAYS)
+    return max(_DECAY_FLOOR, raw_decay)
+
+
 def _score_memory(
-    memory: MemoryEntry, query_tokens: set[str]
+    memory: MemoryEntry,
+    query_tokens: set[str],
+    now: datetime | None = None,
 ) -> tuple[float, ScoreBreakdown] | None:
     """Return a (score, breakdown) pair for *memory* against *query_tokens*.
 
     Returns None when the memory is excluded (rejected or zero-confidence).
+
+    Args:
+        memory: The memory entry to score.
+        query_tokens: Normalised token set from the query.
+        now: Reference timestamp for decay calculation.  Pass a fixed value
+            in tests to keep results deterministic.  Defaults to the current
+            UTC time when omitted.
 
     Scoring formula
     ---------------
@@ -262,15 +341,18 @@ def _score_memory(
     (|overlap| / |query_tokens|) so that a long noisy query with many
     incidental matches does not outrank a short precise match.  Confidence
     and feedback are blended in at modest weights so they act as a
-    secondary signal rather than noise:
+    secondary signal rather than noise.  An exponential age-decay factor
+    (see ``_compute_decay_factor``) scales the confidence contribution:
 
-        overlap_ratio = |overlap| / |query_tokens|   # normalised [0, 1]
-        base          = overlap_ratio
-                        + (confidence × 0.3)
-                        + (feedback_score × 0.1)
-        raw           = base × kind_boost × stale_penalty
+        overlap_ratio   = |overlap| / |query_tokens|   # normalised [0, 1]
+        decay_factor    = age-based multiplier ∈ [_DECAY_FLOOR, 1.0]
+        base            = overlap_ratio
+                          + (confidence × decay_factor × 0.3)
+                          + (feedback_score × 0.1)
+        raw             = base × kind_boost × stale_penalty
 
     This keeps the scale bounded and the components legible in the breakdown.
+    Overlap is never penalised by age — only the confidence contribution decays.
     """
     if memory.feedback_score <= -0.5:
         return None
@@ -291,8 +373,11 @@ def _score_memory(
     if not overlap:
         return None
 
+    ref_now: datetime = now if now is not None else datetime.now(UTC)
+    decay_factor = _compute_decay_factor(memory, ref_now)
+
     overlap_ratio = len(overlap) / len(query_tokens)
-    base = overlap_ratio + (memory.confidence * 0.3) + (memory.feedback_score * 0.1)
+    base = overlap_ratio + (memory.confidence * decay_factor * 0.3) + (memory.feedback_score * 0.1)
     kind_boost = _KIND_BOOST.get(memory.kind, 1.0)
     stale_penalty = _STALE_WEIGHT if memory.staleness in _STALE_LABELS else 1.0
     final = base * kind_boost * stale_penalty
@@ -304,6 +389,7 @@ def _score_memory(
         kind_boost=kind_boost,
         stale_penalty=stale_penalty,
         final_score=final,
+        decay_factor=decay_factor,
     )
     return final, breakdown
 
@@ -371,6 +457,7 @@ def compile_recall(
     query: str,
     *,
     limit: int = 8,
+    _now: datetime | None = None,
 ) -> RecallResult:
     """Match *query* (error text / stacktrace) against past incidents in memory.
 
@@ -378,6 +465,9 @@ def compile_recall(
         storage: Initialised SQLiteStorage instance.
         query: Raw error text, stacktrace, or exception message.
         limit: Maximum number of recall entries to return.
+        _now: Reference timestamp for confidence-decay calculation.  Exposed
+            for deterministic testing only — callers should not pass this in
+            production.  Defaults to the current UTC time when omitted.
 
     Returns:
         A ``RecallResult`` with zero or more ranked ``RecallEntry`` items.
@@ -460,13 +550,14 @@ def compile_recall(
             no_data_hint=_NO_DATA_HINT,
         )
 
+    ref_now: datetime = _now if _now is not None else datetime.now(UTC)
     scored: list[tuple[float, ScoreBreakdown, MemoryEntry]] = []
     seen_score: set[str] = set()
     for memory in fts_candidates:
         if memory.id in seen_score:
             continue
         seen_score.add(memory.id)
-        result_pair = _score_memory(memory, query_tokens)
+        result_pair = _score_memory(memory, query_tokens, now=ref_now)
         if result_pair is not None:
             s, breakdown = result_pair
             if s >= _MIN_SCORE:
