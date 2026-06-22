@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-06-23
+
+### Added
+
+- **`onmc ask "<question>"`** — a natural-language query over the memory brain. Returns the most relevant memories with citations and, when a provider is configured, a concise synthesized answer grounded in those memories. Offline-safe: ranking + citations always work with zero network; the LLM synthesis pass is best-effort and never breaks the command. `--limit`, `--json`, `--no-synth`.
+- **MCP `get_skills` tool** — agents connected over MCP can discover and fetch the repo's portable skills mid-task. Optional `query`/`tags` rank the most relevant skill first; compact TOON-default / JSON output.
+
 ## [0.19.0] — 2026-06-23
 
 ### Added
