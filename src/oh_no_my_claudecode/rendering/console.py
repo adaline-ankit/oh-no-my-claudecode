@@ -21,6 +21,7 @@ from oh_no_my_claudecode.models import (
     Playbook,
     ProjectConfig,
     ReviewModeOutput,
+    Skill,
     SolveModeOutput,
     TaskOutputRecord,
     TaskRecord,
@@ -906,6 +907,91 @@ def render_playbook_generate_summary(
         *[f"  {path}" for path in artifacts_written],
     ]
     console.print(Panel.fit("\n".join(lines), title="Playbook Generate Complete"))
+
+
+# ---------------------------------------------------------------------------
+# Skill rendering
+# ---------------------------------------------------------------------------
+
+
+def render_skill_list(skills: list[Skill]) -> None:
+    """Render a compact summary table of persisted skills."""
+    if not skills:
+        console.print(
+            "[yellow]No skills found. Run `onmc skill promote --auto` or "
+            "`onmc skill promote <playbook-id>` first.[/yellow]"
+        )
+        return
+    table = Table(title=f"Skills ({len(skills)})")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Name", min_width=28)
+    table.add_column("Uses", justify="right", no_wrap=True)
+    table.add_column("Success%", justify="right", no_wrap=True)
+    table.add_column("Conf", justify="right", no_wrap=True)
+    table.add_column("Inject", justify="center", no_wrap=True)
+    for sk in skills:
+        success_pct = f"{sk.success_rate * 100:.0f}%" if sk.use_count else "-"
+        table.add_row(
+            sk.id[:16],
+            shorten(sk.name, max_length=40),
+            str(sk.use_count),
+            success_pct,
+            f"{sk.confidence:.2f}",
+            "[green]yes[/green]" if sk.auto_inject else "[dim]no[/dim]",
+        )
+    console.print(table)
+
+
+def render_skill_detail(skill: Skill) -> None:
+    """Render a single skill with body, trigger, and metadata."""
+    header_lines = [
+        f"[bold]{skill.name}[/bold]",
+        f"ID: {skill.id}",
+        f"Confidence: {skill.confidence:.2f}  "
+        f"Uses: {skill.use_count}  Success: {skill.success_rate * 100:.0f}%",
+        f"Auto-inject: {'yes' if skill.auto_inject else 'no'}",
+        f"Tags: {', '.join(skill.tags) if skill.tags else '-'}",
+        f"Files: {', '.join(skill.files) if skill.files else '-'}",
+        "",
+        f"[italic]When to use:[/italic] {skill.trigger}",
+    ]
+    console.print(Panel.fit("\n".join(header_lines), title="Skill"))
+    if skill.body:
+        console.print(Markdown("## Body"))
+        console.print(skill.body)
+    if skill.source_memory_ids:
+        console.print(Markdown("## Source Memories"))
+        for mid in skill.source_memory_ids:
+            console.print(f"  {mid}")
+
+
+def render_skill_promoted(skills: list[Skill]) -> None:
+    """Render a post-promote summary panel."""
+    if not skills:
+        console.print("[yellow]No new skills promoted.[/yellow]")
+        return
+    lines = [
+        f"Promoted: [bold]{len(skills)} skill(s)[/bold]",
+        "",
+        *[
+            f"  • {sk.name} (conf={sk.confidence:.2f}, inject={'yes' if sk.auto_inject else 'no'})"
+            for sk in skills
+        ],
+    ]
+    console.print(Panel.fit("\n".join(lines), title="Skill Promote Complete"))
+
+
+def render_skill_pruned(skills: list[Skill]) -> None:
+    """Render a post-prune summary panel."""
+    if not skills:
+        console.print("[green]No skills needed pruning.[/green]")
+        return
+    lines = [
+        f"Pruned (auto_inject disabled): [bold]{len(skills)} skill(s)[/bold]",
+        "",
+        *[f"  • {sk.name} ({sk.id[:16]})" for sk in skills],
+    ]
+    console.print(Panel.fit("\n".join(lines), title="Skill Prune Complete"))
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,12 @@ it never touches stdin/stdout directly.
 Terse mode (default for hooks):
   Set ONMC_VERBOSE=1 to get full markdown output.
   Set ONMC_TERSE=1 to force terse even when not a hook.
+
+Skills injection:
+  When auto_inject skills exist and are relevant to the prompt, a compact
+  "Relevant skills" block is appended after the memory block.  The combined
+  output is returned by compile_prompt_recall_safe.  A surfaced skill's
+  use_count is bumped (fire-and-forget; errors are swallowed).
 """
 
 from __future__ import annotations
@@ -206,6 +212,106 @@ def compile_prompt_recall(
 
 
 # ---------------------------------------------------------------------------
+# Skills recall
+# ---------------------------------------------------------------------------
+
+# Maximum number of auto-inject skills to surface per prompt.
+_MAX_SKILLS = 3
+
+# Tags extracted from the prompt by splitting on whitespace (no LLM).
+# We reuse the same tokenize() function used for memory scoring.
+
+
+def compile_skills_recall(
+    storage: SQLiteStorage,
+    prompt: str,
+    *,
+    terse: bool | None = None,
+    max_skills: int = _MAX_SKILLS,
+) -> tuple[str, list[str]]:
+    """Return a compact "Relevant skills" block and list of surfaced skill ids.
+
+    Args:
+        storage: Initialised SQLiteStorage instance.
+        prompt: Raw user prompt used to extract context tags and files.
+        terse: When None, uses ONMC_VERBOSE/ONMC_TERSE env with hook default
+            (terse=True).  Pass True/False to override.
+        max_skills: Maximum number of skills to surface.
+
+    Returns:
+        ``(text, skill_ids)`` where *text* is the formatted block (may be "")
+        and *skill_ids* are the ids of surfaced skills (for use_count bumping).
+        Returns ``("", [])`` when no relevant auto_inject skills exist.
+
+    Always safe to call — any exception returns empty result.
+    """
+    try:
+        if terse is None:
+            from oh_no_my_claudecode.serialize.terse import is_terse
+
+            terse = is_terse(default=True)
+
+        all_skills = storage.list_skills()
+        eligible = [sk for sk in all_skills if sk.auto_inject]
+        if not eligible:
+            return "", []
+
+        # Build context from the prompt: tags are the tokenized words, files
+        # are extracted from simple path-like tokens (contain "/" or ".").
+        prompt_tokens = list(tokenize(prompt))
+        context_tags = prompt_tokens
+        context_files = [t for t in prompt_tokens if "/" in t or "." in t]
+
+        from oh_no_my_claudecode.skill.promoter import rank_skills
+
+        ranked = rank_skills(eligible, tags=context_tags, files=context_files)
+        top = ranked[:max_skills]
+
+        # Only surface skills with a minimum relevance signal.
+        # rank_skills returns all skills sorted; filter those with any tag
+        # overlap or high intrinsic confidence.
+        relevant = [
+            sk
+            for sk in top
+            if (
+                any(t.lower() in {tt.lower() for tt in (sk.tags or [])} for t in context_tags)
+                or sk.confidence >= 0.7
+            )
+        ]
+
+        if not relevant:
+            return "", []
+
+        if terse:
+            from oh_no_my_claudecode.serialize.skill_renderer import render_skills_terse
+
+            text = render_skills_terse(relevant, max_items=max_skills)
+        else:
+            from oh_no_my_claudecode.serialize.skill_renderer import render_skills_verbose
+
+            text = render_skills_verbose(relevant, max_items=max_skills)
+
+        if not text:
+            return "", []
+
+        surfaced_ids = [sk.id for sk in relevant]
+        return text, surfaced_ids
+
+    except Exception:  # noqa: BLE001
+        return "", []
+
+
+def _bump_skill_use_counts(storage: SQLiteStorage, skill_ids: list[str]) -> None:
+    """Fire-and-forget: increment use_count for each surfaced skill.
+
+    Errors are silently swallowed — bumping metrics must never break recall.
+    """
+    for skill_id in skill_ids:
+        with contextlib.suppress(Exception):
+            storage.record_skill_use(skill_id, success=True)
+
+
+# ---------------------------------------------------------------------------
 # Hot-path compile with timeout guard
 # ---------------------------------------------------------------------------
 
@@ -219,13 +325,18 @@ def compile_prompt_recall_safe(
     terse: bool | None = None,
     timeout_ms: int | None = None,
 ) -> tuple[str, int]:
-    """compile_prompt_recall wrapped with a wall-clock timeout.
+    """compile_prompt_recall + skills injection wrapped with a wall-clock timeout.
 
     When the compile exceeds *timeout_ms* (default: ONMC_HOOK_TIMEOUT_MS env
     var, else 800 ms) the function returns ("", 0) so the hook exits 0
     without blocking the host agent.
 
     Any exception is also swallowed — hooks must never crash the session.
+
+    Skills injection:
+      After the memory recall block, a compact "Relevant skills" section is
+      appended when auto_inject skills are relevant to the prompt.  Surfaced
+      skills have their use_count bumped (fire-and-forget).
     """
     import threading
 
@@ -240,13 +351,33 @@ def compile_prompt_recall_safe(
 
     def _run() -> None:
         try:
-            result[0] = compile_prompt_recall(
+            memory_text, memory_tokens = compile_prompt_recall(
                 storage,
                 prompt,
                 limit=limit,
                 budget_tokens=budget_tokens,
                 terse=terse,
             )
+            # Skills block — always suppressed so a skill error never breaks
+            # the memory recall output.
+            skills_text = ""
+            skill_ids: list[str] = []
+            with contextlib.suppress(Exception):
+                skills_text, skill_ids = compile_skills_recall(
+                    storage, prompt, terse=terse
+                )
+
+            # Combine: memory block first, then skills (separated by newline).
+            combined_parts = [p for p in [memory_text, skills_text] if p]
+            combined = "\n".join(combined_parts)
+            combined_tokens = memory_tokens + _count_tokens(skills_text)
+            result[0] = (combined, combined_tokens)
+
+            # Bump use counts after building the result (fire-and-forget).
+            if skill_ids:
+                with contextlib.suppress(Exception):
+                    _bump_skill_use_counts(storage, skill_ids)
+
         except Exception as exc:  # noqa: BLE001
             exc_box.append(exc)
 
