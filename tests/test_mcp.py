@@ -24,6 +24,7 @@ EXPECTED_TOOL_NAMES = {
     "recall",
     "get_coverage",
     "get_digest",
+    "get_skills",
 }
 
 
@@ -146,6 +147,12 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert by_name["get_digest"].inputSchema["required"] == ["since"]
     assert "since" in by_name["get_digest"].inputSchema["properties"]
     assert "limit" in by_name["get_digest"].inputSchema["properties"]
+    # get_skills — no required args
+    assert by_name["get_skills"].inputSchema.get("required", []) == []
+    assert "query" in by_name["get_skills"].inputSchema["properties"]
+    assert "tags" in by_name["get_skills"].inputSchema["properties"]
+    assert "limit" in by_name["get_skills"].inputSchema["properties"]
+    assert by_name["get_skills"].inputSchema["properties"]["tags"]["type"] == "array"
 
 
 def test_search_memory_ranks_seeded_store(
@@ -867,3 +874,166 @@ def test_get_digest_respects_limit(
 
     total_returned = sum(len(section["entries"]) for section in payload["sections"])
     assert total_returned <= 3
+
+
+# ---------------------------------------------------------------------------
+# get_skills tool
+# ---------------------------------------------------------------------------
+
+
+def _seed_skill(repo: OnmcRepo, *, name: str, trigger: str, tags: list[str]) -> None:
+    """Seed a Skill directly into the repo storage."""
+    from oh_no_my_claudecode.models import Skill
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    now = utc_now()
+    from oh_no_my_claudecode.utils.text import stable_id
+
+    skill = Skill(
+        id=stable_id("skill", name, prefix="sk"),
+        name=name,
+        body=f"How-to body for {name}.",
+        trigger=trigger,
+        tags=tags,
+        files=[],
+        source_memory_ids=[],
+        use_count=3,
+        success_count=3,
+        confidence=0.9,
+        auto_inject=True,
+        created_at=now,
+        updated_at=now,
+        last_used_at=None,
+    )
+    _, _, storage = repo._service._load_context()
+    storage.add_skill(skill)
+
+
+def test_get_skills_appears_in_tool_list_with_correct_schema() -> None:
+    """get_skills is present in list_onmc_tools with the expected schema."""
+    tools = list_onmc_tools()
+    by_name = {tool.name: tool for tool in tools}
+
+    assert "get_skills" in by_name
+    schema = by_name["get_skills"].inputSchema
+    assert schema.get("required", []) == []
+    assert "query" in schema["properties"]
+    assert "tags" in schema["properties"]
+    assert "limit" in schema["properties"]
+    assert schema["properties"]["tags"]["type"] == "array"
+
+
+def test_get_skills_returns_skills_json(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_skills returns a JSON array of skills with the expected compact fields."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    _seed_skill(repo, name="Cache Busting", trigger="When cache is stale.", tags=["cache"])
+
+    text = _tool_text(repo, "get_skills", {})
+    payload = json.loads(text)
+
+    assert isinstance(payload, list)
+    assert len(payload) >= 1
+    skill = next((s for s in payload if s["name"] == "Cache Busting"), None)
+    assert skill is not None
+    for field in ("id", "name", "trigger", "body", "tags", "confidence", "success_rate",
+                  "auto_inject"):
+        assert field in skill, f"Missing field: {field}"
+    assert isinstance(skill["confidence"], float)
+    assert isinstance(skill["success_rate"], float)
+    assert isinstance(skill["tags"], list)
+
+
+def test_get_skills_with_query_ranks_relevant_skill_first(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_skills with a query ranks the most relevant skill first."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    _seed_skill(
+        repo,
+        name="Cache Invalidation",
+        trigger="When cache must be cleared.",
+        tags=["cache", "invalidation"],
+    )
+    _seed_skill(
+        repo,
+        name="Auth Token Refresh",
+        trigger="When tokens expire.",
+        tags=["auth", "token"],
+    )
+
+    text = _tool_text(repo, "get_skills", {"query": "cache invalidation boundary"})
+    payload = json.loads(text)
+
+    assert isinstance(payload, list)
+    assert len(payload) >= 1
+    # The cache skill must rank ahead of the auth skill.
+    names = [s["name"] for s in payload]
+    assert "Cache Invalidation" in names
+    cache_idx = names.index("Cache Invalidation")
+    if "Auth Token Refresh" in names:
+        auth_idx = names.index("Auth Token Refresh")
+        assert cache_idx < auth_idx, "Cache skill should rank above auth skill for cache query"
+
+
+def test_get_skills_empty_brain_returns_empty_list(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_skills returns an empty list when the brain has no skills."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    # Do not seed any skills.
+
+    text = _tool_text(repo, "get_skills", {})
+    payload = json.loads(text)
+
+    assert isinstance(payload, list)
+    assert payload == []
+
+
+def test_get_skills_respects_limit(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_skills honours the limit argument."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    for i in range(5):
+        _seed_skill(repo, name=f"Skill {i}", trigger=f"When condition {i}.", tags=[f"tag{i}"])
+
+    text = _tool_text(repo, "get_skills", {"limit": 2})
+    payload = json.loads(text)
+
+    assert isinstance(payload, list)
+    assert len(payload) <= 2
+
+
+def test_get_skills_returns_toon_by_default(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_skills returns TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    _seed_skill(repo, name="TOON Skill", trigger="When TOON is needed.", tags=["toon"])
+
+    text = _tool_text(repo, "get_skills", {})
+
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    assert "TOON Skill" in text or "name" in text

@@ -5,6 +5,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
 from oh_no_my_claudecode.coverage.compiler import CoverageReport
 from oh_no_my_claudecode.models import (
@@ -1336,5 +1337,57 @@ def render_notify_tail(events: list[dict[str, object]]) -> None:
         kind = str(ev.get("kind", ""))
         title = str(ev.get("title", ""))
         table.add_row(time_str, sev_cell, kind, title)
+
+    console.print(table)
+
+
+def render_ask_result(result: AskResult) -> None:
+    """Render an ``AskResult`` — synthesized answer (if any) + cited memory entries."""
+    from rich.rule import Rule
+
+    if not result.entries and not result.answer:
+        hint = result.no_data_hint or "No relevant memories found."
+        console.print(f"[yellow]{hint}[/yellow]")
+        return
+
+    # Synthesized answer panel (only shown when synthesis succeeded).
+    if result.answer:
+        console.print(
+            Panel.fit(
+                result.answer,
+                title="[bold cyan]Answer[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+    elif result.entries:
+        console.print(
+            "[dim]No LLM synthesis — showing ranked memory entries.[/dim]"
+        )
+
+    if not result.entries:
+        return
+
+    noun = "memory" if len(result.entries) == 1 else "memories"
+    console.print(Rule(f"[dim]{len(result.entries)} relevant {noun}[/dim]"))
+
+    table = Table(show_header=True, show_lines=True)
+    table.add_column("#", width=3, justify="right", no_wrap=True)
+    table.add_column("ID", style="dim", width=24, no_wrap=True)
+    table.add_column("Kind", width=14, no_wrap=True)
+    table.add_column("Title", min_width=24)
+    table.add_column("Summary", min_width=32)
+    table.add_column("Provenance", width=22, style="dim")
+    table.add_column("Rel", width=5, justify="right", no_wrap=True)
+
+    for idx, entry in enumerate(result.entries, 1):
+        table.add_row(
+            str(idx),
+            entry.memory_id,
+            entry.kind,
+            entry.title,
+            entry.what_happened,
+            entry.citation or "",
+            f"{entry.relevance:.2f}",
+        )
 
     console.print(table)
