@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -13,9 +13,12 @@ from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.mcp_server.tools import call_onmc_tool
 from oh_no_my_claudecode.models import MemoryArtifactType, MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.recall.compiler import (
+    _DECAY_FLOOR,
+    _DECAY_HALF_LIFE_DAYS,
     RecallResult,
     ScoreBreakdown,
     _build_citation,
+    _compute_decay_factor,
     _score_memory,
     compile_recall,
     normalise_error_text,
@@ -1076,3 +1079,296 @@ def test_render_incident_recall_terse_omits_citation_when_empty() -> None:
     fix_line = next((line for line in lines if "PRIOR:" in line), "")
     assert not fix_line.endswith("[]"), f"Empty citation should not append '[]': {fix_line!r}"
     assert not fix_line.endswith("()"), f"Empty citation should not append '()': {fix_line!r}"
+
+
+# ---------------------------------------------------------------------------
+# Confidence-decay tests
+# ---------------------------------------------------------------------------
+
+
+def _make_memory_at(
+    *,
+    updated_days_ago: float,
+    title: str = "TypeError null access",
+    summary: str = "TypeError accessing null property in handler",
+    confidence: float = 0.85,
+    feedback_score: float = 0.0,
+    kind: MemoryKind = MemoryKind.FAILED_APPROACH,
+) -> MemoryEntry:
+    """Return a MemoryEntry whose updated_at is *updated_days_ago* days before ``now``."""
+    now = datetime(2026, 6, 22, 12, 0, 0, tzinfo=UTC)
+    anchor = now - timedelta(days=updated_days_ago)
+    return MemoryEntry(
+        id=stable_id(kind.value, title, summary, "test:decay", prefix="dec"),
+        kind=kind,
+        title=title,
+        summary=summary,
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test:decay",
+        tags=[kind.value],
+        confidence=confidence,
+        feedback_score=feedback_score,
+        created_at=anchor,
+        updated_at=anchor,
+    )
+
+
+# Fixed reference "now" used across all decay tests — keeps results deterministic.
+_DECAY_NOW = datetime(2026, 6, 22, 12, 0, 0, tzinfo=UTC)
+
+
+def test_decay_factor_fresh_memory_is_one() -> None:
+    """A memory updated today has decay_factor = 1.0."""
+    memory = _make_memory_at(updated_days_ago=0.0)
+    factor = _compute_decay_factor(memory, _DECAY_NOW)
+    assert abs(factor - 1.0) < 1e-9, f"Expected 1.0 for zero age, got {factor}"
+
+
+def test_decay_factor_at_half_life_is_half() -> None:
+    """A memory updated exactly _DECAY_HALF_LIFE_DAYS ago has decay_factor = 0.5."""
+    memory = _make_memory_at(updated_days_ago=_DECAY_HALF_LIFE_DAYS)
+    factor = _compute_decay_factor(memory, _DECAY_NOW)
+    assert abs(factor - 0.5) < 1e-6, f"Expected 0.5 at half-life, got {factor}"
+
+
+def test_decay_factor_bounded_by_floor() -> None:
+    """A very old memory (10 × half-life) has decay_factor == _DECAY_FLOOR."""
+    memory = _make_memory_at(updated_days_ago=10.0 * _DECAY_HALF_LIFE_DAYS)
+    factor = _compute_decay_factor(memory, _DECAY_NOW)
+    assert factor == _DECAY_FLOOR, f"Expected floor {_DECAY_FLOOR}, got {factor}"
+
+
+def test_decay_factor_positive_feedback_reduces_decay() -> None:
+    """A memory with positive feedback decays more slowly than one without."""
+    age = _DECAY_HALF_LIFE_DAYS  # 90 days — exactly half-life without corroboration
+    mem_corroborated = _make_memory_at(updated_days_ago=age, feedback_score=1.0)
+    mem_neutral = _make_memory_at(updated_days_ago=age, feedback_score=0.0)
+    factor_corroborated = _compute_decay_factor(mem_corroborated, _DECAY_NOW)
+    factor_neutral = _compute_decay_factor(mem_neutral, _DECAY_NOW)
+    assert factor_corroborated > factor_neutral, (
+        f"Corroborated ({factor_corroborated:.4f}) should decay less than neutral "
+        f"({factor_neutral:.4f}) at {age} days"
+    )
+
+
+def test_decay_factor_uses_last_verified_at_when_present() -> None:
+    """decay_factor uses last_verified_at in preference to updated_at."""
+    now = _DECAY_NOW
+    old_anchor = now - timedelta(days=180)  # very old updated_at
+    recent_anchor = now - timedelta(days=1)  # recent last_verified_at
+    memory = MemoryEntry(
+        id=stable_id("failed_approach", "lv test", "lv summary", "test", prefix="lv"),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="lv test",
+        summary="lv summary",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test",
+        tags=[],
+        confidence=0.9,
+        feedback_score=0.0,
+        created_at=old_anchor,
+        updated_at=old_anchor,
+        last_verified_at=recent_anchor,
+    )
+    factor = _compute_decay_factor(memory, now)
+    # With last_verified_at=1 day ago the factor should be very close to 1.0, not floored.
+    assert factor > 0.99, (
+        f"Expected factor near 1.0 when last_verified_at is 1 day ago, got {factor:.4f}"
+    )
+
+
+def test_decay_factor_populated_in_score_breakdown() -> None:
+    """ScoreBreakdown.decay_factor is set by _score_memory."""
+    memory = _make_memory_at(updated_days_ago=0.0)
+    tokens = set(tokenize("typeerror null property handler"))
+    result = _score_memory(memory, tokens, now=_DECAY_NOW)
+    assert result is not None
+    _, breakdown = result
+    assert isinstance(breakdown.decay_factor, float)
+    assert _DECAY_FLOOR <= breakdown.decay_factor <= 1.0
+
+
+def test_stale_memory_ranks_below_fresh_at_equal_overlap() -> None:
+    """A fresh memory ranks higher than an old one when textual overlap is equal."""
+    tokens = set(tokenize("typeerror null property handler"))
+
+    fresh_memory = _make_memory_at(updated_days_ago=0.0, title="TypeError null access fresh")
+    old_memory = _make_memory_at(
+        updated_days_ago=10.0 * _DECAY_HALF_LIFE_DAYS,
+        title="TypeError null access old",
+    )
+
+    result_fresh = _score_memory(fresh_memory, tokens, now=_DECAY_NOW)
+    result_old = _score_memory(old_memory, tokens, now=_DECAY_NOW)
+
+    assert result_fresh is not None
+    assert result_old is not None
+    score_fresh, _ = result_fresh
+    score_old, _ = result_old
+    assert score_fresh > score_old, (
+        f"Fresh memory ({score_fresh:.4f}) should outrank old memory ({score_old:.4f})"
+    )
+
+
+def test_compile_recall_fresh_memory_ranks_above_stale_at_equal_overlap(
+    tmp_path: Path,
+) -> None:
+    """compile_recall places a fresh memory above an old one with equal token overlap."""
+    storage = _init_storage(tmp_path / "memory.db")
+    fixed_now = _DECAY_NOW
+
+    # Both memories share the same title/summary tokens — equal textual overlap.
+    fresh = MemoryEntry(
+        id=stable_id(
+            "failed_approach", "TypeError fresh rank", "typeerror fresh rank", "t", prefix="fr"
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError fresh rank",
+        summary="typeerror fresh rank accessing null property handler",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test:fresh",
+        tags=["typeerror"],
+        confidence=0.85,
+        feedback_score=0.0,
+        created_at=fixed_now,
+        updated_at=fixed_now,
+    )
+    old_anchor = fixed_now - timedelta(days=10.0 * _DECAY_HALF_LIFE_DAYS)
+    old = MemoryEntry(
+        id=stable_id(
+            "failed_approach", "TypeError old rank", "typeerror old rank", "t", prefix="ol"
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError old rank",
+        summary="typeerror old rank accessing null property handler",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test:old",
+        tags=["typeerror"],
+        confidence=0.85,
+        feedback_score=0.0,
+        created_at=old_anchor,
+        updated_at=old_anchor,
+    )
+    storage.upsert_memories([fresh, old])
+
+    result = compile_recall(
+        storage,
+        "typeerror null property handler accessing",
+        limit=5,
+        _now=fixed_now,
+    )
+
+    assert result.has_matches
+    ids = [e.memory_id for e in result.entries]
+    assert fresh.id in ids
+    assert old.id in ids
+    assert ids.index(fresh.id) < ids.index(old.id), (
+        "Fresh memory should rank above old memory at equal overlap"
+    )
+
+
+def test_compile_recall_decay_is_deterministic(tmp_path: Path) -> None:
+    """Two compile_recall runs with the same fixed _now produce identical rankings."""
+    storage = _init_storage(tmp_path / "memory.db")
+    fixed_now = _DECAY_NOW
+
+    for i in range(4):
+        anchor = fixed_now - timedelta(days=i * 30)
+        entry = MemoryEntry(
+            id=stable_id(
+                "failed_approach",
+                f"TypeError variant {i}",
+                f"typeerror variant {i}",
+                "t",
+                prefix=f"v{i}",
+            ),
+            kind=MemoryKind.FAILED_APPROACH,
+            title=f"TypeError variant {i}",
+            summary=f"typeerror variant {i} accessing null property handler code",
+            details="",
+            source_type=SourceType.MANUAL,
+            source_ref="test:det",
+            tags=["typeerror"],
+            confidence=0.85,
+            feedback_score=0.0,
+            created_at=anchor,
+            updated_at=anchor,
+        )
+        storage.upsert_memories([entry])
+
+    query = "typeerror accessing null property handler code"
+    result_a = compile_recall(storage, query, limit=10, _now=fixed_now)
+    result_b = compile_recall(storage, query, limit=10, _now=fixed_now)
+    assert [e.memory_id for e in result_a.entries] == [e.memory_id for e in result_b.entries], (
+        "Recall ranking must be deterministic given the same fixed _now"
+    )
+
+
+def test_compile_recall_corroborated_memory_ranks_above_uncorroborated(
+    tmp_path: Path,
+) -> None:
+    """A memory with positive feedback (corroborated) outranks an otherwise-identical
+    one with no feedback when both have the same age."""
+    storage = _init_storage(tmp_path / "memory.db")
+    fixed_now = _DECAY_NOW
+    anchor = fixed_now - timedelta(days=_DECAY_HALF_LIFE_DAYS)  # 90 days old
+
+    corroborated = MemoryEntry(
+        id=stable_id(
+            "failed_approach",
+            "TypeError corroborated",
+            "typeerror corroborated null",
+            "t",
+            prefix="co",
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError corroborated",
+        summary="typeerror corroborated null property handler access",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test:co",
+        tags=["typeerror"],
+        confidence=0.85,
+        feedback_score=1.0,  # strongly corroborated
+        created_at=anchor,
+        updated_at=anchor,
+    )
+    uncorroborated = MemoryEntry(
+        id=stable_id(
+            "failed_approach",
+            "TypeError uncorroborated",
+            "typeerror uncorroborated null",
+            "t",
+            prefix="un",
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError uncorroborated",
+        summary="typeerror uncorroborated null property handler access",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="test:un",
+        tags=["typeerror"],
+        confidence=0.85,
+        feedback_score=0.0,
+        created_at=anchor,
+        updated_at=anchor,
+    )
+    storage.upsert_memories([corroborated, uncorroborated])
+
+    result = compile_recall(
+        storage,
+        "typeerror null property handler access",
+        limit=5,
+        _now=fixed_now,
+    )
+
+    assert result.has_matches
+    ids = [e.memory_id for e in result.entries]
+    if corroborated.id in ids and uncorroborated.id in ids:
+        assert ids.index(corroborated.id) < ids.index(uncorroborated.id), (
+            "Corroborated memory should rank above uncorroborated at same age"
+        )

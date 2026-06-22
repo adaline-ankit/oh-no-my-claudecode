@@ -31,6 +31,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              memory.                                                         │
 │ blame        Git blame for knowledge: map a file's symbols to the memories   │
 │              that govern them.                                               │
+│ coverage     Show a knowledge-gap dashboard: coverage % + uncovered hotspot  │
+│              files.                                                          │
 │ memory-diff  Show what repo knowledge changed between two commits.           │
 │ digest       Show what the repo/team learned since a git ref.                │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
@@ -1321,6 +1323,26 @@ Usage: onmc tui [OPTIONS]
  Open the interactive terminal brain-browser for memory curation.               
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc coverage`
+
+```text
+Usage: onmc coverage [OPTIONS]                                                 
+                                                                                
+ Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.          
+                                                                                
+ Answers "which parts of this repo does the memory actually cover, and where    
+ are the blind spots?"  The killer feature is surfacing high-churn files that   
+ have zero memory coverage — those are the landmines most likely to cause       
+ regressions when touched without context.                                      
+                                                                                
+ Requires at least one `onmc ingest` run (file stats must exist).               
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the CoverageReport as JSON instead of the dashboard.    │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

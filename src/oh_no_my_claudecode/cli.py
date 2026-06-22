@@ -30,6 +30,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_updated,
     render_blame_result,
     render_brief,
+    render_coverage_summary,
     render_doctor_report,
     render_hook_status,
     render_hud,
@@ -383,6 +384,39 @@ def blame_command(
 
     render_blame_result(result)
     console.print(f"[green]Wrote blame report:[/green] {result.output_path}")
+
+
+@app.command("coverage")
+def coverage_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the CoverageReport as JSON instead of the dashboard."),
+    ] = False,
+) -> None:
+    """Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.
+
+    Answers "which parts of this repo does the memory actually cover, and where
+    are the blind spots?"  The killer feature is surfacing high-churn files that
+    have zero memory coverage — those are the landmines most likely to cause
+    regressions when touched without context.
+
+    Requires at least one `onmc ingest` run (file stats must exist).
+    """
+    try:
+        _, report = _service().coverage()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import dataclasses
+
+        console.print(
+            json.dumps(dataclasses.asdict(report), indent=2),
+            markup=False,
+        )
+        return
+
+    render_coverage_summary(report)
 
 
 @app.command("memory-diff")

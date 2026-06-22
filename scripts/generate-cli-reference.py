@@ -84,6 +84,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc spec print", ["spec", "print"]),
     ("onmc spec validate", ["spec", "validate"]),
     ("onmc tui", ["tui"]),
+    ("onmc coverage", ["coverage"]),
     ("onmc bench", ["bench"]),
     ("onmc wiki", ["wiki"]),
     ("onmc plug", ["plug"]),

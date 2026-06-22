@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from oh_no_my_claudecode.blame.compiler import BlameResult
+from oh_no_my_claudecode.coverage.compiler import CoverageReport
 from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
@@ -1112,3 +1113,69 @@ def render_onboard_summary(tour: OnboardingTour, output_path: str) -> None:
             title="onmc onboard",
         )
     )
+
+
+def render_coverage_summary(report: CoverageReport) -> None:
+    """Render a knowledge-gap dashboard panel to the terminal.
+
+    Prints an overall coverage summary, a per-subsystem table (worst-covered
+    first), and the top uncovered hotspot files — the actionable landmines.
+    """
+    # ── Overall panel ──────────────────────────────────────────────────────
+    pct = report.overall_coverage_pct
+    color = "green" if pct >= 70 else ("yellow" if pct >= 40 else "red")
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]Coverage:[/bold]  [{color}]{pct:.1f}%[/{color}]"
+                    f"  ({report.covered_files} / {report.total_files} files)",
+                    f"[dim]Memories consulted: {report.memory_count}[/dim]",
+                    f"[dim]Uncovered files:    {report.uncovered_files}[/dim]",
+                ]
+            ),
+            title="Coverage Report",
+        )
+    )
+
+    if not report.subsystem_rows:
+        console.print("[yellow]No file stats found — run `onmc ingest` first.[/yellow]")
+        return
+
+    # ── Per-subsystem table ────────────────────────────────────────────────
+    sub_table = Table(title="Coverage by Subsystem  (worst first)")
+    sub_table.add_column("Subsystem", min_width=24, no_wrap=False)
+    sub_table.add_column("Files", justify="right", width=6)
+    sub_table.add_column("Covered", justify="right", width=8)
+    sub_table.add_column("Coverage", justify="right", width=10)
+    sub_table.add_column("Churn", justify="right", width=8)
+
+    for row in report.subsystem_rows:
+        row_pct = row.coverage_pct
+        row_color = "green" if row_pct >= 70 else ("yellow" if row_pct >= 40 else "red")
+        sub_table.add_row(
+            row.subsystem,
+            str(row.total_files),
+            str(row.covered_files),
+            f"[{row_color}]{row_pct:.0f}%[/{row_color}]",
+            str(row.total_churn),
+        )
+    console.print(sub_table)
+
+    # ── Top gaps ──────────────────────────────────────────────────────────
+    if report.top_gaps:
+        gap_table = Table(title="Top Uncovered Hotspots  (landmines)")
+        gap_table.add_column("File", min_width=30, no_wrap=False)
+        gap_table.add_column("Subsystem", width=20)
+        gap_table.add_column("Churn", justify="right", width=6)
+        gap_table.add_column("Recent", justify="right", width=8)
+        for gap in report.top_gaps:
+            gap_table.add_row(
+                f"[red]{gap.path}[/red]",
+                gap.subsystem,
+                str(gap.churn),
+                str(gap.recent_churn),
+            )
+        console.print(gap_table)
+    else:
+        console.print("[green]No uncovered hotspot files — well covered![/green]")
