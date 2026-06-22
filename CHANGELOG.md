@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-06-16
+
+### Added
+
+- **`onmc recall "<error/stacktrace>"`** (also reads piped stdin) — "have we hit this before?" Normalizes line numbers / hex / UUIDs / timestamps so error variants match the same memory, then surfaces the prior fix (biased toward failed-approach / gotcha). Plus an MCP `recall` tool so an agent self-checks on errors.
+- **`onmc blame <file>`** — git-blame for knowledge: maps a file's functions/classes/headings to the invariants, decisions, and incidents that govern them (heuristic symbol extraction + attachment), with file-level memories bucketed separately.
+
 ## [0.10.0] — 2026-06-16
 
 ### Added
