@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-06-22
+
+### Added
+
+- **`onmc pull <source>`** — cross-repo brain federation. Import another repo's committed `.agent-memory/` export into this repo's brain; imported memories are tagged `federated:<repo>` so they're recallable here yet clearly attributed and never confused with local knowledge. Dedups by stable id (idempotent re-pull), reuses the sync importer. `--label` / `--json`.
+- **Source citations on recall** — every surfaced memory now carries a compact provenance tag (`source_type · ref · file`), terse-mode aware, gracefully omitting missing fields, so an agent can trust and trace what it recalls.
+
+### Changed
+
+- **Recall ranking quality** — normalized component-score blend (overlap *ratio* + scaled confidence + feedback) so precise queries beat noisy ones at equal raw overlap; deterministic tie-break on `(confidence, recency)` instead of alphabetical title; per-result score breakdown exposed for explainability.
+
 ## [0.13.0] — 2026-06-22
 
 ### Added
