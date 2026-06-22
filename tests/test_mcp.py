@@ -22,6 +22,8 @@ EXPECTED_TOOL_NAMES = {
     "list_tasks",
     "guard_task",
     "recall",
+    "get_coverage",
+    "get_digest",
 }
 
 
@@ -138,6 +140,12 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert "tried" in by_name["record_attempt"].inputSchema["properties"]["status"]["enum"]
     assert by_name["record_memory"].inputSchema["required"] == ["kind", "title", "summary"]
     assert by_name["list_tasks"].inputSchema["properties"] == {}
+    # New tools
+    assert by_name["get_coverage"].inputSchema["properties"] == {}
+    assert by_name["get_coverage"].inputSchema.get("required", []) == []
+    assert by_name["get_digest"].inputSchema["required"] == ["since"]
+    assert "since" in by_name["get_digest"].inputSchema["properties"]
+    assert "limit" in by_name["get_digest"].inputSchema["properties"]
 
 
 def test_search_memory_ranks_seeded_store(
@@ -665,3 +673,197 @@ def test_recall_tool_json_why_omitted_when_breakdown_absent(
 
     assert "why" not in row, "Absent score_breakdown must not produce 'why' key"
     assert "provenance" in row, "Non-empty citation must produce 'provenance' key"
+
+
+# ---------------------------------------------------------------------------
+# get_coverage tool
+# ---------------------------------------------------------------------------
+
+
+def test_get_coverage_returns_coverage_info_json(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_coverage returns a JSON dict with overall_coverage_pct and gap fields."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    text = _tool_text(repo, "get_coverage", {})
+    payload = json.loads(text)
+
+    assert "overall_coverage_pct" in payload
+    assert "covered_files" in payload
+    assert "uncovered_files" in payload
+    assert "total_files" in payload
+    assert "memory_count" in payload
+    assert "worst_subsystems" in payload
+    assert "top_uncovered_hotspots" in payload
+    assert isinstance(payload["overall_coverage_pct"], float)
+    assert isinstance(payload["worst_subsystems"], list)
+    assert isinstance(payload["top_uncovered_hotspots"], list)
+
+
+def test_get_coverage_returns_toon_by_default(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_coverage returns TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    text = _tool_text(repo, "get_coverage", {})
+
+    # TOON is not valid top-level JSON
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    # But must contain coverage info
+    assert "overall_coverage_pct" in text or "coverage" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# get_digest tool
+# ---------------------------------------------------------------------------
+
+
+def _setup_digest_repo(tmp_path: Path) -> tuple[Path, str]:
+    """Create a minimal git repo, init onmc, return (repo_path, since_sha)."""
+    import os
+    import subprocess
+
+    repo = tmp_path / "digest-repo"
+    repo.mkdir()
+
+    def _git(*args: str, env: dict[str, str] | None = None) -> str:
+        merged = os.environ.copy()
+        if env:
+            merged.update(env)
+        r = subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=merged
+        )
+        return r.stdout.strip()
+
+    _git("init")
+    _git("config", "user.name", "Test")
+    _git("config", "user.email", "t@test.com")
+
+    (repo / "README.md").write_text("# Digest test repo\n", encoding="utf-8")
+    ts_env = {"GIT_AUTHOR_DATE": "2026-01-01T10:00:00+00:00",
+               "GIT_COMMITTER_DATE": "2026-01-01T10:00:00+00:00"}
+    _git("add", ".", env=ts_env)
+    _git("commit", "-m", "init", env=ts_env)
+    since_sha = _git("rev-parse", "--short", "HEAD")
+
+    # Add a second file so HEAD differs from since_sha
+    (repo / "extra.md").write_text("extra\n", encoding="utf-8")
+    ts_env2 = {"GIT_AUTHOR_DATE": "2026-01-02T10:00:00+00:00",
+                "GIT_COMMITTER_DATE": "2026-01-02T10:00:00+00:00"}
+    _git("add", ".", env=ts_env2)
+    _git("commit", "-m", "add extra", env=ts_env2)
+
+    return repo, since_sha
+
+
+def test_get_digest_returns_changelog_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest returns a JSON dict with ref metadata and sections."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    # Seed a memory so there's something to find via created_at fallback.
+    onmc_repo.memory.add(
+        type="decision",
+        title="Use shared cache",
+        summary="Workers must always use the shared cache module.",
+    )
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha})
+    payload = json.loads(text)
+
+    assert "since_ref" in payload
+    assert "since_short" in payload
+    assert "since_date" in payload
+    assert "head_short" in payload
+    assert "head_date" in payload
+    assert "source" in payload
+    assert "total" in payload
+    assert "sections" in payload
+    assert isinstance(payload["sections"], list)
+    assert payload["since_short"] == since_sha
+
+
+def test_get_digest_returns_toon_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_digest returns TOON by default without ONMC_MCP_FORMAT=json."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    onmc_repo = init(repo)
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha})
+
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    assert "since_ref" in text or since_sha in text
+
+
+def test_get_digest_bad_ref_errors_cleanly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest returns a clean error payload (not an exception) for an invalid ref."""
+    repo, _ = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    # Use call_onmc_tool directly — it should NOT raise.
+    contents = call_onmc_tool(onmc_repo, "get_digest", {"since": "not-a-real-ref-xyz"})
+    assert len(contents) == 1
+    text = contents[0].text
+    payload = json.loads(text)
+
+    assert "error" in payload
+    bad_ref = "not-a-real-ref-xyz"
+    assert bad_ref in payload["error"] or bad_ref in payload.get("since", "")
+
+
+def test_get_digest_respects_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest honours the limit argument and does not exceed it."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    for i in range(10):
+        onmc_repo.memory.add(
+            type="decision",
+            title=f"Decision {i}",
+            summary=f"Summary {i}",
+        )
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha, "limit": 3})
+    payload = json.loads(text)
+
+    total_returned = sum(len(section["entries"]) for section in payload["sections"])
+    assert total_returned <= 3

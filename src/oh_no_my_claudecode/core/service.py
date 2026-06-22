@@ -1194,6 +1194,79 @@ class OnmcService:
         storage.update_memory(updated)
         return updated
 
+    # Feedback delta constants.
+    # ``up`` nudges the memory toward corroborated; ``down`` demotes it.
+    # Deltas are intentionally modest so a few votes move the score, not a single one.
+    _FEEDBACK_UP_SCORE: float = 0.25
+    _FEEDBACK_DOWN_SCORE: float = 0.3
+    _FEEDBACK_UP_CONFIDENCE: float = 0.05
+    _FEEDBACK_DOWN_CONFIDENCE: float = 0.05
+    # floor: never drop confidence to zero — keep the memory discoverable
+    _FEEDBACK_CONFIDENCE_FLOOR: float = 0.15
+
+    def feedback(
+        self,
+        memory_id: str,
+        direction: str,
+        *,
+        note: str | None = None,
+    ) -> MemoryEntry:
+        """Apply a human trust signal to a memory.
+
+        ``direction`` must be ``"up"`` (memory proved useful) or ``"down"``
+        (memory was wrong or misleading).
+
+        ``up``  increases ``feedback_score`` by ``_FEEDBACK_UP_SCORE`` (clamped
+                to 1.0) and nudges ``confidence`` up by ``_FEEDBACK_UP_CONFIDENCE``
+                (clamped to 1.0).
+
+        ``down`` decreases ``feedback_score`` by ``_FEEDBACK_DOWN_SCORE``
+                (clamped to -1.0) and nudges ``confidence`` down by
+                ``_FEEDBACK_DOWN_CONFIDENCE`` (clamped at ``_FEEDBACK_CONFIDENCE_FLOOR``
+                so the memory remains visible but ranked lower).
+
+        ``updated_at`` is always touched so the decay clock restarts from now,
+        treating fresh feedback as corroboration even for "down" votes.
+
+        If *note* is given it is appended to ``details`` on a new line (only
+        when non-empty).
+
+        Raises:
+            ValueError: When ``direction`` is not ``"up"`` or ``"down"``.
+            LookupError: When ``memory_id`` does not exist.
+        """
+        if direction not in ("up", "down"):
+            msg = f"direction must be 'up' or 'down', got {direction!r}"
+            raise ValueError(msg)
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        if direction == "up":
+            new_feedback = min(memory.feedback_score + self._FEEDBACK_UP_SCORE, 1.0)
+            new_confidence = min(memory.confidence + self._FEEDBACK_UP_CONFIDENCE, 1.0)
+        else:
+            new_feedback = max(memory.feedback_score - self._FEEDBACK_DOWN_SCORE, -1.0)
+            new_confidence = max(
+                memory.confidence - self._FEEDBACK_DOWN_CONFIDENCE,
+                self._FEEDBACK_CONFIDENCE_FLOOR,
+            )
+        updates: dict[str, object] = {
+            "feedback_score": new_feedback,
+            "confidence": new_confidence,
+            "updated_at": utc_now(),
+        }
+        if note and note.strip():
+            updates["details"] = (
+                (memory.details.rstrip() + "\n\n" + note.strip())
+                if memory.details and memory.details.strip()
+                else note.strip()
+            )
+        updated = memory.model_copy(update=updates)
+        storage.update_memory(updated)
+        return updated
+
     def edit_memory(self, memory_id: str, new_summary: str) -> MemoryEntry:
         """Replace a memory summary and reset its feedback score."""
         _, _, storage = self._load_context()

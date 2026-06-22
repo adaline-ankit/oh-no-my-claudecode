@@ -2514,6 +2514,72 @@ def plug_command(
         console.print(f"[green]onmc plug {target}: done.[/green]")
 
 
+@app.command("feedback")
+def feedback_command(
+    memory_id: Annotated[str, typer.Argument(help="Memory ID to apply feedback to.")],
+    direction: Annotated[
+        str,
+        typer.Argument(help="Trust signal: 'up' (useful) or 'down' (wrong/misleading)."),
+    ],
+    note: Annotated[
+        str | None,
+        typer.Option("--note", help="Optional note appended to the memory details."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the updated memory as JSON instead of a rich panel."),
+    ] = False,
+) -> None:
+    """Apply a human trust signal to a stored memory.
+
+    Use 'up' when a recalled memory proved useful; use 'down' when it was
+    wrong or misleading.  Positive feedback slows confidence decay so
+    corroborated memories stay ranked higher for longer.  Negative feedback
+    demotes but does not erase — the memory remains searchable at a lower
+    rank.
+
+    \b
+    Examples
+    --------
+    onmc feedback mem_abc123 up
+    onmc feedback mem_abc123 down --note "outdated after refactor"
+    onmc feedback mem_abc123 up --json
+    """
+    if direction not in ("up", "down"):
+        raise typer.Exit(
+            code=_fatal(
+                f"direction must be 'up' or 'down', got {direction!r}. "
+                "Usage: onmc feedback <memory-id> <up|down>"
+            )
+        )
+    try:
+        updated = _service().feedback(memory_id, direction, note=note)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "id": updated.id,
+                    "direction": direction,
+                    "feedback_score": round(updated.feedback_score, 4),
+                    "confidence": round(updated.confidence, 4),
+                    "updated_at": updated.updated_at.isoformat(),
+                }
+            )
+        )
+        return
+
+    arrow = "[green]up[/green]" if direction == "up" else "[yellow]down[/yellow]"
+    console.print(
+        f"[bold]Feedback:[/bold] {arrow}  "
+        f"feedback_score={updated.feedback_score:.2f}  "
+        f"confidence={updated.confidence:.2f}  "
+        f"id={updated.id}"
+    )
+
+
 def _fatal(message: str) -> int:
     console.print(f"[red]{message}[/red]")
     return 1
