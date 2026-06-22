@@ -26,6 +26,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.onboard.compiler import OnboardingTour
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult
@@ -1095,3 +1096,24 @@ def render_memory_diff(result: MemoryDiffResult) -> None:
 
     if not result.added and not result.removed and not result.changed:
         console.print("[dim]No differences in committed memory snapshots.[/dim]")
+
+
+def render_onboard_summary(tour: OnboardingTour, output_path: str) -> None:
+    """Render a brief onboarding tour summary panel (for non-steps mode)."""
+    repo_name = tour.repo_root.split("/")[-1] or tour.repo_root
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]{repo_name}[/bold]",
+                    f"Memories: {tour.memory_count}  |  "
+                    f"Files indexed: {tour.file_stat_count}  |  "
+                    f"Playbooks: {tour.playbook_count}",
+                    "",
+                    f"Tour stops: {len(tour.stops)}",
+                    f"Artifact: {output_path}",
+                ]
+            ),
+            title="onmc onboard",
+        )
+    )
