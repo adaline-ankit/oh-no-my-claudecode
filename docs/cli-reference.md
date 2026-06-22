@@ -27,9 +27,12 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              navigation.                                                     │
 │ why          Explain why a file looks the way it does, from memory + git     │
 │              history.                                                        │
+│ onboard      Give a new dev (or agent) the guided five-minute repo tour from │
+│              memory.                                                         │
 │ blame        Git blame for knowledge: map a file's symbols to the memories   │
 │              that govern them.                                               │
 │ memory-diff  Show what repo knowledge changed between two commits.           │
+│ digest       Show what the repo/team learned since a git ref.                │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
 │ recall       Search memory for past incidents matching an error or           │
 │              stacktrace.                                                     │
@@ -205,6 +208,38 @@ Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc digest`
+
+```text
+Usage: onmc digest [OPTIONS]                                                   
+                                                                                
+ Show what the repo/team learned since a git ref.                               
+                                                                                
+ Produces a knowledge changelog grouped by kind (Decisions, Invariants,         
+ Gotchas, Failed Approaches, …) covering memories added or updated since        
+ *since*.                                                                       
+                                                                                
+ Prefers committed ``.agent-memory/`` snapshots for precision; falls back to    
+ live ``created_at`` filtering when the committed export is absent at the       
+ given ref.                                                                     
+                                                                                
+ The report is also written as a markdown artifact to ``.onmc/compiled/``.      
+                                                                                
+                                                                                
+ Examples:                                                                      
+   onmc digest --since v1.2.0                                                   
+   onmc digest --since main                                                     
+   onmc digest --since abc1234                                                  
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --since        TEXT  Git ref (tag, branch, commit hash) to diff knowledge │
+│                         from.                                                │
+│                         [required]                                           │
+│    --json               Emit JSON instead of a rich terminal report.         │
+│    --help               Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

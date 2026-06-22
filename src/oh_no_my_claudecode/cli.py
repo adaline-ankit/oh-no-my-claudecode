@@ -42,6 +42,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_diff,
     render_memory_list,
     render_mine_result,
+    render_onboard_summary,
     render_playbook_detail,
     render_playbook_generate_summary,
     render_playbook_list,
@@ -299,6 +300,44 @@ def why_command(
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
 
+@app.command("onboard")
+def onboard_command(
+    steps: Annotated[
+        bool,
+        typer.Option(
+            "--steps",
+            help=(
+                "Print all tour stops at once and exit (non-interactive). "
+                "Suitable for piping, CI, and tests."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Give a new dev (or agent) the guided five-minute repo tour from memory.
+
+    Compiles an ordered sequence of stops — danger zones, load-bearing decisions,
+    top playbooks, and where to look first — entirely offline from stored ONMC
+    memory. Interactive by default (paginated, press Enter to advance); use
+    --steps for a single non-interactive dump.
+    """
+    from rich.console import Console as RichConsole
+
+    from oh_no_my_claudecode.onboard.runner import run_onboard
+
+    try:
+        repo_root, tour = _service().onboard()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if steps:
+        run_onboard(tour, steps=True, console=RichConsole())
+        console.print(f"[green]Wrote onboarding artifact:[/green] {repo_root}")
+        return
+
+    run_onboard(tour, steps=False, console=RichConsole())
+    render_onboard_summary(tour, output_path="")
+
+
 @app.command("blame")
 def blame_command(
     path: Annotated[str, typer.Argument(help="File path to blame (repo-relative or absolute).")],
@@ -379,6 +418,129 @@ def memory_diff_command(
         "[green]Wrote memory-diff artifact:[/green] (see .onmc/compiled/ for the markdown)"
     )
     _ = markdown  # artifact already written by service.memory_diff()
+
+
+@app.command("digest")
+def digest_command(
+    since: Annotated[
+        str,
+        typer.Option(
+            "--since",
+            help="Git ref (tag, branch, commit hash) to diff knowledge from.",
+        ),
+    ],
+    output_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit JSON instead of a rich terminal report."),
+    ] = False,
+) -> None:
+    """Show what the repo/team learned since a git ref.
+
+    Produces a knowledge changelog grouped by kind (Decisions, Invariants,
+    Gotchas, Failed Approaches, …) covering memories added or updated since
+    *since*.
+
+    Prefers committed ``.agent-memory/`` snapshots for precision; falls back to
+    live ``created_at`` filtering when the committed export is absent at the
+    given ref.
+
+    The report is also written as a markdown artifact to ``.onmc/compiled/``.
+
+    \b
+    Examples:
+      onmc digest --since v1.2.0
+      onmc digest --since main
+      onmc digest --since abc1234
+    """
+    import json as _json
+    import sys as _sys
+
+    from rich.panel import Panel
+
+    from oh_no_my_claudecode.serialize.terse import is_terse
+
+    try:
+        artifact_path, result = _service().digest(since)
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if output_json:
+        payload: dict[str, object] = {
+            "since_ref": result.since_ref,
+            "since_short": result.since_short,
+            "since_date": result.since_date,
+            "head_short": result.head_short,
+            "head_date": result.head_date,
+            "source": result.source,
+            "fallback_reason": result.fallback_reason,
+            "total": result.total,
+            "by_kind": {
+                kind.value: [
+                    {
+                        "id": e.id,
+                        "kind": e.kind.value,
+                        "title": e.title,
+                        "summary": e.summary,
+                        "change_type": e.change_type,
+                    }
+                    for e in entries
+                ]
+                for kind, entries in result.by_kind.items()
+            },
+        }
+        # Use sys.stdout directly so Rich doesn't word-wrap inside JSON strings.
+        _sys.stdout.write(_json.dumps(payload, indent=2) + "\n")
+        return
+
+    terse = is_terse(default=False)
+
+    since_label = (
+        f"{result.since_ref} ({result.since_short})"
+        if result.since_short != result.since_ref
+        else result.since_ref
+    )
+    console.print(
+        Panel.fit(
+            f"Since: [bold]{since_label}[/bold] — {result.since_date}\n"
+            f"As of: [bold]{result.head_short}[/bold] — {result.head_date}\n"
+            f"Source: [dim]{result.source}[/dim]",
+            title="onmc digest",
+        )
+    )
+
+    if result.fallback_reason:
+        console.print(f"[yellow]Note:[/yellow] {result.fallback_reason}")
+        console.print()
+
+    if result.total == 0:
+        console.print("[dim]Nothing new learned since this ref.[/dim]")
+    else:
+        from rich.table import Table
+
+        from oh_no_my_claudecode.digest.compiler import _KIND_LABELS, _SECTION_ORDER
+        from oh_no_my_claudecode.utils.text import shorten
+
+        for kind in _SECTION_ORDER:
+            bucket = result.by_kind.get(kind)
+            if not bucket:
+                continue
+            section_label = _KIND_LABELS.get(kind, kind.value.replace("_", " ").title())
+            table = Table(title=section_label, show_header=True)
+            table.add_column("", style="dim", width=2)
+            table.add_column("Title", min_width=28)
+            if not terse:
+                table.add_column("Summary", min_width=44)
+            for entry in bucket:
+                badge = "[green]+[/green]" if entry.change_type == "added" else "[yellow]~[/yellow]"
+                if terse:
+                    table.add_row(badge, entry.title)
+                else:
+                    table.add_row(badge, entry.title, shorten(entry.summary, max_length=80))
+            console.print(table)
+
+    console.print(f"[green]Wrote digest artifact:[/green] {artifact_path}")
 
 
 @app.command("guard")

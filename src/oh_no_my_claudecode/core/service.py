@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
@@ -109,6 +110,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.onboard.compiler import OnboardingTour, compile_onboarding
 from oh_no_my_claudecode.playbook.compiler import compile_playbooks
 from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -239,6 +241,19 @@ class OnmcService:
         report.output_path = output_path.as_posix()
         return repo_root, report
 
+    def onboard(self) -> tuple[Path, OnboardingTour]:
+        """Compile a guided new-dev tour from stored memory.
+
+        Entirely offline — no LLM calls, no network access.  Always returns a
+        valid tour; an empty store is represented honestly in stop 1.
+        """
+        repo_root, config, storage = self._load_context()
+        tour = compile_onboarding(storage, repo_root)
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-onboard.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(tour.to_markdown(), encoding="utf-8")
+        return repo_root, tour
+
     def blame(self, path: str) -> tuple[Path, BlameResult]:
         """Compile a blame (governance map) for a file from stored memory.
 
@@ -280,6 +295,35 @@ class OnmcService:
         output_path = compiled_dir(config, repo_root) / output_name
         output_path.write_text(memory_diff_to_markdown(result), encoding="utf-8")
         return repo_root, result
+
+    def digest(
+        self,
+        since_ref: str,
+    ) -> tuple[Path, DigestResult]:
+        """Compile a knowledge changelog for everything learned since *since_ref*.
+
+        Prefers the committed ``.agent-memory/`` diff path; falls back to
+        ``created_at`` filtering when the export is not committed at *since_ref*.
+
+        Returns:
+            A tuple of (artifact_path, DigestResult).
+
+        Raises:
+            ValueError: When *since_ref* cannot be resolved to a git commit.
+        """
+        from oh_no_my_claudecode.digest.compiler import compile_digest, digest_to_markdown
+
+        repo_root, config, storage = self._load_context()
+        result = compile_digest(repo_root, storage, since_ref)
+        output_name = (
+            f"{utc_now().strftime('%Y%m%d-%H%M%S')}"
+            f"-digest-since-{since_ref[:16].replace('/', '-')}.md"
+        )
+        out_dir = compiled_dir(config, repo_root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_path = out_dir / output_name
+        output_path.write_text(digest_to_markdown(result), encoding="utf-8")
+        return output_path, result
 
     def generate_wiki(
         self,

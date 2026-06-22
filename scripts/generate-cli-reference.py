@@ -22,6 +22,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc codegraph", ["codegraph"]),
     ("onmc why", ["why"]),
     ("onmc memory-diff", ["memory-diff"]),
+    ("onmc digest", ["digest"]),
     ("onmc guard", ["guard"]),
     ("onmc recall", ["recall"]),
     ("onmc status", ["status"]),

@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-06-22
+
+### Added
+
+- **`onmc onboard`** — a guided new-developer tour built from the repo's own memory: repo overview → danger zones (top hotspots + the invariants that govern them) → key decisions/invariants → top playbooks → start-here files. Interactive paginated walk, or `--steps` for a non-interactive dump. The senior-who-read-every-commit, in five minutes.
+- **`onmc digest --since <ref>`** — a knowledge changelog: what the repo *learned* since a git ref, grouped by kind (decisions / invariants / gotchas / failed approaches). Prefers a committed `.agent-memory/` diff (reuses the memory-diff engine); falls back to `created_at`-after-ref when no committed export exists. `--json` for machine output.
+
 ## [0.12.0] — 2026-06-16
 
 ### Added
