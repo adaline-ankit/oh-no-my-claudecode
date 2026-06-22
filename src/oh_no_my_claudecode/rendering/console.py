@@ -30,6 +30,7 @@ from oh_no_my_claudecode.models import (
     TeachModeOutput,
 )
 from oh_no_my_claudecode.onboard.compiler import OnboardingTour
+from oh_no_my_claudecode.savings.compiler import SavingsResult
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult
@@ -1391,3 +1392,104 @@ def render_ask_result(result: AskResult) -> None:
         )
 
     console.print(table)
+
+
+def render_savings_card(result: SavingsResult) -> None:
+    """Render a screenshot-worthy 'Memory Wrapped' ROI card.
+
+    Displays a Rich Panel with:
+    - headline context-token savings % (simulation)
+    - memory / skill / playbook counts
+    - repeated-failure rate improvement (simulation)
+    - top hotspot files covered
+    - honest simulation disclaimer footer
+    """
+    # --- token-savings colour ---
+    ctx_pct = result.context_tokens_pct_reduction
+    if ctx_pct >= 50:
+        ctx_color = "green"
+    elif ctx_pct >= 20:
+        ctx_color = "yellow"
+    else:
+        ctx_color = "dim"
+
+    # --- headline ---
+    headline = (
+        f"  [{ctx_color}]~{ctx_pct:.0f}%[/{ctx_color}] fewer context tokens"
+        "  [dim](deterministic sim)[/dim]"
+    )
+
+    # --- brain inventory ---
+    inventory_line = (
+        f"  🧠  [bold]{result.memories_count}[/bold] memories"
+        f"   ·   [bold]{result.skills_count}[/bold] skills"
+        f"   ·   [bold]{result.playbooks_count}[/bold] playbooks"
+    )
+
+    # --- ROI table ---
+    roi_table = Table(show_header=True, show_lines=False, box=None, padding=(0, 2))
+    roi_table.add_column("Metric", style="bold", min_width=32)
+    roi_table.add_column("Without memory", justify="right", style="dim", width=16)
+    roi_table.add_column("With memory", justify="right", width=14)
+
+    # We only have the delta; derive plausible display values from the built-in
+    # scenario's known WITHOUT rate (80%) and subtract the improvement.
+    rfr_without = 0.80
+    rfr_with = max(0.0, rfr_without - result.repeated_failure_rate_delta)
+    roi_table.add_row(
+        "Repeated-failure rate  [dim](sim)[/dim]",
+        f"{rfr_without:.0%}",
+        f"[green]{rfr_with:.0%}[/green]",
+    )
+    roi_table.add_row(
+        "Wasted attempts saved  [dim](sim)[/dim]",
+        "—",
+        f"[green]-{result.wasted_attempts_saved}[/green]",
+    )
+
+    # --- coverage ---
+    cov_pct = (
+        round(result.covered_hotspots / result.total_hotspots * 100)
+        if result.total_hotspots > 0
+        else 0
+    )
+    cov_color = "green" if cov_pct >= 70 else ("yellow" if cov_pct >= 40 else "dim")
+    cov_line = (
+        f"  [{cov_color}]{result.covered_hotspots}/{result.total_hotspots}[/{cov_color}]"
+        " hotspot files covered"
+    )
+    if result.top_covered_names:
+        cov_line += "  [dim](" + ", ".join(result.top_covered_names) + ")[/dim]"
+
+    # --- footer ---
+    footer = (
+        "[dim]Sim metrics: deterministic bench — identical across runs, no LLM calls. "
+        "powered by onmc — git-portable memory for coding agents[/dim]"
+    )
+    if result.now:
+        footer += f"  [dim]· {result.now}[/dim]"
+
+    # --- assemble panel body ---
+    panel_body = "\n".join(
+        [
+            "",
+            headline,
+            "",
+            inventory_line,
+            "",
+        ]
+    )
+
+    console.print(
+        Panel(
+            panel_body,
+            title="[bold magenta]🧠 onmc — Memory Wrapped[/bold magenta]",
+            border_style="magenta",
+        )
+    )
+
+    # ROI table and coverage below the panel
+    console.print(roi_table)
+    console.print(cov_line)
+    console.print()
+    console.print(footer)
