@@ -69,6 +69,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
 │              wizard).                                                        │
 │ feedback     Apply a human trust signal to a stored memory.                  │
+│ import       Import skills or memories from an external tool into the ONMC   │
+│              brain.                                                          │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -1677,6 +1679,69 @@ Usage: onmc plug [OPTIONS] TARGET
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc import`
+
+```text
+Usage: onmc import [OPTIONS] SOURCE [PATH]                                     
+                                                                                
+ Import skills or memories from an external tool into the ONMC brain.           
+                                                                                
+                                                                                
+ Sources                                                                        
+ -------                                                                        
+ omc       oh-my-claudecode skill files (.omc/skills/*.md).                     
+           Auto-detects project (.omc/skills) then user (~/.omc/skills).        
+           Pass a path to override: onmc import omc /path/to/skills/            
+                                                                                
+ hermes    Nous hermes-agent context files (MEMORY.md, USER.md).                
+           Auto-detects in the current directory.                               
+           Pass a path to a file or directory to override.                      
+                                                                                
+ <path>    Generic .md file or directory of .md files.                          
+           Imported as skills by default; pass --as memory to import            
+           each ## section as a separate memory entry.                          
+                                                                                
+                                                                                
+ Idempotent                                                                     
+ ----------                                                                     
+ Re-importing the same files is safe: items already present in the store        
+ (matched by stable content-derived id) are counted as skipped, never           
+ duplicated.  Use --dry-run to preview without writing.                         
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc import omc                                                                
+ onmc import omc ~/.omc/skills                                                  
+ onmc import hermes                                                             
+ onmc import hermes ./MEMORY.md                                                 
+ onmc import ./docs/how-tos/                                                    
+ onmc import ./RUNBOOK.md --as memory                                           
+ onmc import omc --dry-run                                                      
+ onmc import hermes --json                                                      
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    source      TEXT    Source to import from. Use 'omc' for                │
+│                          oh-my-claudecode skills, 'hermes' for Nous          │
+│                          hermes-agent context files, or a path to a .md file │
+│                          / directory.                                        │
+│                          [required]                                          │
+│      path        [PATH]  Optional path override. For 'omc': path to          │
+│                          .omc/skills dir. For 'hermes': path to MEMORY.md /  │
+│                          USER.md / containing directory. For generic         │
+│                          markdown: the .md file or directory (use as         │
+│                          'source' instead).                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run              Parse and report without writing anything.            │
+│ --as             TEXT  Import generic markdown as 'skill' (default) or       │
+│                        'memory'.                                             │
+│                        [default: skill]                                      │
+│ --json                 Emit the result as JSON instead of a rich table.      │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

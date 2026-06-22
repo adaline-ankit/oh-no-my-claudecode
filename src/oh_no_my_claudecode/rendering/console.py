@@ -8,6 +8,7 @@ from rich.table import Table
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
 from oh_no_my_claudecode.coverage.compiler import CoverageReport
+from oh_no_my_claudecode.importers.base import ImportResult
 from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
@@ -1493,3 +1494,29 @@ def render_savings_card(result: SavingsResult) -> None:
     console.print(cov_line)
     console.print()
     console.print(footer)
+
+
+def render_import_summary(result: ImportResult) -> None:
+    """Render a compact import summary table."""
+    mode_label = "[dim](dry-run — nothing written)[/dim]" if result.dry_run else ""
+
+    table = Table(title=f"Import: {result.source}  {mode_label}")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("Source", result.source)
+    table.add_row("Kind", result.as_kind)
+    if result.dry_run:
+        table.add_row("Would import", str(len(result.items)))
+    else:
+        table.add_row("Imported", str(result.imported))
+        table.add_row("Skipped (already present)", str(result.skipped))
+    console.print(table)
+
+    if result.items:
+        console.print("[dim]Items:[/dim]")
+        for name in result.items[:20]:
+            prefix = "  [cyan]~[/cyan]" if result.dry_run else "  [green]✓[/green]"
+            console.print(f"{prefix} {name}")
+        remaining = len(result.items) - 20
+        if remaining > 0:
+            console.print(f"  [dim]… and {remaining} more[/dim]")

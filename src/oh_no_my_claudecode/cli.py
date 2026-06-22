@@ -35,6 +35,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_doctor_report,
     render_hook_status,
     render_hud,
+    render_import_summary,
     render_ingest_result,
     render_init_summary,
     render_llm_configured,
@@ -2968,6 +2969,130 @@ def notify_tail_command(
         typer.echo(json.dumps(events, indent=2))
         return
     render_notify_tail(events)
+
+
+@app.command("import")
+def import_command(
+    source: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Source to import from. "
+                "Use 'omc' for oh-my-claudecode skills, "
+                "'hermes' for Nous hermes-agent context files, "
+                "or a path to a .md file / directory."
+            )
+        ),
+    ],
+    path: Annotated[
+        Path | None,
+        typer.Argument(
+            help=(
+                "Optional path override. For 'omc': path to .omc/skills dir. "
+                "For 'hermes': path to MEMORY.md / USER.md / containing directory. "
+                "For generic markdown: the .md file or directory (use as 'source' instead)."
+            )
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Parse and report without writing anything."),
+    ] = False,
+    as_kind: Annotated[
+        str,
+        typer.Option(
+            "--as",
+            help="Import generic markdown as 'skill' (default) or 'memory'.",
+        ),
+    ] = "skill",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the result as JSON instead of a rich table."),
+    ] = False,
+) -> None:
+    """Import skills or memories from an external tool into the ONMC brain.
+
+    \b
+    Sources
+    -------
+    omc       oh-my-claudecode skill files (.omc/skills/*.md).
+              Auto-detects project (.omc/skills) then user (~/.omc/skills).
+              Pass a path to override: onmc import omc /path/to/skills/
+
+    hermes    Nous hermes-agent context files (MEMORY.md, USER.md).
+              Auto-detects in the current directory.
+              Pass a path to a file or directory to override.
+
+    <path>    Generic .md file or directory of .md files.
+              Imported as skills by default; pass --as memory to import
+              each ## section as a separate memory entry.
+
+    \b
+    Idempotent
+    ----------
+    Re-importing the same files is safe: items already present in the store
+    (matched by stable content-derived id) are counted as skipped, never
+    duplicated.  Use --dry-run to preview without writing.
+
+    \b
+    Examples
+    --------
+    onmc import omc
+    onmc import omc ~/.omc/skills
+    onmc import hermes
+    onmc import hermes ./MEMORY.md
+    onmc import ./docs/how-tos/
+    onmc import ./RUNBOOK.md --as memory
+    onmc import omc --dry-run
+    onmc import hermes --json
+    """
+    if as_kind not in ("skill", "memory"):
+        raise typer.Exit(
+            code=_fatal(
+                f"--as must be 'skill' or 'memory', got {as_kind!r}. "
+                "Usage: onmc import <source> [path] [--as skill|memory]"
+            )
+        )
+    try:
+        result = _service().import_from(source, path, dry_run=dry_run, as_kind=as_kind)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "source": result.source,
+                    "as_kind": result.as_kind,
+                    "imported": result.imported,
+                    "skipped": result.skipped,
+                    "dry_run": result.dry_run,
+                    "items": result.items,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    render_import_summary(result)
+
+    if dry_run:
+        console.print(
+            "[yellow]Dry run — no changes written. "
+            "Remove --dry-run to import.[/yellow]"
+        )
+    elif result.imported > 0:
+        console.print(
+            f"[green]Imported {result.imported} {result.as_kind}(s) "
+            f"from {result.source}.[/green]"
+        )
+    else:
+        console.print(
+            f"[dim]Nothing new to import from {result.source} "
+            f"({result.skipped} already present).[/dim]"
+        )
 
 
 def _fatal(message: str) -> int:
