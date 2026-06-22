@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-06-16
+
+### Added
+
+- **`/onmc-why` / `/onmc-guard` / `/onmc-brief` / `/onmc-statusline`** — first-class Claude Code slash commands, shipped in the plugin and installed by `onmc plug claude-code`.
+- **PreToolUse danger-guard** — before the agent edits a file, onmc injects file-level danger signals (high churn, invariants, recorded failed approaches) as non-blocking context. Never blocks the edit; silent on safe files.
+- **`onmc check`** — flags staged/changed files that touch a recorded invariant or failed-approach dead-end (`--staged`/`--file`/`--base`, `--strict` to fail, `--install-hook` for an idempotent pre-commit hook).
+
 ## [0.9.0] — 2026-06-16
 
 ### Fixed
