@@ -370,19 +370,35 @@ Usage: onmc pull [OPTIONS] SOURCE
  Import another repo's .agent-memory/ export into this brain (federated         
  memories).                                                                     
                                                                                 
+ SOURCE can be a local filesystem path or a remote git URL:                     
+                                                                                
+                                                                                
+   onmc pull ../sibling-repo                                                    
+   onmc pull https://github.com/org/repo                                        
+   onmc pull git@github.com:org/repo.git --ref main                             
+   onmc pull https://github.com/org/repo --label my-label                       
+                                                                                
  Federated memories are tagged ``federated:<repo-label>`` so they are clearly   
  attributed to their source and are never confused with local memories.         
  Re-pulling is idempotent: memories already present are skipped.                
                                                                                 
+ When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,  
+ its .agent-memory/ export is imported, and the clone is cleaned up             
+ immediately.                                                                   
+                                                                                
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      PATH  Path to another repo (or its .agent-memory/ dir) to   │
-│                        import from.                                          │
+│ *    source      TEXT  Local path to another repo (or its .agent-memory/     │
+│                        dir), or a remote git URL (https://, git@, ssh://).   │
 │                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --label        TEXT  Override the short repo label used for the              │
-│                      federated:<label> tag. Defaults to the source directory │
-│                      name.                                                   │
+│                      federated:<label> tag. For local paths defaults to the  │
+│                      source directory name; for git URLs defaults to the     │
+│                      last path segment of the URL.                           │
+│ --ref          TEXT  Branch, tag, or commit-ish to check out when cloning a  │
+│                      remote git URL. Ignored for local paths. Defaults to    │
+│                      the remote's default branch.                            │
 │ --json               Emit a machine-readable JSON summary to stdout.         │
 │ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯

@@ -5,6 +5,15 @@ Covers:
 - federated memories are tagged with federated:<repo-label>
 - re-pull is idempotent (duplicate memories are skipped, not re-inserted)
 - missing source path raises FileNotFoundError with a clear message
+- git URL detection (is_git_url)
+- repo_label_from_url derivation
+- clone_and_pull happy path with injected clone function (offline)
+- temp-dir cleanup on success and on clone failure
+- --ref is passed through to the clone function
+- --label overrides the derived label for git URLs
+- CLI: onmc pull <git-url> succeeds (mocked clone)
+- CLI: onmc pull <git-url> --ref <branch> (mocked clone)
+- CLI: clone failure exits code 1 with error message
 """
 
 from __future__ import annotations
@@ -22,6 +31,11 @@ from oh_no_my_claudecode.federation.pull import (
     _federation_tag,
     _repo_label_from_path,
     _resolve_agent_memory_dir,
+)
+from oh_no_my_claudecode.federation.remote import (
+    clone_and_pull,
+    is_git_url,
+    repo_label_from_url,
 )
 
 # ---------------------------------------------------------------------------
@@ -275,6 +289,406 @@ def test_cli_pull_missing_source_exits_code_one(
 
     assert result.exit_code == 1
     assert ".agent-memory" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Git URL detection tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/org/repo",
+        "http://github.com/org/repo",
+        "git@github.com:org/repo.git",
+        "ssh://git@github.com/org/repo.git",
+        "https://gitlab.com/org/repo.git",
+        "some-repo.git",
+    ],
+)
+def test_is_git_url_returns_true_for_git_urls(url: str) -> None:
+    assert is_git_url(url) is True
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/home/user/my-repo",
+        "../sibling-repo",
+        ".",
+        "relative/path",
+        "/absolute/path/.agent-memory",
+    ],
+)
+def test_is_git_url_returns_false_for_local_paths(path: str) -> None:
+    assert is_git_url(path) is False
+
+
+# ---------------------------------------------------------------------------
+# repo_label_from_url tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://github.com/org/my-repo", "my-repo"),
+        ("https://github.com/org/repo.git", "repo"),
+        ("git@github.com:org/my-repo.git", "my-repo"),
+        ("ssh://git@github.com/org/my-repo", "my-repo"),
+        ("https://github.com/org/repo/", "repo"),
+    ],
+)
+def test_repo_label_from_url_extracts_last_segment(url: str, expected: str) -> None:
+    assert repo_label_from_url(url) == expected
+
+
+# ---------------------------------------------------------------------------
+# clone_and_pull — offline tests with injected clone function
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_clone(source_agent_memory_dir: Path) -> object:
+    """Return a clone function that copies *source_agent_memory_dir* into dest."""
+
+    def _fake_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        # Simulate a shallow clone: copy the .agent-memory/ dir into the dest.
+        agent_mem_dest = dest / ".agent-memory"
+        import shutil
+
+        shutil.copytree(str(source_agent_memory_dir), str(agent_mem_dest))
+
+    return _fake_clone
+
+
+def test_clone_and_pull_happy_path(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """clone_and_pull imports memories via the injected clone function (offline)."""
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+    expected_count = len(svc_source.list_memories())
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    fake_clone = _make_fake_clone(source_agent_memory)
+    result = clone_and_pull(
+        storage,
+        "https://github.com/org/repo",
+        repo_label="injected-label",
+        _clone_fn=fake_clone,  # type: ignore[arg-type]
+    )
+
+    assert isinstance(result, PullResult)
+    assert result.repo_label == "injected-label"
+    assert result.imported == expected_count
+    assert result.skipped == 0
+
+
+def test_clone_and_pull_derives_label_from_url(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """When no repo_label given, label is derived from the URL."""
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    fake_clone = _make_fake_clone(source_agent_memory)
+    result = clone_and_pull(
+        storage,
+        "https://github.com/org/my-cool-repo",
+        _clone_fn=fake_clone,  # type: ignore[arg-type]
+    )
+
+    assert result.repo_label == "my-cool-repo"
+
+
+def test_clone_and_pull_passes_ref_to_clone_fn(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The ref argument is forwarded to the clone function."""
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    received_refs: list[str | None] = []
+
+    def tracking_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        received_refs.append(ref)
+        import shutil
+
+        shutil.copytree(str(source_agent_memory), str(dest / ".agent-memory"))
+
+    clone_and_pull(
+        storage,
+        "https://github.com/org/repo",
+        ref="my-branch",
+        _clone_fn=tracking_clone,
+    )
+
+    assert received_refs == ["my-branch"]
+
+
+def test_clone_and_pull_cleans_up_temp_dir_on_success(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Temp clone dir is removed after a successful pull."""
+    import tempfile
+
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    created_dirs: list[Path] = []
+    real_mkdtemp = tempfile.mkdtemp
+
+    def tracking_mkdtemp(**kwargs: object) -> str:
+        path = real_mkdtemp(**kwargs)
+        created_dirs.append(Path(path))
+        return path
+
+    import oh_no_my_claudecode.federation.remote as remote_mod
+
+    monkeypatch.setattr(remote_mod.tempfile, "mkdtemp", tracking_mkdtemp)
+
+    fake_clone = _make_fake_clone(source_agent_memory)
+    clone_and_pull(
+        storage,
+        "https://github.com/org/repo",
+        _clone_fn=fake_clone,  # type: ignore[arg-type]
+    )
+
+    assert created_dirs, "mkdtemp must have been called"
+    for d in created_dirs:
+        assert not d.exists(), f"Temp dir {d} was not cleaned up"
+
+
+def test_clone_and_pull_cleans_up_temp_dir_on_clone_failure(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Temp clone dir is removed even when the clone step raises."""
+    import tempfile
+
+    monkeypatch.chdir(sample_repo)
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    created_dirs: list[Path] = []
+    real_mkdtemp = tempfile.mkdtemp
+
+    def tracking_mkdtemp(**kwargs: object) -> str:
+        path = real_mkdtemp(**kwargs)
+        created_dirs.append(Path(path))
+        return path
+
+    import oh_no_my_claudecode.federation.remote as remote_mod
+
+    monkeypatch.setattr(remote_mod.tempfile, "mkdtemp", tracking_mkdtemp)
+
+    def failing_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        raise RuntimeError("git clone failed: network error")
+
+    with pytest.raises(RuntimeError, match="git clone failed"):
+        clone_and_pull(
+            storage,
+            "https://github.com/org/repo",
+            _clone_fn=failing_clone,
+        )
+
+    assert created_dirs, "mkdtemp must have been called"
+    for d in created_dirs:
+        assert not d.exists(), f"Temp dir {d} was not cleaned up after failure"
+
+
+def test_clone_and_pull_no_agent_memory_raises_file_not_found(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """When the cloned repo has no .agent-memory/, FileNotFoundError is raised."""
+    monkeypatch.chdir(sample_repo)
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    svc_local = OnmcService(local_repo)
+    svc_local.init_project()
+    _, _, storage = svc_local._load_context()  # noqa: SLF001
+
+    def empty_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        # Clone succeeds but leaves no .agent-memory/ in dest
+        pass
+
+    with pytest.raises(FileNotFoundError, match=".agent-memory"):
+        clone_and_pull(
+            storage,
+            "https://github.com/org/repo",
+            _clone_fn=empty_clone,
+        )
+
+
+# ---------------------------------------------------------------------------
+# CLI git URL tests (offline — clone step is monkeypatched)
+# ---------------------------------------------------------------------------
+
+
+def test_cli_pull_git_url_success(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """``onmc pull <git-url>`` should succeed when clone is mocked."""
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    monkeypatch.chdir(local_repo)
+    OnmcService(local_repo).init_project()
+
+    import oh_no_my_claudecode.federation.remote as remote_mod
+
+    monkeypatch.setattr(remote_mod, "_default_clone", _make_fake_clone(source_agent_memory))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["pull", "https://github.com/org/my-repo"],
+        prog_name="onmc",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Pulled from" in result.output
+
+
+def test_cli_pull_git_url_with_ref(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """``onmc pull <git-url> --ref <branch>`` should pass ref through."""
+    monkeypatch.chdir(sample_repo)
+    svc_source = OnmcService(sample_repo)
+    svc_source.init_project()
+    svc_source.ingest()
+    svc_source.sync_commit()
+    source_agent_memory = sample_repo / ".agent-memory"
+
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    monkeypatch.chdir(local_repo)
+    OnmcService(local_repo).init_project()
+
+    received_refs: list[str | None] = []
+
+    def tracking_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        received_refs.append(ref)
+        import shutil
+
+        shutil.copytree(str(source_agent_memory), str(dest / ".agent-memory"))
+
+    import oh_no_my_claudecode.federation.remote as remote_mod
+
+    monkeypatch.setattr(remote_mod, "_default_clone", tracking_clone)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["pull", "https://github.com/org/repo", "--ref", "develop"],
+        prog_name="onmc",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert received_refs == ["develop"]
+
+
+def test_cli_pull_git_url_clone_failure_exits_code_one(
+    tmp_path: Path,
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """A clone error should cause the CLI to exit with code 1."""
+    monkeypatch.chdir(sample_repo)
+    local_repo = tmp_path / "local"
+    local_repo.mkdir()
+    _git_init(local_repo)
+    monkeypatch.chdir(local_repo)
+    OnmcService(local_repo).init_project()
+
+    def failing_clone(git_url: str, dest: Path, ref: str | None) -> None:  # noqa: ARG001
+        raise RuntimeError("git clone failed: connection refused")
+
+    import oh_no_my_claudecode.federation.remote as remote_mod
+
+    monkeypatch.setattr(remote_mod, "_default_clone", failing_clone)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["pull", "https://github.com/org/repo"],
+        prog_name="onmc",
+    )
+
+    assert result.exit_code == 1
 
 
 # ---------------------------------------------------------------------------

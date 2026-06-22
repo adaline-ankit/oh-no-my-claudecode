@@ -931,8 +931,13 @@ def sync_command(
 @app.command("pull")
 def pull_command(
     source: Annotated[
-        Path,
-        typer.Argument(help="Path to another repo (or its .agent-memory/ dir) to import from."),
+        str,
+        typer.Argument(
+            help=(
+                "Local path to another repo (or its .agent-memory/ dir), "
+                "or a remote git URL (https://, git@, ssh://)."
+            )
+        ),
     ],
     repo_label: Annotated[
         str | None,
@@ -940,7 +945,18 @@ def pull_command(
             "--label",
             help=(
                 "Override the short repo label used for the federated:<label> tag. "
-                "Defaults to the source directory name."
+                "For local paths defaults to the source directory name; "
+                "for git URLs defaults to the last path segment of the URL."
+            ),
+        ),
+    ] = None,
+    ref: Annotated[
+        str | None,
+        typer.Option(
+            "--ref",
+            help=(
+                "Branch, tag, or commit-ish to check out when cloning a remote git URL. "
+                "Ignored for local paths. Defaults to the remote's default branch."
             ),
         ),
     ] = None,
@@ -951,13 +967,29 @@ def pull_command(
 ) -> None:
     """Import another repo's .agent-memory/ export into this brain (federated memories).
 
+    SOURCE can be a local filesystem path or a remote git URL:
+
+    \b
+      onmc pull ../sibling-repo
+      onmc pull https://github.com/org/repo
+      onmc pull git@github.com:org/repo.git --ref main
+      onmc pull https://github.com/org/repo --label my-label
+
     Federated memories are tagged ``federated:<repo-label>`` so they are clearly
     attributed to their source and are never confused with local memories.
     Re-pulling is idempotent: memories already present are skipped.
+
+    When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,
+    its .agent-memory/ export is imported, and the clone is cleaned up immediately.
     """
+    from oh_no_my_claudecode.federation.remote import is_git_url
+
     try:
-        _, result = _service().pull(source.resolve(), repo_label=repo_label)
-    except FileNotFoundError as exc:
+        if is_git_url(source):
+            _, result = _service().pull(source, ref=ref, repo_label=repo_label)
+        else:
+            _, result = _service().pull(Path(source).resolve(), ref=ref, repo_label=repo_label)
+    except (FileNotFoundError, RuntimeError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if output_json:
