@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-06-22
+
+### Added
+
+- **`onmc pull <git-url>`** — federate from a *remote* repo, not just a local path. Shallow-clones the repo to a temp dir, imports its committed `.agent-memory/` (federated + deduped), and cleans up the clone. Detects http(s)/ssh/scp git URLs vs local paths; `--ref <branch|tag>` to pull a non-default branch; repo label derived from the URL.
+- **Recall explanations in MCP output** — each recall result returned over MCP now carries `provenance` (source citation) and a compact `why` score breakdown (final score + dominant components), in both the default TOON path and the JSON path. Additive and backward-compatible; gracefully omitted when absent. Agents consuming onmc over MCP can now see *why* a memory surfaced.
+
 ## [0.14.0] — 2026-06-22
 
 ### Added
