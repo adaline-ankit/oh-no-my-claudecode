@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-06-23
+
+### Added
+
+- **`onmc skill` — portable, self-improving skills.** The flagship answer to OMC-style Skills, but git-portable, cross-agent, and provenanced instead of siloed in one tool's dir. Promote a playbook (or auto-detect a recurring fail→fix pattern) into a named Skill that **auto-injects when relevant** (per-prompt recall + SessionStart hooks, terse, ranked by relevance × success-rate, never-block) and **gets better the more it's used** (`onmc skill feedback up|down` feeds `use_count`/`success_count`/`confidence`; unused skills decay out of injection). `onmc skill promote|list|show|feedback|prune`.
+- Skills are **cross-agent portable** — `onmc sync` exports them to `.agent-memory/skills/` and the open **AGENT-MEMORY-SPEC** documents the shape, so the same skill works in Claude Code, Codex, and Cursor.
+- Schema migration v7 (`skills` table).
+
 ## [0.17.0] — 2026-06-22
 
 ### Added
