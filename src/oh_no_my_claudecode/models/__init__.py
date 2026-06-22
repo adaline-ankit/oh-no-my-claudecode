@@ -34,6 +34,7 @@ from oh_no_my_claudecode.models.prompt import (
     SolveModeOutput,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.models.skill import Skill, SkillProvenanceItem
 from oh_no_my_claudecode.models.task import (
     TERMINAL_TASK_STATUSES,
     TaskLifecycleError,
@@ -73,6 +74,8 @@ __all__ = [
     "ProjectHints",
     "RepoFileRecord",
     "ReviewModeOutput",
+    "Skill",
+    "SkillProvenanceItem",
     "SolveModeOutput",
     "SourceType",
     "StorageSettings",

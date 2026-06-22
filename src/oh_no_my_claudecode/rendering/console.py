@@ -5,6 +5,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from oh_no_my_claudecode.blame.compiler import BlameResult
+from oh_no_my_claudecode.coverage.compiler import CoverageReport
 from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
@@ -19,12 +21,14 @@ from oh_no_my_claudecode.models import (
     Playbook,
     ProjectConfig,
     ReviewModeOutput,
+    Skill,
     SolveModeOutput,
     TaskOutputRecord,
     TaskRecord,
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.onboard.compiler import OnboardingTour
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
 from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult
@@ -781,9 +785,7 @@ def render_why_report(report: WhyReport) -> None:
     if report.context_memories or report.related_artifacts:
         console.print(Markdown("## Related context"))
         for memory in report.context_memories:
-            console.print(
-                f"  [{memory.kind.value}] [bold]{memory.title}[/bold]: {memory.summary}"
-            )
+            console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]: {memory.summary}")
         for artifact in report.related_artifacts:
             console.print(
                 f"  [artifact/{artifact.type.value}] [bold]{artifact.title}[/bold]: "
@@ -801,6 +803,46 @@ def render_why_report(report: WhyReport) -> None:
         console.print(Markdown("## Recent commits"))
         for subject in report.git_history.recent_subjects:
             console.print(f"  - {subject}")
+
+
+def render_blame_result(result: BlameResult) -> None:
+    """Render a BlameResult to the terminal using rich panels and tables."""
+    found_label = "yes" if result.file_exists else "[yellow]no (not in working tree)[/yellow]"
+    status_lines = [
+        f"[bold]{result.path}[/bold]",
+        f"File found: {found_label}",
+        f"Symbols extracted: {result.symbol_count}",
+    ]
+    if result.parse_skipped:
+        status_lines.append(f"[dim]Symbol scan skipped: {result.parse_skip_reason}[/dim]")
+    console.print(Panel.fit("\n".join(status_lines), title="onmc blame"))
+    console.print(
+        "[dim]Heuristic: regex symbol extraction + substring attachment. "
+        "Results are approximate.[/dim]"
+    )
+
+    if not result.has_data:
+        console.print(
+            "[yellow]No recorded knowledge for this file.[/yellow]\n"
+            "Run [bold]onmc ingest[/bold] to index git history and docs, "
+            "then [bold]onmc mine[/bold] to extract memories from session transcripts."
+        )
+        return
+
+    if result.anchors:
+        console.print(Markdown("## Symbol-level governance"))
+        for anchor in result.anchors:
+            line_label = f"  (line {anchor.line})" if anchor.line is not None else ""
+            console.print(f"\n  [bold cyan]{anchor.anchor}[/bold cyan]{line_label}")
+            for memory in anchor.memories:
+                console.print(f"    [{memory.kind.value}] [bold]{memory.title}[/bold]")
+                console.print(f"    {memory.summary}")
+
+    if result.file_level_memories:
+        console.print(Markdown("## File-level governance (applies to whole file)"))
+        for memory in result.file_level_memories:
+            console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]")
+            console.print(f"  {memory.summary}")
 
 
 # ── Playbook rendering ─────────────────────────────────────────────────────────
@@ -865,6 +907,91 @@ def render_playbook_generate_summary(
         *[f"  {path}" for path in artifacts_written],
     ]
     console.print(Panel.fit("\n".join(lines), title="Playbook Generate Complete"))
+
+
+# ---------------------------------------------------------------------------
+# Skill rendering
+# ---------------------------------------------------------------------------
+
+
+def render_skill_list(skills: list[Skill]) -> None:
+    """Render a compact summary table of persisted skills."""
+    if not skills:
+        console.print(
+            "[yellow]No skills found. Run `onmc skill promote --auto` or "
+            "`onmc skill promote <playbook-id>` first.[/yellow]"
+        )
+        return
+    table = Table(title=f"Skills ({len(skills)})")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Name", min_width=28)
+    table.add_column("Uses", justify="right", no_wrap=True)
+    table.add_column("Success%", justify="right", no_wrap=True)
+    table.add_column("Conf", justify="right", no_wrap=True)
+    table.add_column("Inject", justify="center", no_wrap=True)
+    for sk in skills:
+        success_pct = f"{sk.success_rate * 100:.0f}%" if sk.use_count else "-"
+        table.add_row(
+            sk.id[:16],
+            shorten(sk.name, max_length=40),
+            str(sk.use_count),
+            success_pct,
+            f"{sk.confidence:.2f}",
+            "[green]yes[/green]" if sk.auto_inject else "[dim]no[/dim]",
+        )
+    console.print(table)
+
+
+def render_skill_detail(skill: Skill) -> None:
+    """Render a single skill with body, trigger, and metadata."""
+    header_lines = [
+        f"[bold]{skill.name}[/bold]",
+        f"ID: {skill.id}",
+        f"Confidence: {skill.confidence:.2f}  "
+        f"Uses: {skill.use_count}  Success: {skill.success_rate * 100:.0f}%",
+        f"Auto-inject: {'yes' if skill.auto_inject else 'no'}",
+        f"Tags: {', '.join(skill.tags) if skill.tags else '-'}",
+        f"Files: {', '.join(skill.files) if skill.files else '-'}",
+        "",
+        f"[italic]When to use:[/italic] {skill.trigger}",
+    ]
+    console.print(Panel.fit("\n".join(header_lines), title="Skill"))
+    if skill.body:
+        console.print(Markdown("## Body"))
+        console.print(skill.body)
+    if skill.source_memory_ids:
+        console.print(Markdown("## Source Memories"))
+        for mid in skill.source_memory_ids:
+            console.print(f"  {mid}")
+
+
+def render_skill_promoted(skills: list[Skill]) -> None:
+    """Render a post-promote summary panel."""
+    if not skills:
+        console.print("[yellow]No new skills promoted.[/yellow]")
+        return
+    lines = [
+        f"Promoted: [bold]{len(skills)} skill(s)[/bold]",
+        "",
+        *[
+            f"  • {sk.name} (conf={sk.confidence:.2f}, inject={'yes' if sk.auto_inject else 'no'})"
+            for sk in skills
+        ],
+    ]
+    console.print(Panel.fit("\n".join(lines), title="Skill Promote Complete"))
+
+
+def render_skill_pruned(skills: list[Skill]) -> None:
+    """Render a post-prune summary panel."""
+    if not skills:
+        console.print("[green]No skills needed pruning.[/green]")
+        return
+    lines = [
+        f"Pruned (auto_inject disabled): [bold]{len(skills)} skill(s)[/bold]",
+        "",
+        *[f"  • {sk.name} ({sk.id[:16]})" for sk in skills],
+    ]
+    console.print(Panel.fit("\n".join(lines), title="Skill Prune Complete"))
 
 
 # ---------------------------------------------------------------------------
@@ -981,8 +1108,7 @@ def render_hud(health: MemoryHealth) -> None:
         f" covered — {health.coverage_pct:.0f}%",
         "",
         f"[underline]LLM activity (last {rc.window_hours}h)[/underline]",
-        f"  Calls: {rc.call_count}  Tokens: {tok_label}"
-        f"  Latency: {latency_s:.1f}s total",
+        f"  Calls: {rc.call_count}  Tokens: {tok_label}  Latency: {latency_s:.1f}s total",
     ]
 
     console.print(Panel("\n".join(lines), title="ONMC Memory HUD", border_style="blue"))
@@ -1052,3 +1178,90 @@ def render_memory_diff(result: MemoryDiffResult) -> None:
 
     if not result.added and not result.removed and not result.changed:
         console.print("[dim]No differences in committed memory snapshots.[/dim]")
+
+
+def render_onboard_summary(tour: OnboardingTour, output_path: str) -> None:
+    """Render a brief onboarding tour summary panel (for non-steps mode)."""
+    repo_name = tour.repo_root.split("/")[-1] or tour.repo_root
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]{repo_name}[/bold]",
+                    f"Memories: {tour.memory_count}  |  "
+                    f"Files indexed: {tour.file_stat_count}  |  "
+                    f"Playbooks: {tour.playbook_count}",
+                    "",
+                    f"Tour stops: {len(tour.stops)}",
+                    f"Artifact: {output_path}",
+                ]
+            ),
+            title="onmc onboard",
+        )
+    )
+
+
+def render_coverage_summary(report: CoverageReport) -> None:
+    """Render a knowledge-gap dashboard panel to the terminal.
+
+    Prints an overall coverage summary, a per-subsystem table (worst-covered
+    first), and the top uncovered hotspot files — the actionable landmines.
+    """
+    # ── Overall panel ──────────────────────────────────────────────────────
+    pct = report.overall_coverage_pct
+    color = "green" if pct >= 70 else ("yellow" if pct >= 40 else "red")
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]Coverage:[/bold]  [{color}]{pct:.1f}%[/{color}]"
+                    f"  ({report.covered_files} / {report.total_files} files)",
+                    f"[dim]Memories consulted: {report.memory_count}[/dim]",
+                    f"[dim]Uncovered files:    {report.uncovered_files}[/dim]",
+                ]
+            ),
+            title="Coverage Report",
+        )
+    )
+
+    if not report.subsystem_rows:
+        console.print("[yellow]No file stats found — run `onmc ingest` first.[/yellow]")
+        return
+
+    # ── Per-subsystem table ────────────────────────────────────────────────
+    sub_table = Table(title="Coverage by Subsystem  (worst first)")
+    sub_table.add_column("Subsystem", min_width=24, no_wrap=False)
+    sub_table.add_column("Files", justify="right", width=6)
+    sub_table.add_column("Covered", justify="right", width=8)
+    sub_table.add_column("Coverage", justify="right", width=10)
+    sub_table.add_column("Churn", justify="right", width=8)
+
+    for row in report.subsystem_rows:
+        row_pct = row.coverage_pct
+        row_color = "green" if row_pct >= 70 else ("yellow" if row_pct >= 40 else "red")
+        sub_table.add_row(
+            row.subsystem,
+            str(row.total_files),
+            str(row.covered_files),
+            f"[{row_color}]{row_pct:.0f}%[/{row_color}]",
+            str(row.total_churn),
+        )
+    console.print(sub_table)
+
+    # ── Top gaps ──────────────────────────────────────────────────────────
+    if report.top_gaps:
+        gap_table = Table(title="Top Uncovered Hotspots  (landmines)")
+        gap_table.add_column("File", min_width=30, no_wrap=False)
+        gap_table.add_column("Subsystem", width=20)
+        gap_table.add_column("Churn", justify="right", width=6)
+        gap_table.add_column("Recent", justify="right", width=8)
+        for gap in report.top_gaps:
+            gap_table.add_row(
+                f"[red]{gap.path}[/red]",
+                gap.subsystem,
+                str(gap.churn),
+                str(gap.recent_churn),
+            )
+        console.print(gap_table)
+    else:
+        console.print("[green]No uncovered hotspot files — well covered![/green]")

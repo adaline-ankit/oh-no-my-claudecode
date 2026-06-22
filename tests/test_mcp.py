@@ -21,6 +21,9 @@ EXPECTED_TOOL_NAMES = {
     "record_memory",
     "list_tasks",
     "guard_task",
+    "recall",
+    "get_coverage",
+    "get_digest",
 }
 
 
@@ -137,6 +140,12 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert "tried" in by_name["record_attempt"].inputSchema["properties"]["status"]["enum"]
     assert by_name["record_memory"].inputSchema["required"] == ["kind", "title", "summary"]
     assert by_name["list_tasks"].inputSchema["properties"] == {}
+    # New tools
+    assert by_name["get_coverage"].inputSchema["properties"] == {}
+    assert by_name["get_coverage"].inputSchema.get("required", []) == []
+    assert by_name["get_digest"].inputSchema["required"] == ["since"]
+    assert "since" in by_name["get_digest"].inputSchema["properties"]
+    assert "limit" in by_name["get_digest"].inputSchema["properties"]
 
 
 def test_search_memory_ranks_seeded_store(
@@ -481,3 +490,380 @@ def test_record_memory_toon_contains_id(
     )
     assert "memory_id" in text
     assert "manual" in text  # source_type
+
+
+# ---------------------------------------------------------------------------
+# Recall tool: provenance citation + score breakdown in MCP output
+# ---------------------------------------------------------------------------
+
+
+def _seed_failed_approach_for_mcp(repo: OnmcRepo) -> str:
+    """Seed a FAILED_APPROACH memory into *repo* and return its id."""
+    from oh_no_my_claudecode.models import MemoryKind, SourceType
+    from oh_no_my_claudecode.models.memory import MemoryEntry
+    from oh_no_my_claudecode.utils.text import stable_id
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    now = utc_now()
+    entry = MemoryEntry(
+        id=stable_id(
+            MemoryKind.FAILED_APPROACH.value,
+            "TypeError null access mcp",
+            "TypeError accessing null in mcp test.",
+            "test:mcp",
+            prefix="mcp",
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError null access mcp",
+        summary="TypeError accessing null property in mcp test code.",
+        details="Guard with null check before access.",
+        source_type=SourceType.MANUAL,
+        source_ref="test:mcp",
+        tags=["typeerror", "null", "mcp"],
+        confidence=0.85,
+        created_at=now,
+        updated_at=now,
+    )
+    _, _, storage = repo._service._load_context()
+    storage.upsert_memories([entry])
+    return entry.id
+
+
+def test_recall_tool_json_includes_provenance_and_why(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """MCP recall result entries include 'provenance' and 'why' fields in JSON mode."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+    mem_id = _seed_failed_approach_for_mcp(repo)
+
+    text = _tool_text(
+        repo,
+        "recall",
+        {"query": "TypeError accessing null property mcp test", "limit": 5},
+    )
+    payload = json.loads(text)
+
+    assert payload["has_matches"]
+    entries = payload["entries"]
+    match = next((e for e in entries if e["memory_id"] == mem_id), None)
+    assert match is not None, f"Expected {mem_id!r} in entries: {entries}"
+
+    # provenance must be present and non-empty (SourceType.MANUAL → "manual" in string)
+    assert "provenance" in match, "Entry must include 'provenance' field"
+    assert match["provenance"], "provenance must be non-empty"
+    assert "manual" in match["provenance"]
+
+    # why must be present with the three compact sub-fields
+    assert "why" in match, "Entry must include 'why' field"
+    why = match["why"]
+    assert "final" in why
+    assert "overlap" in why
+    assert "boost" in why
+    assert isinstance(why["final"], float)
+    assert why["final"] > 0.0
+    assert why["overlap"] > 0.0
+    assert why["overlap"] <= 1.0
+    assert why["boost"] >= 1.0
+
+
+def test_recall_tool_toon_includes_provenance_and_why(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MCP recall result includes provenance and why in TOON (default) format."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+    _seed_failed_approach_for_mcp(repo)
+
+    text = _tool_text(
+        repo,
+        "recall",
+        {"query": "TypeError accessing null property mcp test", "limit": 5},
+    )
+
+    # TOON output is not JSON-parseable at the top level, but the field names
+    # and values must appear somewhere in the rendered output.
+    assert "provenance" in text, "TOON output should contain 'provenance' field name"
+    assert "manual" in text, "TOON output should contain the source type value"
+    assert "why" in text, "TOON output should contain 'why' field name"
+    assert "final" in text or "boost" in text, (
+        "TOON output should contain score breakdown sub-fields"
+    )
+
+
+def test_recall_tool_json_empty_result_has_no_provenance(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """Empty recall result (no matches) contains no spurious provenance or why fields."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+
+    text = _tool_text(repo, "recall", {"query": "xyzzyx frabbitz quux bizarre error"})
+    payload = json.loads(text)
+
+    assert not payload["has_matches"]
+    assert payload["entries"] == []
+
+
+def test_recall_tool_json_provenance_omitted_gracefully_when_citation_empty(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """When a RecallEntry has an empty citation, 'provenance' is omitted from JSON output."""
+    from oh_no_my_claudecode.mcp_server.tools import _recall_entry_dict
+    from oh_no_my_claudecode.recall.compiler import RecallEntry, ScoreBreakdown
+
+    # Build an entry with empty citation
+    entry_no_citation = RecallEntry(
+        memory_id="mem-test",
+        title="Test entry",
+        what_happened="Something happened.",
+        resolution="Fix it.",
+        source_ref="test:ref",
+        confidence=0.8,
+        relevance=0.5,
+        kind="failed_approach",
+        citation="",  # explicitly empty
+        score_breakdown=ScoreBreakdown(
+            overlap_ratio=0.5,
+            confidence=0.8,
+            feedback_score=0.0,
+            kind_boost=3.0,
+            stale_penalty=1.0,
+            final_score=1.2,
+        ),
+    )
+    row = _recall_entry_dict(entry_no_citation)
+
+    assert "provenance" not in row, "Empty citation must not produce 'provenance' key"
+    assert "why" in row, "Non-None score_breakdown must always produce 'why' key"
+
+
+def test_recall_tool_json_why_omitted_when_breakdown_absent(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """When score_breakdown is None, 'why' is omitted from JSON output."""
+    from oh_no_my_claudecode.mcp_server.tools import _recall_entry_dict
+    from oh_no_my_claudecode.recall.compiler import RecallEntry
+
+    entry_no_breakdown = RecallEntry(
+        memory_id="mem-no-bd",
+        title="Test entry without breakdown",
+        what_happened="Something happened.",
+        resolution="Fix it.",
+        source_ref="test:ref",
+        confidence=0.8,
+        relevance=0.5,
+        kind="failed_approach",
+        citation="(manual · test:ref)",
+        score_breakdown=None,  # absent
+    )
+    row = _recall_entry_dict(entry_no_breakdown)
+
+    assert "why" not in row, "Absent score_breakdown must not produce 'why' key"
+    assert "provenance" in row, "Non-empty citation must produce 'provenance' key"
+
+
+# ---------------------------------------------------------------------------
+# get_coverage tool
+# ---------------------------------------------------------------------------
+
+
+def test_get_coverage_returns_coverage_info_json(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_coverage returns a JSON dict with overall_coverage_pct and gap fields."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    text = _tool_text(repo, "get_coverage", {})
+    payload = json.loads(text)
+
+    assert "overall_coverage_pct" in payload
+    assert "covered_files" in payload
+    assert "uncovered_files" in payload
+    assert "total_files" in payload
+    assert "memory_count" in payload
+    assert "worst_subsystems" in payload
+    assert "top_uncovered_hotspots" in payload
+    assert isinstance(payload["overall_coverage_pct"], float)
+    assert isinstance(payload["worst_subsystems"], list)
+    assert isinstance(payload["top_uncovered_hotspots"], list)
+
+
+def test_get_coverage_returns_toon_by_default(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_coverage returns TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+
+    text = _tool_text(repo, "get_coverage", {})
+
+    # TOON is not valid top-level JSON
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    # But must contain coverage info
+    assert "overall_coverage_pct" in text or "coverage" in text.lower()
+
+
+# ---------------------------------------------------------------------------
+# get_digest tool
+# ---------------------------------------------------------------------------
+
+
+def _setup_digest_repo(tmp_path: Path) -> tuple[Path, str]:
+    """Create a minimal git repo, init onmc, return (repo_path, since_sha)."""
+    import os
+    import subprocess
+
+    repo = tmp_path / "digest-repo"
+    repo.mkdir()
+
+    def _git(*args: str, env: dict[str, str] | None = None) -> str:
+        merged = os.environ.copy()
+        if env:
+            merged.update(env)
+        r = subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True, env=merged
+        )
+        return r.stdout.strip()
+
+    _git("init")
+    _git("config", "user.name", "Test")
+    _git("config", "user.email", "t@test.com")
+
+    (repo / "README.md").write_text("# Digest test repo\n", encoding="utf-8")
+    ts_env = {"GIT_AUTHOR_DATE": "2026-01-01T10:00:00+00:00",
+               "GIT_COMMITTER_DATE": "2026-01-01T10:00:00+00:00"}
+    _git("add", ".", env=ts_env)
+    _git("commit", "-m", "init", env=ts_env)
+    since_sha = _git("rev-parse", "--short", "HEAD")
+
+    # Add a second file so HEAD differs from since_sha
+    (repo / "extra.md").write_text("extra\n", encoding="utf-8")
+    ts_env2 = {"GIT_AUTHOR_DATE": "2026-01-02T10:00:00+00:00",
+                "GIT_COMMITTER_DATE": "2026-01-02T10:00:00+00:00"}
+    _git("add", ".", env=ts_env2)
+    _git("commit", "-m", "add extra", env=ts_env2)
+
+    return repo, since_sha
+
+
+def test_get_digest_returns_changelog_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest returns a JSON dict with ref metadata and sections."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    # Seed a memory so there's something to find via created_at fallback.
+    onmc_repo.memory.add(
+        type="decision",
+        title="Use shared cache",
+        summary="Workers must always use the shared cache module.",
+    )
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha})
+    payload = json.loads(text)
+
+    assert "since_ref" in payload
+    assert "since_short" in payload
+    assert "since_date" in payload
+    assert "head_short" in payload
+    assert "head_date" in payload
+    assert "source" in payload
+    assert "total" in payload
+    assert "sections" in payload
+    assert isinstance(payload["sections"], list)
+    assert payload["since_short"] == since_sha
+
+
+def test_get_digest_returns_toon_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """get_digest returns TOON by default without ONMC_MCP_FORMAT=json."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    onmc_repo = init(repo)
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha})
+
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    assert "since_ref" in text or since_sha in text
+
+
+def test_get_digest_bad_ref_errors_cleanly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest returns a clean error payload (not an exception) for an invalid ref."""
+    repo, _ = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    # Use call_onmc_tool directly — it should NOT raise.
+    contents = call_onmc_tool(onmc_repo, "get_digest", {"since": "not-a-real-ref-xyz"})
+    assert len(contents) == 1
+    text = contents[0].text
+    payload = json.loads(text)
+
+    assert "error" in payload
+    bad_ref = "not-a-real-ref-xyz"
+    assert bad_ref in payload["error"] or bad_ref in payload.get("since", "")
+
+
+def test_get_digest_respects_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """get_digest honours the limit argument and does not exceed it."""
+    repo, since_sha = _setup_digest_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    onmc_repo = init(repo)
+
+    for i in range(10):
+        onmc_repo.memory.add(
+            type="decision",
+            title=f"Decision {i}",
+            summary=f"Summary {i}",
+        )
+
+    text = _tool_text(onmc_repo, "get_digest", {"since": since_sha, "limit": 3})
+    payload = json.loads(text)
+
+    total_returned = sum(len(section["entries"]) for section in payload["sections"])
+    assert total_returned <= 3

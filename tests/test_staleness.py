@@ -212,7 +212,7 @@ def test_migration_v3_idempotent(tmp_path: Path) -> None:
 
     assert "staleness" in columns
     assert "last_verified_at" in columns
-    assert storage.get_meta("schema_version") == "6"
+    assert storage.get_meta("schema_version") == "7"
 
 
 def test_migration_v3_upgrades_existing_v2_db(tmp_path: Path) -> None:
@@ -249,7 +249,7 @@ def test_migration_v3_upgrades_existing_v2_db(tmp_path: Path) -> None:
 
     assert "staleness" in columns
     assert "last_verified_at" in columns
-    assert storage.get_meta("schema_version") == "6"
+    assert storage.get_meta("schema_version") == "7"
 
 
 # ---------------------------------------------------------------------------

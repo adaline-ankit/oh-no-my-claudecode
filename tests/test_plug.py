@@ -20,8 +20,10 @@ from oh_no_my_claudecode.integrations.plug import (
     _CODEX_MARKER,
     _CURSOR_MARKER,
     _SENTINEL,
+    SLASH_COMMAND_NAMES,
     SUPPORTED_TARGETS,
     PlugResult,
+    install_slash_commands,
     plug_target,
 )
 
@@ -284,3 +286,108 @@ def test_supported_targets_list() -> None:
     """SUPPORTED_TARGETS contains all expected entries."""
     expected = {"claude-code", "codex", "cursor", "omc", "omx", "all"}
     assert set(SUPPORTED_TARGETS) == expected
+
+
+# ---------------------------------------------------------------------------
+# Slash command installation tests
+# ---------------------------------------------------------------------------
+
+
+def test_plug_claude_code_writes_slash_commands(
+    sample_repo: Path, fake_home: Path
+) -> None:
+    """plug_target('claude-code') installs slash-command files into .claude/commands/."""
+    result = plug_target("claude-code", repo_root=sample_repo)
+
+    commands_dir = sample_repo / ".claude" / "commands"
+    assert commands_dir.is_dir(), ".claude/commands/ was not created"
+
+    for name in SLASH_COMMAND_NAMES:
+        cmd_file = commands_dir / f"{name}.md"
+        assert cmd_file.exists(), f"slash command file missing: {name}.md"
+        content = cmd_file.read_text(encoding="utf-8")
+        # Must have frontmatter with description
+        assert "description:" in content, f"{name}.md missing description frontmatter"
+        # Must reference the onmc CLI command
+        assert f"onmc {name.removeprefix('onmc-')}" in content or f"onmc {name}" in content
+
+    # The written files list must include each command file
+    written_basenames = {Path(p).name for p in result.files_written}
+    for name in SLASH_COMMAND_NAMES:
+        assert f"{name}.md" in written_basenames, (
+            f"{name}.md not reported in files_written"
+        )
+
+
+def test_plug_claude_code_slash_commands_idempotent(
+    sample_repo: Path, fake_home: Path
+) -> None:
+    """Running plug_target('claude-code') twice: second run skips identical commands."""
+    plug_target("claude-code", repo_root=sample_repo)
+    result2 = plug_target("claude-code", repo_root=sample_repo)
+
+    skipped_basenames = {Path(p).name for p in result2.files_skipped}
+    for name in SLASH_COMMAND_NAMES:
+        assert f"{name}.md" in skipped_basenames, (
+            f"{name}.md not skipped on idempotent re-run"
+        )
+
+
+def test_install_slash_commands_creates_files(
+    sample_repo: Path,
+) -> None:
+    """install_slash_commands() copies files and returns correct written/skipped lists."""
+    written, skipped = install_slash_commands(repo_root=sample_repo)
+
+    commands_dir = sample_repo / ".claude" / "commands"
+    assert commands_dir.is_dir()
+
+    # All expected files should be written on a fresh repo
+    written_names = {Path(p).name for p in written}
+    for name in SLASH_COMMAND_NAMES:
+        assert f"{name}.md" in written_names
+
+    assert skipped == []
+
+
+def test_install_slash_commands_idempotent(sample_repo: Path) -> None:
+    """Calling install_slash_commands twice skips files on second call."""
+    install_slash_commands(repo_root=sample_repo)
+    written2, skipped2 = install_slash_commands(repo_root=sample_repo)
+
+    assert written2 == []
+    skipped_names = {Path(p).name for p in skipped2}
+    for name in SLASH_COMMAND_NAMES:
+        assert f"{name}.md" in skipped_names
+
+
+def test_slash_command_files_have_valid_frontmatter(sample_repo: Path) -> None:
+    """Each installed slash-command file has the required frontmatter fields."""
+    install_slash_commands(repo_root=sample_repo)
+    commands_dir = sample_repo / ".claude" / "commands"
+
+    for name in SLASH_COMMAND_NAMES:
+        content = (commands_dir / f"{name}.md").read_text(encoding="utf-8")
+        assert content.startswith("---"), f"{name}.md must start with YAML frontmatter"
+        assert "description:" in content, f"{name}.md missing description field"
+        # onmc-why and onmc-guard and onmc-brief have argument-hint; statusline does not
+        if name != "onmc-statusline":
+            assert "argument-hint:" in content, f"{name}.md missing argument-hint"
+
+
+def test_cli_plug_claude_code_installs_slash_commands(
+    initialized_repo: Path, fake_home: Path
+) -> None:
+    """``onmc plug claude-code`` via CLI installs slash-command files."""
+    runner = _cli_runner()
+    result = runner.invoke(app, ["plug", "claude-code"], prog_name="onmc")
+
+    assert result.exit_code == 0, result.output
+
+    commands_dir = initialized_repo / ".claude" / "commands"
+    assert commands_dir.is_dir(), ".claude/commands/ not created by CLI"
+
+    for name in SLASH_COMMAND_NAMES:
+        assert (commands_dir / f"{name}.md").exists(), (
+            f"CLI did not install {name}.md"
+        )

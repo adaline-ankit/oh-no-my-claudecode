@@ -4,18 +4,26 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.coverage.compiler import CoverageReport
+    from oh_no_my_claudecode.digest.compiler import DigestResult
+    from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
 
+from oh_no_my_claudecode.blame.compiler import BlameResult, blame_result_to_markdown, compile_blame
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
 from oh_no_my_claudecode.claude_md import (
     claude_md_path,
@@ -103,6 +111,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
     TeachModeOutput,
 )
+from oh_no_my_claudecode.onboard.compiler import OnboardingTour, compile_onboarding
 from oh_no_my_claudecode.playbook.compiler import compile_playbooks
 from oh_no_my_claudecode.prompt import compile_prompt
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -233,6 +242,38 @@ class OnmcService:
         report.output_path = output_path.as_posix()
         return repo_root, report
 
+    def onboard(self) -> tuple[Path, OnboardingTour]:
+        """Compile a guided new-dev tour from stored memory.
+
+        Entirely offline — no LLM calls, no network access.  Always returns a
+        valid tour; an empty store is represented honestly in stop 1.
+        """
+        repo_root, config, storage = self._load_context()
+        tour = compile_onboarding(storage, repo_root)
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-onboard.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(tour.to_markdown(), encoding="utf-8")
+        return repo_root, tour
+
+    def blame(self, path: str) -> tuple[Path, BlameResult]:
+        """Compile a blame (governance map) for a file from stored memory.
+
+        Maps each top-level symbol in the file to the memories that govern it
+        (invariants, decisions, hotspots, gotchas, etc.).  Memories that
+        reference the file but don't name a specific symbol land in the
+        file-level bucket.
+
+        Entirely offline — no LLM calls, no network access.
+        """
+        repo_root, config, storage = self._load_context()
+        result = compile_blame(repo_root, storage, path)
+        safe_name = re.sub(r"[^a-zA-Z0-9._-]", "_", result.path)
+        output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-blame-{safe_name}.md"
+        output_path = compiled_dir(config, repo_root) / output_name
+        output_path.write_text(blame_result_to_markdown(result), encoding="utf-8")
+        result.output_path = output_path.as_posix()
+        return repo_root, result
+
     def memory_diff(
         self,
         commit_a: str,
@@ -250,12 +291,40 @@ class OnmcService:
         from oh_no_my_claudecode.timetravel.memory_diff import memory_diff_to_markdown
 
         output_name = (
-            f"{utc_now().strftime('%Y%m%d-%H%M%S')}"
-            f"-memory-diff-{commit_a[:8]}-{commit_b[:8]}.md"
+            f"{utc_now().strftime('%Y%m%d-%H%M%S')}-memory-diff-{commit_a[:8]}-{commit_b[:8]}.md"
         )
         output_path = compiled_dir(config, repo_root) / output_name
         output_path.write_text(memory_diff_to_markdown(result), encoding="utf-8")
         return repo_root, result
+
+    def digest(
+        self,
+        since_ref: str,
+    ) -> tuple[Path, DigestResult]:
+        """Compile a knowledge changelog for everything learned since *since_ref*.
+
+        Prefers the committed ``.agent-memory/`` diff path; falls back to
+        ``created_at`` filtering when the export is not committed at *since_ref*.
+
+        Returns:
+            A tuple of (artifact_path, DigestResult).
+
+        Raises:
+            ValueError: When *since_ref* cannot be resolved to a git commit.
+        """
+        from oh_no_my_claudecode.digest.compiler import compile_digest, digest_to_markdown
+
+        repo_root, config, storage = self._load_context()
+        result = compile_digest(repo_root, storage, since_ref)
+        output_name = (
+            f"{utc_now().strftime('%Y%m%d-%H%M%S')}"
+            f"-digest-since-{since_ref[:16].replace('/', '-')}.md"
+        )
+        out_dir = compiled_dir(config, repo_root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_path = out_dir / output_name
+        output_path.write_text(digest_to_markdown(result), encoding="utf-8")
+        return output_path, result
 
     def generate_wiki(
         self,
@@ -361,9 +430,7 @@ class OnmcService:
             settings_path=settings_path.as_posix(),
             mcp_path=mcp_path.as_posix(),
             mcp_registered=mcp_registered(mcp_path=mcp_path),
-            legacy_global_hooks=legacy_global_hooks_present(
-                settings_path=user_settings_path(home)
-            ),
+            legacy_global_hooks=legacy_global_hooks_present(settings_path=user_settings_path(home)),
             latest_snapshot_id=latest_snapshot.id if latest_snapshot else None,
             last_pre_compact_at=meta.get("last_pre_compact_at"),
             last_session_start_at=meta.get("last_session_start_at"),
@@ -568,6 +635,60 @@ class OnmcService:
             since=since,
         )
 
+    def capture_session(
+        self,
+        *,
+        session_id: str | None = None,
+        transcript_path: Path | None = None,
+    ) -> int:
+        """Heuristically capture durable memory from a session transcript.
+
+        Reads the transcript at *transcript_path* (if supplied) or discovers the
+        most-recent transcript for the repo that matches *session_id* (if
+        given).  Extracts high-signal patterns (fixes, decisions, invariants,
+        notes) without any LLM call, deduplicates against the existing store via
+        ``stable_id``, and writes new entries tagged with
+        ``source_type=SourceType.SESSION``.
+
+        Returns the number of new memories written.  Never raises — any error
+        produces 0 writes.
+        """
+        from oh_no_my_claudecode.mine.autocapture import capture_from_transcript
+        from oh_no_my_claudecode.mine.transcript import discover_transcripts
+
+        try:
+            repo_root, _, storage = self._load_context()
+        except Exception:  # noqa: BLE001
+            return 0
+
+        try:
+            if transcript_path is not None:
+                resolved_path: Path = transcript_path
+                resolved_id = session_id or transcript_path.stem
+            else:
+                candidates = discover_transcripts(repo_root, session_id=session_id)
+                if not candidates:
+                    return 0
+                resolved_path = candidates[-1]
+                resolved_id = session_id or resolved_path.stem
+
+            entries = capture_from_transcript(
+                resolved_path,
+                session_id=resolved_id,
+                repo_root=repo_root,
+            )
+        except Exception:  # noqa: BLE001
+            return 0
+
+        if not entries:
+            return 0
+
+        try:
+            inserted, _ = storage.upsert_memories(entries)
+        except Exception:  # noqa: BLE001
+            return 0
+        return inserted
+
     def doctor(self) -> tuple[bool, dict[str, list[str]]]:
         """Run a health check over the repo, memory store, and agent integrations."""
         repo_root, config, storage = self._load_context()
@@ -604,8 +725,7 @@ class OnmcService:
             [task for task in storage.list_tasks() if task.status == TaskStatus.ACTIVE]
         )
         report["memory"].append(
-            f"{len(memories)} memory records "
-            f"({llm_extracted} LLM-extracted, {heuristic} heuristic)"
+            f"{len(memories)} memory records ({llm_extracted} LLM-extracted, {heuristic} heuristic)"
         )
         report["memory"].append(f"{storage.task_count()} tasks ({active_task_count} active)")
         if (repo_root / ".agent-memory" / "manifest.json").exists():
@@ -635,23 +755,50 @@ class OnmcService:
                     if valid:
                         report["provider"].append(f"API key env var: {key_var} valid")
                     elif detail == "invalid credentials":
-                        report["errors"].append(
-                            f"{provider_name} key is invalid. Check {key_var}."
-                        )
+                        report["errors"].append(f"{provider_name} key is invalid. Check {key_var}.")
                     else:
-                        report["warnings"].append(
-                            f"Could not validate {key_var}: {detail}."
-                        )
+                        report["warnings"].append(f"Could not validate {key_var}: {detail}.")
+        # --- PATH / binary health (check 1 + 2) ---
+        path_checks = _check_onmc_path_health()
+        onmc_resolvable = any(sev == "ok" for sev, _ in path_checks)
+        for severity, message in path_checks:
+            if severity == "ok":
+                report["claude"].append(message)
+            else:
+                report["warnings"].append(message)
+
         hook_status = self.hooks_status()
         report["claude"].append(
             "Compaction hooks "
             f"{'installed' if hook_status.installed else 'not installed'} "
             "(.claude/settings.json)"
         )
+        if hook_status.installed and not onmc_resolvable:
+            report["warnings"].append(
+                "Hooks are installed in .claude/settings.json but the `onmc` binary is "
+                "not resolvable on PATH — hooks will silently fail. "
+                "Fix PATH or reinstall via `pip install oh-no-my-claudecode`."
+            )
+
+        # --- MCP sanity (check 3) ---
+        mcp_registered_ok = hook_status.mcp_registered
         report["claude"].append(
-            f"MCP server {'registered' if hook_status.mcp_registered else 'not registered'} "
-            "(.mcp.json)"
+            f"MCP server {'registered' if mcp_registered_ok else 'not registered'} (.mcp.json)"
         )
+        if mcp_registered_ok:
+            # Verify the MCP entry's command resolves to a working binary.
+            mcp_path = mcp_config_path(repo_root)
+            mcp_command = _read_mcp_command(mcp_path)
+            if mcp_command:
+                mcp_binary = shutil.which(mcp_command)
+                if mcp_binary is None:
+                    report["warnings"].append(
+                        f"MCP server is registered but its command `{mcp_command}` is not "
+                        "resolvable — the MCP server will fail to start."
+                    )
+                else:
+                    report["claude"].append(f"MCP command resolvable ({mcp_binary})")
+
         if hook_status.legacy_global_hooks:
             report["warnings"].append(
                 "Legacy onmc hooks found in ~/.claude/settings.json — "
@@ -800,6 +947,64 @@ class OnmcService:
             )
             raise FileNotFoundError(msg)
         return repo_root, restore_agent_memory(input_dir=source_dir, storage=storage)
+
+    def pull(
+        self,
+        source: str | Path,
+        *,
+        ref: str | None = None,
+        repo_label: str | None = None,
+    ) -> tuple[Path, PullResult]:
+        """Import memories from another repo's ``.agent-memory/`` export.
+
+        Accepts either a local path or a remote git URL.  When *source* is a
+        git URL (``https://``, ``http://``, ``git@``, ``ssh://``, or ending
+        with ``.git``) the repo is shallow-cloned to a temporary directory,
+        its ``.agent-memory/`` is imported, and the clone is removed.
+
+        Federated memories are stamped with a ``federated:<repo-label>`` tag so
+        they are clearly attributed to their origin and are never confused with
+        local memories.  Re-pulling is idempotent: memories already present in
+        the local store are skipped.
+
+        Parameters
+        ----------
+        source:
+            Local path (str or Path) to another repo root or its
+            ``.agent-memory/`` directory, **or** a remote git URL.
+        ref:
+            Branch, tag, or commit-ish to check out when cloning a remote URL.
+            Ignored for local paths.  Defaults to the remote's default branch.
+        repo_label:
+            Override the short label used for the ``federated:`` namespace tag.
+            For local paths defaults to the source directory name; for remote
+            URLs defaults to the last path segment of the URL (minus ``.git``).
+
+        Returns
+        -------
+        tuple[Path, PullResult]
+            ``(local_repo_root, result)`` where *result* carries imported/skipped counts.
+        """
+        from oh_no_my_claudecode.federation.pull import PullResult as _PullResult
+        from oh_no_my_claudecode.federation.pull import pull_memories
+        from oh_no_my_claudecode.federation.remote import clone_and_pull, is_git_url
+
+        repo_root, _, storage = self._load_context()
+
+        source_str = str(source)
+        result: _PullResult
+        if is_git_url(source_str):
+            result = clone_and_pull(
+                storage,
+                source_str,
+                ref=ref,
+                repo_label=repo_label,
+            )
+        else:
+            source_path = source if isinstance(source, Path) else Path(source_str)
+            result = pull_memories(storage, source_path, repo_label=repo_label)
+
+        return repo_root, result
 
     def spec_validate(self, path: Path | None = None) -> tuple[Path, SpecValidationReport]:
         """Validate that a .agent-memory/ directory conforms to the open spec."""
@@ -986,6 +1191,79 @@ class OnmcService:
                 "updated_at": utc_now(),
             }
         )
+        storage.update_memory(updated)
+        return updated
+
+    # Feedback delta constants.
+    # ``up`` nudges the memory toward corroborated; ``down`` demotes it.
+    # Deltas are intentionally modest so a few votes move the score, not a single one.
+    _FEEDBACK_UP_SCORE: float = 0.25
+    _FEEDBACK_DOWN_SCORE: float = 0.3
+    _FEEDBACK_UP_CONFIDENCE: float = 0.05
+    _FEEDBACK_DOWN_CONFIDENCE: float = 0.05
+    # floor: never drop confidence to zero — keep the memory discoverable
+    _FEEDBACK_CONFIDENCE_FLOOR: float = 0.15
+
+    def feedback(
+        self,
+        memory_id: str,
+        direction: str,
+        *,
+        note: str | None = None,
+    ) -> MemoryEntry:
+        """Apply a human trust signal to a memory.
+
+        ``direction`` must be ``"up"`` (memory proved useful) or ``"down"``
+        (memory was wrong or misleading).
+
+        ``up``  increases ``feedback_score`` by ``_FEEDBACK_UP_SCORE`` (clamped
+                to 1.0) and nudges ``confidence`` up by ``_FEEDBACK_UP_CONFIDENCE``
+                (clamped to 1.0).
+
+        ``down`` decreases ``feedback_score`` by ``_FEEDBACK_DOWN_SCORE``
+                (clamped to -1.0) and nudges ``confidence`` down by
+                ``_FEEDBACK_DOWN_CONFIDENCE`` (clamped at ``_FEEDBACK_CONFIDENCE_FLOOR``
+                so the memory remains visible but ranked lower).
+
+        ``updated_at`` is always touched so the decay clock restarts from now,
+        treating fresh feedback as corroboration even for "down" votes.
+
+        If *note* is given it is appended to ``details`` on a new line (only
+        when non-empty).
+
+        Raises:
+            ValueError: When ``direction`` is not ``"up"`` or ``"down"``.
+            LookupError: When ``memory_id`` does not exist.
+        """
+        if direction not in ("up", "down"):
+            msg = f"direction must be 'up' or 'down', got {direction!r}"
+            raise ValueError(msg)
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+        if direction == "up":
+            new_feedback = min(memory.feedback_score + self._FEEDBACK_UP_SCORE, 1.0)
+            new_confidence = min(memory.confidence + self._FEEDBACK_UP_CONFIDENCE, 1.0)
+        else:
+            new_feedback = max(memory.feedback_score - self._FEEDBACK_DOWN_SCORE, -1.0)
+            new_confidence = max(
+                memory.confidence - self._FEEDBACK_DOWN_CONFIDENCE,
+                self._FEEDBACK_CONFIDENCE_FLOOR,
+            )
+        updates: dict[str, object] = {
+            "feedback_score": new_feedback,
+            "confidence": new_confidence,
+            "updated_at": utc_now(),
+        }
+        if note and note.strip():
+            updates["details"] = (
+                (memory.details.rstrip() + "\n\n" + note.strip())
+                if memory.details and memory.details.strip()
+                else note.strip()
+            )
+        updated = memory.model_copy(update=updates)
         storage.update_memory(updated)
         return updated
 
@@ -1419,6 +1697,22 @@ class OnmcService:
         log_path = self._llm_log_path(repo_root, config)
         return compute_memory_health(storage, repo_root, log_path)
 
+    def coverage(self) -> tuple[Path, CoverageReport]:
+        """Compute a knowledge-gap dashboard for this repo.
+
+        Returns ``(repo_root, CoverageReport)`` describing which parts of the
+        repo have memory coverage and which hotspot files are blind spots.
+
+        Entirely offline — no LLM calls, no network access.  Requires an
+        initialised store with at least one ingest run (file stats must exist).
+        """
+        from oh_no_my_claudecode.coverage.compiler import CoverageReport as _CoverageReport
+        from oh_no_my_claudecode.coverage.compiler import compile_coverage
+
+        repo_root, _, storage = self._load_context()
+        report: _CoverageReport = compile_coverage(storage, repo_root)
+        return repo_root, report
+
     def statusline(self) -> str:
         """Return a compact one-line health string for Claude Code statusLine.
 
@@ -1577,41 +1871,44 @@ class OnmcService:
     ) -> Path:
         output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-{mode.value}.md"
         output_path = compiled_dir(config, repo_root) / output_name
-        markdown = "\n".join(
-            [
-                f"# ONMC {mode.value.title()} Output",
-                "",
-                f"- Task: {task}",
-                (
-                    "- Provider: "
-                    f"{config.llm.provider.value if config.llm.provider else 'unconfigured'}"
-                ),
-                f"- Model: {config.llm.model or 'unknown'}",
-                f"- Repo: `{repo_root.as_posix()}`",
-                "",
-                "## Summary",
-                "",
-                _summary_for_structured_output(mode, structured),
-                "",
-                "## Structured Output",
-                "",
-                "```json",
-                json.dumps(structured.model_dump(mode="json"), indent=2, sort_keys=True),
-                "```",
-                "",
-                "## Files To Inspect",
-                "",
-                *[f"1. `{path}`" for path in brief.files_to_inspect[:8]],
-                "",
-                "## Validation Checklist",
-                "",
-                *[f"- {item}" for item in brief.validation_checklist[:6]],
-                "",
-                "## Prompt Sections",
-                "",
-                *[f"- {title}" for title in prompt.section_titles],
-            ]
-        ).strip() + "\n"
+        markdown = (
+            "\n".join(
+                [
+                    f"# ONMC {mode.value.title()} Output",
+                    "",
+                    f"- Task: {task}",
+                    (
+                        "- Provider: "
+                        f"{config.llm.provider.value if config.llm.provider else 'unconfigured'}"
+                    ),
+                    f"- Model: {config.llm.model or 'unknown'}",
+                    f"- Repo: `{repo_root.as_posix()}`",
+                    "",
+                    "## Summary",
+                    "",
+                    _summary_for_structured_output(mode, structured),
+                    "",
+                    "## Structured Output",
+                    "",
+                    "```json",
+                    json.dumps(structured.model_dump(mode="json"), indent=2, sort_keys=True),
+                    "```",
+                    "",
+                    "## Files To Inspect",
+                    "",
+                    *[f"1. `{path}`" for path in brief.files_to_inspect[:8]],
+                    "",
+                    "## Validation Checklist",
+                    "",
+                    *[f"- {item}" for item in brief.validation_checklist[:6]],
+                    "",
+                    "## Prompt Sections",
+                    "",
+                    *[f"- {title}" for title in prompt.section_titles],
+                ]
+            ).strip()
+            + "\n"
+        )
         output_path.write_text(markdown, encoding="utf-8")
         return output_path
 
@@ -1716,6 +2013,159 @@ class OnmcService:
 
         return written
 
+    # ── Skill management ──────────────────────────────────────────────────────
+
+    # Feedback delta constants for skills (mirrors memory feedback constants).
+    _SKILL_FEEDBACK_UP_CONFIDENCE: float = 0.05
+    _SKILL_FEEDBACK_DOWN_CONFIDENCE: float = 0.05
+    _SKILL_CONFIDENCE_FLOOR: float = 0.10
+
+    def skill_promote(
+        self,
+        playbook_id: str | None = None,
+        *,
+        auto: bool = False,
+        name: str | None = None,
+    ) -> list[object]:
+        """Promote a playbook or recurring patterns to skill(s).
+
+        When *playbook_id* is given, promotes that single playbook to a Skill
+        (raises LookupError when not found, ValueError when already promoted).
+
+        When *auto=True*, detects recurring fail→fix patterns + high-signal tag
+        clusters across all stored memories and returns new Skills (skipping
+        memories already captured by existing skills).
+
+        Returns a list of newly created Skill objects.
+        """
+        from oh_no_my_claudecode.skill.promoter import (
+            auto_promote_recurring,
+            promote_playbook_to_skill,
+        )
+
+        _, _, storage = self._load_context()
+
+        if auto:
+            import contextlib
+
+            skills = auto_promote_recurring(storage)
+            for sk in skills:
+                with contextlib.suppress(ValueError):
+                    storage.add_skill(sk)
+            return list(skills)
+
+        if playbook_id is None:
+            msg = "Provide a playbook_id or pass auto=True."
+            raise ValueError(msg)
+
+        playbook = storage.get_playbook(playbook_id)
+        if playbook is None:
+            msg = f"Playbook not found: {playbook_id}"
+            raise LookupError(msg)
+
+        skill = promote_playbook_to_skill(playbook, name=name)
+        storage.add_skill(skill)
+        return [skill]
+
+    def skill_list(self) -> list[object]:
+        """Return all persisted skills ordered by confidence."""
+        _, _, storage = self._load_context()
+        return storage.list_skills()  # type: ignore[return-value]
+
+    def skill_show(self, skill_id: str) -> object:
+        """Return a single skill by id (or unique prefix); raises LookupError."""
+        _, _, storage = self._load_context()
+        all_skills = storage.list_skills()
+        matches = [sk for sk in all_skills if sk.id.startswith(skill_id)]
+        if not matches:
+            msg = f"Skill not found: {skill_id}"
+            raise LookupError(msg)
+        if len(matches) > 1:
+            ids = ", ".join(sk.id for sk in matches)
+            msg = f"Ambiguous skill prefix '{skill_id}' matches: {ids}"
+            raise LookupError(msg)
+        return matches[0]
+
+    def skill_feedback(self, skill_id: str, direction: str) -> object:
+        """Apply a trust signal to a skill's confidence and success metrics.
+
+        ``direction`` must be ``"up"`` or ``"down"``.
+
+        ``up``   bumps success_count + use_count and nudges confidence up.
+        ``down`` bumps use_count only and nudges confidence down
+                 (clamped at _SKILL_CONFIDENCE_FLOOR so the skill stays visible).
+
+        Returns the updated Skill.
+        """
+        if direction not in ("up", "down"):
+            msg = f"direction must be 'up' or 'down', got {direction!r}"
+            raise ValueError(msg)
+        from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+        _, _, storage = self._load_context()
+        skill_obj = self.skill_show(skill_id)
+        if not isinstance(skill_obj, _Skill):
+            msg = f"Skill not found: {skill_id}"
+            raise LookupError(msg)
+        skill = skill_obj
+        success = direction == "up"
+        updated = storage.record_skill_use(skill.id, success=success)
+        # Also adjust confidence.
+        if direction == "up":
+            new_conf = min(1.0, updated.confidence + self._SKILL_FEEDBACK_UP_CONFIDENCE)
+        else:
+            new_conf = max(
+                self._SKILL_CONFIDENCE_FLOOR,
+                updated.confidence - self._SKILL_FEEDBACK_DOWN_CONFIDENCE,
+            )
+        final = updated.model_copy(update={"confidence": new_conf})
+        storage.update_skill(final)
+        return final
+
+    def skill_prune(self) -> list[object]:
+        """Disable auto_inject on skills with low success rate and long disuse.
+
+        A skill is pruned when ALL of the following hold:
+        - use_count >= 3  (enough signal to judge)
+        - success_rate < 0.3  (failing more than it helps)
+        - OR last_used_at is older than 60 days
+
+        Pruning sets auto_inject=False and nudges confidence down to the floor.
+        Returns the list of Skills that were pruned.
+        """
+        from oh_no_my_claudecode.utils.time import utc_now as _utc_now
+
+        _, _, storage = self._load_context()
+        skills = storage.list_skills()
+        now = _utc_now()
+        pruned: list[object] = []
+
+        for sk in skills:
+            should_prune = False
+            if sk.use_count >= 3 and sk.success_rate < 0.3:
+                should_prune = True
+            if sk.last_used_at is not None:
+                from datetime import UTC
+
+                last = sk.last_used_at
+                if last.tzinfo is None:
+                    last = last.replace(tzinfo=UTC)
+                now_aware = now if now.tzinfo else now.replace(tzinfo=UTC)
+                days_since = (now_aware - last).total_seconds() / 86_400
+                if days_since > 60:
+                    should_prune = True
+            if should_prune and sk.auto_inject:
+                updated = sk.model_copy(
+                    update={
+                        "auto_inject": False,
+                        "confidence": max(self._SKILL_CONFIDENCE_FLOOR, sk.confidence - 0.1),
+                    }
+                )
+                storage.update_skill(updated)
+                pruned.append(updated)
+
+        return pruned
+
     # ── User-scope (cross-repo) memory ────────────────────────────────────────
 
     def add_user_memory(
@@ -1794,6 +2244,21 @@ class OnmcService:
 
         repo_root, _, storage = self._load_context()
         result = compile_guard(storage, task, limit=limit)
+        return repo_root, result
+
+    def recall(self, query: str, *, limit: int = 8) -> tuple[Path, RecallResult]:
+        """Match *query* (error text / stacktrace) against past incidents in memory.
+
+        Returns ``(repo_root, RecallResult)`` where ``RecallResult.entries``
+        contains ranked ``RecallEntry`` items from memories biased toward
+        ``FAILED_APPROACH`` and ``GOTCHA`` kinds.  An empty result is valid and
+        means no relevant incidents have been recorded — the ``no_data_hint``
+        field explains how to populate the brain.
+        """
+        from oh_no_my_claudecode.recall.compiler import compile_recall
+
+        repo_root, _, storage = self._load_context()
+        result = compile_recall(storage, query, limit=limit)
         return repo_root, result
 
     def consolidate(self, *, dry_run: bool = False) -> tuple[Path, ConsolidationResult]:
@@ -1961,9 +2426,7 @@ def _fallback_mode_output(
         return ReviewModeOutput(
             concerns=brief.risk_notes[:4]
             or ["No major historical risks were identified by the heuristic fallback."],
-            assumptions=[
-                "The proposed change respects the repo invariants surfaced in the brief."
-            ],
+            assumptions=["The proposed change respects the repo invariants surfaced in the brief."],
             likely_regressions=brief.impacted_areas[:4],
             required_tests=brief.validation_checklist[:5],
         )
@@ -2075,9 +2538,7 @@ def _append_report_header(lines: list[str], summary: AgentReadinessSummary) -> N
     )
 
 
-def _append_report_memory_and_tasks(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_memory_and_tasks(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Memory and Task State",
@@ -2094,36 +2555,23 @@ def _append_report_memory_and_tasks(
     )
 
 
-def _append_report_agent_integration(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_agent_integration(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Agent Integration",
             "",
             f"- CLAUDE.md: {'present' if summary.claude_md_exists else 'missing'}",
-            (
-                "- Claude hooks: "
-                f"{'installed' if summary.hooks.installed else 'not installed'}"
-            ),
-            (
-                "- MCP server: "
-                f"{'registered' if summary.hooks.mcp_registered else 'not registered'}"
-            ),
+            (f"- Claude hooks: {'installed' if summary.hooks.installed else 'not installed'}"),
+            (f"- MCP server: {'registered' if summary.hooks.mcp_registered else 'not registered'}"),
             f"- Portable export: {'present' if summary.manifest_exists else 'missing'}",
-            (
-                "- Sync hook: "
-                f"{'installed' if summary.sync_hook_installed else 'not installed'}"
-            ),
+            (f"- Sync hook: {'installed' if summary.sync_hook_installed else 'not installed'}"),
             f"- LLM provider: {summary.provider_label}",
             "",
         ]
     )
 
 
-def _append_report_health_sections(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_health_sections(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(["## Health Signals", ""])
     for section in summary.health_sections:
         items = summary.health.get(section, [])
@@ -2134,9 +2582,7 @@ def _append_report_health_sections(
         lines.append("")
 
 
-def _append_report_recommendations(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_recommendations(lines: list[str], summary: AgentReadinessSummary) -> None:
     if summary.errors:
         lines.extend(["### Errors", ""])
         lines.extend(f"- {item}" for item in summary.errors)
@@ -2150,9 +2596,7 @@ def _append_report_recommendations(
     lines.append("")
 
 
-def _append_report_share_snippet(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_share_snippet(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Share Snippet",
@@ -2166,6 +2610,111 @@ def _append_report_share_snippet(
             "Generated by `onmc report`.",
         ]
     )
+
+
+_ONMC_PATH_PROBE_TIMEOUT = 5  # seconds
+
+
+def _installed_onmc_version() -> str | None:
+    """Return the importlib.metadata version for oh-no-my-claudecode, or None."""
+    try:
+        return pkg_version("oh-no-my-claudecode")
+    except PackageNotFoundError:
+        return None
+
+
+def _probe_path_onmc() -> tuple[str | None, str | None]:
+    """Return (path_binary, version_string) for the `onmc` binary on PATH.
+
+    Returns (None, None) if the binary is not found or fails to report a version.
+    The probe uses a short hard timeout so it never hangs doctor.
+    """
+    binary = shutil.which("onmc")
+    if binary is None:
+        return None, None
+    try:
+        result = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=_ONMC_PATH_PROBE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return binary, None
+    output = (result.stdout + result.stderr).strip()
+    # Extract trailing semver token, e.g. "onmc 0.10.0" or just "0.10.0"
+    match = re.search(r"(\d+\.\d+\.\d+(?:\.\w+)*)", output)
+    if match:
+        return binary, match.group(1)
+    # Binary ran but produced no parseable version — treat as broken
+    return binary, None
+
+
+def _check_onmc_path_health() -> list[tuple[str, str]]:
+    """Return a list of (severity, message) tuples describing PATH onmc health.
+
+    Severity is one of "ok", "warn", or "error".  Doctor aggregates these into
+    the appropriate report buckets without needing to understand what they mean.
+    """
+    installed_ver = _installed_onmc_version()
+    binary, path_ver = _probe_path_onmc()
+
+    results: list[tuple[str, str]] = []
+
+    if binary is None:
+        results.append(
+            (
+                "warn",
+                "onmc not found on PATH — hooks will fail. "
+                "Add the virtualenv bin/ to PATH or reinstall (`pip install oh-no-my-claudecode`).",
+            )
+        )
+        return results
+
+    if path_ver is None:
+        results.append(
+            (
+                "warn",
+                f"onmc found at {binary} but failed to report a version "
+                f"(binary may be broken). "
+                "Reinstall via `pip install --upgrade oh-no-my-claudecode`.",
+            )
+        )
+        return results
+
+    if installed_ver and path_ver != installed_ver:
+        results.append(
+            (
+                "warn",
+                f"PATH onmc version ({path_ver} at {binary}) differs from installed "
+                f"package version ({installed_ver}) — stale shadow binary detected. "
+                "Run `pip install --upgrade oh-no-my-claudecode` or fix your PATH.",
+            )
+        )
+    else:
+        results.append(("ok", f"onmc {path_ver} on PATH ({binary})"))
+
+    return results
+
+
+def _read_mcp_command(mcp_path: Path) -> str | None:
+    """Return the ``command`` field of the onmc MCP server entry in .mcp.json, or None."""
+    if not mcp_path.exists():
+        return None
+    try:
+        payload = json.loads(mcp_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    servers = payload.get("mcpServers")
+    if not isinstance(servers, dict):
+        return None
+    onmc_entry = servers.get("onmc")
+    if not isinstance(onmc_entry, dict):
+        return None
+    cmd = onmc_entry.get("command")
+    return cmd if isinstance(cmd, str) else None
 
 
 def _git_count(repo_root: Path) -> int:

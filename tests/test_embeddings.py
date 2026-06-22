@@ -201,17 +201,17 @@ def test_cosine_similarity_dimension_mismatch_raises() -> None:
 
 def test_migration_v6_creates_memory_vectors_table(tmp_path: Path) -> None:
     storage = _store(tmp_path)
-    assert storage.get_meta("schema_version") == "6"
+    assert storage.get_meta("schema_version") == "7"
     # Table must exist and be queryable.
     count = storage.memory_vector_count()
     assert count == 0
 
 
 def test_migration_v6_is_idempotent(tmp_path: Path) -> None:
-    """Calling initialize() twice must not raise and must leave schema at "6"."""
+    """Calling initialize() twice must not raise and must leave schema stable."""
     storage = _store(tmp_path)
     storage.initialize()  # second call
-    assert storage.get_meta("schema_version") == "6"
+    assert storage.get_meta("schema_version") == "7"
     assert storage.memory_vector_count() == 0
 
 

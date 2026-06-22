@@ -7,6 +7,7 @@ from oh_no_my_claudecode.models import MemoryArtifactRecord
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync.schema import (
     ExportedMemoryRecord,
+    ExportedSkillRecord,
     ExportedTaskRecord,
     SyncManifest,
     SyncResult,
@@ -14,7 +15,7 @@ from oh_no_my_claudecode.sync.schema import (
 
 
 def restore_agent_memory(*, input_dir: Path, storage: SQLiteStorage) -> SyncResult:
-    """Restore ONMC memory and task state from a git-portable JSON directory."""
+    """Restore ONMC memory, task state, and skills from a git-portable JSON directory."""
     manifest_path = input_dir / "manifest.json"
     SyncManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
 
@@ -38,6 +39,16 @@ def restore_agent_memory(*, input_dir: Path, storage: SQLiteStorage) -> SyncResu
         attempts_restored += len(exported_task.attempts)
         artifacts_restored += len(exported_task.artifacts)
 
+    skills_restored = 0
+    skills_dir = input_dir / "skills"
+    if skills_dir.exists():
+        for payload_path in sorted(skills_dir.glob("*.json")):
+            exported_skill = ExportedSkillRecord.model_validate(
+                json.loads(payload_path.read_text(encoding="utf-8"))
+            )
+            _upsert_skill(storage, exported_skill)
+            skills_restored += 1
+
     latest_brief_path: str | None = (input_dir / "compiled" / "latest-brief.md").as_posix()
     if not (input_dir / "compiled" / "latest-brief.md").exists():
         latest_brief_path = None
@@ -48,6 +59,7 @@ def restore_agent_memory(*, input_dir: Path, storage: SQLiteStorage) -> SyncResu
         task_count=tasks_restored,
         attempt_count=attempts_restored,
         artifact_count=artifacts_restored,
+        skill_count=skills_restored,
         latest_brief_path=latest_brief_path,
     )
 
@@ -74,3 +86,13 @@ def _upsert_memory_artifact(storage: SQLiteStorage, artifact: MemoryArtifactReco
         storage.create_memory_artifact(artifact)
     else:
         storage.update_memory_artifact(artifact)
+
+
+def _upsert_skill(storage: SQLiteStorage, exported_skill: ExportedSkillRecord) -> None:
+    """Idempotent skill restore: add if absent, update if present."""
+    skill = exported_skill.skill
+    existing = storage.get_skill(skill.id)
+    if existing is None:
+        storage.add_skill(skill)
+    else:
+        storage.update_skill(skill)

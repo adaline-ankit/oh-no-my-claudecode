@@ -28,7 +28,9 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_detail,
     render_attempt_list,
     render_attempt_updated,
+    render_blame_result,
     render_brief,
+    render_coverage_summary,
     render_doctor_report,
     render_hook_status,
     render_hud,
@@ -41,10 +43,15 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_diff,
     render_memory_list,
     render_mine_result,
+    render_onboard_summary,
     render_playbook_detail,
     render_playbook_generate_summary,
     render_playbook_list,
     render_review_output,
+    render_skill_detail,
+    render_skill_list,
+    render_skill_promoted,
+    render_skill_pruned,
     render_solve_output,
     render_status,
     render_sync_result,
@@ -88,6 +95,10 @@ user_app = typer.Typer(
     help="Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).",
     no_args_is_help=True,
 )
+skill_app = typer.Typer(
+    help="Manage self-improving skills synthesized from playbooks and memory patterns.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -96,6 +107,7 @@ app.add_typer(llm_app, name="llm")
 app.add_typer(hooks_app, name="hooks")
 app.add_typer(claude_md_app, name="claude-md")
 app.add_typer(playbook_app, name="playbook")
+app.add_typer(skill_app, name="skill")
 app.add_typer(user_app, name="user")
 
 
@@ -298,6 +310,124 @@ def why_command(
     console.print(f"[green]Wrote why report:[/green] {report.output_path}")
 
 
+@app.command("onboard")
+def onboard_command(
+    steps: Annotated[
+        bool,
+        typer.Option(
+            "--steps",
+            help=(
+                "Print all tour stops at once and exit (non-interactive). "
+                "Suitable for piping, CI, and tests."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Give a new dev (or agent) the guided five-minute repo tour from memory.
+
+    Compiles an ordered sequence of stops — danger zones, load-bearing decisions,
+    top playbooks, and where to look first — entirely offline from stored ONMC
+    memory. Interactive by default (paginated, press Enter to advance); use
+    --steps for a single non-interactive dump.
+    """
+    from rich.console import Console as RichConsole
+
+    from oh_no_my_claudecode.onboard.runner import run_onboard
+
+    try:
+        repo_root, tour = _service().onboard()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if steps:
+        run_onboard(tour, steps=True, console=RichConsole())
+        console.print(f"[green]Wrote onboarding artifact:[/green] {repo_root}")
+        return
+
+    run_onboard(tour, steps=False, console=RichConsole())
+    render_onboard_summary(tour, output_path="")
+
+
+@app.command("blame")
+def blame_command(
+    path: Annotated[str, typer.Argument(help="File path to blame (repo-relative or absolute).")],
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
+) -> None:
+    """Git blame for knowledge: map a file's symbols to the memories that govern them.
+
+    Shows which recorded decisions, invariants, hotspots, and gotchas apply to
+    each top-level symbol / section of the file.  Memories that reference the
+    file but don't name a specific symbol appear in a file-level bucket.
+
+    Symbol extraction is heuristic (regex, not AST) — results are approximate.
+    Supported: .py, .ts, .tsx, .js, .jsx, .mjs, .cjs, .md, .mdx.
+    """
+    from oh_no_my_claudecode.serialize.terse import is_terse
+
+    try:
+        _, result = _service().blame(path)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        # Compact terse: plain text lines
+        lines = [f"blame: {result.path}"]
+        if not result.has_data:
+            lines.append("no recorded knowledge — run onmc ingest/mine")
+        else:
+            for anchor in result.anchors:
+                line_label = f":{anchor.line}" if anchor.line is not None else ""
+                lines.append(f"  {anchor.anchor}{line_label}")
+                for memory in anchor.memories:
+                    lines.append(f"    [{memory.kind.value}] {memory.title}")
+            if result.file_level_memories:
+                lines.append("  (whole file)")
+                for memory in result.file_level_memories:
+                    lines.append(f"    [{memory.kind.value}] {memory.title}")
+        console.print("\n".join(lines), markup=False)
+        return
+
+    render_blame_result(result)
+    console.print(f"[green]Wrote blame report:[/green] {result.output_path}")
+
+
+@app.command("coverage")
+def coverage_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the CoverageReport as JSON instead of the dashboard."),
+    ] = False,
+) -> None:
+    """Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.
+
+    Answers "which parts of this repo does the memory actually cover, and where
+    are the blind spots?"  The killer feature is surfacing high-churn files that
+    have zero memory coverage — those are the landmines most likely to cause
+    regressions when touched without context.
+
+    Requires at least one `onmc ingest` run (file stats must exist).
+    """
+    try:
+        _, report = _service().coverage()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import dataclasses
+
+        console.print(
+            json.dumps(dataclasses.asdict(report), indent=2),
+            markup=False,
+        )
+        return
+
+    render_coverage_summary(report)
+
+
 @app.command("memory-diff")
 def memory_diff_command(
     commit_a: Annotated[
@@ -328,10 +458,132 @@ def memory_diff_command(
 
     markdown = memory_diff_to_markdown(result)
     console.print(
-        "[green]Wrote memory-diff artifact:[/green] "
-        "(see .onmc/compiled/ for the markdown)"
+        "[green]Wrote memory-diff artifact:[/green] (see .onmc/compiled/ for the markdown)"
     )
     _ = markdown  # artifact already written by service.memory_diff()
+
+
+@app.command("digest")
+def digest_command(
+    since: Annotated[
+        str,
+        typer.Option(
+            "--since",
+            help="Git ref (tag, branch, commit hash) to diff knowledge from.",
+        ),
+    ],
+    output_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit JSON instead of a rich terminal report."),
+    ] = False,
+) -> None:
+    """Show what the repo/team learned since a git ref.
+
+    Produces a knowledge changelog grouped by kind (Decisions, Invariants,
+    Gotchas, Failed Approaches, …) covering memories added or updated since
+    *since*.
+
+    Prefers committed ``.agent-memory/`` snapshots for precision; falls back to
+    live ``created_at`` filtering when the committed export is absent at the
+    given ref.
+
+    The report is also written as a markdown artifact to ``.onmc/compiled/``.
+
+    \b
+    Examples:
+      onmc digest --since v1.2.0
+      onmc digest --since main
+      onmc digest --since abc1234
+    """
+    import json as _json
+    import sys as _sys
+
+    from rich.panel import Panel
+
+    from oh_no_my_claudecode.serialize.terse import is_terse
+
+    try:
+        artifact_path, result = _service().digest(since)
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if output_json:
+        payload: dict[str, object] = {
+            "since_ref": result.since_ref,
+            "since_short": result.since_short,
+            "since_date": result.since_date,
+            "head_short": result.head_short,
+            "head_date": result.head_date,
+            "source": result.source,
+            "fallback_reason": result.fallback_reason,
+            "total": result.total,
+            "by_kind": {
+                kind.value: [
+                    {
+                        "id": e.id,
+                        "kind": e.kind.value,
+                        "title": e.title,
+                        "summary": e.summary,
+                        "change_type": e.change_type,
+                    }
+                    for e in entries
+                ]
+                for kind, entries in result.by_kind.items()
+            },
+        }
+        # Use sys.stdout directly so Rich doesn't word-wrap inside JSON strings.
+        _sys.stdout.write(_json.dumps(payload, indent=2) + "\n")
+        return
+
+    terse = is_terse(default=False)
+
+    since_label = (
+        f"{result.since_ref} ({result.since_short})"
+        if result.since_short != result.since_ref
+        else result.since_ref
+    )
+    console.print(
+        Panel.fit(
+            f"Since: [bold]{since_label}[/bold] — {result.since_date}\n"
+            f"As of: [bold]{result.head_short}[/bold] — {result.head_date}\n"
+            f"Source: [dim]{result.source}[/dim]",
+            title="onmc digest",
+        )
+    )
+
+    if result.fallback_reason:
+        console.print(f"[yellow]Note:[/yellow] {result.fallback_reason}")
+        console.print()
+
+    if result.total == 0:
+        console.print("[dim]Nothing new learned since this ref.[/dim]")
+    else:
+        from rich.table import Table
+
+        from oh_no_my_claudecode.digest.compiler import _KIND_LABELS, _SECTION_ORDER
+        from oh_no_my_claudecode.utils.text import shorten
+
+        for kind in _SECTION_ORDER:
+            bucket = result.by_kind.get(kind)
+            if not bucket:
+                continue
+            section_label = _KIND_LABELS.get(kind, kind.value.replace("_", " ").title())
+            table = Table(title=section_label, show_header=True)
+            table.add_column("", style="dim", width=2)
+            table.add_column("Title", min_width=28)
+            if not terse:
+                table.add_column("Summary", min_width=44)
+            for entry in bucket:
+                badge = "[green]+[/green]" if entry.change_type == "added" else "[yellow]~[/yellow]"
+                if terse:
+                    table.add_row(badge, entry.title)
+                else:
+                    table.add_row(badge, entry.title, shorten(entry.summary, max_length=80))
+            console.print(table)
+
+    console.print(f"[green]Wrote digest artifact:[/green] {artifact_path}")
 
 
 @app.command("guard")
@@ -387,6 +639,234 @@ def guard_command(
         console.print(f"[green]Wrote guard artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write failure must not break the command
+
+
+@app.command("recall")
+def recall_command(
+    query: Annotated[
+        str | None,
+        typer.Argument(
+            help=(
+                "Error text or stacktrace to search for. "
+                "Omit to read from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`)."
+            ),
+        ),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of incident matches to return."),
+    ] = 8,
+    terse: Annotated[
+        bool,
+        typer.Option("--terse", help="Emit compact terse output (overrides ONMC_TERSE env var)."),
+    ] = False,
+) -> None:
+    """Search memory for past incidents matching an error or stacktrace.
+
+    Paste an error message or stacktrace as an argument or pipe it via stdin.
+    Returns prior failures/fixes that match, ranked by relevance.
+
+    Examples:
+
+      onmc recall "TypeError: cannot read property x of undefined"
+
+      cat error.log | onmc recall
+    """
+    import sys
+
+    from oh_no_my_claudecode.config import compiled_dir, load_config
+    from oh_no_my_claudecode.serialize.terse import is_terse, render_incident_recall_terse
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    # Resolve query: argument takes priority; fall back to stdin.
+    raw_query: str
+    if query is not None:
+        raw_query = query
+    elif not sys.stdin.isatty():
+        raw_query = sys.stdin.read()
+    else:
+        _fatal("Provide an error/stacktrace as an argument or pipe it via stdin.")
+        raise typer.Exit(code=1)
+
+    try:
+        repo_root, result = _service().recall(raw_query, limit=limit)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    use_terse = terse or is_terse(default=False)
+    if use_terse:
+        console.print(
+            render_incident_recall_terse(result.entries, raw_query, max_items=limit),
+            markup=False,
+        )
+        return
+
+    markdown = result.to_markdown()
+
+    if result.has_matches:
+        from rich.panel import Panel
+
+        console.print(
+            Panel.fit(
+                markdown.rstrip(),
+                title="[bold cyan]Seen this before?[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+    else:
+        console.print(
+            f"[yellow]Recall: no recorded incidents match this error.[/yellow]\n"
+            f"[dim]{result.no_data_hint}[/dim]"
+        )
+
+    # Write artifact to .onmc/compiled/<ts>-recall.md
+    try:
+        config = load_config(repo_root)
+        out_dir = compiled_dir(config, repo_root)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        ts = utc_now().strftime("%Y%m%d-%H%M%S")
+        artifact_path = out_dir / f"{ts}-recall.md"
+        artifact_path.write_text(markdown, encoding="utf-8")
+        console.print(f"[green]Wrote recall artifact:[/green] {artifact_path}")
+    except Exception:  # noqa: BLE001, S110
+        pass  # artifact write failure must not break the command
+
+
+@app.command("check")
+def check_command(
+    staged: Annotated[
+        bool,
+        typer.Option("--staged", help="Check git-staged files (default)."),
+    ] = True,
+    files: Annotated[
+        list[str] | None,
+        typer.Option("--file", help="Explicit file paths to check (repeat for multiple)."),
+    ] = None,
+    base: Annotated[
+        str | None,
+        typer.Option("--base", help="Diff against this git ref instead of staged files."),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Exit nonzero when warn-level findings exist."),
+    ] = False,
+    install_hook: Annotated[
+        bool,
+        typer.Option("--install-hook", help="Install onmc check as a git pre-commit hook."),
+    ] = False,
+) -> None:
+    """Flag staged/changed files that touch recorded invariants or dead-ends.
+
+    By default checks all git-staged files (``git diff --cached --name-only``).
+    Pass ``--file`` to check explicit paths.  Pass ``--base <ref>`` to diff
+    against a git ref.
+
+    Exit code is 0 by default (warn-only).  Pass ``--strict`` to exit nonzero
+    when any warn-level findings are present.
+
+    Pass ``--install-hook`` to wire this command as an idempotent git
+    pre-commit hook (appends to any existing hook; never clobbers it).
+    """
+    import subprocess
+
+    from oh_no_my_claudecode.check import CheckSeverity, install_pre_commit_hook, run_check
+    from oh_no_my_claudecode.core.repo import discover_repo_root
+
+    try:
+        repo_root = discover_repo_root(Path.cwd())
+    except Exception as exc:  # noqa: BLE001
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if install_hook:
+        hook_path, was_created = install_pre_commit_hook(repo_root)
+        if was_created:
+            console.print(f"[green]Pre-commit hook installed:[/green] {hook_path}")
+        else:
+            console.print(
+                f"[green]Pre-commit hook updated (onmc block appended):[/green] {hook_path}"
+            )
+        return
+
+    # Resolve file list from the requested source.
+    changed_files: list[str]
+    if files:
+        changed_files = list(files)
+    elif base is not None:
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", base, "HEAD"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            changed_files = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        except subprocess.CalledProcessError as exc:
+            raise typer.Exit(code=_fatal(f"git diff failed: {exc.stderr.strip()}")) from exc
+    else:
+        # Default: staged files.
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            changed_files = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        except subprocess.CalledProcessError as exc:
+            raise typer.Exit(code=_fatal(f"git diff failed: {exc.stderr.strip()}")) from exc
+
+    if not changed_files:
+        console.print("[dim]onmc check: no files to check.[/dim]")
+        return
+
+    try:
+        _, _, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError:
+        # onmc not initialized — silently skip (don't block the commit).
+        console.print("[dim]onmc check: store not initialized, skipping.[/dim]")
+        return
+
+    check_result = run_check(repo_root, storage, changed_files)
+
+    if not check_result.findings:
+        console.print(
+            f"[green]onmc check:[/green] {len(changed_files)} file(s) checked, no findings."
+        )
+        return
+
+    # Group findings by file for readable output.
+    from collections import defaultdict
+
+    from oh_no_my_claudecode.check import CheckFinding
+
+    by_file: dict[str, list[CheckFinding]] = defaultdict(list)
+    for finding in check_result.findings:
+        by_file[finding.rel_path].append(finding)
+
+    console.print(
+        f"[bold]onmc check[/bold] — {len(changed_files)} file(s), "
+        f"{check_result.warn_count} warning(s), {check_result.info_count} info(s)"
+    )
+    console.print()
+
+    for rel_path, path_findings in sorted(by_file.items()):
+        console.print(f"[bold]{rel_path}[/bold]")
+        for finding in path_findings:
+            if finding.severity == CheckSeverity.WARN:
+                prefix = "  [yellow]WARNING[/yellow]"
+            else:
+                prefix = "  [dim]INFO[/dim]   "
+            short_summary = finding.summary[:120]
+            if len(finding.summary) > 120:
+                short_summary += "..."
+            console.print(f"{prefix} [{finding.kind}] {finding.title}")
+            console.print(f"         {short_summary}")
+        console.print()
+
+    if strict and check_result.has_warnings:
+        raise typer.Exit(code=1)
 
 
 @app.command("status")
@@ -489,6 +969,91 @@ def sync_command(
         "post-commit hook installed. Memory will export to .agent-memory/ on every commit."
     )
     console.print(f"[green]Hook path:[/green] {hook_path}")
+
+
+@app.command("pull")
+def pull_command(
+    source: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Local path to another repo (or its .agent-memory/ dir), "
+                "or a remote git URL (https://, git@, ssh://)."
+            )
+        ),
+    ],
+    repo_label: Annotated[
+        str | None,
+        typer.Option(
+            "--label",
+            help=(
+                "Override the short repo label used for the federated:<label> tag. "
+                "For local paths defaults to the source directory name; "
+                "for git URLs defaults to the last path segment of the URL."
+            ),
+        ),
+    ] = None,
+    ref: Annotated[
+        str | None,
+        typer.Option(
+            "--ref",
+            help=(
+                "Branch, tag, or commit-ish to check out when cloning a remote git URL. "
+                "Ignored for local paths. Defaults to the remote's default branch."
+            ),
+        ),
+    ] = None,
+    output_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable JSON summary to stdout."),
+    ] = False,
+) -> None:
+    """Import another repo's .agent-memory/ export into this brain (federated memories).
+
+    SOURCE can be a local filesystem path or a remote git URL:
+
+    \b
+      onmc pull ../sibling-repo
+      onmc pull https://github.com/org/repo
+      onmc pull git@github.com:org/repo.git --ref main
+      onmc pull https://github.com/org/repo --label my-label
+
+    Federated memories are tagged ``federated:<repo-label>`` so they are clearly
+    attributed to their source and are never confused with local memories.
+    Re-pulling is idempotent: memories already present are skipped.
+
+    When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,
+    its .agent-memory/ export is imported, and the clone is cleaned up immediately.
+    """
+    from oh_no_my_claudecode.federation.remote import is_git_url
+
+    try:
+        if is_git_url(source):
+            _, result = _service().pull(source, ref=ref, repo_label=repo_label)
+        else:
+            _, result = _service().pull(Path(source).resolve(), ref=ref, repo_label=repo_label)
+    except (FileNotFoundError, RuntimeError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if output_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "source": result.source,
+                    "repo_label": result.repo_label,
+                    "imported": result.imported,
+                    "skipped": result.skipped,
+                }
+            )
+        )
+        return
+
+    console.print(
+        f"[green]Pulled from[/green] {result.source} [dim](label: {result.repo_label})[/dim]"
+    )
+    console.print(
+        f"  imported: [bold]{result.imported}[/bold]  skipped (already present): {result.skipped}"
+    )
 
 
 @app.command("serve")
@@ -780,8 +1345,7 @@ def _run_session_start_hook() -> None:
 
 @hooks_app.command("session-start")
 def hooks_session_start_command() -> None:
-    """Inject context at session start: boot digest on startup, continuation brief after compaction.
-    """
+    """Inject context at session start: boot digest on startup, continuation brief after compaction."""  # noqa: E501
     _run_session_start_hook()
 
 
@@ -833,16 +1397,99 @@ def hooks_prompt_recall_command() -> None:
 
 @hooks_app.command("session-end")
 def hooks_session_end_command() -> None:
-    """Run memory consolidation on SessionEnd.
+    """Run memory consolidation and heuristic auto-capture on SessionEnd.
 
     Called automatically by the Claude Code SessionEnd hook.  Reads the event
-    payload from stdin (session_id, cwd, reason), runs a best-effort
-    consolidation pass, and exits 0.  Errors are swallowed; stdout is never
-    written (SessionEnd hooks cannot inject context).
+    payload from stdin (session_id, transcript_path, cwd, reason), runs a
+    best-effort consolidation pass followed by heuristic auto-capture of
+    durable memory from the just-ended session transcript.  Errors are
+    swallowed; stdout is never written (SessionEnd hooks cannot inject
+    context).
+
+    Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture
+    while keeping consolidation active.
+    """
+    import contextlib
+    import os
+
+    payload: dict[str, object] = {}
+    with contextlib.suppress(Exception):
+        payload = _read_hook_payload()
+    with contextlib.suppress(Exception):  # noqa: SIM117
+        _service().consolidate(dry_run=False)
+    # Auto-capture — opt-out via env var.
+    if os.environ.get("ONMC_AUTOCAPTURE", "1") == "0":
+        return
+    with contextlib.suppress(Exception):
+        raw_session_id = payload.get("session_id")
+        session_id = raw_session_id if isinstance(raw_session_id, str) and raw_session_id else None
+        raw_transcript = payload.get("transcript_path")
+        transcript_path = (
+            Path(raw_transcript) if isinstance(raw_transcript, str) and raw_transcript else None
+        )
+        _service().capture_session(session_id=session_id, transcript_path=transcript_path)
+
+
+# Tools that carry a file_path in tool_input (Edit / Write variants).
+_EDIT_TOOL_NAMES = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+
+
+@hooks_app.command("pre-tool-use")
+def hooks_pre_tool_use_command() -> None:
+    """Inject file-level danger warnings before the agent edits a file.
+
+    Called automatically by the Claude Code PreToolUse hook (matcher:
+    ``Edit|Write|MultiEdit|NotebookEdit``).  Reads the hook payload from
+    stdin, extracts ``tool_input.file_path``, looks up hotspot / invariant /
+    failed-approach memories for that file, and emits a PreToolUse
+    ``additionalContext`` JSON payload to stdout when anything notable is
+    found.  Non-edit tools and unknown paths produce no output.
+
+    Design invariants:
+    - Always exits 0 — never blocks the edit.
+    - Any exception is silently swallowed; stdout stays clean on error.
+    - Output is tiny: at most a handful of bullet points.
     """
     try:
-        _read_hook_payload()  # consume stdin; payload not used today
-        _service().consolidate(dry_run=False)
+        payload = _read_hook_payload()
+        tool_name = payload.get("tool_name", "")
+        if not isinstance(tool_name, str) or tool_name not in _EDIT_TOOL_NAMES:
+            return
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict):
+            return
+        raw_file_path = tool_input.get("file_path")
+        if not isinstance(raw_file_path, str) or not raw_file_path.strip():
+            return
+        try:
+            from oh_no_my_claudecode.core.repo import discover_repo_root
+            from oh_no_my_claudecode.hooks.pre_tool_use import compile_pretool_warning
+
+            # Determine repo root: prefer cwd from payload, fall back to process cwd.
+            raw_cwd = payload.get("cwd")
+            cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+            try:
+                repo_root = discover_repo_root(cwd)
+            except Exception:  # noqa: BLE001
+                repo_root = cwd
+
+            _, _config, storage = _service()._load_context()  # noqa: SLF001
+            warning_md, n = compile_pretool_warning(storage, repo_root, raw_file_path)
+        except Exception:  # noqa: BLE001
+            return
+        if n == 0 or not warning_md:
+            return
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "additionalContext": warning_md,
+                    }
+                }
+            )
+            + "\n"
+        )
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 
@@ -996,6 +1643,36 @@ def mine_command(
             f"  Review them? [onmc memory list --source {display_source}] or press Enter to skip",
             markup=False,
         )
+
+
+@app.command("capture")
+def capture_command(
+    session: Annotated[
+        str | None,
+        typer.Option("--session", help="Session ID to capture (default: most recent)."),
+    ] = None,
+    transcript: Annotated[
+        Path | None,
+        typer.Option("--transcript", help="Explicit path to a .jsonl transcript file."),
+    ] = None,
+) -> None:
+    """Heuristically capture durable memory from a session transcript.
+
+    Extracts fixes, decisions, invariants, and notes from the session
+    transcript without any LLM call.  Deduplicated entries are stored
+    with source_type=session so they can be listed or pruned independently.
+
+    Useful for on-demand re-capture or testing the auto-capture path that
+    runs automatically on SessionEnd (set ONMC_AUTOCAPTURE=0 to disable).
+    """
+    try:
+        count = _service().capture_session(session_id=session, transcript_path=transcript)
+        if count:
+            console.print(f"[green]Captured {count} new memory entries from session.[/green]")
+        else:
+            console.print("No new memory entries captured (nothing matched or already stored).")
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
 
 
 @app.command("doctor")
@@ -1565,6 +2242,210 @@ def playbook_show_command(
 
 
 # ---------------------------------------------------------------------------
+# Skill commands
+# ---------------------------------------------------------------------------
+
+
+@skill_app.command("promote")
+def skill_promote_command(
+    playbook_id: Annotated[
+        str | None,
+        typer.Argument(help="Playbook ID (or prefix) to promote to a skill."),
+    ] = None,
+    auto: Annotated[
+        bool,
+        typer.Option("--auto", help="Auto-detect recurring patterns and promote all."),
+    ] = False,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Override the skill name (only used with a playbook-id)."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the new skill(s) as JSON."),
+    ] = False,
+) -> None:
+    """Promote a playbook or recurring patterns to skill(s).
+
+    Provide a playbook ID to lift a single playbook into a named, reusable
+    skill.  Use --auto to scan all stored memories for recurring fail→fix
+    patterns and high-signal tag clusters, promoting each to a skill.
+
+    \b
+    Examples
+    --------
+    onmc skill promote pb_abc123
+    onmc skill promote pb_abc123 --name "Cache Invalidation"
+    onmc skill promote --auto
+    onmc skill promote --auto --json
+    """
+    if not auto and playbook_id is None:
+        raise typer.Exit(code=_fatal("Provide a playbook-id or pass --auto."))
+    try:
+        skills = _service().skill_promote(playbook_id, auto=auto, name=name)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [
+                    sk.model_dump(mode="json") if isinstance(sk, _Skill) else {}
+                    for sk in skills
+                ],
+                indent=2,
+            )
+        )
+        return
+    render_skill_promoted([sk for sk in skills if isinstance(sk, _Skill)])
+
+
+@skill_app.command("list")
+def skill_list_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit skills as JSON array."),
+    ] = False,
+) -> None:
+    """List all persisted skills."""
+    try:
+        skills = _service().skill_list()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [sk.model_dump(mode="json") if isinstance(sk, _Skill) else {} for sk in skills],
+                indent=2,
+            )
+        )
+        return
+    render_skill_list([sk for sk in skills if isinstance(sk, _Skill)])
+
+
+@skill_app.command("show")
+def skill_show_command(
+    skill_id: Annotated[str, typer.Argument(help="Skill ID (or prefix) to show.")],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the skill as JSON."),
+    ] = False,
+) -> None:
+    """Show a single skill with body, trigger, and metadata."""
+    try:
+        skill = _service().skill_show(skill_id)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output and isinstance(skill, _Skill):
+        typer.echo(json.dumps(skill.model_dump(mode="json"), indent=2))
+        return
+    if isinstance(skill, _Skill):
+        render_skill_detail(skill)
+
+
+@skill_app.command("feedback")
+def skill_feedback_command(
+    skill_id: Annotated[str, typer.Argument(help="Skill ID to apply feedback to.")],
+    direction: Annotated[
+        str,
+        typer.Argument(help="Trust signal: 'up' (helped) or 'down' (did not help)."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the updated skill as JSON."),
+    ] = False,
+) -> None:
+    """Apply a trust signal to a stored skill.
+
+    'up' marks the skill as having helped and nudges its confidence upward.
+    'down' records the usage without incrementing success_count and nudges
+    confidence downward (clamped at a floor so the skill remains visible).
+
+    \b
+    Examples
+    --------
+    onmc skill feedback sk_abc123 up
+    onmc skill feedback sk_abc123 down
+    onmc skill feedback sk_abc123 up --json
+    """
+    if direction not in ("up", "down"):
+        raise typer.Exit(
+            code=_fatal(
+                f"direction must be 'up' or 'down', got {direction!r}. "
+                "Usage: onmc skill feedback <skill-id> <up|down>"
+            )
+        )
+    try:
+        updated = _service().skill_feedback(skill_id, direction)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output and isinstance(updated, _Skill):
+        typer.echo(
+            json.dumps(
+                {
+                    "id": updated.id,
+                    "direction": direction,
+                    "use_count": updated.use_count,
+                    "success_count": updated.success_count,
+                    "confidence": round(updated.confidence, 4),
+                }
+            )
+        )
+        return
+    if isinstance(updated, _Skill):
+        arrow = "[green]up[/green]" if direction == "up" else "[yellow]down[/yellow]"
+        console.print(
+            f"[bold]Feedback:[/bold] {arrow}  "
+            f"skill=[dim]{updated.id[:16]}[/dim]  "
+            f"uses={updated.use_count}  "
+            f"conf={updated.confidence:.4f}"
+        )
+
+
+@skill_app.command("prune")
+def skill_prune_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit pruned skills as JSON array."),
+    ] = False,
+) -> None:
+    """Disable auto_inject on low-success, long-unused skills.
+
+    A skill is pruned when it has been used at least 3 times with a success
+    rate below 30%, or has not been used in the last 60 days.  Pruning sets
+    auto_inject=False so the injection layer skips it; the skill remains in
+    storage and can be re-examined or deleted manually.
+    """
+    try:
+        pruned = _service().skill_prune()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                [sk.model_dump(mode="json") if isinstance(sk, _Skill) else {} for sk in pruned],
+                indent=2,
+            )
+        )
+        return
+    render_skill_pruned([sk for sk in pruned if isinstance(sk, _Skill)])
+
+
+# ---------------------------------------------------------------------------
 # User-scope (cross-repo) memory commands
 # ---------------------------------------------------------------------------
 
@@ -1701,8 +2582,7 @@ def bench_command(
 
         memories_raw = storage.list_memories()
         repo_memories = [
-            MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[])
-            for m in memories_raw
+            MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[]) for m in memories_raw
         ]
         # Re-use built-in tasks but replace the memory store with real repo memories
         scenario = BenchScenario(
@@ -1727,9 +2607,7 @@ def bench_command(
                     "without_memory": dataclasses.asdict(result.without_memory),
                     "with_memory": dataclasses.asdict(result.with_memory),
                     "deltas": {
-                        "repeated_failure_rate": round(
-                            result.repeated_failure_rate_delta, 4
-                        ),
+                        "repeated_failure_rate": round(result.repeated_failure_rate_delta, 4),
                         "wasted_attempts": result.wasted_attempts_delta,
                         "context_tokens_pct_reduction": round(
                             result.context_tokens_pct_reduction, 1
@@ -1809,10 +2687,7 @@ def plug_command(
     target: Annotated[
         str,
         typer.Argument(
-            help=(
-                "Agent to wire onmc into. "
-                "Choices: claude-code, codex, cursor, omc, omx, all."
-            )
+            help=("Agent to wire onmc into. Choices: claude-code, codex, cursor, omc, omx, all.")
         ),
     ],
 ) -> None:
@@ -1850,6 +2725,72 @@ def plug_command(
         console.print(f"  {note}")
     if not result.files_written and not result.files_skipped:
         console.print(f"[green]onmc plug {target}: done.[/green]")
+
+
+@app.command("feedback")
+def feedback_command(
+    memory_id: Annotated[str, typer.Argument(help="Memory ID to apply feedback to.")],
+    direction: Annotated[
+        str,
+        typer.Argument(help="Trust signal: 'up' (useful) or 'down' (wrong/misleading)."),
+    ],
+    note: Annotated[
+        str | None,
+        typer.Option("--note", help="Optional note appended to the memory details."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the updated memory as JSON instead of a rich panel."),
+    ] = False,
+) -> None:
+    """Apply a human trust signal to a stored memory.
+
+    Use 'up' when a recalled memory proved useful; use 'down' when it was
+    wrong or misleading.  Positive feedback slows confidence decay so
+    corroborated memories stay ranked higher for longer.  Negative feedback
+    demotes but does not erase — the memory remains searchable at a lower
+    rank.
+
+    \b
+    Examples
+    --------
+    onmc feedback mem_abc123 up
+    onmc feedback mem_abc123 down --note "outdated after refactor"
+    onmc feedback mem_abc123 up --json
+    """
+    if direction not in ("up", "down"):
+        raise typer.Exit(
+            code=_fatal(
+                f"direction must be 'up' or 'down', got {direction!r}. "
+                "Usage: onmc feedback <memory-id> <up|down>"
+            )
+        )
+    try:
+        updated = _service().feedback(memory_id, direction, note=note)
+    except (FileNotFoundError, LookupError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "id": updated.id,
+                    "direction": direction,
+                    "feedback_score": round(updated.feedback_score, 4),
+                    "confidence": round(updated.confidence, 4),
+                    "updated_at": updated.updated_at.isoformat(),
+                }
+            )
+        )
+        return
+
+    arrow = "[green]up[/green]" if direction == "up" else "[yellow]down[/yellow]"
+    console.print(
+        f"[bold]Feedback:[/bold] {arrow}  "
+        f"feedback_score={updated.feedback_score:.2f}  "
+        f"confidence={updated.confidence:.2f}  "
+        f"id={updated.id}"
+    )
 
 
 def _fatal(message: str) -> int:

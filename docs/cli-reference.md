@@ -27,14 +27,27 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              navigation.                                                     │
 │ why          Explain why a file looks the way it does, from memory + git     │
 │              history.                                                        │
+│ onboard      Give a new dev (or agent) the guided five-minute repo tour from │
+│              memory.                                                         │
+│ blame        Git blame for knowledge: map a file's symbols to the memories   │
+│              that govern them.                                               │
+│ coverage     Show a knowledge-gap dashboard: coverage % + uncovered hotspot  │
+│              files.                                                          │
 │ memory-diff  Show what repo knowledge changed between two commits.           │
+│ digest       Show what the repo/team learned since a git ref.                │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
+│ recall       Search memory for past incidents matching an error or           │
+│              stacktrace.                                                     │
+│ check        Flag staged/changed files that touch recorded invariants or     │
+│              dead-ends.                                                      │
 │ status       Show local ONMC status.                                         │
 │ statusline   Print a compact one-line brain health string for Claude Code    │
 │              statusLine.                                                     │
 │ hud          Display a rich multi-line memory health HUD panel.              │
 │ report       Generate a shareable agent-readiness report.                    │
 │ sync         Export, restore, or hook git-portable ONMC memory state.        │
+│ pull         Import another repo's .agent-memory/ export into this brain     │
+│              (federated memories).                                           │
 │ serve        Serve ONMC over the requested runtime protocol.                 │
 │ solve        Compile repo-aware context and ask the configured LLM for the   │
 │              next best approach.                                             │
@@ -45,6 +58,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ consolidate  Clean and strengthen the memory store (dedup, merge,            │
 │              promote/demote, edge graph).                                    │
 │ mine         Mine Claude Code session transcripts into ONMC memory.          │
+│ capture      Heuristically capture durable memory from a session transcript. │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
 │ wiki         Generate a browsable multi-page markdown wiki from stored       │
@@ -52,6 +66,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
 │              wizard).                                                        │
+│ feedback     Apply a human trust signal to a stored memory.                  │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -60,6 +75,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ hooks        Install and run Claude Code compaction hooks.                   │
 │ claude-md    Generate and maintain CLAUDE.md from ONMC memory.               │
 │ playbook     Synthesize and manage memory-derived playbooks.                 │
+│ skill        Manage self-improving skills synthesized from playbooks and     │
+│              memory patterns.                                                │
 │ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
 │              repo-scoped).                                                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -199,6 +216,38 @@ Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc digest`
+
+```text
+Usage: onmc digest [OPTIONS]                                                   
+                                                                                
+ Show what the repo/team learned since a git ref.                               
+                                                                                
+ Produces a knowledge changelog grouped by kind (Decisions, Invariants,         
+ Gotchas, Failed Approaches, …) covering memories added or updated since        
+ *since*.                                                                       
+                                                                                
+ Prefers committed ``.agent-memory/`` snapshots for precision; falls back to    
+ live ``created_at`` filtering when the committed export is absent at the       
+ given ref.                                                                     
+                                                                                
+ The report is also written as a markdown artifact to ``.onmc/compiled/``.      
+                                                                                
+                                                                                
+ Examples:                                                                      
+   onmc digest --since v1.2.0                                                   
+   onmc digest --since main                                                     
+   onmc digest --since abc1234                                                  
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --since        TEXT  Git ref (tag, branch, commit hash) to diff knowledge │
+│                         from.                                                │
+│                         [required]                                           │
+│    --json               Emit JSON instead of a rich terminal report.         │
+│    --help               Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc guard`
 
 ```text
@@ -216,6 +265,36 @@ Usage: onmc guard [OPTIONS]
 │    --terse                              Emit compact terse output (overrides │
 │                                         ONMC_TERSE env var).                 │
 │    --help                               Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc recall`
+
+```text
+Usage: onmc recall [OPTIONS] [QUERY]                                           
+                                                                                
+ Search memory for past incidents matching an error or stacktrace.              
+                                                                                
+ Paste an error message or stacktrace as an argument or pipe it via stdin.      
+ Returns prior failures/fixes that match, ranked by relevance.                  
+                                                                                
+ Examples:                                                                      
+                                                                                
+   onmc recall "TypeError: cannot read property x of undefined"                 
+                                                                                
+   cat error.log | onmc recall                                                  
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
+│                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
+│                                      return.                                 │
+│                                      [default: 8]                            │
+│ --terse                              Emit compact terse output (overrides    │
+│                                      ONMC_TERSE env var).                    │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -285,6 +364,48 @@ Usage: onmc sync [OPTIONS]
 │ --restore               Restore from .agent-memory/.                         │
 │ --install-hook          Install a post-commit sync hook.                     │
 │ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc pull`
+
+```text
+Usage: onmc pull [OPTIONS] SOURCE                                              
+                                                                                
+ Import another repo's .agent-memory/ export into this brain (federated         
+ memories).                                                                     
+                                                                                
+ SOURCE can be a local filesystem path or a remote git URL:                     
+                                                                                
+                                                                                
+   onmc pull ../sibling-repo                                                    
+   onmc pull https://github.com/org/repo                                        
+   onmc pull git@github.com:org/repo.git --ref main                             
+   onmc pull https://github.com/org/repo --label my-label                       
+                                                                                
+ Federated memories are tagged ``federated:<repo-label>`` so they are clearly   
+ attributed to their source and are never confused with local memories.         
+ Re-pulling is idempotent: memories already present are skipped.                
+                                                                                
+ When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,  
+ its .agent-memory/ export is imported, and the clone is cleaned up             
+ immediately.                                                                   
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    source      TEXT  Local path to another repo (or its .agent-memory/     │
+│                        dir), or a remote git URL (https://, git@, ssh://).   │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --label        TEXT  Override the short repo label used for the              │
+│                      federated:<label> tag. For local paths defaults to the  │
+│                      source directory name; for git URLs defaults to the     │
+│                      last path segment of the URL.                           │
+│ --ref          TEXT  Branch, tag, or commit-ish to check out when cloning a  │
+│                      remote git URL. Ignored for local paths. Defaults to    │
+│                      the remote's default branch.                            │
+│ --json               Emit a machine-readable JSON summary to stdout.         │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -460,7 +581,10 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │                continuation brief after compaction.                          │
 │ prompt-recall  Inject the most relevant repo memories for the current user   │
 │                prompt.                                                       │
-│ session-end    Run memory consolidation on SessionEnd.                       │
+│ session-end    Run memory consolidation and heuristic auto-capture on        │
+│                SessionEnd.                                                   │
+│ pre-tool-use   Inject file-level danger warnings before the agent edits a    │
+│                file.                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -549,12 +673,17 @@ Usage: onmc hooks prompt-recall [OPTIONS]
 ```text
 Usage: onmc hooks session-end [OPTIONS]                                        
                                                                                 
- Run memory consolidation on SessionEnd.                                        
+ Run memory consolidation and heuristic auto-capture on SessionEnd.             
                                                                                 
  Called automatically by the Claude Code SessionEnd hook.  Reads the event      
- payload from stdin (session_id, cwd, reason), runs a best-effort               
- consolidation pass, and exits 0.  Errors are swallowed; stdout is never        
- written (SessionEnd hooks cannot inject context).                              
+ payload from stdin (session_id, transcript_path, cwd, reason), runs a          
+ best-effort consolidation pass followed by heuristic auto-capture of           
+ durable memory from the just-ended session transcript.  Errors are             
+ swallowed; stdout is never written (SessionEnd hooks cannot inject             
+ context).                                                                      
+                                                                                
+ Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture          
+ while keeping consolidation active.                                            
                                                                                 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -675,7 +804,7 @@ Usage: onmc memory list [OPTIONS]
 │ --source                         [git|doc|code|manual  Filter by memory      │
 │                                  |manual_seed|llm_ext  source type.          │
 │                                  racted|transcript|gi                        │
-│                                  thub_pr]                                    │
+│                                  thub_pr|session]                            │
 │ --type                           [fix|did_not_work|de  Filter task-derived   │
 │                                  sign_conflict|gotcha  memory artifacts by   │
 │                                  |invariant|validatio  type.                 │
@@ -1061,6 +1190,133 @@ Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc skill`
+
+```text
+Usage: onmc skill [OPTIONS] COMMAND [ARGS]...                                  
+                                                                                
+ Manage self-improving skills synthesized from playbooks and memory patterns.   
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ promote   Promote a playbook or recurring patterns to skill(s).              │
+│ list      List all persisted skills.                                         │
+│ show      Show a single skill with body, trigger, and metadata.              │
+│ feedback  Apply a trust signal to a stored skill.                            │
+│ prune     Disable auto_inject on low-success, long-unused skills.            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill promote`
+
+```text
+Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]                              
+                                                                                
+ Promote a playbook or recurring patterns to skill(s).                          
+                                                                                
+ Provide a playbook ID to lift a single playbook into a named, reusable         
+ skill.  Use --auto to scan all stored memories for recurring fail→fix          
+ patterns and high-signal tag clusters, promoting each to a skill.              
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc skill promote pb_abc123                                                   
+ onmc skill promote pb_abc123 --name "Cache Invalidation"                       
+ onmc skill promote --auto                                                      
+ onmc skill promote --auto --json                                               
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
+│                                   skill.                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --auto              Auto-detect recurring patterns and promote all.          │
+│ --name        TEXT  Override the skill name (only used with a playbook-id).  │
+│ --json              Emit the new skill(s) as JSON.                           │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill list`
+
+```text
+Usage: onmc skill list [OPTIONS]                                               
+                                                                                
+ List all persisted skills.                                                     
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit skills as JSON array.                                   │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill show`
+
+```text
+Usage: onmc skill show [OPTIONS] SKILL_ID                                      
+                                                                                
+ Show a single skill with body, trigger, and metadata.                          
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill_id      TEXT  Skill ID (or prefix) to show. [required]            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the skill as JSON.                                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill feedback`
+
+```text
+Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION                        
+                                                                                
+ Apply a trust signal to a stored skill.                                        
+                                                                                
+ 'up' marks the skill as having helped and nudges its confidence upward.        
+ 'down' records the usage without incrementing success_count and nudges         
+ confidence downward (clamped at a floor so the skill remains visible).         
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc skill feedback sk_abc123 up                                               
+ onmc skill feedback sk_abc123 down                                             
+ onmc skill feedback sk_abc123 up --json                                        
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill_id       TEXT  Skill ID to apply feedback to. [required]          │
+│ *    direction      TEXT  Trust signal: 'up' (helped) or 'down' (did not     │
+│                           help).                                             │
+│                           [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the updated skill as JSON.                              │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill prune`
+
+```text
+Usage: onmc skill prune [OPTIONS]                                              
+                                                                                
+ Disable auto_inject on low-success, long-unused skills.                        
+                                                                                
+ A skill is pruned when it has been used at least 3 times with a success        
+ rate below 30%, or has not been used in the last 60 days.  Pruning sets        
+ auto_inject=False so the injection layer skips it; the skill remains in        
+ storage and can be re-examined or deleted manually.                            
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit pruned skills as JSON array.                            │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc user`
 
 ```text
@@ -1201,6 +1457,26 @@ Usage: onmc tui [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc coverage`
+
+```text
+Usage: onmc coverage [OPTIONS]                                                 
+                                                                                
+ Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.          
+                                                                                
+ Answers "which parts of this repo does the memory actually cover, and where    
+ are the blind spots?"  The killer feature is surfacing high-churn files that   
+ have zero memory coverage — those are the landmines most likely to cause       
+ regressions when touched without context.                                      
+                                                                                
+ Requires at least one `onmc ingest` run (file stats must exist).               
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the CoverageReport as JSON instead of the dashboard.    │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc bench`
 
 ```text
@@ -1266,5 +1542,38 @@ Usage: onmc plug [OPTIONS] TARGET
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc feedback`
+
+```text
+Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION                             
+                                                                                
+ Apply a human trust signal to a stored memory.                                 
+                                                                                
+ Use 'up' when a recalled memory proved useful; use 'down' when it was          
+ wrong or misleading.  Positive feedback slows confidence decay so              
+ corroborated memories stay ranked higher for longer.  Negative feedback        
+ demotes but does not erase — the memory remains searchable at a lower          
+ rank.                                                                          
+                                                                                
+                                                                                
+ Examples                                                                       
+ --------                                                                       
+ onmc feedback mem_abc123 up                                                    
+ onmc feedback mem_abc123 down --note "outdated after refactor"                 
+ onmc feedback mem_abc123 up --json                                             
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  Memory ID to apply feedback to. [required]         │
+│ *    direction      TEXT  Trust signal: 'up' (useful) or 'down'              │
+│                           (wrong/misleading).                                │
+│                           [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --note        TEXT  Optional note appended to the memory details.            │
+│ --json              Emit the updated memory as JSON instead of a rich panel. │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

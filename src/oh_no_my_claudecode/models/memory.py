@@ -30,6 +30,7 @@ class SourceType(StrEnum):
     LLM_EXTRACTED = "llm_extracted"
     TRANSCRIPT = "transcript"
     GITHUB_PR = "github_pr"
+    SESSION = "session"
 
 
 class MemoryEntry(BaseModel):

@@ -4,6 +4,9 @@ Targets
 -------
 claude-code  Install Claude Code hooks + .mcp.json (delegates to the
              existing install_claude_hooks function — no new logic).
+             Also installs slash-command markdown files into the repo's
+             ``.claude/commands/`` directory so users get /onmc-why,
+             /onmc-guard, /onmc-brief, and /onmc-statusline.
 codex        Write/refresh an AGENTS.md stanza so Codex runs
              ``onmc brief`` and ``onmc guard`` at session start and
              knows how to reach the MCP server.
@@ -26,10 +29,22 @@ Every file write is guarded by a sentinel comment/marker.  Re-running
 
 For JSON files (claude-code target) idempotency is handled by the
 underlying install_claude_hooks function.
+
+Slash commands (claude-code target)
+------------------------------------
+The canonical command files live in ``.claude-plugin/commands/`` in the
+onmc package directory.  ``onmc plug claude-code`` copies them into the
+target repo's ``.claude/commands/`` so they are available as project-scoped
+slash commands even without the plugin installed.  The plugin's
+``plugin.json`` also references ``.claude-plugin/commands`` so users who
+install via the marketplace get the same commands automatically.
+
+Spec reference: https://code.claude.com/docs/en/agent-sdk/slash-commands
 """
 
 from __future__ import annotations
 
+import shutil
 import textwrap
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -41,6 +56,26 @@ from oh_no_my_claudecode.hooks.installer import (
     install_claude_hooks,
     mcp_config_path,
     project_settings_path,
+)
+
+# ---------------------------------------------------------------------------
+# Slash-command constants
+# ---------------------------------------------------------------------------
+
+# Canonical location of the command markdown files, relative to this module's
+# package root (two levels up from integrations/plug.py → package root).
+_PLUGIN_COMMANDS_DIR: Path = (
+    Path(__file__).parent.parent.parent.parent  # repo root when installed from source
+    / ".claude-plugin"
+    / "commands"
+)
+
+# Names of the command files shipped by onmc (without .md extension).
+SLASH_COMMAND_NAMES: tuple[str, ...] = (
+    "onmc-why",
+    "onmc-guard",
+    "onmc-brief",
+    "onmc-statusline",
 )
 
 # ---------------------------------------------------------------------------
@@ -106,8 +141,45 @@ def plug_target(target: str, *, repo_root: Path) -> PlugResult:
 _CLAUDE_CODE_DOCS_PATH = "docs/integrations/claude-code.md"
 
 
+def install_slash_commands(*, repo_root: Path) -> tuple[list[str], list[str]]:
+    """Copy onmc slash-command markdown files into *repo_root*/.claude/commands/.
+
+    Returns ``(files_written, files_skipped)`` — each entry is an absolute path
+    string.  Writes are idempotent: if the destination file is already identical
+    to the source, it is counted as skipped.
+
+    The source files live in the onmc package tree under
+    ``.claude-plugin/commands/``.  If that directory is not found (e.g. when
+    running from an editable install in a non-standard layout), the function
+    returns empty lists so callers degrade gracefully.
+    """
+    src_dir = _PLUGIN_COMMANDS_DIR
+    if not src_dir.is_dir():
+        return [], []
+
+    dest_dir = repo_root / ".claude" / "commands"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[str] = []
+    skipped: list[str] = []
+
+    for name in SLASH_COMMAND_NAMES:
+        src = src_dir / f"{name}.md"
+        if not src.exists():
+            continue
+        dest = dest_dir / f"{name}.md"
+        src_content = src.read_bytes()
+        if dest.exists() and dest.read_bytes() == src_content:
+            skipped.append(str(dest))
+        else:
+            shutil.copy2(src, dest)
+            written.append(str(dest))
+
+    return written, skipped
+
+
 def _plug_claude_code(*, repo_root: Path) -> PlugResult:
-    """Install Claude Code hooks and .mcp.json by reusing install_claude_hooks."""
+    """Install Claude Code hooks, .mcp.json, and project-scoped slash commands."""
     result = PlugResult(target="claude-code")
 
     settings_path = project_settings_path(repo_root)
@@ -122,10 +194,19 @@ def _plug_claude_code(*, repo_root: Path) -> PlugResult:
         result.files_written.append(str(install_result.backup_path))
     result.files_written.append(str(settings_path))
     result.files_written.append(str(mcp_path))
+
+    # Install slash commands into .claude/commands/
+    cmd_written, cmd_skipped = install_slash_commands(repo_root=repo_root)
+    result.files_written.extend(cmd_written)
+    result.files_skipped.extend(cmd_skipped)
+
     result.notes.append(
         "Claude Code hooks installed: PreCompact, SessionStart, UserPromptSubmit, SessionEnd."
     )
     result.notes.append("MCP server registered in .mcp.json as 'onmc'.")
+    if cmd_written:
+        names = ", ".join(f"/{n}" for n in SLASH_COMMAND_NAMES)
+        result.notes.append(f"Slash commands installed: {names}")
     result.notes.append(
         "Tip: users can also install via plugin marketplace — "
         "see docs/integrations/claude-code.md for the /plugin command."

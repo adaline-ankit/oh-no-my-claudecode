@@ -4,6 +4,70 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-06-22
+
+### Added
+
+- **`onmc feedback <memory-id> up|down`** — a human/agent-in-the-loop trust signal. `up` reinforces a memory (raises `feedback_score` + `confidence`); `down` demotes it toward a 0.15 floor without zeroing it. Both touch `updated_at`, so the signal feeds the v0.16.0 confidence-decay ranking — positive feedback slows a memory's ageing, negative demotes it. `--note`, `--json`.
+- **MCP `get_coverage` + `get_digest` tools** — agents connected over MCP can now query the knowledge-gap dashboard ("where are the blind spots?") and the knowledge changelog ("what did this repo learn since `<ref>`?") without shelling out to the CLI. Compact TOON-default / JSON output; bad refs error cleanly.
+
+## [0.16.0] — 2026-06-22
+
+### Added
+
+- **`onmc coverage`** — a knowledge-gap dashboard. Joins the repo's file-churn index against memory `source_ref` associations to answer "where are the blind spots?". Headline output is **Top Uncovered Hotspots**: high-churn files with zero memory coverage, sorted by commit frequency — the landmines most likely to cause regressions. Plus per-subsystem coverage rows (worst-first) and an overall coverage %. `--json`.
+
+### Changed
+
+- **Confidence-decay recall ranking** — a memory's confidence contribution now decays exponentially with time since last corroboration (90-day half-life, 0.3 floor), so stale never-reconfirmed memories rank below fresh/corroborated ones of equal textual relevance. Positive feedback slows the ageing; textual overlap is never penalised. `decay_factor` is exposed on `ScoreBreakdown` and flows into the MCP `why` explanation.
+
+## [0.15.0] — 2026-06-22
+
+### Added
+
+- **`onmc pull <git-url>`** — federate from a *remote* repo, not just a local path. Shallow-clones the repo to a temp dir, imports its committed `.agent-memory/` (federated + deduped), and cleans up the clone. Detects http(s)/ssh/scp git URLs vs local paths; `--ref <branch|tag>` to pull a non-default branch; repo label derived from the URL.
+- **Recall explanations in MCP output** — each recall result returned over MCP now carries `provenance` (source citation) and a compact `why` score breakdown (final score + dominant components), in both the default TOON path and the JSON path. Additive and backward-compatible; gracefully omitted when absent. Agents consuming onmc over MCP can now see *why* a memory surfaced.
+
+## [0.14.0] — 2026-06-22
+
+### Added
+
+- **`onmc pull <source>`** — cross-repo brain federation. Import another repo's committed `.agent-memory/` export into this repo's brain; imported memories are tagged `federated:<repo>` so they're recallable here yet clearly attributed and never confused with local knowledge. Dedups by stable id (idempotent re-pull), reuses the sync importer. `--label` / `--json`.
+- **Source citations on recall** — every surfaced memory now carries a compact provenance tag (`source_type · ref · file`), terse-mode aware, gracefully omitting missing fields, so an agent can trust and trace what it recalls.
+
+### Changed
+
+- **Recall ranking quality** — normalized component-score blend (overlap *ratio* + scaled confidence + feedback) so precise queries beat noisy ones at equal raw overlap; deterministic tie-break on `(confidence, recency)` instead of alphabetical title; per-result score breakdown exposed for explainability.
+
+## [0.13.0] — 2026-06-22
+
+### Added
+
+- **`onmc onboard`** — a guided new-developer tour built from the repo's own memory: repo overview → danger zones (top hotspots + the invariants that govern them) → key decisions/invariants → top playbooks → start-here files. Interactive paginated walk, or `--steps` for a non-interactive dump. The senior-who-read-every-commit, in five minutes.
+- **`onmc digest --since <ref>`** — a knowledge changelog: what the repo *learned* since a git ref, grouped by kind (decisions / invariants / gotchas / failed approaches). Prefers a committed `.agent-memory/` diff (reuses the memory-diff engine); falls back to `created_at`-after-ref when no committed export exists. `--json` for machine output.
+
+## [0.12.0] — 2026-06-16
+
+### Added
+
+- **`onmc doctor` install/wiring checks** — detects a stale or broken `onmc` on PATH shadowing the installed version, hooks pointing at an unresolvable binary ("hooks will silently fail"), and an unresolvable MCP command. Subprocess-probed with a timeout; warnings keep exit 0, errors only on real failures.
+- **Zero-effort SessionEnd auto-capture** — the SessionEnd hook now also mines the just-ended session transcript into durable memory heuristically (decisions / fixes / invariants), capped and deduped, `source_type=session`. `ONMC_AUTOCAPTURE=0` to opt out; always exits 0, never blocks the session. Plus a manual `onmc capture`.
+
+## [0.11.0] — 2026-06-16
+
+### Added
+
+- **`onmc recall "<error/stacktrace>"`** (also reads piped stdin) — "have we hit this before?" Normalizes line numbers / hex / UUIDs / timestamps so error variants match the same memory, then surfaces the prior fix (biased toward failed-approach / gotcha). Plus an MCP `recall` tool so an agent self-checks on errors.
+- **`onmc blame <file>`** — git-blame for knowledge: maps a file's functions/classes/headings to the invariants, decisions, and incidents that govern them (heuristic symbol extraction + attachment), with file-level memories bucketed separately.
+
+## [0.10.0] — 2026-06-16
+
+### Added
+
+- **`/onmc-why` / `/onmc-guard` / `/onmc-brief` / `/onmc-statusline`** — first-class Claude Code slash commands, shipped in the plugin and installed by `onmc plug claude-code`.
+- **PreToolUse danger-guard** — before the agent edits a file, onmc injects file-level danger signals (high churn, invariants, recorded failed approaches) as non-blocking context. Never blocks the edit; silent on safe files.
+- **`onmc check`** — flags staged/changed files that touch a recorded invariant or failed-approach dead-end (`--staged`/`--file`/`--base`, `--strict` to fail, `--install-hook` for an idempotent pre-commit hook).
+
 ## [0.9.0] — 2026-06-16
 
 ### Fixed

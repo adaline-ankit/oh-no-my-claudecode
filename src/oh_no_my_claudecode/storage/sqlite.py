@@ -21,6 +21,7 @@ from oh_no_my_claudecode.models import (
     Playbook,
     PlaybookProvenanceItem,
     RepoFileRecord,
+    Skill,
     SourceType,
     TaskOutputRecord,
     TaskOutputType,
@@ -28,7 +29,7 @@ from oh_no_my_claudecode.models import (
     TaskStatus,
 )
 from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
-from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime
+from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime, utc_now
 
 _SCHEMA_VERSION_KEY = "schema_version"
 
@@ -283,6 +284,42 @@ def _migrate_v6(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v7(conn: sqlite3.Connection) -> None:
+    """Add the skills table (migration v7).
+
+    A skill is a named, reusable, self-improving unit of know-how synthesized
+    from playbooks or recurring memory patterns.  Usage and feedback signals
+    (use_count, success_count, confidence) drive self-improvement over time.
+
+    Idempotent: uses CREATE TABLE/INDEX IF NOT EXISTS so re-running on an
+    already-migrated database is a no-op.
+    """
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS skills (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            body TEXT NOT NULL,
+            trigger TEXT NOT NULL,
+            tags_json TEXT NOT NULL,
+            files_json TEXT NOT NULL,
+            source_memory_ids_json TEXT NOT NULL,
+            use_count INTEGER NOT NULL DEFAULT 0,
+            success_count INTEGER NOT NULL DEFAULT 0,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            auto_inject INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_used_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_skills_name
+            ON skills(name);
+        CREATE INDEX IF NOT EXISTS idx_skills_confidence
+            ON skills(confidence DESC);
+        """
+    )
+
+
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -290,6 +327,7 @@ _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (4, _migrate_v4),
     (5, _migrate_v5),
     (6, _migrate_v6),
+    (7, _migrate_v7),
 )
 
 
@@ -1353,6 +1391,164 @@ class SQLiteStorage:
         with self._connection() as conn:
             cursor = conn.execute("DELETE FROM playbooks")
         return int(cursor.rowcount)
+
+    # ── Skill CRUD (v7) ──────────────────────────────────────────────────────
+
+    def add_skill(self, skill: Skill) -> None:
+        """Insert a skill; raises ValueError if the id already exists."""
+        with self._connection() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM skills WHERE id = ?", (skill.id,)
+            ).fetchone()
+            if existing:
+                msg = f"Skill already exists: {skill.id}"
+                raise ValueError(msg)
+            conn.execute(
+                """
+                INSERT INTO skills (
+                    id, name, body, trigger, tags_json, files_json,
+                    source_memory_ids_json, use_count, success_count,
+                    confidence, auto_inject, created_at, updated_at, last_used_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                self._skill_values(skill),
+            )
+
+    def get_skill(self, skill_id: str) -> Skill | None:
+        """Return a single skill by id, or None if not found."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM skills WHERE id = ?", (skill_id,)
+            ).fetchone()
+        return None if row is None else self._row_to_skill(row)
+
+    def list_skills(self) -> list[Skill]:
+        """Return all skills ordered by confidence descending, then name."""
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM skills ORDER BY confidence DESC, name ASC"
+            ).fetchall()
+        return [self._row_to_skill(row) for row in rows]
+
+    def update_skill(self, skill: Skill) -> None:
+        """Replace a skill's mutable fields by id; raises LookupError if missing."""
+        with self._connection() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM skills WHERE id = ?", (skill.id,)
+            ).fetchone()
+            if not existing:
+                msg = f"Skill not found: {skill.id}"
+                raise LookupError(msg)
+            conn.execute(
+                """
+                UPDATE skills SET
+                    name=?, body=?, trigger=?, tags_json=?, files_json=?,
+                    source_memory_ids_json=?, use_count=?, success_count=?,
+                    confidence=?, auto_inject=?, created_at=?, updated_at=?,
+                    last_used_at=?
+                WHERE id=?
+                """,
+                (*self._skill_values(skill)[1:], skill.id),
+            )
+
+    def record_skill_use(self, skill_id: str, *, success: bool) -> Skill:
+        """Bump use_count (+1) and optionally success_count; update last_used_at.
+
+        Raises LookupError when the skill does not exist.  Returns the updated
+        Skill so callers can surface the new metrics without a second read.
+        """
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM skills WHERE id = ?", (skill_id,)
+            ).fetchone()
+            if row is None:
+                msg = f"Skill not found: {skill_id}"
+                raise LookupError(msg)
+            skill = self._row_to_skill(row)
+        now_str = isoformat_utc(utc_now())
+        new_use = skill.use_count + 1
+        new_success = skill.success_count + (1 if success else 0)
+        with self._connection() as conn:
+            conn.execute(
+                """
+                UPDATE skills SET
+                    use_count=?, success_count=?, last_used_at=?, updated_at=?
+                WHERE id=?
+                """,
+                (new_use, new_success, now_str, now_str, skill_id),
+            )
+        return skill.model_copy(
+            update={
+                "use_count": new_use,
+                "success_count": new_success,
+                "last_used_at": utc_now(),
+                "updated_at": utc_now(),
+            }
+        )
+
+    @staticmethod
+    def _skill_values(
+        skill: Skill,
+    ) -> tuple[
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        str,
+        int,
+        int,
+        float,
+        int,
+        str,
+        str,
+        str | None,
+    ]:
+        """Return a tuple of column values for INSERT / UPDATE statements."""
+        return (
+            skill.id,
+            skill.name,
+            skill.body,
+            skill.trigger,
+            json.dumps(skill.tags),
+            json.dumps(skill.files),
+            json.dumps(skill.source_memory_ids),
+            skill.use_count,
+            skill.success_count,
+            skill.confidence,
+            int(skill.auto_inject),
+            isoformat_utc(skill.created_at),
+            isoformat_utc(skill.updated_at),
+            isoformat_utc(skill.last_used_at) if skill.last_used_at is not None else None,
+        )
+
+    @staticmethod
+    def _row_to_skill(row: sqlite3.Row) -> Skill:
+        from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+        created_at = parse_datetime(row["created_at"])
+        updated_at = parse_datetime(row["updated_at"])
+        if created_at is None or updated_at is None:
+            msg = "Skill row is missing timestamps."
+            raise ValueError(msg)
+        last_used_at = parse_datetime(row["last_used_at"]) if row["last_used_at"] else None
+        return _Skill(
+            id=row["id"],
+            name=row["name"],
+            body=row["body"],
+            trigger=row["trigger"],
+            tags=json.loads(row["tags_json"]),
+            files=json.loads(row["files_json"]),
+            source_memory_ids=json.loads(row["source_memory_ids_json"]),
+            use_count=int(row["use_count"]),
+            success_count=int(row["success_count"]),
+            confidence=float(row["confidence"]),
+            auto_inject=bool(row["auto_inject"]),
+            created_at=created_at,
+            updated_at=updated_at,
+            last_used_at=last_used_at,
+        )
 
     # ── Memory edge CRUD (v5) ─────────────────────────────────────────────────
 
