@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-06-16
+
+### Added
+
+- **`onmc doctor` install/wiring checks** — detects a stale or broken `onmc` on PATH shadowing the installed version, hooks pointing at an unresolvable binary ("hooks will silently fail"), and an unresolvable MCP command. Subprocess-probed with a timeout; warnings keep exit 0, errors only on real failures.
+- **Zero-effort SessionEnd auto-capture** — the SessionEnd hook now also mines the just-ended session transcript into durable memory heuristically (decisions / fixes / invariants), capped and deduped, `source_type=session`. `ONMC_AUTOCAPTURE=0` to opt out; always exits 0, never blocks the session. Plus a manual `onmc capture`.
+
 ## [0.11.0] — 2026-06-16
 
 ### Added
