@@ -41,6 +41,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ hud          Display a rich multi-line memory health HUD panel.              │
 │ report       Generate a shareable agent-readiness report.                    │
 │ sync         Export, restore, or hook git-portable ONMC memory state.        │
+│ pull         Import another repo's .agent-memory/ export into this brain     │
+│              (federated memories).                                           │
 │ serve        Serve ONMC over the requested runtime protocol.                 │
 │ solve        Compile repo-aware context and ask the configured LLM for the   │
 │              next best approach.                                             │
@@ -322,6 +324,32 @@ Usage: onmc sync [OPTIONS]
 │ --restore               Restore from .agent-memory/.                         │
 │ --install-hook          Install a post-commit sync hook.                     │
 │ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc pull`
+
+```text
+Usage: onmc pull [OPTIONS] SOURCE                                              
+                                                                                
+ Import another repo's .agent-memory/ export into this brain (federated         
+ memories).                                                                     
+                                                                                
+ Federated memories are tagged ``federated:<repo-label>`` so they are clearly   
+ attributed to their source and are never confused with local memories.         
+ Re-pulling is idempotent: memories already present are skipped.                
+                                                                                
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    source      PATH  Path to another repo (or its .agent-memory/ dir) to   │
+│                        import from.                                          │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --label        TEXT  Override the short repo label used for the              │
+│                      federated:<label> tag. Defaults to the source directory │
+│                      name.                                                   │
+│ --json               Emit a machine-readable JSON summary to stdout.         │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

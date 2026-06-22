@@ -376,8 +376,7 @@ def memory_diff_command(
 
     markdown = memory_diff_to_markdown(result)
     console.print(
-        "[green]Wrote memory-diff artifact:[/green] "
-        "(see .onmc/compiled/ for the markdown)"
+        "[green]Wrote memory-diff artifact:[/green] (see .onmc/compiled/ for the markdown)"
     )
     _ = markdown  # artifact already written by service.memory_diff()
 
@@ -767,6 +766,59 @@ def sync_command(
     console.print(f"[green]Hook path:[/green] {hook_path}")
 
 
+@app.command("pull")
+def pull_command(
+    source: Annotated[
+        Path,
+        typer.Argument(help="Path to another repo (or its .agent-memory/ dir) to import from."),
+    ],
+    repo_label: Annotated[
+        str | None,
+        typer.Option(
+            "--label",
+            help=(
+                "Override the short repo label used for the federated:<label> tag. "
+                "Defaults to the source directory name."
+            ),
+        ),
+    ] = None,
+    output_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a machine-readable JSON summary to stdout."),
+    ] = False,
+) -> None:
+    """Import another repo's .agent-memory/ export into this brain (federated memories).
+
+    Federated memories are tagged ``federated:<repo-label>`` so they are clearly
+    attributed to their source and are never confused with local memories.
+    Re-pulling is idempotent: memories already present are skipped.
+    """
+    try:
+        _, result = _service().pull(source.resolve(), repo_label=repo_label)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if output_json:
+        typer.echo(
+            json.dumps(
+                {
+                    "source": result.source,
+                    "repo_label": result.repo_label,
+                    "imported": result.imported,
+                    "skipped": result.skipped,
+                }
+            )
+        )
+        return
+
+    console.print(
+        f"[green]Pulled from[/green] {result.source} [dim](label: {result.repo_label})[/dim]"
+    )
+    console.print(
+        f"  imported: [bold]{result.imported}[/bold]  skipped (already present): {result.skipped}"
+    )
+
+
 @app.command("serve")
 def serve_command(
     mcp: Annotated[
@@ -1056,8 +1108,7 @@ def _run_session_start_hook() -> None:
 
 @hooks_app.command("session-start")
 def hooks_session_start_command() -> None:
-    """Inject context at session start: boot digest on startup, continuation brief after compaction.
-    """
+    """Inject context at session start: boot digest on startup, continuation brief after compaction."""  # noqa: E501
     _run_session_start_hook()
 
 
@@ -1134,14 +1185,10 @@ def hooks_session_end_command() -> None:
         return
     with contextlib.suppress(Exception):
         raw_session_id = payload.get("session_id")
-        session_id = (
-            raw_session_id if isinstance(raw_session_id, str) and raw_session_id else None
-        )
+        session_id = raw_session_id if isinstance(raw_session_id, str) and raw_session_id else None
         raw_transcript = payload.get("transcript_path")
         transcript_path = (
-            Path(raw_transcript)
-            if isinstance(raw_transcript, str) and raw_transcript
-            else None
+            Path(raw_transcript) if isinstance(raw_transcript, str) and raw_transcript else None
         )
         _service().capture_session(session_id=session_id, transcript_path=transcript_path)
 
@@ -2094,8 +2141,7 @@ def bench_command(
 
         memories_raw = storage.list_memories()
         repo_memories = [
-            MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[])
-            for m in memories_raw
+            MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[]) for m in memories_raw
         ]
         # Re-use built-in tasks but replace the memory store with real repo memories
         scenario = BenchScenario(
@@ -2120,9 +2166,7 @@ def bench_command(
                     "without_memory": dataclasses.asdict(result.without_memory),
                     "with_memory": dataclasses.asdict(result.with_memory),
                     "deltas": {
-                        "repeated_failure_rate": round(
-                            result.repeated_failure_rate_delta, 4
-                        ),
+                        "repeated_failure_rate": round(result.repeated_failure_rate_delta, 4),
                         "wasted_attempts": result.wasted_attempts_delta,
                         "context_tokens_pct_reduction": round(
                             result.context_tokens_pct_reduction, 1
@@ -2202,10 +2246,7 @@ def plug_command(
     target: Annotated[
         str,
         typer.Argument(
-            help=(
-                "Agent to wire onmc into. "
-                "Choices: claude-code, codex, cursor, omc, omx, all."
-            )
+            help=("Agent to wire onmc into. Choices: claude-code, codex, cursor, omc, omx, all.")
         ),
     ],
 ) -> None:

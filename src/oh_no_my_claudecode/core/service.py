@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.recall.compiler import RecallResult
@@ -274,8 +275,7 @@ class OnmcService:
         from oh_no_my_claudecode.timetravel.memory_diff import memory_diff_to_markdown
 
         output_name = (
-            f"{utc_now().strftime('%Y%m%d-%H%M%S')}"
-            f"-memory-diff-{commit_a[:8]}-{commit_b[:8]}.md"
+            f"{utc_now().strftime('%Y%m%d-%H%M%S')}-memory-diff-{commit_a[:8]}-{commit_b[:8]}.md"
         )
         output_path = compiled_dir(config, repo_root) / output_name
         output_path.write_text(memory_diff_to_markdown(result), encoding="utf-8")
@@ -385,9 +385,7 @@ class OnmcService:
             settings_path=settings_path.as_posix(),
             mcp_path=mcp_path.as_posix(),
             mcp_registered=mcp_registered(mcp_path=mcp_path),
-            legacy_global_hooks=legacy_global_hooks_present(
-                settings_path=user_settings_path(home)
-            ),
+            legacy_global_hooks=legacy_global_hooks_present(settings_path=user_settings_path(home)),
             latest_snapshot_id=latest_snapshot.id if latest_snapshot else None,
             last_pre_compact_at=meta.get("last_pre_compact_at"),
             last_session_start_at=meta.get("last_session_start_at"),
@@ -682,8 +680,7 @@ class OnmcService:
             [task for task in storage.list_tasks() if task.status == TaskStatus.ACTIVE]
         )
         report["memory"].append(
-            f"{len(memories)} memory records "
-            f"({llm_extracted} LLM-extracted, {heuristic} heuristic)"
+            f"{len(memories)} memory records ({llm_extracted} LLM-extracted, {heuristic} heuristic)"
         )
         report["memory"].append(f"{storage.task_count()} tasks ({active_task_count} active)")
         if (repo_root / ".agent-memory" / "manifest.json").exists():
@@ -713,13 +710,9 @@ class OnmcService:
                     if valid:
                         report["provider"].append(f"API key env var: {key_var} valid")
                     elif detail == "invalid credentials":
-                        report["errors"].append(
-                            f"{provider_name} key is invalid. Check {key_var}."
-                        )
+                        report["errors"].append(f"{provider_name} key is invalid. Check {key_var}.")
                     else:
-                        report["warnings"].append(
-                            f"Could not validate {key_var}: {detail}."
-                        )
+                        report["warnings"].append(f"Could not validate {key_var}: {detail}.")
         # --- PATH / binary health (check 1 + 2) ---
         path_checks = _check_onmc_path_health()
         onmc_resolvable = any(sev == "ok" for sev, _ in path_checks)
@@ -745,8 +738,7 @@ class OnmcService:
         # --- MCP sanity (check 3) ---
         mcp_registered_ok = hook_status.mcp_registered
         report["claude"].append(
-            f"MCP server {'registered' if mcp_registered_ok else 'not registered'} "
-            "(.mcp.json)"
+            f"MCP server {'registered' if mcp_registered_ok else 'not registered'} (.mcp.json)"
         )
         if mcp_registered_ok:
             # Verify the MCP entry's command resolves to a working binary.
@@ -910,6 +902,39 @@ class OnmcService:
             )
             raise FileNotFoundError(msg)
         return repo_root, restore_agent_memory(input_dir=source_dir, storage=storage)
+
+    def pull(
+        self,
+        source: Path,
+        *,
+        repo_label: str | None = None,
+    ) -> tuple[Path, PullResult]:
+        """Import memories from another repo's ``.agent-memory/`` export.
+
+        Federated memories are stamped with a ``federated:<repo-label>`` tag so
+        they are clearly attributed to their origin and are never confused with
+        local memories.  Re-pulling is idempotent: memories already present in
+        the local store are skipped.
+
+        Parameters
+        ----------
+        source:
+            Path to another repo root or its ``.agent-memory/`` directory.
+        repo_label:
+            Override the short label used for the ``federated:`` namespace tag.
+            Defaults to the source repo directory name.
+
+        Returns
+        -------
+        tuple[Path, PullResult]
+            ``(local_repo_root, result)`` where *result* carries imported/skipped counts.
+        """
+        from oh_no_my_claudecode.federation.pull import PullResult as _PullResult
+        from oh_no_my_claudecode.federation.pull import pull_memories
+
+        repo_root, _, storage = self._load_context()
+        result: _PullResult = pull_memories(storage, source, repo_label=repo_label)
+        return repo_root, result
 
     def spec_validate(self, path: Path | None = None) -> tuple[Path, SpecValidationReport]:
         """Validate that a .agent-memory/ directory conforms to the open spec."""
@@ -1687,41 +1712,44 @@ class OnmcService:
     ) -> Path:
         output_name = f"{utc_now().strftime('%Y%m%d-%H%M%S')}-{mode.value}.md"
         output_path = compiled_dir(config, repo_root) / output_name
-        markdown = "\n".join(
-            [
-                f"# ONMC {mode.value.title()} Output",
-                "",
-                f"- Task: {task}",
-                (
-                    "- Provider: "
-                    f"{config.llm.provider.value if config.llm.provider else 'unconfigured'}"
-                ),
-                f"- Model: {config.llm.model or 'unknown'}",
-                f"- Repo: `{repo_root.as_posix()}`",
-                "",
-                "## Summary",
-                "",
-                _summary_for_structured_output(mode, structured),
-                "",
-                "## Structured Output",
-                "",
-                "```json",
-                json.dumps(structured.model_dump(mode="json"), indent=2, sort_keys=True),
-                "```",
-                "",
-                "## Files To Inspect",
-                "",
-                *[f"1. `{path}`" for path in brief.files_to_inspect[:8]],
-                "",
-                "## Validation Checklist",
-                "",
-                *[f"- {item}" for item in brief.validation_checklist[:6]],
-                "",
-                "## Prompt Sections",
-                "",
-                *[f"- {title}" for title in prompt.section_titles],
-            ]
-        ).strip() + "\n"
+        markdown = (
+            "\n".join(
+                [
+                    f"# ONMC {mode.value.title()} Output",
+                    "",
+                    f"- Task: {task}",
+                    (
+                        "- Provider: "
+                        f"{config.llm.provider.value if config.llm.provider else 'unconfigured'}"
+                    ),
+                    f"- Model: {config.llm.model or 'unknown'}",
+                    f"- Repo: `{repo_root.as_posix()}`",
+                    "",
+                    "## Summary",
+                    "",
+                    _summary_for_structured_output(mode, structured),
+                    "",
+                    "## Structured Output",
+                    "",
+                    "```json",
+                    json.dumps(structured.model_dump(mode="json"), indent=2, sort_keys=True),
+                    "```",
+                    "",
+                    "## Files To Inspect",
+                    "",
+                    *[f"1. `{path}`" for path in brief.files_to_inspect[:8]],
+                    "",
+                    "## Validation Checklist",
+                    "",
+                    *[f"- {item}" for item in brief.validation_checklist[:6]],
+                    "",
+                    "## Prompt Sections",
+                    "",
+                    *[f"- {title}" for title in prompt.section_titles],
+                ]
+            ).strip()
+            + "\n"
+        )
         output_path.write_text(markdown, encoding="utf-8")
         return output_path
 
@@ -2086,9 +2114,7 @@ def _fallback_mode_output(
         return ReviewModeOutput(
             concerns=brief.risk_notes[:4]
             or ["No major historical risks were identified by the heuristic fallback."],
-            assumptions=[
-                "The proposed change respects the repo invariants surfaced in the brief."
-            ],
+            assumptions=["The proposed change respects the repo invariants surfaced in the brief."],
             likely_regressions=brief.impacted_areas[:4],
             required_tests=brief.validation_checklist[:5],
         )
@@ -2200,9 +2226,7 @@ def _append_report_header(lines: list[str], summary: AgentReadinessSummary) -> N
     )
 
 
-def _append_report_memory_and_tasks(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_memory_and_tasks(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Memory and Task State",
@@ -2219,36 +2243,23 @@ def _append_report_memory_and_tasks(
     )
 
 
-def _append_report_agent_integration(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_agent_integration(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Agent Integration",
             "",
             f"- CLAUDE.md: {'present' if summary.claude_md_exists else 'missing'}",
-            (
-                "- Claude hooks: "
-                f"{'installed' if summary.hooks.installed else 'not installed'}"
-            ),
-            (
-                "- MCP server: "
-                f"{'registered' if summary.hooks.mcp_registered else 'not registered'}"
-            ),
+            (f"- Claude hooks: {'installed' if summary.hooks.installed else 'not installed'}"),
+            (f"- MCP server: {'registered' if summary.hooks.mcp_registered else 'not registered'}"),
             f"- Portable export: {'present' if summary.manifest_exists else 'missing'}",
-            (
-                "- Sync hook: "
-                f"{'installed' if summary.sync_hook_installed else 'not installed'}"
-            ),
+            (f"- Sync hook: {'installed' if summary.sync_hook_installed else 'not installed'}"),
             f"- LLM provider: {summary.provider_label}",
             "",
         ]
     )
 
 
-def _append_report_health_sections(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_health_sections(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(["## Health Signals", ""])
     for section in summary.health_sections:
         items = summary.health.get(section, [])
@@ -2259,9 +2270,7 @@ def _append_report_health_sections(
         lines.append("")
 
 
-def _append_report_recommendations(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_recommendations(lines: list[str], summary: AgentReadinessSummary) -> None:
     if summary.errors:
         lines.extend(["### Errors", ""])
         lines.extend(f"- {item}" for item in summary.errors)
@@ -2275,9 +2284,7 @@ def _append_report_recommendations(
     lines.append("")
 
 
-def _append_report_share_snippet(
-    lines: list[str], summary: AgentReadinessSummary
-) -> None:
+def _append_report_share_snippet(lines: list[str], summary: AgentReadinessSummary) -> None:
     lines.extend(
         [
             "## Share Snippet",
