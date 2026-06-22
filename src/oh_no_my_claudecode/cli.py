@@ -389,6 +389,143 @@ def guard_command(
         pass  # artifact write failure must not break the command
 
 
+@app.command("check")
+def check_command(
+    staged: Annotated[
+        bool,
+        typer.Option("--staged", help="Check git-staged files (default)."),
+    ] = True,
+    files: Annotated[
+        list[str] | None,
+        typer.Option("--file", help="Explicit file paths to check (repeat for multiple)."),
+    ] = None,
+    base: Annotated[
+        str | None,
+        typer.Option("--base", help="Diff against this git ref instead of staged files."),
+    ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Exit nonzero when warn-level findings exist."),
+    ] = False,
+    install_hook: Annotated[
+        bool,
+        typer.Option("--install-hook", help="Install onmc check as a git pre-commit hook."),
+    ] = False,
+) -> None:
+    """Flag staged/changed files that touch recorded invariants or dead-ends.
+
+    By default checks all git-staged files (``git diff --cached --name-only``).
+    Pass ``--file`` to check explicit paths.  Pass ``--base <ref>`` to diff
+    against a git ref.
+
+    Exit code is 0 by default (warn-only).  Pass ``--strict`` to exit nonzero
+    when any warn-level findings are present.
+
+    Pass ``--install-hook`` to wire this command as an idempotent git
+    pre-commit hook (appends to any existing hook; never clobbers it).
+    """
+    import subprocess
+
+    from oh_no_my_claudecode.check import CheckSeverity, install_pre_commit_hook, run_check
+    from oh_no_my_claudecode.core.repo import discover_repo_root
+
+    try:
+        repo_root = discover_repo_root(Path.cwd())
+    except Exception as exc:  # noqa: BLE001
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if install_hook:
+        hook_path, was_created = install_pre_commit_hook(repo_root)
+        if was_created:
+            console.print(f"[green]Pre-commit hook installed:[/green] {hook_path}")
+        else:
+            console.print(
+                f"[green]Pre-commit hook updated (onmc block appended):[/green] {hook_path}"
+            )
+        return
+
+    # Resolve file list from the requested source.
+    changed_files: list[str]
+    if files:
+        changed_files = list(files)
+    elif base is not None:
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--name-only", base, "HEAD"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            changed_files = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        except subprocess.CalledProcessError as exc:
+            raise typer.Exit(code=_fatal(f"git diff failed: {exc.stderr.strip()}")) from exc
+    else:
+        # Default: staged files.
+        try:
+            result = subprocess.run(
+                ["git", "diff", "--cached", "--name-only"],
+                cwd=repo_root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            changed_files = [ln.strip() for ln in result.stdout.splitlines() if ln.strip()]
+        except subprocess.CalledProcessError as exc:
+            raise typer.Exit(code=_fatal(f"git diff failed: {exc.stderr.strip()}")) from exc
+
+    if not changed_files:
+        console.print("[dim]onmc check: no files to check.[/dim]")
+        return
+
+    try:
+        _, _, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError:
+        # onmc not initialized — silently skip (don't block the commit).
+        console.print("[dim]onmc check: store not initialized, skipping.[/dim]")
+        return
+
+    check_result = run_check(repo_root, storage, changed_files)
+
+    if not check_result.findings:
+        console.print(
+            f"[green]onmc check:[/green] {len(changed_files)} file(s) checked, no findings."
+        )
+        return
+
+    # Group findings by file for readable output.
+    from collections import defaultdict
+
+    from oh_no_my_claudecode.check import CheckFinding
+
+    by_file: dict[str, list[CheckFinding]] = defaultdict(list)
+    for finding in check_result.findings:
+        by_file[finding.rel_path].append(finding)
+
+    console.print(
+        f"[bold]onmc check[/bold] — {len(changed_files)} file(s), "
+        f"{check_result.warn_count} warning(s), {check_result.info_count} info(s)"
+    )
+    console.print()
+
+    for rel_path, path_findings in sorted(by_file.items()):
+        console.print(f"[bold]{rel_path}[/bold]")
+        for finding in path_findings:
+            if finding.severity == CheckSeverity.WARN:
+                prefix = "  [yellow]WARNING[/yellow]"
+            else:
+                prefix = "  [dim]INFO[/dim]   "
+            short_summary = finding.summary[:120]
+            if len(finding.summary) > 120:
+                short_summary += "..."
+            console.print(f"{prefix} [{finding.kind}] {finding.title}")
+            console.print(f"         {short_summary}")
+        console.print()
+
+    if strict and check_result.has_warnings:
+        raise typer.Exit(code=1)
+
+
 @app.command("status")
 def status_command() -> None:
     """Show local ONMC status."""
@@ -843,6 +980,70 @@ def hooks_session_end_command() -> None:
     try:
         _read_hook_payload()  # consume stdin; payload not used today
         _service().consolidate(dry_run=False)
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+# Tools that carry a file_path in tool_input (Edit / Write variants).
+_EDIT_TOOL_NAMES = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+
+
+@hooks_app.command("pre-tool-use")
+def hooks_pre_tool_use_command() -> None:
+    """Inject file-level danger warnings before the agent edits a file.
+
+    Called automatically by the Claude Code PreToolUse hook (matcher:
+    ``Edit|Write|MultiEdit|NotebookEdit``).  Reads the hook payload from
+    stdin, extracts ``tool_input.file_path``, looks up hotspot / invariant /
+    failed-approach memories for that file, and emits a PreToolUse
+    ``additionalContext`` JSON payload to stdout when anything notable is
+    found.  Non-edit tools and unknown paths produce no output.
+
+    Design invariants:
+    - Always exits 0 — never blocks the edit.
+    - Any exception is silently swallowed; stdout stays clean on error.
+    - Output is tiny: at most a handful of bullet points.
+    """
+    try:
+        payload = _read_hook_payload()
+        tool_name = payload.get("tool_name", "")
+        if not isinstance(tool_name, str) or tool_name not in _EDIT_TOOL_NAMES:
+            return
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict):
+            return
+        raw_file_path = tool_input.get("file_path")
+        if not isinstance(raw_file_path, str) or not raw_file_path.strip():
+            return
+        try:
+            from oh_no_my_claudecode.core.repo import discover_repo_root
+            from oh_no_my_claudecode.hooks.pre_tool_use import compile_pretool_warning
+
+            # Determine repo root: prefer cwd from payload, fall back to process cwd.
+            raw_cwd = payload.get("cwd")
+            cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+            try:
+                repo_root = discover_repo_root(cwd)
+            except Exception:  # noqa: BLE001
+                repo_root = cwd
+
+            _, _config, storage = _service()._load_context()  # noqa: SLF001
+            warning_md, n = compile_pretool_warning(storage, repo_root, raw_file_path)
+        except Exception:  # noqa: BLE001
+            return
+        if n == 0 or not warning_md:
+            return
+        sys.stdout.write(
+            json.dumps(
+                {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "additionalContext": warning_md,
+                    }
+                }
+            )
+            + "\n"
+        )
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 

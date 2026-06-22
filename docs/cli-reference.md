@@ -29,6 +29,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              history.                                                        │
 │ memory-diff  Show what repo knowledge changed between two commits.           │
 │ guard        Surface recorded dead-ends so you never repeat a known failure. │
+│ check        Flag staged/changed files that touch recorded invariants or     │
+│              dead-ends.                                                      │
 │ status       Show local ONMC status.                                         │
 │ statusline   Print a compact one-line brain health string for Claude Code    │
 │              statusLine.                                                     │
@@ -461,6 +463,8 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │ prompt-recall  Inject the most relevant repo memories for the current user   │
 │                prompt.                                                       │
 │ session-end    Run memory consolidation on SessionEnd.                       │
+│ pre-tool-use   Inject file-level danger warnings before the agent edits a    │
+│                file.                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
