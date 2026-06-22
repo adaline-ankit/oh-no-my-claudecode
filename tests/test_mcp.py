@@ -482,3 +482,186 @@ def test_record_memory_toon_contains_id(
     )
     assert "memory_id" in text
     assert "manual" in text  # source_type
+
+
+# ---------------------------------------------------------------------------
+# Recall tool: provenance citation + score breakdown in MCP output
+# ---------------------------------------------------------------------------
+
+
+def _seed_failed_approach_for_mcp(repo: OnmcRepo) -> str:
+    """Seed a FAILED_APPROACH memory into *repo* and return its id."""
+    from oh_no_my_claudecode.models import MemoryKind, SourceType
+    from oh_no_my_claudecode.models.memory import MemoryEntry
+    from oh_no_my_claudecode.utils.text import stable_id
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    now = utc_now()
+    entry = MemoryEntry(
+        id=stable_id(
+            MemoryKind.FAILED_APPROACH.value,
+            "TypeError null access mcp",
+            "TypeError accessing null in mcp test.",
+            "test:mcp",
+            prefix="mcp",
+        ),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="TypeError null access mcp",
+        summary="TypeError accessing null property in mcp test code.",
+        details="Guard with null check before access.",
+        source_type=SourceType.MANUAL,
+        source_ref="test:mcp",
+        tags=["typeerror", "null", "mcp"],
+        confidence=0.85,
+        created_at=now,
+        updated_at=now,
+    )
+    _, _, storage = repo._service._load_context()
+    storage.upsert_memories([entry])
+    return entry.id
+
+
+def test_recall_tool_json_includes_provenance_and_why(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """MCP recall result entries include 'provenance' and 'why' fields in JSON mode."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+    mem_id = _seed_failed_approach_for_mcp(repo)
+
+    text = _tool_text(
+        repo,
+        "recall",
+        {"query": "TypeError accessing null property mcp test", "limit": 5},
+    )
+    payload = json.loads(text)
+
+    assert payload["has_matches"]
+    entries = payload["entries"]
+    match = next((e for e in entries if e["memory_id"] == mem_id), None)
+    assert match is not None, f"Expected {mem_id!r} in entries: {entries}"
+
+    # provenance must be present and non-empty (SourceType.MANUAL → "manual" in string)
+    assert "provenance" in match, "Entry must include 'provenance' field"
+    assert match["provenance"], "provenance must be non-empty"
+    assert "manual" in match["provenance"]
+
+    # why must be present with the three compact sub-fields
+    assert "why" in match, "Entry must include 'why' field"
+    why = match["why"]
+    assert "final" in why
+    assert "overlap" in why
+    assert "boost" in why
+    assert isinstance(why["final"], float)
+    assert why["final"] > 0.0
+    assert why["overlap"] > 0.0
+    assert why["overlap"] <= 1.0
+    assert why["boost"] >= 1.0
+
+
+def test_recall_tool_toon_includes_provenance_and_why(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MCP recall result includes provenance and why in TOON (default) format."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+    _seed_failed_approach_for_mcp(repo)
+
+    text = _tool_text(
+        repo,
+        "recall",
+        {"query": "TypeError accessing null property mcp test", "limit": 5},
+    )
+
+    # TOON output is not JSON-parseable at the top level, but the field names
+    # and values must appear somewhere in the rendered output.
+    assert "provenance" in text, "TOON output should contain 'provenance' field name"
+    assert "manual" in text, "TOON output should contain the source type value"
+    assert "why" in text, "TOON output should contain 'why' field name"
+    assert "final" in text or "boost" in text, (
+        "TOON output should contain score breakdown sub-fields"
+    )
+
+
+def test_recall_tool_json_empty_result_has_no_provenance(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """Empty recall result (no matches) contains no spurious provenance or why fields."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+
+    text = _tool_text(repo, "recall", {"query": "xyzzyx frabbitz quux bizarre error"})
+    payload = json.loads(text)
+
+    assert not payload["has_matches"]
+    assert payload["entries"] == []
+
+
+def test_recall_tool_json_provenance_omitted_gracefully_when_citation_empty(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """When a RecallEntry has an empty citation, 'provenance' is omitted from JSON output."""
+    from oh_no_my_claudecode.mcp_server.tools import _recall_entry_dict
+    from oh_no_my_claudecode.recall.compiler import RecallEntry, ScoreBreakdown
+
+    # Build an entry with empty citation
+    entry_no_citation = RecallEntry(
+        memory_id="mem-test",
+        title="Test entry",
+        what_happened="Something happened.",
+        resolution="Fix it.",
+        source_ref="test:ref",
+        confidence=0.8,
+        relevance=0.5,
+        kind="failed_approach",
+        citation="",  # explicitly empty
+        score_breakdown=ScoreBreakdown(
+            overlap_ratio=0.5,
+            confidence=0.8,
+            feedback_score=0.0,
+            kind_boost=3.0,
+            stale_penalty=1.0,
+            final_score=1.2,
+        ),
+    )
+    row = _recall_entry_dict(entry_no_citation)
+
+    assert "provenance" not in row, "Empty citation must not produce 'provenance' key"
+    assert "why" in row, "Non-None score_breakdown must always produce 'why' key"
+
+
+def test_recall_tool_json_why_omitted_when_breakdown_absent(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """When score_breakdown is None, 'why' is omitted from JSON output."""
+    from oh_no_my_claudecode.mcp_server.tools import _recall_entry_dict
+    from oh_no_my_claudecode.recall.compiler import RecallEntry
+
+    entry_no_breakdown = RecallEntry(
+        memory_id="mem-no-bd",
+        title="Test entry without breakdown",
+        what_happened="Something happened.",
+        resolution="Fix it.",
+        source_ref="test:ref",
+        confidence=0.8,
+        relevance=0.5,
+        kind="failed_approach",
+        citation="(manual · test:ref)",
+        score_breakdown=None,  # absent
+    )
+    row = _recall_entry_dict(entry_no_breakdown)
+
+    assert "why" not in row, "Absent score_breakdown must not produce 'why' key"
+    assert "provenance" in row, "Non-empty citation must produce 'provenance' key"

@@ -310,20 +310,43 @@ def _recall(repo: OnmcRepo, args: dict[str, Any]) -> str:
         "has_matches": result.has_matches,
         "no_data_hint": result.no_data_hint if not result.has_matches else "",
         "entries": [
-            {
-                "memory_id": entry.memory_id,
-                "title": entry.title,
-                "what_happened": entry.what_happened,
-                "resolution": entry.resolution,
-                "source_ref": entry.source_ref,
-                "confidence": entry.confidence,
-                "relevance": round(entry.relevance, 3),
-                "kind": entry.kind,
-            }
+            _recall_entry_dict(entry)
             for entry in result.entries
         ],
     }
     return _json_text(payload)
+
+
+def _recall_entry_dict(entry: object) -> dict[str, object]:
+    """Serialize one RecallEntry to a dict, including provenance + score summary."""
+    # Import lazily to avoid circular import at module load time.
+    from oh_no_my_claudecode.recall.compiler import RecallEntry  # noqa: PLC0415
+
+    if not isinstance(entry, RecallEntry):
+        msg = f"Expected RecallEntry, got {type(entry).__name__}"
+        raise TypeError(msg)
+    row: dict[str, object] = {
+        "memory_id": entry.memory_id,
+        "title": entry.title,
+        "what_happened": entry.what_happened,
+        "resolution": entry.resolution,
+        "source_ref": entry.source_ref,
+        "confidence": entry.confidence,
+        "relevance": round(entry.relevance, 3),
+        "kind": entry.kind,
+    }
+    # Provenance citation — omit when empty.
+    if entry.citation:
+        row["provenance"] = entry.citation
+    # Compact score summary — omit when breakdown is absent.
+    bd = entry.score_breakdown
+    if bd is not None:
+        row["why"] = {
+            "final": round(bd.final_score, 3),
+            "overlap": round(bd.overlap_ratio, 3),
+            "boost": round(bd.kind_boost, 2),
+        }
+    return row
 
 
 def _search_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:

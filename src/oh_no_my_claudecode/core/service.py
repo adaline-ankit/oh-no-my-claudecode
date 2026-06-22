@@ -949,11 +949,17 @@ class OnmcService:
 
     def pull(
         self,
-        source: Path,
+        source: str | Path,
         *,
+        ref: str | None = None,
         repo_label: str | None = None,
     ) -> tuple[Path, PullResult]:
         """Import memories from another repo's ``.agent-memory/`` export.
+
+        Accepts either a local path or a remote git URL.  When *source* is a
+        git URL (``https://``, ``http://``, ``git@``, ``ssh://``, or ending
+        with ``.git``) the repo is shallow-cloned to a temporary directory,
+        its ``.agent-memory/`` is imported, and the clone is removed.
 
         Federated memories are stamped with a ``federated:<repo-label>`` tag so
         they are clearly attributed to their origin and are never confused with
@@ -963,10 +969,15 @@ class OnmcService:
         Parameters
         ----------
         source:
-            Path to another repo root or its ``.agent-memory/`` directory.
+            Local path (str or Path) to another repo root or its
+            ``.agent-memory/`` directory, **or** a remote git URL.
+        ref:
+            Branch, tag, or commit-ish to check out when cloning a remote URL.
+            Ignored for local paths.  Defaults to the remote's default branch.
         repo_label:
             Override the short label used for the ``federated:`` namespace tag.
-            Defaults to the source repo directory name.
+            For local paths defaults to the source directory name; for remote
+            URLs defaults to the last path segment of the URL (minus ``.git``).
 
         Returns
         -------
@@ -975,9 +986,23 @@ class OnmcService:
         """
         from oh_no_my_claudecode.federation.pull import PullResult as _PullResult
         from oh_no_my_claudecode.federation.pull import pull_memories
+        from oh_no_my_claudecode.federation.remote import clone_and_pull, is_git_url
 
         repo_root, _, storage = self._load_context()
-        result: _PullResult = pull_memories(storage, source, repo_label=repo_label)
+
+        source_str = str(source)
+        result: _PullResult
+        if is_git_url(source_str):
+            result = clone_and_pull(
+                storage,
+                source_str,
+                ref=ref,
+                repo_label=repo_label,
+            )
+        else:
+            source_path = source if isinstance(source, Path) else Path(source_str)
+            result = pull_memories(storage, source_path, repo_label=repo_label)
+
         return repo_root, result
 
     def spec_validate(self, path: Path | None = None) -> tuple[Path, SpecValidationReport]:
