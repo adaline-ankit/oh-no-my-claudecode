@@ -9,8 +9,12 @@ PRE_COMPACT_COMMAND = "onmc hooks pre-compact"
 SESSION_START_COMMAND = "onmc hooks session-start"
 SESSION_END_COMMAND = "onmc hooks session-end"
 PROMPT_RECALL_COMMAND = "onmc hooks prompt-recall"
+PRE_TOOL_USE_COMMAND = "onmc hooks pre-tool-use"
 LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
 MCP_SERVER_NAME = "onmc"
+
+# Matcher for PreToolUse: fires on file-editing tools only.
+_PRE_TOOL_USE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 
 _ONMC_COMMANDS = frozenset(
     {
@@ -18,11 +22,19 @@ _ONMC_COMMANDS = frozenset(
         SESSION_START_COMMAND,
         SESSION_END_COMMAND,
         PROMPT_RECALL_COMMAND,
+        PRE_TOOL_USE_COMMAND,
         LEGACY_POST_COMPACT_COMMAND,
     }
 )
 # "PostCompact" is not a real Claude Code event; earlier onmc versions registered it.
-_HOOK_EVENTS = ("PreCompact", "PostCompact", "SessionStart", "SessionEnd", "UserPromptSubmit")
+_HOOK_EVENTS = (
+    "PreCompact",
+    "PostCompact",
+    "PreToolUse",
+    "SessionStart",
+    "SessionEnd",
+    "UserPromptSubmit",
+)
 
 
 def project_settings_path(repo_root: Path) -> Path:
@@ -80,6 +92,9 @@ def install_claude_hooks(
     - ``UserPromptSubmit`` (matcher ``""``) runs ``onmc hooks prompt-recall``
       on every user prompt, injecting only the memories most relevant to that
       specific prompt.
+    - ``PreToolUse`` (matcher ``"Edit|Write|MultiEdit|NotebookEdit"``) runs
+      ``onmc hooks pre-tool-use`` before every file edit, injecting hotspot /
+      invariant / failed-approach warnings for the target file.
 
     MCP registration is merged into ``<repo>/.mcp.json`` (Claude Code does not
     read MCP servers from settings.json). A backup of the pre-install settings
@@ -124,6 +139,12 @@ def install_claude_hooks(
         event_name="SessionEnd",
         matcher="",
         command=SESSION_END_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_PRE_TOOL_USE_MATCHER,
+        command=PRE_TOOL_USE_COMMAND,
     )
     _write_json(settings_path, settings)
     if register_mcp:
@@ -196,6 +217,12 @@ def hooks_installed(*, settings_path: Path) -> bool:
             event_name="SessionEnd",
             matcher="",
             command=SESSION_END_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="PreToolUse",
+            matcher=_PRE_TOOL_USE_MATCHER,
+            command=PRE_TOOL_USE_COMMAND,
         )
     )
 
