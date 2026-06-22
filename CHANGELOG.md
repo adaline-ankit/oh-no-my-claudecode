@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-06-22
+
+### Added
+
+- **`onmc coverage`** — a knowledge-gap dashboard. Joins the repo's file-churn index against memory `source_ref` associations to answer "where are the blind spots?". Headline output is **Top Uncovered Hotspots**: high-churn files with zero memory coverage, sorted by commit frequency — the landmines most likely to cause regressions. Plus per-subsystem coverage rows (worst-first) and an overall coverage %. `--json`.
+
+### Changed
+
+- **Confidence-decay recall ranking** — a memory's confidence contribution now decays exponentially with time since last corroboration (90-day half-life, 0.3 floor), so stale never-reconfirmed memories rank below fresh/corroborated ones of equal textual relevance. Positive feedback slows the ageing; textual overlap is never penalised. `decay_factor` is exposed on `ScoreBreakdown` and flows into the MCP `why` explanation.
+
 ## [0.15.0] — 2026-06-22
 
 ### Added
