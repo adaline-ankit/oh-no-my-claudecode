@@ -1,3 +1,4 @@
+from oh_no_my_claudecode.mine.autocapture import capture_from_transcript
 from oh_no_my_claudecode.mine.extractor import extract_transcript_findings, mine_transcripts
 from oh_no_my_claudecode.mine.github_miner import (
     extract_github_pr_findings,
@@ -14,6 +15,7 @@ from oh_no_my_claudecode.mine.transcript import (
 )
 
 __all__ = [
+    "capture_from_transcript",
     "claude_project_dir_name",
     "discover_transcript_dir",
     "discover_transcripts",
