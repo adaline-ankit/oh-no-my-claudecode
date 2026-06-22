@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-06-23
+
+### Added
+
+- **Context firewall — "the memory layer with zero context tax."** Operational notification noise (capture confirmations, staleness warnings, "surfaced N" meta-notices, danger-guard advisories) is now routed to a side sink instead of the agent's context window, so context carries only high-value recall. New `notify/` subsystem: `NotifyEvent` + sinks — FileSink (default, JSONL → `.onmc/notify.log`), DiscordSink, SlackSink (stdlib urllib, short timeout, exception-safe, no-op without a webhook). Routine events batch; failures emit immediately. Config precedence env > config.yaml > default. `onmc notify test|status|tail`.
+- Hooks (per-prompt recall, boot-digest, pre-tool-use) emit observability events to the sink while keeping recalled memories/skills — and any real safety block — in context. Kill-switch `ONMC_FIREWALL=0` restores prior in-context behavior; every hook still exits 0 and never blocks.
+
 ## [0.18.0] — 2026-06-23
 
 ### Added
