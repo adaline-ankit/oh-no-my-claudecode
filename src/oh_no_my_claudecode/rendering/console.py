@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
+
+if TYPE_CHECKING:
+    from oh_no_my_claudecode.profile.compiler import UserProfile
 
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
@@ -1060,6 +1065,54 @@ def render_user_memory_removed(memory_id: str, *, found: bool) -> None:
         console.print(f"[green]Removed user preference:[/green] {memory_id}")
     else:
         console.print(f"[yellow]User preference not found:[/yellow] {memory_id}")
+
+
+def render_user_profile(profile: UserProfile) -> None:
+    """Render a derived user behavioral profile in a rich panel.
+
+    Sections: Preferences / Patterns / Mistakes to avoid / Tooling.
+    Empty sections are omitted.  When the profile is entirely empty, prints a
+    hint to add user preferences first.
+    """
+    if profile.is_empty:
+        console.print(
+            "[yellow]No user profile data found. "
+            "Use `onmc user add` to record preferences.[/yellow]"
+        )
+        return
+
+    noun = "memory" if profile.derived_from == 1 else "memories"
+    lines: list[str] = [f"Derived from {profile.derived_from} user {noun}.", ""]
+
+    if profile.preferences:
+        lines.append("[bold cyan]Preferences[/bold cyan]")
+        for title, summary in profile.preferences:
+            short = shorten(summary, max_length=80)
+            lines.append(f"  [green]+[/green] [bold]{title}[/bold]: {short}")
+        lines.append("")
+
+    if profile.frequent_mistakes:
+        lines.append("[bold red]Mistakes to avoid[/bold red]")
+        for title, summary in profile.frequent_mistakes:
+            short = shorten(summary, max_length=80)
+            lines.append(f"  [red]-[/red] [bold]{title}[/bold]: {short}")
+        lines.append("")
+
+    if profile.tooling:
+        lines.append("[bold yellow]Tooling[/bold yellow]")
+        for title, summary in profile.tooling:
+            short = shorten(summary, max_length=80)
+            lines.append(f"  [yellow]~[/yellow] [bold]{title}[/bold]: {short}")
+        lines.append("")
+
+    if profile.patterns:
+        lines.append("[bold]Patterns[/bold]")
+        for title, summary in profile.patterns:
+            short = shorten(summary, max_length=80)
+            lines.append(f"  [dim]·[/dim] [bold]{title}[/bold]: {short}")
+        lines.append("")
+
+    console.print(Panel.fit("\n".join(lines).rstrip(), title="Your User Profile"))
 
 
 def render_hud(health: MemoryHealth) -> None:

@@ -69,6 +69,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_user_memory_detail,
     render_user_memory_list,
     render_user_memory_removed,
+    render_user_profile,
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
@@ -100,6 +101,10 @@ user_app = typer.Typer(
     help="Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).",
     no_args_is_help=True,
 )
+profile_app = typer.Typer(
+    help="Show and rebuild the derived user behavioral profile (~/.onmc/user.db).",
+    no_args_is_help=True,
+)
 skill_app = typer.Typer(
     help="Manage self-improving skills synthesized from playbooks and memory patterns.",
     no_args_is_help=True,
@@ -118,6 +123,7 @@ app.add_typer(claude_md_app, name="claude-md")
 app.add_typer(playbook_app, name="playbook")
 app.add_typer(skill_app, name="skill")
 app.add_typer(user_app, name="user")
+app.add_typer(profile_app, name="profile")
 app.add_typer(notify_app, name="notify")
 
 
@@ -2548,6 +2554,58 @@ def user_remove_command(memory_id: str) -> None:
     """Remove a user preference by ID."""
     found = _service().remove_user_memory(memory_id)
     render_user_memory_removed(memory_id, found=found)
+
+
+# ---------------------------------------------------------------------------
+# Profile commands — derived behavioral profile from user-scope memories
+# ---------------------------------------------------------------------------
+
+
+@profile_app.command("show")
+def profile_show_command(
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Output the profile as JSON."),
+    ] = False,
+) -> None:
+    """Show the derived behavioral profile compiled from ~/.onmc/user.db.
+
+    Buckets user memories into preferences, patterns, mistakes-to-avoid, and
+    tooling — entirely offline, no LLM calls.  Use `onmc user add` to seed
+    the profile with more memories.
+    """
+    profile = _service().user_profile()
+    if json_out:
+        import dataclasses
+
+        console.print(
+            json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2)
+        )
+        return
+    render_user_profile(profile)
+
+
+@profile_app.command("rebuild")
+def profile_rebuild_command(
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Output the rebuilt profile as JSON."),
+    ] = False,
+) -> None:
+    """Recompute the behavioral profile from ~/.onmc/user.db and display it.
+
+    Equivalent to `onmc profile show` — the profile is always freshly derived
+    from the current user store (no cache).
+    """
+    profile = _service().user_profile()
+    if json_out:
+        import dataclasses
+
+        console.print(
+            json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2)
+        )
+        return
+    render_user_profile(profile)
 
 
 @spec_app.command("print")

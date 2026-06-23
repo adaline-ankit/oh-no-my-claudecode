@@ -19,6 +19,9 @@ _MAX_USER_PREFS = 5
 # Max skills to surface in the boot digest.
 _MAX_BOOT_SKILLS = 2
 
+# Max profile items per bucket to surface in boot digest.
+_MAX_PROFILE_ITEMS = 2
+
 
 def compile_boot_digest(
     *,
@@ -39,6 +42,8 @@ def compile_boot_digest(
     *user_memories* is an optional list of user-scope preference memories (from
     ``~/.onmc/user.db``).  Up to ``_MAX_USER_PREFS`` are prepended as a small
     "Your preferences" section so they travel with the developer across all repos.
+    A compact derived "Your profile" block (preferences + mistakes-to-avoid) is
+    also injected when user memories are present.
 
     *skills* is an optional list of Skill objects.  Up to ``_MAX_BOOT_SKILLS``
     auto_inject skills (ranked by confidence) are appended as a compact section so
@@ -73,6 +78,9 @@ def compile_boot_digest(
     prefs = [m for m in (user_memories or []) if m.feedback_score > -0.5]
     top_skills = _select_top_skills(skills or [], max_items=_MAX_BOOT_SKILLS)
 
+    # Derive a compact user profile from user memories (graceful-empty on missing db).
+    profile = _compile_profile_safe(prefs)
+
     if not invariants and not hotspots and not active_tasks and not prefs and not top_skills:
         return "", 0
 
@@ -86,6 +94,10 @@ def compile_boot_digest(
             repo_name=repo_name,
             prefs=prefs,
         )
+        # Append compact profile lines (mistakes-to-avoid) in terse mode when verbose.
+        profile_text = _render_profile_terse(profile)
+        if profile_text:
+            text = f"{text}\n{profile_text}" if text else profile_text
         # Append compact skills lines if any.
         if top_skills:
             from oh_no_my_claudecode.serialize.skill_renderer import render_skills_terse
@@ -97,6 +109,7 @@ def compile_boot_digest(
             return "", 0
         token_count = len(tokenize(text))
         _firewall_emit_boot_recall(repo_root, token_count)
+        _firewall_emit_profile_injected(repo_root, profile)
         return text, token_count
 
     # Full markdown mode.
@@ -107,6 +120,9 @@ def compile_boot_digest(
         for memory in prefs[:_MAX_USER_PREFS]:
             lines.append(f"- **{memory.title}**: {shorten(memory.summary, max_length=100)}")
         lines.append("")
+
+    # Derived profile block — compact mistakes + extra preferences not already listed.
+    _append_profile_lines(lines, profile)
 
     if invariants:
         lines.append("### Key invariants & decisions")
@@ -137,6 +153,7 @@ def compile_boot_digest(
 
     if token_count <= BOOT_DIGEST_MAX_TOKENS:
         _firewall_emit_boot_recall(repo_root, token_count)
+        _firewall_emit_profile_injected(repo_root, profile)
         return markdown, token_count
 
     # Trim to fit the token budget.
@@ -150,6 +167,7 @@ def compile_boot_digest(
     )
     token_count = len(tokenize(markdown))
     _firewall_emit_boot_recall(repo_root, token_count)
+    _firewall_emit_profile_injected(repo_root, profile)
     return markdown, token_count
 
 
@@ -169,6 +187,95 @@ def _firewall_emit_boot_recall(repo_root: Path | None, token_count: int) -> None
                 detail=f"tokens≈{token_count}",
             ),
         )
+
+
+def _firewall_emit_profile_injected(repo_root: Path | None, profile: object) -> None:
+    """Emit an observability event when a non-empty profile was injected (exception-safe)."""
+    with contextlib.suppress(Exception):
+        from oh_no_my_claudecode.hooks.firewall import firewall_emit
+        from oh_no_my_claudecode.notify import EventKind, EventSeverity, NotifyEvent
+        from oh_no_my_claudecode.profile.compiler import UserProfile
+
+        if not isinstance(profile, UserProfile) or profile.is_empty:
+            return
+        _root = repo_root if repo_root is not None else Path.cwd()
+        firewall_emit(
+            _root,
+            NotifyEvent(
+                kind=EventKind.GENERIC,
+                severity=EventSeverity.ROUTINE,
+                title="user-profile injected into boot-digest",
+                detail=f"derived_from={profile.derived_from}",
+            ),
+        )
+
+
+def _compile_profile_safe(prefs: list[MemoryEntry]) -> object:
+    """Compile a UserProfile from *prefs*, returning an empty profile on any error."""
+    with contextlib.suppress(Exception):
+        from oh_no_my_claudecode.profile.compiler import compile_user_profile
+
+        return compile_user_profile(prefs)
+    # Return a sentinel empty object that passes is_empty checks.
+    from oh_no_my_claudecode.profile.compiler import UserProfile
+
+    return UserProfile()
+
+
+def _append_profile_lines(lines: list[str], profile: object) -> None:
+    """Append a compact '### Your profile' block to *lines* when the profile has data.
+
+    Only mistakes-to-avoid are added here (preferences already surfaced above).
+    Under ONMC_VERBOSE, also adds tooling signals.
+    """
+    with contextlib.suppress(Exception):
+        from oh_no_my_claudecode.profile.compiler import UserProfile
+        from oh_no_my_claudecode.serialize.terse import is_terse
+
+        if not isinstance(profile, UserProfile) or profile.is_empty:
+            return
+
+        verbose = not is_terse(default=True)
+        profile_lines: list[str] = []
+
+        if profile.frequent_mistakes:
+            profile_lines.append("### Mistakes to avoid")
+            for title, summary in profile.frequent_mistakes[:_MAX_PROFILE_ITEMS]:
+                profile_lines.append(
+                    f"- **{title}**: {shorten(summary, max_length=100)}"
+                )
+            profile_lines.append("")
+
+        if verbose and profile.tooling:
+            profile_lines.append("### Tooling preferences")
+            for title, summary in profile.tooling[:_MAX_PROFILE_ITEMS]:
+                profile_lines.append(
+                    f"- **{title}**: {shorten(summary, max_length=100)}"
+                )
+            profile_lines.append("")
+
+        lines.extend(profile_lines)
+
+
+def _render_profile_terse(profile: object) -> str:
+    """Render compact MISTAKE: lines for the terse boot digest.
+
+    Returns an empty string when the profile is empty or on any error.
+    Only mistakes-to-avoid are surfaced in terse mode to keep token budget tight.
+    """
+    with contextlib.suppress(Exception):
+        from oh_no_my_claudecode.profile.compiler import UserProfile
+
+        if not isinstance(profile, UserProfile) or profile.is_empty:
+            return ""
+        if not profile.frequent_mistakes:
+            return ""
+        parts = []
+        for title, _summary in profile.frequent_mistakes[:_MAX_PROFILE_ITEMS]:
+            # Keep it terse: just the title
+            parts.append(f"MISTAKE: {title}")
+        return "\n".join(parts)
+    return ""
 
 
 def _select_kind(memories: list[MemoryEntry], kinds: set[MemoryKind]) -> list[MemoryEntry]:

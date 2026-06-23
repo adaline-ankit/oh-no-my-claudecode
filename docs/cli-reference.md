@@ -83,6 +83,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              memory patterns.                                                │
 │ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
 │              repo-scoped).                                                   │
+│ profile      Show and rebuild the derived user behavioral profile            │
+│              (~/.onmc/user.db).                                              │
 │ notify       Inspect and test the context firewall notification sink.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -1435,6 +1437,56 @@ Usage: onmc user remove [OPTIONS] MEMORY_ID
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc profile`
+
+```text
+Usage: onmc profile [OPTIONS] COMMAND [ARGS]...                                
+                                                                                
+ Show and rebuild the derived user behavioral profile (~/.onmc/user.db).        
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ show     Show the derived behavioral profile compiled from ~/.onmc/user.db.  │
+│ rebuild  Recompute the behavioral profile from ~/.onmc/user.db and display   │
+│          it.                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc profile show`
+
+```text
+Usage: onmc profile show [OPTIONS]                                             
+                                                                                
+ Show the derived behavioral profile compiled from ~/.onmc/user.db.             
+                                                                                
+ Buckets user memories into preferences, patterns, mistakes-to-avoid, and       
+ tooling — entirely offline, no LLM calls.  Use `onmc user add` to seed         
+ the profile with more memories.                                                
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Output the profile as JSON.                                  │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc profile rebuild`
+
+```text
+Usage: onmc profile rebuild [OPTIONS]                                          
+                                                                                
+ Recompute the behavioral profile from ~/.onmc/user.db and display it.          
+                                                                                
+ Equivalent to `onmc profile show` — the profile is always freshly derived      
+ from the current user store (no cache).                                        
+                                                                                
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Output the rebuilt profile as JSON.                          │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
