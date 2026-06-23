@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.33.0] — 2026-06-23
+
+### Added
+
+- **`onmc mcp` — runtime MCP trust gateway.** The runtime complement to the static `onmc audit`: audit finds risky config, this gates risky calls. A `.onmc/mcp-policy.yaml` declares a server allowlist, per-tool scopes (read/write/network), and an approval-required list; `classify_call` returns allow / block / approval_required per tool call (secret-in-args → block; unknown server/network/write → approval; reuses the `onmc audit` secret + prompt-injection patterns on args). `onmc mcp policy init [--force]` writes a documented safe-default policy; `onmc mcp check <calls.jsonl> [--json] [--fail-on block|approval_required]` classifies recorded tool calls offline and exits nonzero at/above the threshold for CI/guard gating, appending decisions to a JSONL audit log.
+
 ## [0.32.0] — 2026-06-23
 
 ### Added
