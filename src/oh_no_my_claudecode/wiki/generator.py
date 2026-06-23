@@ -22,6 +22,7 @@ truncation leak into the output.
 from __future__ import annotations
 
 from collections import defaultdict
+from enum import StrEnum
 from pathlib import Path
 
 from oh_no_my_claudecode.models import (
@@ -75,6 +76,11 @@ _EDGE_VERBS: dict[EdgeType, str] = {
     EdgeType.RELATES: "relates to",
     EdgeType.DUPLICATE_OF: "is a duplicate of",
 }
+
+
+class WikiFormat(StrEnum):
+    MARKDOWN = "markdown"
+    OBSIDIAN = "obsidian"
 
 
 # ---------------------------------------------------------------------------

@@ -75,6 +75,7 @@ from oh_no_my_claudecode.rendering.console import (
 from oh_no_my_claudecode.setup import run_setup_wizard
 from oh_no_my_claudecode.ui import serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
+from oh_no_my_claudecode.wiki import WikiFormat
 
 app = typer.Typer(
     help="Repo-native memory and context compiler for coding agents.",
@@ -1791,10 +1792,14 @@ def wiki_command(
             ),
         ),
     ] = None,
+    wiki_format: Annotated[
+        WikiFormat,
+        typer.Option("--format", help="Output format: markdown wiki or Obsidian vault."),
+    ] = WikiFormat.MARKDOWN,
 ) -> None:
-    """Generate a browsable multi-page markdown wiki from stored memory."""
+    """Generate a markdown wiki or Obsidian knowledge-graph vault."""
     try:
-        repo_root, written = _service().generate_wiki(output_dir=output)
+        repo_root, written = _service().generate_wiki(output_dir=output, format=wiki_format)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
@@ -1802,8 +1807,10 @@ def wiki_command(
         console.print("[yellow]No wiki pages were generated (store may be empty).[/yellow]")
         raise typer.Exit(code=0)
 
-    index_path = next((p for p in written if p.name == "index.md"), written[0])
-    console.print(f"[green]Wiki generated:[/green] {len(written)} page(s)")
+    index_name = "Home.md" if wiki_format is WikiFormat.OBSIDIAN else "index.md"
+    index_path = next((p for p in written if p.name == index_name), written[0])
+    label = "Obsidian vault" if wiki_format is WikiFormat.OBSIDIAN else "Wiki"
+    console.print(f"[green]{label} generated:[/green] {len(written)} page(s)")
     for page in sorted(written):
         try:
             display = page.relative_to(repo_root)
