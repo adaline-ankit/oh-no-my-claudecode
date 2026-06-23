@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-06-23
+
+### Added
+
+- **`onmc benchmark` — a reproducible memory-effectiveness suite.** One verifiable command, every metric labelled MEASURED (live, no LLM) vs SIM (deterministic model). MEASURED: brain composition, recall latency p50/p95 + hits/query, terse-vs-verbose injection char reduction, TOON-vs-JSON payload reduction. SIM: repeated-failure rate −100%, wasted attempts −9, context tokens −97%, tasks +0 (reuses the canonical `onmc bench` harness). Injectable timer keeps timing tests deterministic; graceful on small brains. `onmc benchmark [--runs N] [--json]`.
+
 ## [0.27.0] — 2026-06-23
 
 ### Added
