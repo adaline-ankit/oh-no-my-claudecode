@@ -1,47 +1,35 @@
-# Launch assets
+# ONMC launch assets
 
-This directory contains launch materials for the public release of
-`oh-no-my-claudecode` (onmc).
+Current campaign: **v0.36 - memory-grounded autonomous coding loops with proof**.
 
-## Files
+## Use now
 
-| File | Description |
+| Asset | Purpose |
 |---|---|
-| [`show-hn.md`](show-hn.md) | Show HN post — title options (5), full post body, and anticipated objections with honest answers |
-| [`reddit.md`](reddit.md) | r/programming and r/LocalLLaMA variants |
-| [`submissions.md`](submissions.md) | Ecosystem list entries and directory submissions *(written by a second agent — do not edit here)* |
+| [v0.36 launch kit](v0.36-launch-kit.md) | Positioning, demo script, Show HN, Reddit, X, LinkedIn, Product Hunt |
+| [README](../../README.md) | Product page and verified command reference |
+| [Changelog](../../CHANGELOG.md) | Release-by-release evidence |
 
-## Related
+## Historical assets
 
-| Link | Description |
-|---|---|
-| [`docs/demo.md`](../demo.md) | Full "Two Agents, One Brain" walkthrough — all output verified live against v0.7.0 |
-| [`AGENT-MEMORY-SPEC.md`](../../AGENT-MEMORY-SPEC.md) | Open spec for the `.agent-memory/` format (version 1) |
-| [`docs/integrations/`](../integrations/) | Per-agent integration guides (Claude Code, Codex, Cursor, OMC, OMX) |
-| [`docs/cli-reference.md`](../cli-reference.md) | Full generated CLI reference |
+`show-hn.md`, `reddit.md`, and `submissions.md` preserve the original memory-only launch campaign.
+They mention older releases and should not be posted without updating their version and feature claims.
 
-## Verified numbers used in all copy
+## Claims policy
 
-All claims were verified against the live repo before writing. Do not update
-these without re-running `onmc bench`.
+- Say receipts are **tamper-evident** or **hash-chained**, never signed.
+- Say `verified` means loop convergence plus successful final verifier.
+- Label Trace Observatory token savings as estimates.
+- Label `onmc bench` repeated-failure/context numbers as deterministic simulation.
+- Use `onmc benchmark` for measured repo-specific latency/compression results.
+- Say MCP policy classifies JSONL/stdin calls for hooks and CI; it is not a transparent proxy.
+- Never promise cost data when an agent CLI did not return it.
 
-```
-$ onmc bench
-                  onmc bench — onmc-builtin-v1
-┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━┓
-┃ Metric                 ┃ Without memory ┃ With memory ┃ Delta ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━┩
-│ Repeated-failure rate  │           100% │          0% │ -100% │
-│ Wasted attempts        │              9 │           0 │    -9 │
-│ Context tokens (proxy) │           4000 │         107 │  -97% │
-│ Tasks resolved         │              5 │           5 │    +0 │
-└────────────────────────┴────────────────┴─────────────┴───────┘
-Methodology: deterministic simulation — no LLM calls.
-```
+## Primary hook
 
-## Coordination note
+> Your coding agent should not forget yesterday's failure or claim success without passing today's tests.
 
-A second agent owns `submissions.md` in this directory. This README and all
-other files in `docs/launch/` are owned by the launch-copy agent. Do not
-modify `submissions.md` here; do not let the submissions agent modify
-`show-hn.md`, `reddit.md`, or this `README.md`.
+## Short pitch
+
+ONMC gives Claude Code and Codex repo memory, dead-end-aware autonomous loops, real verifier gates,
+hard budgets, replay/evals, and tamper-evident receipts. Local-first, cross-agent, MIT.

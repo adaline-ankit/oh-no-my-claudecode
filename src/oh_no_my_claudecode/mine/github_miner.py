@@ -175,7 +175,9 @@ def mine_github_prs(
 
 
 def _fetch_json(url: str) -> object:
-    headers = {"User-Agent": "onmc/0.3.0", "Accept": "application/vnd.github+json"}
+    from oh_no_my_claudecode import __version__
+
+    headers = {"User-Agent": f"onmc/{__version__}", "Accept": "application/vnd.github+json"}
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"token {token}"

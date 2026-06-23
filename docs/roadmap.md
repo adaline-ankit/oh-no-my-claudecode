@@ -35,11 +35,28 @@ Shipped in this repo:
 - OSS contributor guardrails, issue templates, Dependabot, labels, and branch protection
 - CodeQL, OpenSSF Scorecard, dependency audit, and Windows smoke CI
 - generated CLI reference checked in CI
+- guided setup with first useful recall and dashboard handoff
+- evolving cross-repo user profile and MCP profile access
+- memory federation with configured multi-source pull
+- knowledge coverage suggestions and deterministic stubs
+- memory-grounded autonomous loop with real Claude Code and Codex adapters
+- verifier-based completion and hard iteration/token/cost/wall/no-progress limits
+- tamper-evident hash-chained run receipts
+- Agent Trace Observatory with JSON/OpenTelemetry export
+- measured/sim-labelled benchmark suite
+- agent-configuration security audit and CI gate
+- deterministic memory eval suite and regression gate
+- deterministic trace replay with memory-vs-cold comparison
+- MCP trust policy and call classification for hooks/CI
+- memory-aware GitHub Agentic Workflow scaffolding
 
-## P1
+## Next
 
-- manual memory CRUD
-- stale-entry pruning by source fingerprint
+- signed receipts or optional external attestation
+- live MCP transport enforcement in addition to offline/stdin classification
+- richer Codex usage/cost extraction where its CLI exposes stable fields
+- isolated worktree mode for autonomous loops
+- real-world benchmark fixtures and opt-in published case studies
 - richer test-mapping heuristics
 - branch-aware briefing
 - richer Claude Code session-state capture beyond compaction snapshots
@@ -49,13 +66,13 @@ Shipped in this repo:
 - turn Windows smoke coverage into full Windows support
 - add release notes automation around `CHANGELOG.md`
 
-## P2
+## Later
 
 - diff-aware ingest
 - explicit ADR parsing
 - configurable ranking weights
 - agent-facing output presets for different coding tools
-- deeper autonomous agent orchestration on top of the memory spine
+- cross-runtime mission handoff without becoming a generic swarm runtime
 
 ## Explicit Non-Goals
 
@@ -66,4 +83,4 @@ These are not planned for the MVP path:
 - auth
 - vector database as a requirement
 - generic multi-agent orchestration runtime
-- autonomous patching engine
+- hosted agent execution

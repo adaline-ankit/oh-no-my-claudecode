@@ -5,14 +5,22 @@ build-backend = "hatchling.build"
 [project]
 name = "oh-no-my-claudecode"
 version = "0.36.0"
-description = "Repo-native memory and context compiler for coding agents."
+description = "Memory-grounded autonomous coding loops for Claude Code and Codex."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 authors = [
   { name = "ONMC Contributors" }
 ]
-keywords = ["coding-agents", "developer-tools", "cli", "context", "memory"]
+keywords = [
+  "coding-agents",
+  "claude-code",
+  "codex",
+  "autonomous-agents",
+  "agent-memory",
+  "mcp",
+  "developer-tools",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",

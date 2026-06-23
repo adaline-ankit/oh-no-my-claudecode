@@ -8,7 +8,7 @@ Run `python scripts/generate-cli-reference.py` after changing CLI commands.
 ```text
 Usage: onmc [OPTIONS] COMMAND [ARGS]...
 
- Repo-native memory and context compiler for coding agents.
+ Memory-grounded autonomous coding loops for Claude Code and Codex.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --install-completion          Install completion for the current shell.      │

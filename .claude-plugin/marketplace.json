@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-marketplace.json",
   "name": "onmc",
-  "description": "ONMC — Repo-Native Agent Memory for AI coding agents",
+  "description": "ONMC - memory-grounded autonomous coding loops for Claude Code",
   "owner": {
     "name": "ONMC Contributors",
     "email": "ankit@adaline.ai"
@@ -9,22 +9,22 @@
   "plugins": [
     {
       "name": "oh-no-my-claudecode",
-      "displayName": "ONMC — Repo-Native Agent Memory",
-      "description": "Repo-native memory for AI coding agents. Builds a structured memory store from git history, surfaces architectural decisions and known dead-ends via CLAUDE.md, Claude Code lifecycle hooks, and MCP tools (search_memory, guard_task, get_brief).",
+      "displayName": "ONMC - Memory-Grounded Coding Loops",
+      "description": "Run Claude Code with repo memory, known-dead-end guards, verifier gates, hard budgets, and tamper-evident receipts.",
       "source": {
         "source": "github",
         "repo": "adaline-ankit/oh-no-my-claudecode"
       },
-      "version": "0.5.0",
+      "version": "0.36.0",
       "author": {
         "name": "ONMC Contributors"
       },
       "homepage": "https://github.com/adaline-ankit/oh-no-my-claudecode",
       "repository": "https://github.com/adaline-ankit/oh-no-my-claudecode",
       "license": "MIT",
-      "keywords": ["memory", "context", "coding-agents", "claude-code", "mcp", "developer-tools"],
+      "keywords": ["agent-memory", "autonomous-agents", "coding-agents", "claude-code", "mcp", "verified-execution"],
       "category": "developer-tools",
-      "tags": ["memory", "context", "mcp"]
+      "tags": ["agent-memory", "autonomous-agents", "mcp"]
     }
   ]
 }
