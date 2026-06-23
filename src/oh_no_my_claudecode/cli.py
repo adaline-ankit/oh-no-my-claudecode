@@ -29,6 +29,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_detail,
     render_attempt_list,
     render_attempt_updated,
+    render_benchmark_report,
     render_blame_result,
     render_brief,
     render_coverage_suggestions,
@@ -3023,6 +3024,62 @@ def savings_command(
         return
 
     render_savings_card(result)
+
+
+@app.command("benchmark")
+def benchmark_command(
+    runs: Annotated[
+        int,
+        typer.Option(
+            "--runs",
+            help="Number of timing repetitions for timed benchmarks (default: 20).",
+        ),
+    ] = 20,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Run a reproducible benchmark suite against the current repo brain.
+
+    Measures five benchmarks — each labelled MEASURED (live, reproducible) or
+    SIM (deterministic model, no LLM):
+
+    \b
+    MEASURED:
+      1. recall_latency      — compile_recall p50/p95 ms + hits/query
+      2. terse_vs_verbose    — mean % char reduction (title+citation vs markdown)
+      3. toon_vs_json        — % char reduction (TOON vs compact JSON)
+      4. brain_composition   — memory count + per-kind breakdown
+
+    SIM (deterministic, identical across runs):
+      5. harness_sim         — repeated-failure delta, wasted-attempts saved,
+                               context-token % reduction, tasks-resolved delta
+
+    Use --json for machine-readable output.  --runs controls timing precision.
+    """
+    import dataclasses
+    import json as _json
+
+    try:
+        _, report = _service().benchmark(runs=runs)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(
+            _json.dumps(
+                {
+                    "brain_memory_count": report.brain_memory_count,
+                    "generated_note": report.generated_note,
+                    "metrics": [dataclasses.asdict(m) for m in report.metrics],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    render_benchmark_report(report)
 
 
 @app.command("plug")
