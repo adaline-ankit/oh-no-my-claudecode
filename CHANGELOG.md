@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-06-23
+
+### Added
+
+- **`onmc profile` — an evolving user profile that sharpens across sessions.** Derives a behavioral profile from accumulated `~/.onmc` user-scope memories + feedback: recurring preferences, coding patterns, frequent mistakes/corrections, and tooling choices — weighted by confidence × feedback × recency decay (reuses the recall decay model). Deterministic, no LLM. `onmc profile show|rebuild [--json]` renders Preferences / Patterns / Mistakes-to-avoid / Tooling.
+- The **SessionStart boot-digest** now injects a compact `👤 Your profile` block (top preferences + mistakes-to-avoid), terse by default, firewall-aware (emits an observability event; keeps the profile in context). Empty/missing user DB injects nothing and never raises.
+
 ## [0.22.0] — 2026-06-23
 
 ### Added
