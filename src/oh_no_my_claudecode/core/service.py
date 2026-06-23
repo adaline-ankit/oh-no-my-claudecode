@@ -882,6 +882,16 @@ class OnmcService:
         )
         return "\n".join(lines)
 
+    def list_repo_files(self) -> list[RepoFileRecord]:
+        """Return files indexed during the latest ingest."""
+        _, _, storage = self._load_context()
+        return storage.list_repo_files()
+
+    def list_file_stats(self) -> list[FileStat]:
+        """Return git-derived file activity statistics."""
+        _, _, storage = self._load_context()
+        return storage.list_file_stats()
+
     def _build_agent_readiness_summary(self) -> AgentReadinessSummary:
         repo_root, config, storage = self._load_context()
         ok, health = self.doctor()
