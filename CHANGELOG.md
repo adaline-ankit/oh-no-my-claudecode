@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.35.0] — 2026-06-24
+
+### Added
+
+- **`onmc replay` — replay lab.** Completes the proof trilogy (benchmark proves value, eval gates regressions, replay shows what memory changed). Consumes a recorded `onmc trace` session (`.onmc/traces/<id>.jsonl`) and deterministically re-derives what the brain would surface at each step — recall hits, guard dead-ends, injected context chars — with no LLM or network. `onmc replay run <session-id-or-path> [--json]` for the per-step report; `--compare` runs with-vs-without-memory and reports "memory would have changed N of M steps"; `--without-memory` for the cold baseline. Resolves a session by id or direct JSONL path.
+
 ## [0.34.0] — 2026-06-24
 
 ### Added
