@@ -1,5 +1,8 @@
 "use strict";
 
+const WELCOME_KEY = "onmc_welcome_dismissed_v1";
+const WELCOME_FRESH_THRESHOLD = 20;
+
 const state = { data: null, view: "overview", search: "", kind: "" };
 const palette = ["#237a50", "#356f91", "#a65e18", "#6b5b95", "#a23d3d", "#55766a"];
 
@@ -43,6 +46,50 @@ function hydrateDashboard() {
   renderCodegraphLists();
   renderHealth();
   switchView(state.view);
+  renderWelcome();
+}
+
+function renderWelcome() {
+  const data = state.data;
+  const { summary, memory_kinds: kinds, repo } = data;
+  const isFresh = summary.memories <= WELCOME_FRESH_THRESHOLD;
+  const dismissed = localStorage.getItem(WELCOME_KEY) === "1";
+
+  // Populate stats
+  const hotspotCount = data.codegraph.files.filter((file) => file.churn > 0).length;
+  const decisionCount = (kinds.find((item) => item.kind === "decision") || {}).count || 0;
+  const invariantCount = (kinds.find((item) => item.kind === "invariant") || {}).count || 0;
+  byId("welcome-sub").textContent =
+    `${escapeHtml(repo.name)} has been indexed. Here's a snapshot of what ONMC knows so far.`;
+  byId("welcome-stats").innerHTML = [
+    [formatNumber(summary.memories), "memories"],
+    [formatNumber(hotspotCount), "hotspots"],
+    [formatNumber(decisionCount + invariantCount), "decisions & invariants"],
+  ].map(([value, label]) =>
+    `<div class="welcome-stat"><strong class="welcome-stat-value">${value}</strong><span class="welcome-stat-label">${escapeHtml(label)}</span></div>`
+  ).join("");
+
+  // Show/hide the overlay and re-open affordance
+  const shouldShow = !dismissed || isFresh && !dismissed;
+  byId("welcome-overlay").hidden = !shouldShow;
+  byId("welcome-open").hidden = !dismissed;
+}
+
+function dismissWelcome() {
+  localStorage.setItem(WELCOME_KEY, "1");
+  const overlay = byId("welcome-overlay");
+  overlay.style.opacity = "0";
+  overlay.style.transition = "opacity .18s ease";
+  setTimeout(() => { overlay.hidden = true; }, 200);
+  byId("welcome-open").hidden = false;
+}
+
+function openWelcome() {
+  const overlay = byId("welcome-overlay");
+  overlay.style.opacity = "";
+  overlay.style.transition = "";
+  overlay.hidden = false;
+  byId("welcome-open").hidden = true;
 }
 
 function renderOverview() {
@@ -225,6 +272,10 @@ document.addEventListener("click", (event) => {
   const goButton = event.target.closest("[data-go-view]");
   if (goButton) switchView(goButton.dataset.goView);
 });
+byId("welcome-close").addEventListener("click", dismissWelcome);
+byId("welcome-got-it").addEventListener("click", dismissWelcome);
+byId("welcome-explore").addEventListener("click", dismissWelcome);
+byId("welcome-open").addEventListener("click", openWelcome);
 byId("refresh-button").addEventListener("click", renderDashboard);
 byId("retry-button").addEventListener("click", renderDashboard);
 byId("memory-search").addEventListener("input", (event) => { state.search = event.target.value; renderMemories(); });

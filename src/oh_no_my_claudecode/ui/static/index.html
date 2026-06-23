@@ -47,6 +47,7 @@
           </div>
           <div class="topbar-actions">
             <span id="last-ingest" class="last-ingest"></span>
+            <button id="welcome-open" class="icon-button" type="button" title="Show welcome guide" aria-label="Show welcome guide" hidden>?</button>
             <button id="refresh-button" class="icon-button" type="button" title="Refresh data" aria-label="Refresh data">↻</button>
           </div>
         </header>
@@ -63,6 +64,26 @@
           <strong>Dashboard unavailable</strong>
           <span id="error-message"></span>
           <button id="retry-button" type="button" class="button">Retry</button>
+        </div>
+
+        <div id="welcome-overlay" class="welcome-overlay" role="dialog" aria-modal="false" aria-labelledby="welcome-title" hidden>
+          <div class="welcome-card">
+            <button class="welcome-dismiss" id="welcome-close" type="button" aria-label="Dismiss welcome">×</button>
+            <div class="welcome-mark" aria-hidden="true">O</div>
+            <p class="welcome-eyebrow">You're all set</p>
+            <h2 class="welcome-title" id="welcome-title">Your repo now remembers</h2>
+            <p class="welcome-sub" id="welcome-sub"></p>
+            <div class="welcome-stats" id="welcome-stats" aria-label="Memory snapshot"></div>
+            <ol class="welcome-steps">
+              <li><span class="welcome-step-num">1</span><span><strong>Ask for context</strong> — <code>onmc brief</code> prints a briefing for Claude</span></li>
+              <li><span class="welcome-step-num">2</span><span><strong>Run a loop</strong> — <code>onmc loop</code> keeps memory current as you work</span></li>
+              <li><span class="welcome-step-num">3</span><span><strong>It learns automatically</strong> — every session, decisions and hotspots are tracked</span></li>
+            </ol>
+            <div class="welcome-actions">
+              <button class="button" id="welcome-got-it" type="button">Got it</button>
+              <button class="button button-outline" id="welcome-explore" type="button" data-view="overview">Explore dashboard</button>
+            </div>
+          </div>
         </div>
 
         <div id="dashboard" hidden>

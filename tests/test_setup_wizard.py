@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
@@ -10,9 +11,13 @@ from oh_no_my_claudecode.hooks.installer import install_claude_hooks
 from oh_no_my_claudecode.models import LLMProviderType
 from oh_no_my_claudecode.setup.detector import detect_environment
 from oh_no_my_claudecode.setup.wizard import (
+    _TOTAL_STEPS,
     _integration_phase,
     _provider_phase,
+    _render_first_win,
+    _ui_handoff,
     run_setup_wizard,
+    should_seed_interactively,
 )
 
 
@@ -162,3 +167,129 @@ def test_provider_phase_rejects_raw_api_key_and_stores_env_var_name_only(
     assert config.llm.api_key_env_var == "ANTHROPIC_API_KEY"
     assert raw_key not in config_text
     assert seen_keys == ["real-env-value"]
+
+
+# ---------------------------------------------------------------------------
+# New behavioral tests for the glow-up wizard
+# ---------------------------------------------------------------------------
+
+
+def test_step_count_constant_is_stable() -> None:
+    """The exported step count must stay at 6 — tests + docs depend on it."""
+    assert _TOTAL_STEPS == 6
+
+
+def test_setup_yes_no_llm_returns_complete_setup_result(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """run_setup_wizard(yes=True, no_llm=True) must return a fully-populated SetupResult."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
+        lambda: sample_repo / ".missing" / "settings.json",
+    )
+
+    result = run_setup_wizard(cwd=sample_repo, yes=True, no_llm=True)
+
+    assert result.repo_root == sample_repo.as_posix()
+    assert result.provider is None
+    assert result.model is None
+    assert result.claude_md_generated is True
+    assert isinstance(result.extracted_records, int)
+    assert result.extracted_records >= 0
+
+
+def test_setup_yes_no_llm_never_prompts(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """In yes=True mode no Prompt.ask / Confirm.ask should ever fire."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
+        lambda: sample_repo / ".missing" / "settings.json",
+    )
+
+    def _bomb(*args: object, **kwargs: object) -> object:
+        raise AssertionError("wizard prompted in non-interactive mode")
+
+    monkeypatch.setattr("oh_no_my_claudecode.setup.wizard.Prompt.ask", _bomb)
+    monkeypatch.setattr("oh_no_my_claudecode.setup.wizard.Confirm.ask", _bomb)
+
+    # Should not raise
+    run_setup_wizard(cwd=sample_repo, yes=True, no_llm=True)
+
+
+def test_setup_yes_no_llm_never_launches_server(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """In yes=True mode _ui_handoff must NOT call subprocess.Popen (would hang CI).
+
+    We test _ui_handoff directly with yes=True and assert it never invokes Popen.
+    """
+    import oh_no_my_claudecode.setup.wizard as wizard_mod
+
+    popen_calls: list[object] = []
+
+    def _bomb_popen(cmd: object, **kwargs: object) -> object:
+        popen_calls.append(cmd)
+        raise AssertionError(f"subprocess.Popen must not be called in yes=True mode: {cmd}")
+
+    monkeypatch.setattr(wizard_mod.subprocess, "Popen", _bomb_popen)
+
+    wizard_mod._ui_handoff(yes=True)  # noqa: SLF001
+
+    assert popen_calls == [], "subprocess.Popen must not be called in yes=True mode"
+
+
+def test_ui_handoff_yes_mode_never_prompts_or_spawns(monkeypatch: object) -> None:
+    """_ui_handoff(yes=True) must not ask and not call Popen."""
+    launched: list[object] = []
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.subprocess.Popen",
+        lambda *a, **kw: launched.append(a),
+    )
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.Confirm.ask",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not prompt")),
+    )
+
+    _ui_handoff(yes=True)  # must complete silently
+
+    assert launched == []
+
+
+def test_first_win_skipped_gracefully_on_empty_brain(sample_repo: Path) -> None:
+    """_render_first_win must not raise when the brain has no memories."""
+    service = OnmcService(sample_repo)
+    service.init_project()
+    # Do NOT call ingest — brain is empty
+    detection = detect_environment(sample_repo)
+
+    # Must not raise anything
+    _render_first_win(service, detection)
+
+
+def test_first_win_skipped_gracefully_on_recall_exception(sample_repo: Path) -> None:
+    """_render_first_win must swallow arbitrary exceptions from recall."""
+    service = OnmcService(sample_repo)
+    service.init_project()
+    detection = detect_environment(sample_repo)
+
+    with patch.object(service, "recall", side_effect=RuntimeError("boom")):
+        _render_first_win(service, detection)  # must not raise
+
+
+def test_should_seed_interactively_false_when_yes() -> None:
+    """Non-interactive mode must never trigger seeding regardless of memory count."""
+    assert should_seed_interactively(0, yes=True) is False
+    assert should_seed_interactively(1, yes=True) is False
+
+
+def test_should_seed_interactively_true_when_sparse_and_interactive() -> None:
+    """Interactive mode with <5 memories should offer seeding."""
+    assert should_seed_interactively(0, yes=False) is True
+    assert should_seed_interactively(4, yes=False) is True
+    assert should_seed_interactively(5, yes=False) is False
