@@ -29,6 +29,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_detail,
     render_attempt_list,
     render_attempt_updated,
+    render_audit_report,
     render_benchmark_report,
     render_blame_result,
     render_brief,
@@ -1918,6 +1919,81 @@ def doctor_command() -> None:
     ok, report = _service().doctor()
     render_doctor_report(ok, report)
     raise typer.Exit(code=0 if ok else 1)
+
+
+@app.command("audit")
+def audit_command(
+    path: Annotated[
+        Path | None,
+        typer.Argument(
+            help=(
+                "Repo root to scan.  Defaults to the current directory.  "
+                "The directory does not need to be an initialised ONMC repo — "
+                "audit is purely static."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the full AuditReport as JSON to stdout."),
+    ] = False,
+    fail_on: Annotated[
+        str,
+        typer.Option(
+            "--fail-on",
+            help=(
+                "Exit non-zero when at least one finding at this severity or higher "
+                "exists.  One of: critical, high, medium, low, info.  Default: high."
+            ),
+        ),
+    ] = "high",
+) -> None:
+    """Scan agent configuration for security risks and emit a scored report.
+
+    Scans CLAUDE.md, AGENTS.md, .claude/settings.json, .claude/settings.local.json,
+    .mcp.json, and hooks/ for secrets, over-broad permissions, hook injection
+    vectors, and prompt-injection surfaces.
+
+    Exit codes:
+
+    - 0 — no findings at or above ``--fail-on`` threshold
+    - 1 — one or more findings at or above the threshold  (CI gate)
+    - 2 — usage error
+
+    Use ``--fail-on critical`` for a lenient CI gate, ``--fail-on medium`` for
+    a stricter one.
+    """
+    from oh_no_my_claudecode.audit.scanner import AuditSeverity
+
+    valid_severities: list[AuditSeverity] = ["critical", "high", "medium", "low", "info"]
+    if fail_on not in valid_severities:
+        msg = f"--fail-on must be one of: {', '.join(valid_severities)}"
+        raise typer.Exit(code=_fatal(msg))
+
+    repo_root: Path = path.resolve() if path is not None else Path.cwd()
+
+    report = _service().audit(repo_root=repo_root)
+
+    if as_json:
+        import dataclasses
+
+        def _to_dict(obj: object) -> object:
+            if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+                return {
+                    k: _to_dict(v)
+                    for k, v in dataclasses.asdict(obj).items()
+                }
+            if isinstance(obj, set):
+                return sorted(obj)
+            return obj
+
+        sys.stdout.write(json.dumps(_to_dict(report), indent=2, default=str) + "\n")
+    else:
+        render_audit_report(report)
+
+    threshold: AuditSeverity = fail_on
+    if report.findings_at_or_above(threshold):
+        raise typer.Exit(code=1)
 
 
 @app.command("wiki")

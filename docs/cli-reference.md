@@ -63,6 +63,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ capture      Heuristically capture durable memory from a session transcript. │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
+│ audit        Scan agent configuration for security risks and emit a scored   │
+│              report.                                                         │
 │ wiki         Generate a markdown wiki or Obsidian knowledge-graph vault.     │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
@@ -585,6 +587,42 @@ Usage: onmc doctor [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc audit`
+
+```text
+Usage: onmc audit [OPTIONS] [PATH]
+
+ Scan agent configuration for security risks and emit a scored report.
+
+ Scans CLAUDE.md, AGENTS.md, .claude/settings.json,
+ .claude/settings.local.json,
+ .mcp.json, and hooks/ for secrets, over-broad permissions, hook injection
+ vectors, and prompt-injection surfaces.
+
+ Exit codes:
+
+ - 0 — no findings at or above ``--fail-on`` threshold
+ - 1 — one or more findings at or above the threshold  (CI gate)
+ - 2 — usage error
+
+ Use ``--fail-on critical`` for a lenient CI gate, ``--fail-on medium`` for
+ a stricter one.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   path      [PATH]  Repo root to scan.  Defaults to the current directory.   │
+│                     The directory does not need to be an initialised ONMC    │
+│                     repo — audit is purely static.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                 Emit the full AuditReport as JSON to stdout.          │
+│ --fail-on        TEXT  Exit non-zero when at least one finding at this       │
+│                        severity or higher exists.  One of: critical, high,   │
+│                        medium, low, info.  Default: high.                    │
+│                        [default: high]                                       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
