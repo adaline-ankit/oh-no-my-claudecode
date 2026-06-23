@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              (~/.onmc/user.db).                                              │
 │ notify       Inspect and test the context firewall notification sink.        │
 │ gh-aw        Scaffold memory-aware GitHub Actions agentic workflows.         │
+│ mcp          MCP Trust Gateway — classify tool calls against a policy.       │
 │ trace        Agent Trace Observatory — instrument a session and get a        │
 │              token-ROI report.                                               │
 │ eval         Measure and gate memory recall quality (offline,                │
@@ -1946,6 +1947,100 @@ Usage: onmc gh-aw init [OPTIONS] [PATH]
 │ --force            Overwrite existing onmc-managed workflow files.           │
 │ --json             Output result as JSON.                                    │
 │ --help             Show this message and exit.                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mcp`
+
+```text
+Usage: onmc mcp [OPTIONS] COMMAND [ARGS]...
+
+ MCP Trust Gateway — classify tool calls against a policy.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ check   Classify MCP tool calls from a JSONL file (or stdin) against the     │
+│         trust policy.                                                        │
+│ policy  Manage the MCP trust policy file (.onmc/mcp-policy.yaml).            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mcp policy`
+
+```text
+Usage: onmc mcp policy [OPTIONS] COMMAND [ARGS]...
+
+ Manage the MCP trust policy file (.onmc/mcp-policy.yaml).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Write a documented starter .onmc/mcp-policy.yaml for the MCP trust     │
+│       gateway.                                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mcp policy init`
+
+```text
+Usage: onmc mcp policy init [OPTIONS] [PATH]
+
+ Write a documented starter .onmc/mcp-policy.yaml for the MCP trust gateway.
+
+ The generated file declares example server allow-lists, tool scopes
+ (read / write / network), and approval-required lists with inline comments.
+
+ Re-running is safe — the file is not overwritten unless --force is passed.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   path      [PATH]  Repo root.  Defaults to current directory.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --force          Overwrite an existing policy file.                          │
+│ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mcp check`
+
+```text
+Usage: onmc mcp check [OPTIONS] [CALLS_FILE]
+
+ Classify MCP tool calls from a JSONL file (or stdin) against the trust policy.
+
+ Reads recorded tool-call events, applies the .onmc/mcp-policy.yaml policy,
+ scans arguments for embedded secrets and prompt-injection phrases, and
+ renders a decision table.
+
+ Exit codes:
+
+ - 0 — all calls pass the --fail-on threshold
+ - 1 — at least one call blocked / requires approval (when threshold met)
+ - 2 — usage error
+
+ Example::
+
+     onmc mcp check calls.jsonl --fail-on block
+     cat calls.jsonl | onmc mcp check - --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   calls_file      [CALLS_FILE]  Path to a JSONL file of recorded tool calls. │
+│                                 Each line: {"server": "...", "tool": "...",  │
+│                                 "args": {...}}.  Omit or pass '-' to read    │
+│                                 from stdin.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                      Emit classifications as JSON to stdout.          │
+│ --fail-on             TEXT  Exit non-zero when any decision has this verdict │
+│                             or worse.  One of: block, approval_required.     │
+│                             Default: block.                                  │
+│                             [default: block]                                 │
+│ --no-audit-log              Skip writing to .onmc/mcp-audit.log.             │
+│ --repo                PATH  Repo root for locating .onmc/mcp-policy.yaml.    │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
+    from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
+    from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.trace.models import TraceReport
 
@@ -2162,4 +2165,85 @@ def _render_eval_comparison(comparison: object) -> None:
     console.print(table)
     console.print()
     console.print("[dim]Methodology: deterministic, offline — no LLM calls.[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# MCP Trust Gateway rendering
+# ---------------------------------------------------------------------------
+
+
+def render_mcp_policy(policy_path: Path, *, written: bool) -> None:
+    """Render the outcome of ``onmc mcp policy init``."""
+    if written:
+        verb = "[green]written:[/green]"
+    else:
+        verb = "[dim]already exists (use --force to overwrite):[/dim]"
+    console.print(f"{verb} {policy_path}")
+    if written:
+        console.print(
+            "\n[bold]MCP policy file created.[/bold]  "
+            "Edit [cyan].onmc/mcp-policy.yaml[/cyan] to customise server allow-lists, "
+            "tool scopes, and approval requirements.\n"
+            "Run [cyan]onmc mcp check <calls.jsonl>[/cyan] to classify recorded tool calls."
+        )
+
+
+def render_mcp_decision_table(
+    results: list[tuple[_McpToolCall, _McpDecision]],
+    *,
+    title: str = "MCP Trust Gateway — Call Classification",
+) -> None:
+    """Render a table of (ToolCall, Decision) classification results."""
+    verdict_colors: dict[str, str] = {
+        "allow": "green",
+        "block": "bold red",
+        "approval_required": "yellow",
+    }
+    sev_colors: dict[str, str] = {
+        "critical": "bold red",
+        "high": "red",
+        "medium": "yellow",
+        "low": "blue",
+        "info": "dim",
+    }
+
+    table = Table(title=title, show_lines=True, expand=True)
+    table.add_column("Server", no_wrap=True, width=16)
+    table.add_column("Tool", no_wrap=True, width=20)
+    table.add_column("Verdict", no_wrap=True, width=18)
+    table.add_column("Severity", no_wrap=True, width=10)
+    table.add_column("Reason", no_wrap=False)
+
+    blocks = 0
+    approvals = 0
+    allows = 0
+
+    for call, dec in results:
+        vc = verdict_colors.get(dec.verdict, "white")
+        sc = sev_colors.get(dec.severity, "white")
+        reason_text = "; ".join(dec.reasons)[:120]
+
+        table.add_row(
+            call.server,
+            call.tool,
+            f"[{vc}]{dec.verdict}[/{vc}]",
+            f"[{sc}]{dec.severity}[/{sc}]",
+            reason_text,
+        )
+
+        if dec.verdict == "block":
+            blocks += 1
+        elif dec.verdict == "approval_required":
+            approvals += 1
+        else:
+            allows += 1
+
+    console.print(table)
+    total = len(results)
+    console.print(
+        f"\n[green]{allows} allow[/green]  "
+        f"[yellow]{approvals} approval_required[/yellow]  "
+        f"[bold red]{blocks} block[/bold red]  "
+        f"[dim]({total} total)[/dim]"
+    )
     console.print("[dim]without-memory baseline: all retrieval results treated as empty.[/dim]")

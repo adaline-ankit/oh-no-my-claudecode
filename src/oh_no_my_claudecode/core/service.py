@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.loop.models import LoopResult
+    from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
+    from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.savings.compiler import SavingsResult
@@ -2815,6 +2817,84 @@ class OnmcService:
                 repo_root = self.cwd
         result: _AuditReport = run_audit(repo_root)
         return result
+
+    # ------------------------------------------------------------------
+    # MCP Trust Gateway
+    # ------------------------------------------------------------------
+
+    def mcp_policy_init(self, *, force: bool = False, repo_root: Path | None = None) -> Path:
+        """Write a starter ``.onmc/mcp-policy.yaml`` for the MCP trust gateway.
+
+        Parameters
+        ----------
+        force:
+            Overwrite an existing policy file.
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+
+        Returns
+        -------
+        Path
+            Absolute path to the (written or existing) policy file.
+        """
+        from oh_no_my_claudecode.mcp_trust.policy import init_policy
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except FileNotFoundError:
+                repo_root = self.cwd
+        return init_policy(repo_root, force=force)
+
+    def mcp_check(
+        self,
+        calls_jsonl: str,
+        *,
+        repo_root: Path | None = None,
+        write_audit_log: bool = True,
+    ) -> list[tuple[McpToolCall, McpDecision]]:
+        """Classify MCP tool calls recorded in a JSONL source string.
+
+        Parameters
+        ----------
+        calls_jsonl:
+            Raw JSONL string (one JSON object per line).  Each line must have
+            ``server`` and ``tool`` keys; an optional ``args`` dict is scanned
+            for secrets and injection phrases.
+        repo_root:
+            Explicit repo root for locating the policy file and the audit log.
+            Defaults to the service's ``cwd``.
+        write_audit_log:
+            When ``True`` (default), append each decision to
+            ``.onmc/mcp-audit.log``.
+
+        Returns
+        -------
+        list[tuple[ToolCall, Decision]]
+            One entry per parsed call.
+        """
+        from oh_no_my_claudecode.mcp_trust.gateway import (
+            append_audit_log,
+            classify_call,
+            parse_calls_jsonl,
+        )
+        from oh_no_my_claudecode.mcp_trust.policy import load_policy
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except FileNotFoundError:
+                repo_root = self.cwd
+
+        policy = load_policy(repo_root)
+        calls = parse_calls_jsonl(calls_jsonl)
+        results: list[tuple[McpToolCall, McpDecision]] = []
+        for call in calls:
+            decision = classify_call(policy, call)
+            if write_audit_log:
+                append_audit_log(repo_root, call, decision)
+            results.append((call, decision))
+        return results
 
     # ------------------------------------------------------------------
     # Eval harness
