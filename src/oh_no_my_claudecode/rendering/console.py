@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
@@ -1884,3 +1885,113 @@ def render_trace_card(report: TraceReport) -> None:
     ]
     console.print()
     console.print(f"[dim]{' · '.join(footer_parts)}[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# Audit report rendering
+# ---------------------------------------------------------------------------
+
+
+def render_audit_report(report: AuditReport) -> None:
+    """Render a security scorecard for ``onmc audit``.
+
+    Layout
+    ------
+    1. Grade banner (A–F) with colour + score.
+    2. Counts-by-severity table.
+    3. Per-finding table (file:line, rule-id, severity, title, fix).
+    4. Files scanned count.
+
+    The scorecard is designed to be screenshot-viral — a single panel
+    that communicates the security posture at a glance.
+    """
+    from oh_no_my_claudecode.audit.scanner import AuditReport
+
+    if not isinstance(report, AuditReport):  # pragma: no cover
+        return
+
+    grade_colors: dict[str, str] = {
+        "A": "green",
+        "B": "cyan",
+        "C": "yellow",
+        "D": "red",
+        "F": "bold red",
+    }
+    sev_colors: dict[str, str] = {
+        "critical": "bold red",
+        "high": "red",
+        "medium": "yellow",
+        "low": "blue",
+        "info": "dim",
+    }
+
+    grade_color = grade_colors.get(report.grade, "white")
+
+    # ── Grade banner ───────────────────────────────────────────────────────
+    critical = report.counts_by_severity.get("critical", 0)
+    high = report.counts_by_severity.get("high", 0)
+    medium = report.counts_by_severity.get("medium", 0)
+    low = report.counts_by_severity.get("low", 0)
+    info = report.counts_by_severity.get("info", 0)
+    total = len(report.findings)
+
+    banner_lines = [
+        f"  Grade: [{grade_color}]{report.grade}[/{grade_color}]"
+        f"   Score: [{grade_color}]{report.score}/100[/{grade_color}]",
+        "",
+        f"  [bold red]{critical} critical[/bold red]  "
+        f"[red]{high} high[/red]  "
+        f"[yellow]{medium} medium[/yellow]  "
+        f"[blue]{low} low[/blue]  "
+        f"[dim]{info} info[/dim]",
+        "",
+        f"  [dim]{total} finding(s) across {len(report.files_scanned)} file(s) scanned[/dim]",
+    ]
+    border = "green" if report.grade == "A" else ("yellow" if report.grade in ("B", "C") else "red")
+    console.print(
+        Panel(
+            "\n".join(banner_lines),
+            title="[bold]onmc audit — Agent Config Security Scorecard[/bold]",
+            border_style=border,
+        )
+    )
+
+    if not report.findings:
+        console.print(
+            "[green]No findings — configuration looks clean.[/green]\n"
+            "[dim]Re-run after any change to CLAUDE.md, AGENTS.md, "
+            ".claude/settings.json, or .mcp.json.[/dim]"
+        )
+        return
+
+    # ── Per-finding table ──────────────────────────────────────────────────
+    table = Table(
+        title=f"Findings ({total})",
+        show_lines=True,
+        expand=True,
+    )
+    table.add_column("Rule", width=12, no_wrap=True)
+    table.add_column("Sev", width=10, no_wrap=True)
+    table.add_column("File", min_width=20, no_wrap=False)
+    table.add_column("Title", min_width=28, no_wrap=False)
+    table.add_column("Fix", min_width=34, no_wrap=False)
+
+    sev_order = ["critical", "high", "medium", "low", "info"]
+    sorted_findings = sorted(
+        report.findings,
+        key=lambda f: (sev_order.index(f.severity), f.file, f.line or 0),
+    )
+
+    for finding in sorted_findings:
+        sev_color = sev_colors.get(finding.severity, "white")
+        file_cell = finding.file
+        if finding.line is not None:
+            file_cell = f"{finding.file}:{finding.line}"
+        table.add_row(
+            f"[dim]{finding.rule_id}[/dim]",
+            f"[{sev_color}]{finding.severity}[/{sev_color}]",
+            file_cell,
+            finding.title,
+            shorten(finding.fix, max_length=120),
+        )
+    console.print(table)

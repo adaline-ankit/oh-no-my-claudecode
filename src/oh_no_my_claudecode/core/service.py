@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.ask.compiler import AskResult
+    from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
@@ -2757,6 +2758,36 @@ class OnmcService:
             for edge in new_edges:
                 storage.upsert_memory_edge(edge)
         return repo_root, result
+
+    def audit(self, *, repo_root: Path | None = None) -> AuditReport:
+        """Run the agent-configuration security scanner against the repo.
+
+        This is entirely offline — no LLM calls, no network access.  Results
+        are deterministic: given the same repo configuration files they always
+        produce the same findings.
+
+        Parameters
+        ----------
+        repo_root:
+            Explicit repo root to scan.  When ``None``, discovered from
+            ``self.cwd``.  This lets callers scan a path that has not been
+            initialised with ``onmc init``.
+
+        Returns
+        -------
+        AuditReport
+            Scored, graded report ready for rendering or JSON serialisation.
+        """
+        from oh_no_my_claudecode.audit.scanner import AuditReport as _AuditReport
+        from oh_no_my_claudecode.audit.scanner import run_audit
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except FileNotFoundError:
+                repo_root = self.cwd
+        result: _AuditReport = run_audit(repo_root)
+        return result
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)
