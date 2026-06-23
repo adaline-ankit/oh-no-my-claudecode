@@ -304,15 +304,15 @@ def test_cli_gh_aw_help(monkeypatch: pytest.MonkeyPatch, tmp_repo: Path) -> None
 
 
 def test_cli_gh_aw_init_help(monkeypatch: pytest.MonkeyPatch, tmp_repo: Path) -> None:
-    """``onmc gh-aw init --help`` prints help text."""
+    """``onmc gh-aw init`` accepts --dry-run / --force / --json.
+
+    Exercises the flags directly rather than scraping Rich-rendered ``--help``
+    text: that output is ANSI-laden and wraps/truncates at CI's 80-col terminal,
+    which made substring assertions flaky.
+    """
     monkeypatch.chdir(tmp_repo)
     runner = _cli_runner()
 
-    # Force a wide terminal so Rich does not wrap/truncate option names in CI's
-    # narrow (80-col) terminal — otherwise "--dry-run" can split across lines.
-    result = runner.invoke(app, ["gh-aw", "init", "--help"], env={"COLUMNS": "200"})
-    assert result.exit_code == 0
-    normalized = " ".join(result.output.split())
-    assert "--dry-run" in normalized
-    assert "--force" in normalized
-    assert "--json" in normalized
+    assert runner.invoke(app, ["gh-aw", "init", "--dry-run"]).exit_code == 0
+    assert runner.invoke(app, ["gh-aw", "init", "--dry-run", "--json"]).exit_code == 0
+    assert runner.invoke(app, ["gh-aw", "init", "--force", "--dry-run"]).exit_code == 0
