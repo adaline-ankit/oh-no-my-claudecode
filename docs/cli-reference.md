@@ -6,10 +6,10 @@ Run `python scripts/generate-cli-reference.py` after changing CLI commands.
 ## `onmc`
 
 ```text
-Usage: onmc [OPTIONS] COMMAND [ARGS]...                                        
-                                                                                
- Repo-native memory and context compiler for coding agents.                     
-                                                                                
+Usage: onmc [OPTIONS] COMMAND [ARGS]...
+
+ Repo-native memory and context compiler for coding agents.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --install-completion          Install completion for the current shell.      │
 │ --show-completion             Show completion for the current shell, to copy │
@@ -41,6 +41,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ ask          Ask a natural-language question answered from repo memory.      │
 │ check        Flag staged/changed files that touch recorded invariants or     │
 │              dead-ends.                                                      │
+│ ui           Open the local read-only ONMC visual dashboard.                 │
 │ status       Show local ONMC status.                                         │
 │ statusline   Print a compact one-line brain health string for Claude Code    │
 │              statusLine.                                                     │
@@ -92,10 +93,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 ## `onmc setup`
 
 ```text
-Usage: onmc setup [OPTIONS]                                                    
-                                                                                
- Run the interactive ONMC onboarding wizard.                                    
-                                                                                
+Usage: onmc setup [OPTIONS]
+
+ Run the interactive ONMC onboarding wizard.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --yes             Use defaults and skip interactive prompts.                 │
 │ --no-llm          Skip provider setup and LLM-assisted extraction.           │
@@ -106,10 +107,10 @@ Usage: onmc setup [OPTIONS]
 ## `onmc init`
 
 ```text
-Usage: onmc init [OPTIONS]                                                     
-                                                                                
- Initialize ONMC state in the current git repository.                           
-                                                                                
+Usage: onmc init [OPTIONS]
+
+ Initialize ONMC state in the current git repository.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -118,10 +119,10 @@ Usage: onmc init [OPTIONS]
 ## `onmc ingest`
 
 ```text
-Usage: onmc ingest [OPTIONS]                                                   
-                                                                                
- Ingest repo knowledge into local structured memory.                            
-                                                                                
+Usage: onmc ingest [OPTIONS]
+
+ Ingest repo knowledge into local structured memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --files                 Ingest only the file paths passed after this flag.   │
 │ --install-hook          Install the ONMC incremental post-commit hook.       │
@@ -133,10 +134,10 @@ Usage: onmc ingest [OPTIONS]
 ## `onmc brief`
 
 ```text
-Usage: onmc brief [OPTIONS]                                                    
-                                                                                
- Compile a task-specific context brief.                                         
-                                                                                
+Usage: onmc brief [OPTIONS]
+
+ Compile a task-specific context brief.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --task              TEXT                    Task description to compile a │
 │                                                brief for.                    │
@@ -160,10 +161,10 @@ Usage: onmc brief [OPTIONS]
 ## `onmc codegraph`
 
 ```text
-Usage: onmc codegraph [OPTIONS]                                                
-                                                                                
- Generate a compact codegraph for token-efficient agent navigation.             
-                                                                                
+Usage: onmc codegraph [OPTIONS]
+
+ Generate a compact codegraph for token-efficient agent navigation.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --max-files          INTEGER RANGE [x>=1]  Maximum hot files to include.     │
 │                                            [default: 40]                     │
@@ -175,13 +176,33 @@ Usage: onmc codegraph [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc ui`
+
+```text
+Usage: onmc ui [OPTIONS]
+
+ Open the local read-only ONMC visual dashboard.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --host                 TEXT                       Dashboard bind address.    │
+│                                                   [default: 127.0.0.1]       │
+│ --port                 INTEGER RANGE              Dashboard TCP port.        │
+│                        [0<=x<=65535]              [default: 8765]            │
+│ --open    --no-open                               Open the dashboard in a    │
+│                                                   browser.                   │
+│                                                   [default: open]            │
+│ --help                                            Show this message and      │
+│                                                   exit.                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc why`
 
 ```text
-Usage: onmc why [OPTIONS] PATH                                                 
-                                                                                
- Explain why a file looks the way it does, from memory + git history.           
-                                                                                
+Usage: onmc why [OPTIONS] PATH
+
+ Explain why a file looks the way it does, from memory + git history.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    path      TEXT  File path to explain (repo-relative or absolute).       │
 │                      [required]                                              │
@@ -200,18 +221,18 @@ Usage: onmc why [OPTIONS] PATH
 ## `onmc memory-diff`
 
 ```text
-Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B                            
-                                                                                
- Show what repo knowledge changed between two commits.                          
-                                                                                
- Diffs the committed `.agent-memory/` JSON snapshots at commitA and commitB.    
- Reports added, removed, and changed memory entries by id and title.            
-                                                                                
- When `.agent-memory/` is not committed at either point, falls back to a plain  
- git diff of changed files and clearly labels the output as fallback mode.      
-                                                                                
- Run `onmc sync --commit` and commit `.agent-memory/` to unlock full diffs.     
-                                                                                
+Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
+
+ Show what repo knowledge changed between two commits.
+
+ Diffs the committed `.agent-memory/` JSON snapshots at commitA and commitB.
+ Reports added, removed, and changed memory entries by id and title.
+
+ When `.agent-memory/` is not committed at either point, falls back to a plain
+ git diff of changed files and clearly labels the output as fallback mode.
+
+ Run `onmc sync --commit` and commit `.agent-memory/` to unlock full diffs.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    commit_a      TEXT  Older commit-ish (hash, tag, or branch name).       │
 │                          [required]                                          │
@@ -226,26 +247,26 @@ Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 ## `onmc digest`
 
 ```text
-Usage: onmc digest [OPTIONS]                                                   
-                                                                                
- Show what the repo/team learned since a git ref.                               
-                                                                                
- Produces a knowledge changelog grouped by kind (Decisions, Invariants,         
- Gotchas, Failed Approaches, …) covering memories added or updated since        
- *since*.                                                                       
-                                                                                
- Prefers committed ``.agent-memory/`` snapshots for precision; falls back to    
- live ``created_at`` filtering when the committed export is absent at the       
- given ref.                                                                     
-                                                                                
- The report is also written as a markdown artifact to ``.onmc/compiled/``.      
-                                                                                
-                                                                                
- Examples:                                                                      
-   onmc digest --since v1.2.0                                                   
-   onmc digest --since main                                                     
-   onmc digest --since abc1234                                                  
-                                                                                
+Usage: onmc digest [OPTIONS]
+
+ Show what the repo/team learned since a git ref.
+
+ Produces a knowledge changelog grouped by kind (Decisions, Invariants,
+ Gotchas, Failed Approaches, …) covering memories added or updated since
+ *since*.
+
+ Prefers committed ``.agent-memory/`` snapshots for precision; falls back to
+ live ``created_at`` filtering when the committed export is absent at the
+ given ref.
+
+ The report is also written as a markdown artifact to ``.onmc/compiled/``.
+
+
+ Examples:
+   onmc digest --since v1.2.0
+   onmc digest --since main
+   onmc digest --since abc1234
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --since        TEXT  Git ref (tag, branch, commit hash) to diff knowledge │
 │                         from.                                                │
@@ -258,10 +279,10 @@ Usage: onmc digest [OPTIONS]
 ## `onmc guard`
 
 ```text
-Usage: onmc guard [OPTIONS]                                                    
-                                                                                
- Surface recorded dead-ends so you never repeat a known failure.                
-                                                                                
+Usage: onmc guard [OPTIONS]
+
+ Surface recorded dead-ends so you never repeat a known failure.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --task         TEXT                  Task description to check for        │
 │                                         dead-ends.                           │
@@ -278,19 +299,19 @@ Usage: onmc guard [OPTIONS]
 ## `onmc recall`
 
 ```text
-Usage: onmc recall [OPTIONS] [QUERY]                                           
-                                                                                
- Search memory for past incidents matching an error or stacktrace.              
-                                                                                
- Paste an error message or stacktrace as an argument or pipe it via stdin.      
- Returns prior failures/fixes that match, ranked by relevance.                  
-                                                                                
- Examples:                                                                      
-                                                                                
-   onmc recall "TypeError: cannot read property x of undefined"                 
-                                                                                
-   cat error.log | onmc recall                                                  
-                                                                                
+Usage: onmc recall [OPTIONS] [QUERY]
+
+ Search memory for past incidents matching an error or stacktrace.
+
+ Paste an error message or stacktrace as an argument or pipe it via stdin.
+ Returns prior failures/fixes that match, ranked by relevance.
+
+ Examples:
+
+   onmc recall "TypeError: cannot read property x of undefined"
+
+   cat error.log | onmc recall
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
 │                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
@@ -308,23 +329,23 @@ Usage: onmc recall [OPTIONS] [QUERY]
 ## `onmc ask`
 
 ```text
-Usage: onmc ask [OPTIONS] QUESTION                                             
-                                                                                
- Ask a natural-language question answered from repo memory.                     
-                                                                                
- Returns the most relevant memories with citations.  When an LLM provider       
- is configured, also synthesizes a concise answer grounded in those memories.   
- Ranking and citations always work offline — synthesis is best-effort and       
- its failure never breaks the command.                                          
-                                                                                
- Examples:                                                                      
-                                                                                
-   onmc ask "why do we avoid bypassing the cache boundary?"                     
-                                                                                
-   onmc ask "what failed when we tried to use X?" --no-synth                    
-                                                                                
-   onmc ask "what is the auth decision?" --json                                 
-                                                                                
+Usage: onmc ask [OPTIONS] QUESTION
+
+ Ask a natural-language question answered from repo memory.
+
+ Returns the most relevant memories with citations.  When an LLM provider
+ is configured, also synthesizes a concise answer grounded in those memories.
+ Ranking and citations always work offline — synthesis is best-effort and
+ its failure never breaks the command.
+
+ Examples:
+
+   onmc ask "why do we avoid bypassing the cache boundary?"
+
+   onmc ask "what failed when we tried to use X?" --no-synth
+
+   onmc ask "what is the auth decision?" --json
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    question      TEXT  Natural-language question to answer from repo       │
 │                          memory.                                             │
@@ -344,10 +365,10 @@ Usage: onmc ask [OPTIONS] QUESTION
 ## `onmc status`
 
 ```text
-Usage: onmc status [OPTIONS]                                                   
-                                                                                
- Show local ONMC status.                                                        
-                                                                                
+Usage: onmc status [OPTIONS]
+
+ Show local ONMC status.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -356,15 +377,15 @@ Usage: onmc status [OPTIONS]
 ## `onmc statusline`
 
 ```text
-Usage: onmc statusline [OPTIONS]                                               
-                                                                                
- Print a compact one-line brain health string for Claude Code statusLine.       
-                                                                                
- Example output: 🧠 142 mem · 87% fresh · 3 stale · 12k tok/day                 
-                                                                                
- Wire into Claude Code by adding to your settings.json:                         
-   "statusLine": "onmc statusline"                                              
-                                                                                
+Usage: onmc statusline [OPTIONS]
+
+ Print a compact one-line brain health string for Claude Code statusLine.
+
+ Example output: 🧠 142 mem · 87% fresh · 3 stale · 12k tok/day
+
+ Wire into Claude Code by adding to your settings.json:
+   "statusLine": "onmc statusline"
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -373,10 +394,10 @@ Usage: onmc statusline [OPTIONS]
 ## `onmc hud`
 
 ```text
-Usage: onmc hud [OPTIONS]                                                      
-                                                                                
- Display a rich multi-line memory health HUD panel.                             
-                                                                                
+Usage: onmc hud [OPTIONS]
+
+ Display a rich multi-line memory health HUD panel.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -385,10 +406,10 @@ Usage: onmc hud [OPTIONS]
 ## `onmc report`
 
 ```text
-Usage: onmc report [OPTIONS]                                                   
-                                                                                
- Generate a shareable agent-readiness report.                                   
-                                                                                
+Usage: onmc report [OPTIONS]
+
+ Generate a shareable agent-readiness report.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --output  -o      PATH  Write the markdown report to this path.              │
 │ --help                  Show this message and exit.                          │
@@ -398,10 +419,10 @@ Usage: onmc report [OPTIONS]
 ## `onmc sync`
 
 ```text
-Usage: onmc sync [OPTIONS]                                                     
-                                                                                
- Export, restore, or hook git-portable ONMC memory state.                       
-                                                                                
+Usage: onmc sync [OPTIONS]
+
+ Export, restore, or hook git-portable ONMC memory state.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --commit                Export to .agent-memory/.                            │
 │ --restore               Restore from .agent-memory/.                         │
@@ -413,27 +434,27 @@ Usage: onmc sync [OPTIONS]
 ## `onmc pull`
 
 ```text
-Usage: onmc pull [OPTIONS] SOURCE                                              
-                                                                                
- Import another repo's .agent-memory/ export into this brain (federated         
- memories).                                                                     
-                                                                                
- SOURCE can be a local filesystem path or a remote git URL:                     
-                                                                                
-                                                                                
-   onmc pull ../sibling-repo                                                    
-   onmc pull https://github.com/org/repo                                        
-   onmc pull git@github.com:org/repo.git --ref main                             
-   onmc pull https://github.com/org/repo --label my-label                       
-                                                                                
- Federated memories are tagged ``federated:<repo-label>`` so they are clearly   
- attributed to their source and are never confused with local memories.         
- Re-pulling is idempotent: memories already present are skipped.                
-                                                                                
- When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,  
- its .agent-memory/ export is imported, and the clone is cleaned up             
- immediately.                                                                   
-                                                                                
+Usage: onmc pull [OPTIONS] SOURCE
+
+ Import another repo's .agent-memory/ export into this brain (federated
+ memories).
+
+ SOURCE can be a local filesystem path or a remote git URL:
+
+
+   onmc pull ../sibling-repo
+   onmc pull https://github.com/org/repo
+   onmc pull git@github.com:org/repo.git --ref main
+   onmc pull https://github.com/org/repo --label my-label
+
+ Federated memories are tagged ``federated:<repo-label>`` so they are clearly
+ attributed to their source and are never confused with local memories.
+ Re-pulling is idempotent: memories already present are skipped.
+
+ When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,
+ its .agent-memory/ export is imported, and the clone is cleaned up
+ immediately.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    source      TEXT  Local path to another repo (or its .agent-memory/     │
 │                        dir), or a remote git URL (https://, git@, ssh://).   │
@@ -455,10 +476,10 @@ Usage: onmc pull [OPTIONS] SOURCE
 ## `onmc serve`
 
 ```text
-Usage: onmc serve [OPTIONS]                                                    
-                                                                                
- Serve ONMC over the requested runtime protocol.                                
-                                                                                
+Usage: onmc serve [OPTIONS]
+
+ Serve ONMC over the requested runtime protocol.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --mcp               Run the ONMC MCP server over stdio.                      │
 │ --repo        TEXT  Repository path to serve (resolved once at startup).     │
@@ -470,11 +491,11 @@ Usage: onmc serve [OPTIONS]
 ## `onmc solve`
 
 ```text
-Usage: onmc solve [OPTIONS]                                                    
-                                                                                
- Compile repo-aware context and ask the configured LLM for the next best        
- approach.                                                                      
-                                                                                
+Usage: onmc solve [OPTIONS]
+
+ Compile repo-aware context and ask the configured LLM for the next best
+ approach.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --task           TEXT  Engineering task to solve. [required]              │
 │    --task-id        TEXT  Optional existing task to link this output to.     │
@@ -487,10 +508,10 @@ Usage: onmc solve [OPTIONS]
 ## `onmc review`
 
 ```text
-Usage: onmc review [OPTIONS]                                                   
-                                                                                
- Compile repo-aware review context and critique the proposed approach.          
-                                                                                
+Usage: onmc review [OPTIONS]
+
+ Compile repo-aware review context and critique the proposed approach.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --task              TEXT  Task or proposed change to review. [required]   │
 │    --input-file        PATH  Optional file containing plan, diff, or notes.  │
@@ -503,10 +524,10 @@ Usage: onmc review [OPTIONS]
 ## `onmc teach`
 
 ```text
-Usage: onmc teach [OPTIONS]                                                    
-                                                                                
- Compile repo-aware teaching context and generate a learning artifact.          
-                                                                                
+Usage: onmc teach [OPTIONS]
+
+ Compile repo-aware teaching context and generate a learning artifact.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --task               TEXT  Task to explain and teach from. [required]     │
 │    --task-id            TEXT  Optional existing task to link this output to. │
@@ -521,10 +542,10 @@ Usage: onmc teach [OPTIONS]
 ## `onmc mine`
 
 ```text
-Usage: onmc mine [OPTIONS]                                                     
-                                                                                
- Mine Claude Code session transcripts into ONMC memory.                         
-                                                                                
+Usage: onmc mine [OPTIONS]
+
+ Mine Claude Code session transcripts into ONMC memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --github               Mine GitHub PRs and reviews from the repo remote.     │
 │ --session        TEXT  Mine a specific session id.                           │
@@ -539,10 +560,10 @@ Usage: onmc mine [OPTIONS]
 ## `onmc doctor`
 
 ```text
-Usage: onmc doctor [OPTIONS]                                                   
-                                                                                
- Run a health check over repo state, memory, provider setup, and integrations.  
-                                                                                
+Usage: onmc doctor [OPTIONS]
+
+ Run a health check over repo state, memory, provider setup, and integrations.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -551,10 +572,10 @@ Usage: onmc doctor [OPTIONS]
 ## `onmc llm`
 
 ```text
-Usage: onmc llm [OPTIONS] COMMAND [ARGS]...                                    
-                                                                                
- Configure optional LLM providers.                                              
-                                                                                
+Usage: onmc llm [OPTIONS] COMMAND [ARGS]...
+
+ Configure optional LLM providers.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -567,10 +588,10 @@ Usage: onmc llm [OPTIONS] COMMAND [ARGS]...
 ## `onmc llm status`
 
 ```text
-Usage: onmc llm status [OPTIONS]                                               
-                                                                                
- Show optional LLM provider configuration status.                               
-                                                                                
+Usage: onmc llm status [OPTIONS]
+
+ Show optional LLM provider configuration status.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -579,10 +600,10 @@ Usage: onmc llm status [OPTIONS]
 ## `onmc llm configure`
 
 ```text
-Usage: onmc llm configure [OPTIONS]                                            
-                                                                                
- Persist optional LLM provider settings to the local ONMC config.               
-                                                                                
+Usage: onmc llm configure [OPTIONS]
+
+ Persist optional LLM provider settings to the local ONMC config.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --provider               [anthropic|openai|mock]  LLM provider to         │
 │                                                      configure.              │
@@ -605,10 +626,10 @@ Usage: onmc llm configure [OPTIONS]
 ## `onmc hooks`
 
 ```text
-Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...                                  
-                                                                                
- Install and run Claude Code compaction hooks.                                  
-                                                                                
+Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
+
+ Install and run Claude Code compaction hooks.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -634,10 +655,10 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 ## `onmc hooks install`
 
 ```text
-Usage: onmc hooks install [OPTIONS]                                            
-                                                                                
- Install project-scoped Claude Code hooks into .claude/settings.json.           
-                                                                                
+Usage: onmc hooks install [OPTIONS]
+
+ Install project-scoped Claude Code hooks into .claude/settings.json.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --yes     -y        Accept defaults without prompting.                       │
 │ --no-mcp            Skip MCP server setup.                                   │
@@ -648,10 +669,10 @@ Usage: onmc hooks install [OPTIONS]
 ## `onmc hooks uninstall`
 
 ```text
-Usage: onmc hooks uninstall [OPTIONS]                                          
-                                                                                
- Remove ONMC entries from project Claude Code settings and .mcp.json.           
-                                                                                
+Usage: onmc hooks uninstall [OPTIONS]
+
+ Remove ONMC entries from project Claude Code settings and .mcp.json.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -660,10 +681,10 @@ Usage: onmc hooks uninstall [OPTIONS]
 ## `onmc hooks status`
 
 ```text
-Usage: onmc hooks status [OPTIONS]                                             
-                                                                                
- Show current Claude hook installation and snapshot status.                     
-                                                                                
+Usage: onmc hooks status [OPTIONS]
+
+ Show current Claude hook installation and snapshot status.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -672,10 +693,10 @@ Usage: onmc hooks status [OPTIONS]
 ## `onmc hooks pre-compact`
 
 ```text
-Usage: onmc hooks pre-compact [OPTIONS]                                        
-                                                                                
- Capture a compaction snapshot before Claude Code compacts context.             
-                                                                                
+Usage: onmc hooks pre-compact [OPTIONS]
+
+ Capture a compaction snapshot before Claude Code compacts context.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -684,11 +705,11 @@ Usage: onmc hooks pre-compact [OPTIONS]
 ## `onmc hooks session-start`
 
 ```text
-Usage: onmc hooks session-start [OPTIONS]                                      
-                                                                                
- Inject context at session start: boot digest on startup, continuation brief    
- after compaction.                                                              
-                                                                                
+Usage: onmc hooks session-start [OPTIONS]
+
+ Inject context at session start: boot digest on startup, continuation brief
+ after compaction.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -697,15 +718,15 @@ Usage: onmc hooks session-start [OPTIONS]
 ## `onmc hooks prompt-recall`
 
 ```text
-Usage: onmc hooks prompt-recall [OPTIONS]                                      
-                                                                                
- Inject the most relevant repo memories for the current user prompt.            
-                                                                                
- Reads the UserPromptSubmit JSON payload from stdin, extracts the ``prompt``    
- field, searches stored memory for relevant entries, and writes the             
- UserPromptSubmit additionalContext JSON to stdout.  Stdout is always pure      
- JSON or empty — never mixed with diagnostics.  Always exits 0.                 
-                                                                                
+Usage: onmc hooks prompt-recall [OPTIONS]
+
+ Inject the most relevant repo memories for the current user prompt.
+
+ Reads the UserPromptSubmit JSON payload from stdin, extracts the ``prompt``
+ field, searches stored memory for relevant entries, and writes the
+ UserPromptSubmit additionalContext JSON to stdout.  Stdout is always pure
+ JSON or empty — never mixed with diagnostics.  Always exits 0.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -714,20 +735,20 @@ Usage: onmc hooks prompt-recall [OPTIONS]
 ## `onmc hooks session-end`
 
 ```text
-Usage: onmc hooks session-end [OPTIONS]                                        
-                                                                                
- Run memory consolidation and heuristic auto-capture on SessionEnd.             
-                                                                                
- Called automatically by the Claude Code SessionEnd hook.  Reads the event      
- payload from stdin (session_id, transcript_path, cwd, reason), runs a          
- best-effort consolidation pass followed by heuristic auto-capture of           
- durable memory from the just-ended session transcript.  Errors are             
- swallowed; stdout is never written (SessionEnd hooks cannot inject             
- context).                                                                      
-                                                                                
- Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture          
- while keeping consolidation active.                                            
-                                                                                
+Usage: onmc hooks session-end [OPTIONS]
+
+ Run memory consolidation and heuristic auto-capture on SessionEnd.
+
+ Called automatically by the Claude Code SessionEnd hook.  Reads the event
+ payload from stdin (session_id, transcript_path, cwd, reason), runs a
+ best-effort consolidation pass followed by heuristic auto-capture of
+ durable memory from the just-ended session transcript.  Errors are
+ swallowed; stdout is never written (SessionEnd hooks cannot inject
+ context).
+
+ Set ``ONMC_AUTOCAPTURE=0`` in the environment to disable auto-capture
+ while keeping consolidation active.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -736,11 +757,11 @@ Usage: onmc hooks session-end [OPTIONS]
 ## `onmc consolidate`
 
 ```text
-Usage: onmc consolidate [OPTIONS]                                              
-                                                                                
- Clean and strengthen the memory store (dedup, merge, promote/demote, edge      
- graph).                                                                        
-                                                                                
+Usage: onmc consolidate [OPTIONS]
+
+ Clean and strengthen the memory store (dedup, merge, promote/demote, edge
+ graph).
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --dry-run          Compute the consolidation plan without writing anything.  │
 │ --help             Show this message and exit.                               │
@@ -750,10 +771,10 @@ Usage: onmc consolidate [OPTIONS]
 ## `onmc claude-md`
 
 ```text
-Usage: onmc claude-md [OPTIONS] COMMAND [ARGS]...                              
-                                                                                
- Generate and maintain CLAUDE.md from ONMC memory.                              
-                                                                                
+Usage: onmc claude-md [OPTIONS] COMMAND [ARGS]...
+
+ Generate and maintain CLAUDE.md from ONMC memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --watch           Watch ONMC state and regenerate CLAUDE.md on updates.      │
 │ --no-llm          Use deterministic generation only.                         │
@@ -769,10 +790,10 @@ Usage: onmc claude-md [OPTIONS] COMMAND [ARGS]...
 ## `onmc claude-md generate`
 
 ```text
-Usage: onmc claude-md generate [OPTIONS]                                       
-                                                                                
- Generate CLAUDE.md from stored memory.                                         
-                                                                                
+Usage: onmc claude-md generate [OPTIONS]
+
+ Generate CLAUDE.md from stored memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --no-llm          Use deterministic generation only.                         │
 │ --help            Show this message and exit.                                │
@@ -782,10 +803,10 @@ Usage: onmc claude-md generate [OPTIONS]
 ## `onmc claude-md update`
 
 ```text
-Usage: onmc claude-md update [OPTIONS]                                         
-                                                                                
- Update stale CLAUDE.md sections.                                               
-                                                                                
+Usage: onmc claude-md update [OPTIONS]
+
+ Update stale CLAUDE.md sections.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --no-llm          Use deterministic generation only.                         │
 │ --help            Show this message and exit.                                │
@@ -795,10 +816,10 @@ Usage: onmc claude-md update [OPTIONS]
 ## `onmc claude-md preview`
 
 ```text
-Usage: onmc claude-md preview [OPTIONS]                                        
-                                                                                
- Preview CLAUDE.md without writing it.                                          
-                                                                                
+Usage: onmc claude-md preview [OPTIONS]
+
+ Preview CLAUDE.md without writing it.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --no-llm          Use deterministic generation only.                         │
 │ --help            Show this message and exit.                                │
@@ -808,10 +829,10 @@ Usage: onmc claude-md preview [OPTIONS]
 ## `onmc memory`
 
 ```text
-Usage: onmc memory [OPTIONS] COMMAND [ARGS]...                                 
-                                                                                
- Inspect stored memory.                                                         
-                                                                                
+Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
+
+ Inspect stored memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -833,10 +854,10 @@ Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
 ## `onmc memory list`
 
 ```text
-Usage: onmc memory list [OPTIONS]                                              
-                                                                                
- List stored memory entries.                                                    
-                                                                                
+Usage: onmc memory list [OPTIONS]
+
+ List stored memory entries.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --kind                           [doc_fact|decision|i  Filter by memory      │
 │                                  nvariant|hotspot|git  kind.                 │
@@ -868,10 +889,10 @@ Usage: onmc memory list [OPTIONS]
 ## `onmc memory add`
 
 ```text
-Usage: onmc memory add [OPTIONS] TASK_ID                                       
-                                                                                
- Add a task-derived memory artifact.                                            
-                                                                                
+Usage: onmc memory add [OPTIONS] TASK_ID
+
+ Add a task-derived memory artifact.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -914,10 +935,10 @@ Usage: onmc memory add [OPTIONS] TASK_ID
 ## `onmc memory show`
 
 ```text
-Usage: onmc memory show [OPTIONS] MEMORY_ID                                    
-                                                                                
- Show a single memory entry with provenance.                                    
-                                                                                
+Usage: onmc memory show [OPTIONS] MEMORY_ID
+
+ Show a single memory entry with provenance.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -929,10 +950,10 @@ Usage: onmc memory show [OPTIONS] MEMORY_ID
 ## `onmc memory confirm`
 
 ```text
-Usage: onmc memory confirm [OPTIONS] MEMORY_ID                                 
-                                                                                
- Mark a memory record as verified useful.                                       
-                                                                                
+Usage: onmc memory confirm [OPTIONS] MEMORY_ID
+
+ Mark a memory record as verified useful.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -944,10 +965,10 @@ Usage: onmc memory confirm [OPTIONS] MEMORY_ID
 ## `onmc memory reject`
 
 ```text
-Usage: onmc memory reject [OPTIONS] MEMORY_ID                                  
-                                                                                
- Mark a memory record as wrong or stale.                                        
-                                                                                
+Usage: onmc memory reject [OPTIONS] MEMORY_ID
+
+ Mark a memory record as wrong or stale.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -959,10 +980,10 @@ Usage: onmc memory reject [OPTIONS] MEMORY_ID
 ## `onmc memory edit`
 
 ```text
-Usage: onmc memory edit [OPTIONS] MEMORY_ID                                    
-                                                                                
- Edit a memory summary and reset its feedback score.                            
-                                                                                
+Usage: onmc memory edit [OPTIONS] MEMORY_ID
+
+ Edit a memory summary and reset its feedback score.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -974,10 +995,10 @@ Usage: onmc memory edit [OPTIONS] MEMORY_ID
 ## `onmc task`
 
 ```text
-Usage: onmc task [OPTIONS] COMMAND [ARGS]...                                   
-                                                                                
- Manage task lifecycle state.                                                   
-                                                                                
+Usage: onmc task [OPTIONS] COMMAND [ARGS]...
+
+ Manage task lifecycle state.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -993,10 +1014,10 @@ Usage: onmc task [OPTIONS] COMMAND [ARGS]...
 ## `onmc task start`
 
 ```text
-Usage: onmc task start [OPTIONS]                                               
-                                                                                
- Create and activate a new task for the current repository.                     
-                                                                                
+Usage: onmc task start [OPTIONS]
+
+ Create and activate a new task for the current repository.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --title              TEXT  Short task title. [required]                   │
 │ *  --description        TEXT  Task description. [required]                   │
@@ -1008,10 +1029,10 @@ Usage: onmc task start [OPTIONS]
 ## `onmc task list`
 
 ```text
-Usage: onmc task list [OPTIONS]                                                
-                                                                                
- List tasks for the current repository.                                         
-                                                                                
+Usage: onmc task list [OPTIONS]
+
+ List tasks for the current repository.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1020,10 +1041,10 @@ Usage: onmc task list [OPTIONS]
 ## `onmc task show`
 
 ```text
-Usage: onmc task show [OPTIONS] TASK_ID                                        
-                                                                                
- Show a stored task with lifecycle details.                                     
-                                                                                
+Usage: onmc task show [OPTIONS] TASK_ID
+
+ Show a stored task with lifecycle details.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1035,10 +1056,10 @@ Usage: onmc task show [OPTIONS] TASK_ID
 ## `onmc task end`
 
 ```text
-Usage: onmc task end [OPTIONS] TASK_ID                                         
-                                                                                
- End a task with a terminal status and final summary.                           
-                                                                                
+Usage: onmc task end [OPTIONS] TASK_ID
+
+ End a task with a terminal status and final summary.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1054,10 +1075,10 @@ Usage: onmc task end [OPTIONS] TASK_ID
 ## `onmc task status`
 
 ```text
-Usage: onmc task status [OPTIONS] TASK_ID                                      
-                                                                                
- Update task status.                                                            
-                                                                                
+Usage: onmc task status [OPTIONS] TASK_ID
+
+ Update task status.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1071,10 +1092,10 @@ Usage: onmc task status [OPTIONS] TASK_ID
 ## `onmc attempt`
 
 ```text
-Usage: onmc attempt [OPTIONS] COMMAND [ARGS]...                                
-                                                                                
- Track task-scoped attempts.                                                    
-                                                                                
+Usage: onmc attempt [OPTIONS] COMMAND [ARGS]...
+
+ Track task-scoped attempts.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1089,10 +1110,10 @@ Usage: onmc attempt [OPTIONS] COMMAND [ARGS]...
 ## `onmc attempt add`
 
 ```text
-Usage: onmc attempt add [OPTIONS] TASK_ID                                      
-                                                                                
- Add an attempt record for a task.                                              
-                                                                                
+Usage: onmc attempt add [OPTIONS] TASK_ID
+
+ Add an attempt record for a task.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1120,10 +1141,10 @@ Usage: onmc attempt add [OPTIONS] TASK_ID
 ## `onmc attempt list`
 
 ```text
-Usage: onmc attempt list [OPTIONS] TASK_ID                                     
-                                                                                
- List attempts attached to a task.                                              
-                                                                                
+Usage: onmc attempt list [OPTIONS] TASK_ID
+
+ List attempts attached to a task.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1135,10 +1156,10 @@ Usage: onmc attempt list [OPTIONS] TASK_ID
 ## `onmc attempt show`
 
 ```text
-Usage: onmc attempt show [OPTIONS] ATTEMPT_ID                                  
-                                                                                
- Show one attempt record.                                                       
-                                                                                
+Usage: onmc attempt show [OPTIONS] ATTEMPT_ID
+
+ Show one attempt record.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    attempt_id      TEXT  [required]                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1150,10 +1171,10 @@ Usage: onmc attempt show [OPTIONS] ATTEMPT_ID
 ## `onmc attempt update`
 
 ```text
-Usage: onmc attempt update [OPTIONS] ATTEMPT_ID                                
-                                                                                
- Update an existing attempt.                                                    
-                                                                                
+Usage: onmc attempt update [OPTIONS] ATTEMPT_ID
+
+ Update an existing attempt.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    attempt_id      TEXT  [required]                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1178,10 +1199,10 @@ Usage: onmc attempt update [OPTIONS] ATTEMPT_ID
 ## `onmc playbook`
 
 ```text
-Usage: onmc playbook [OPTIONS] COMMAND [ARGS]...                               
-                                                                                
- Synthesize and manage memory-derived playbooks.                                
-                                                                                
+Usage: onmc playbook [OPTIONS] COMMAND [ARGS]...
+
+ Synthesize and manage memory-derived playbooks.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1196,10 +1217,10 @@ Usage: onmc playbook [OPTIONS] COMMAND [ARGS]...
 ## `onmc playbook generate`
 
 ```text
-Usage: onmc playbook generate [OPTIONS]                                        
-                                                                                
- Synthesize playbooks from stored memory, persist, and write artifacts.         
-                                                                                
+Usage: onmc playbook generate [OPTIONS]
+
+ Synthesize playbooks from stored memory, persist, and write artifacts.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --no-llm          Skip the optional LLM polish pass; deterministic only.     │
 │ --help            Show this message and exit.                                │
@@ -1209,10 +1230,10 @@ Usage: onmc playbook generate [OPTIONS]
 ## `onmc playbook list`
 
 ```text
-Usage: onmc playbook list [OPTIONS]                                            
-                                                                                
- List all persisted playbooks.                                                  
-                                                                                
+Usage: onmc playbook list [OPTIONS]
+
+ List all persisted playbooks.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1221,10 +1242,10 @@ Usage: onmc playbook list [OPTIONS]
 ## `onmc playbook show`
 
 ```text
-Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID                                
-                                                                                
- Show a single playbook with steps and provenance.                              
-                                                                                
+Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
+
+ Show a single playbook with steps and provenance.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    playbook_id      TEXT  Playbook ID (or prefix) to show. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1236,10 +1257,10 @@ Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
 ## `onmc skill`
 
 ```text
-Usage: onmc skill [OPTIONS] COMMAND [ARGS]...                                  
-                                                                                
- Manage self-improving skills synthesized from playbooks and memory patterns.   
-                                                                                
+Usage: onmc skill [OPTIONS] COMMAND [ARGS]...
+
+ Manage self-improving skills synthesized from playbooks and memory patterns.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1255,22 +1276,22 @@ Usage: onmc skill [OPTIONS] COMMAND [ARGS]...
 ## `onmc skill promote`
 
 ```text
-Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]                              
-                                                                                
- Promote a playbook or recurring patterns to skill(s).                          
-                                                                                
- Provide a playbook ID to lift a single playbook into a named, reusable         
- skill.  Use --auto to scan all stored memories for recurring fail→fix          
- patterns and high-signal tag clusters, promoting each to a skill.              
-                                                                                
-                                                                                
- Examples                                                                       
- --------                                                                       
- onmc skill promote pb_abc123                                                   
- onmc skill promote pb_abc123 --name "Cache Invalidation"                       
- onmc skill promote --auto                                                      
- onmc skill promote --auto --json                                               
-                                                                                
+Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
+
+ Promote a playbook or recurring patterns to skill(s).
+
+ Provide a playbook ID to lift a single playbook into a named, reusable
+ skill.  Use --auto to scan all stored memories for recurring fail→fix
+ patterns and high-signal tag clusters, promoting each to a skill.
+
+
+ Examples
+ --------
+ onmc skill promote pb_abc123
+ onmc skill promote pb_abc123 --name "Cache Invalidation"
+ onmc skill promote --auto
+ onmc skill promote --auto --json
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
 │                                   skill.                                     │
@@ -1286,10 +1307,10 @@ Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
 ## `onmc skill list`
 
 ```text
-Usage: onmc skill list [OPTIONS]                                               
-                                                                                
- List all persisted skills.                                                     
-                                                                                
+Usage: onmc skill list [OPTIONS]
+
+ List all persisted skills.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit skills as JSON array.                                   │
 │ --help          Show this message and exit.                                  │
@@ -1299,10 +1320,10 @@ Usage: onmc skill list [OPTIONS]
 ## `onmc skill show`
 
 ```text
-Usage: onmc skill show [OPTIONS] SKILL_ID                                      
-                                                                                
- Show a single skill with body, trigger, and metadata.                          
-                                                                                
+Usage: onmc skill show [OPTIONS] SKILL_ID
+
+ Show a single skill with body, trigger, and metadata.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    skill_id      TEXT  Skill ID (or prefix) to show. [required]            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1315,21 +1336,21 @@ Usage: onmc skill show [OPTIONS] SKILL_ID
 ## `onmc skill feedback`
 
 ```text
-Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION                        
-                                                                                
- Apply a trust signal to a stored skill.                                        
-                                                                                
- 'up' marks the skill as having helped and nudges its confidence upward.        
- 'down' records the usage without incrementing success_count and nudges         
- confidence downward (clamped at a floor so the skill remains visible).         
-                                                                                
-                                                                                
- Examples                                                                       
- --------                                                                       
- onmc skill feedback sk_abc123 up                                               
- onmc skill feedback sk_abc123 down                                             
- onmc skill feedback sk_abc123 up --json                                        
-                                                                                
+Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION
+
+ Apply a trust signal to a stored skill.
+
+ 'up' marks the skill as having helped and nudges its confidence upward.
+ 'down' records the usage without incrementing success_count and nudges
+ confidence downward (clamped at a floor so the skill remains visible).
+
+
+ Examples
+ --------
+ onmc skill feedback sk_abc123 up
+ onmc skill feedback sk_abc123 down
+ onmc skill feedback sk_abc123 up --json
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    skill_id       TEXT  Skill ID to apply feedback to. [required]          │
 │ *    direction      TEXT  Trust signal: 'up' (helped) or 'down' (did not     │
@@ -1345,15 +1366,15 @@ Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION
 ## `onmc skill prune`
 
 ```text
-Usage: onmc skill prune [OPTIONS]                                              
-                                                                                
- Disable auto_inject on low-success, long-unused skills.                        
-                                                                                
- A skill is pruned when it has been used at least 3 times with a success        
- rate below 30%, or has not been used in the last 60 days.  Pruning sets        
- auto_inject=False so the injection layer skips it; the skill remains in        
- storage and can be re-examined or deleted manually.                            
-                                                                                
+Usage: onmc skill prune [OPTIONS]
+
+ Disable auto_inject on low-success, long-unused skills.
+
+ A skill is pruned when it has been used at least 3 times with a success
+ rate below 30%, or has not been used in the last 60 days.  Pruning sets
+ auto_inject=False so the injection layer skips it; the skill remains in
+ storage and can be re-examined or deleted manually.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit pruned skills as JSON array.                            │
 │ --help          Show this message and exit.                                  │
@@ -1363,10 +1384,10 @@ Usage: onmc skill prune [OPTIONS]
 ## `onmc user`
 
 ```text
-Usage: onmc user [OPTIONS] COMMAND [ARGS]...                                   
-                                                                                
- Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).       
-                                                                                
+Usage: onmc user [OPTIONS] COMMAND [ARGS]...
+
+ Manage cross-repo user preferences (stored in ~/.onmc, not repo-scoped).
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1382,14 +1403,14 @@ Usage: onmc user [OPTIONS] COMMAND [ARGS]...
 ## `onmc user add`
 
 ```text
-Usage: onmc user add [OPTIONS]                                                 
-                                                                                
- Add a cross-repo user preference (stored in ~/.onmc, not git-tracked).         
-                                                                                
- User preferences travel with you across all repositories and appear at the     
- top of every session boot digest so your coding style is always applied.       
- Examples: "always use pytest", "run ruff before committing".                   
-                                                                                
+Usage: onmc user add [OPTIONS]
+
+ Add a cross-repo user preference (stored in ~/.onmc, not git-tracked).
+
+ User preferences travel with you across all repositories and appear at the
+ top of every session boot digest so your coding style is always applied.
+ Examples: "always use pytest", "run ruff before committing".
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --title          TEXT  Short preference title. [required]                 │
 │ *  --summary        TEXT  Full description of the preference or              │
@@ -1402,10 +1423,10 @@ Usage: onmc user add [OPTIONS]
 ## `onmc user list`
 
 ```text
-Usage: onmc user list [OPTIONS]                                                
-                                                                                
- List all cross-repo user preferences.                                          
-                                                                                
+Usage: onmc user list [OPTIONS]
+
+ List all cross-repo user preferences.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1414,10 +1435,10 @@ Usage: onmc user list [OPTIONS]
 ## `onmc user show`
 
 ```text
-Usage: onmc user show [OPTIONS] MEMORY_ID                                      
-                                                                                
- Show a single user preference by ID.                                           
-                                                                                
+Usage: onmc user show [OPTIONS] MEMORY_ID
+
+ Show a single user preference by ID.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1429,10 +1450,10 @@ Usage: onmc user show [OPTIONS] MEMORY_ID
 ## `onmc user remove`
 
 ```text
-Usage: onmc user remove [OPTIONS] MEMORY_ID                                    
-                                                                                
- Remove a user preference by ID.                                                
-                                                                                
+Usage: onmc user remove [OPTIONS] MEMORY_ID
+
+ Remove a user preference by ID.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1444,10 +1465,10 @@ Usage: onmc user remove [OPTIONS] MEMORY_ID
 ## `onmc profile`
 
 ```text
-Usage: onmc profile [OPTIONS] COMMAND [ARGS]...                                
-                                                                                
- Show and rebuild the derived user behavioral profile (~/.onmc/user.db).        
-                                                                                
+Usage: onmc profile [OPTIONS] COMMAND [ARGS]...
+
+ Show and rebuild the derived user behavioral profile (~/.onmc/user.db).
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1461,14 +1482,14 @@ Usage: onmc profile [OPTIONS] COMMAND [ARGS]...
 ## `onmc profile show`
 
 ```text
-Usage: onmc profile show [OPTIONS]                                             
-                                                                                
- Show the derived behavioral profile compiled from ~/.onmc/user.db.             
-                                                                                
- Buckets user memories into preferences, patterns, mistakes-to-avoid, and       
- tooling — entirely offline, no LLM calls.  Use `onmc user add` to seed         
- the profile with more memories.                                                
-                                                                                
+Usage: onmc profile show [OPTIONS]
+
+ Show the derived behavioral profile compiled from ~/.onmc/user.db.
+
+ Buckets user memories into preferences, patterns, mistakes-to-avoid, and
+ tooling — entirely offline, no LLM calls.  Use `onmc user add` to seed
+ the profile with more memories.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Output the profile as JSON.                                  │
 │ --help          Show this message and exit.                                  │
@@ -1478,13 +1499,13 @@ Usage: onmc profile show [OPTIONS]
 ## `onmc profile rebuild`
 
 ```text
-Usage: onmc profile rebuild [OPTIONS]                                          
-                                                                                
- Recompute the behavioral profile from ~/.onmc/user.db and display it.          
-                                                                                
- Equivalent to `onmc profile show` — the profile is always freshly derived      
- from the current user store (no cache).                                        
-                                                                                
+Usage: onmc profile rebuild [OPTIONS]
+
+ Recompute the behavioral profile from ~/.onmc/user.db and display it.
+
+ Equivalent to `onmc profile show` — the profile is always freshly derived
+ from the current user store (no cache).
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Output the rebuilt profile as JSON.                          │
 │ --help          Show this message and exit.                                  │
@@ -1494,10 +1515,10 @@ Usage: onmc profile rebuild [OPTIONS]
 ## `onmc notify`
 
 ```text
-Usage: onmc notify [OPTIONS] COMMAND [ARGS]...                                 
-                                                                                
- Inspect and test the context firewall notification sink.                       
-                                                                                
+Usage: onmc notify [OPTIONS] COMMAND [ARGS]...
+
+ Inspect and test the context firewall notification sink.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1511,19 +1532,19 @@ Usage: onmc notify [OPTIONS] COMMAND [ARGS]...
 ## `onmc notify status`
 
 ```text
-Usage: onmc notify status [OPTIONS]                                            
-                                                                                
- Show the active context firewall sink configuration.                           
-                                                                                
- Reads from config.yaml and env vars (env wins).  Displays the active sink      
- type, log path, and masked webhook URLs when configured.                       
-                                                                                
- Environment overrides:                                                         
- - ONMC_NOTIFY_ENABLED=0  disable the firewall entirely.                        
- - ONMC_NOTIFY_SINK       "file" | "discord" | "slack" | "none".                
- - ONMC_DISCORD_WEBHOOK   Discord incoming webhook URL.                         
- - ONMC_SLACK_WEBHOOK     Slack incoming webhook URL.                           
-                                                                                
+Usage: onmc notify status [OPTIONS]
+
+ Show the active context firewall sink configuration.
+
+ Reads from config.yaml and env vars (env wins).  Displays the active sink
+ type, log path, and masked webhook URLs when configured.
+
+ Environment overrides:
+ - ONMC_NOTIFY_ENABLED=0  disable the firewall entirely.
+ - ONMC_NOTIFY_SINK       "file" | "discord" | "slack" | "none".
+ - ONMC_DISCORD_WEBHOOK   Discord incoming webhook URL.
+ - ONMC_SLACK_WEBHOOK     Slack incoming webhook URL.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the status as JSON instead of a rich panel.             │
 │ --help          Show this message and exit.                                  │
@@ -1533,13 +1554,13 @@ Usage: onmc notify status [OPTIONS]
 ## `onmc notify test`
 
 ```text
-Usage: onmc notify test [OPTIONS]                                              
-                                                                                
- Emit a test event to the active sink and report where it went.                 
-                                                                                
- Useful for verifying that the context firewall is correctly routed before      
- connecting real hooks.  The test event has kind=generic and severity=routine.  
-                                                                                
+Usage: onmc notify test [OPTIONS]
+
+ Emit a test event to the active sink and report where it went.
+
+ Useful for verifying that the context firewall is correctly routed before
+ connecting real hooks.  The test event has kind=generic and severity=routine.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --message  -m      TEXT  Custom message for the test event.                  │
 │                          [default: test notification from onmc]              │
@@ -1550,14 +1571,14 @@ Usage: onmc notify test [OPTIONS]
 ## `onmc notify tail`
 
 ```text
-Usage: onmc notify tail [OPTIONS]                                              
-                                                                                
- Show recent events from the context firewall log (.onmc/notify.log).           
-                                                                                
- Only the FileSink (the default) produces a readable local log.  Discord and    
- Slack sinks route events to the webhook without storing them locally, but      
- the FileSink always writes a local JSONL copy when enabled.                    
-                                                                                
+Usage: onmc notify tail [OPTIONS]
+
+ Show recent events from the context firewall log (.onmc/notify.log).
+
+ Only the FileSink (the default) produces a readable local log.  Discord and
+ Slack sinks route events to the webhook without storing them locally, but
+ the FileSink always writes a local JSONL copy when enabled.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --lines  -n      INTEGER RANGE [x>=1]  Number of recent events to show.      │
 │                                        [default: 20]                         │
@@ -1569,10 +1590,10 @@ Usage: onmc notify tail [OPTIONS]
 ## `onmc spec`
 
 ```text
-Usage: onmc spec [OPTIONS] COMMAND [ARGS]...                                   
-                                                                                
- Inspect and validate the Agent Memory open spec.                               
-                                                                                
+Usage: onmc spec [OPTIONS] COMMAND [ARGS]...
+
+ Inspect and validate the Agent Memory open spec.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1586,10 +1607,10 @@ Usage: onmc spec [OPTIONS] COMMAND [ARGS]...
 ## `onmc spec print`
 
 ```text
-Usage: onmc spec print [OPTIONS]                                               
-                                                                                
- Print the Agent Memory Spec version and schema summary.                        
-                                                                                
+Usage: onmc spec print [OPTIONS]
+
+ Print the Agent Memory Spec version and schema summary.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1598,14 +1619,14 @@ Usage: onmc spec print [OPTIONS]
 ## `onmc spec validate`
 
 ```text
-Usage: onmc spec validate [OPTIONS]                                            
-                                                                                
- Validate that a .agent-memory/ directory conforms to the open spec.            
-                                                                                
- Checks manifest presence and field completeness, validates all memory and      
- task record files, and verifies enum values against the spec. Exits with       
- code 1 if any errors are found.                                                
-                                                                                
+Usage: onmc spec validate [OPTIONS]
+
+ Validate that a .agent-memory/ directory conforms to the open spec.
+
+ Checks manifest presence and field completeness, validates all memory and
+ task record files, and verifies enum values against the spec. Exits with
+ code 1 if any errors are found.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --path        PATH  Path to the .agent-memory/ directory to validate.        │
 │                     Defaults to .agent-memory/ in the current repo root.     │
@@ -1616,10 +1637,10 @@ Usage: onmc spec validate [OPTIONS]
 ## `onmc tui`
 
 ```text
-Usage: onmc tui [OPTIONS]                                                      
-                                                                                
- Open the interactive terminal brain-browser for memory curation.               
-                                                                                
+Usage: onmc tui [OPTIONS]
+
+ Open the interactive terminal brain-browser for memory curation.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1628,17 +1649,17 @@ Usage: onmc tui [OPTIONS]
 ## `onmc coverage`
 
 ```text
-Usage: onmc coverage [OPTIONS]                                                 
-                                                                                
- Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.          
-                                                                                
- Answers "which parts of this repo does the memory actually cover, and where    
- are the blind spots?"  The killer feature is surfacing high-churn files that   
- have zero memory coverage — those are the landmines most likely to cause       
- regressions when touched without context.                                      
-                                                                                
- Requires at least one `onmc ingest` run (file stats must exist).               
-                                                                                
+Usage: onmc coverage [OPTIONS]
+
+ Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.
+
+ Answers "which parts of this repo does the memory actually cover, and where
+ are the blind spots?"  The killer feature is surfacing high-churn files that
+ have zero memory coverage — those are the landmines most likely to cause
+ regressions when touched without context.
+
+ Requires at least one `onmc ingest` run (file stats must exist).
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the CoverageReport as JSON instead of the dashboard.    │
 │ --help          Show this message and exit.                                  │
@@ -1648,18 +1669,18 @@ Usage: onmc coverage [OPTIONS]
 ## `onmc bench`
 
 ```text
-Usage: onmc bench [OPTIONS]                                                    
-                                                                                
- Measure whether onmc memory actually reduces wasted work.                      
-                                                                                
- Runs a deterministic proof harness comparing two conditions: without onmc      
- memory vs with onmc memory (brief/recall injected).  Default uses a            
- built-in synthetic scenario that works on any repo with no init needed.        
-                                                                                
- The harness is a deterministic simulation — no LLM is called.  Results are     
- reproducible in CI.  See the bench/harness.py module docstring for the full    
- methodology.                                                                   
-                                                                                
+Usage: onmc bench [OPTIONS]
+
+ Measure whether onmc memory actually reduces wasted work.
+
+ Runs a deterministic proof harness comparing two conditions: without onmc
+ memory vs with onmc memory (brief/recall injected).  Default uses a
+ built-in synthetic scenario that works on any repo with no init needed.
+
+ The harness is a deterministic simulation — no LLM is called.  Results are
+ reproducible in CI.  See the bench/harness.py module docstring for the full
+ methodology.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --repo-memory          Run against the current repo's real memory store      │
 │                        instead of built-in scenario.                         │
@@ -1671,18 +1692,18 @@ Usage: onmc bench [OPTIONS]
 ## `onmc savings`
 
 ```text
-Usage: onmc savings [OPTIONS]                                                  
-                                                                                
- Show a shareable 'Memory Wrapped' token-ROI card.                              
-                                                                                
- Renders a screenshot-worthy terminal card summarising the memory brain:        
- memories / skills / playbooks stored, the simulated context-token savings      
- percentage, repeated-failure rate improvement, and hotspot coverage.           
-                                                                                
- Token-ROI numbers come from the same deterministic bench harness as            
- ``onmc bench`` — no LLM is called.  Results are identical across runs on       
- the same memory store.  Use ``--json`` for machine-readable output.            
-                                                                                
+Usage: onmc savings [OPTIONS]
+
+ Show a shareable 'Memory Wrapped' token-ROI card.
+
+ Renders a screenshot-worthy terminal card summarising the memory brain:
+ memories / skills / playbooks stored, the simulated context-token savings
+ percentage, repeated-failure rate improvement, and hotspot coverage.
+
+ Token-ROI numbers come from the same deterministic bench harness as
+ ``onmc bench`` — no LLM is called.  Results are identical across runs on
+ the same memory store.  Use ``--json`` for machine-readable output.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
 │ --help          Show this message and exit.                                  │
@@ -1692,10 +1713,10 @@ Usage: onmc savings [OPTIONS]
 ## `onmc wiki`
 
 ```text
-Usage: onmc wiki [OPTIONS]                                                     
-                                                                                
- Generate a browsable multi-page markdown wiki from stored memory.              
-                                                                                
+Usage: onmc wiki [OPTIONS]
+
+ Generate a browsable multi-page markdown wiki from stored memory.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --output        PATH  Directory to write wiki pages into. Defaults to        │
 │                       .onmc/wiki/ (gitignored). Pass e.g. docs/wiki to       │
@@ -1707,23 +1728,23 @@ Usage: onmc wiki [OPTIONS]
 ## `onmc plug`
 
 ```text
-Usage: onmc plug [OPTIONS] TARGET                                              
-                                                                                
- Wire onmc into a target coding agent (one-shot idempotent wizard).             
-                                                                                
-                                                                                
- Targets                                                                        
- -------                                                                        
- claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).          
- codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief       
-               and onmc guard at session start.                                 
- cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).      
- omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.    
- omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.    
- all           Apply claude-code + codex + cursor (safe subset).                
-                                                                                
- All writes are idempotent — running twice never duplicates stanzas.            
-                                                                                
+Usage: onmc plug [OPTIONS] TARGET
+
+ Wire onmc into a target coding agent (one-shot idempotent wizard).
+
+
+ Targets
+ -------
+ claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).
+ codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief
+               and onmc guard at session start.
+ cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).
+ omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.
+ omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.
+ all           Apply claude-code + codex + cursor (safe subset).
+
+ All writes are idempotent — running twice never duplicates stanzas.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    target      TEXT  Agent to wire onmc into. Choices: claude-code, codex, │
 │                        cursor, omc, omx, all.                                │
@@ -1737,44 +1758,44 @@ Usage: onmc plug [OPTIONS] TARGET
 ## `onmc import`
 
 ```text
-Usage: onmc import [OPTIONS] SOURCE [PATH]                                     
-                                                                                
- Import skills or memories from an external tool into the ONMC brain.           
-                                                                                
-                                                                                
- Sources                                                                        
- -------                                                                        
- omc       oh-my-claudecode skill files (.omc/skills/*.md).                     
-           Auto-detects project (.omc/skills) then user (~/.omc/skills).        
-           Pass a path to override: onmc import omc /path/to/skills/            
-                                                                                
- hermes    Nous hermes-agent context files (MEMORY.md, USER.md).                
-           Auto-detects in the current directory.                               
-           Pass a path to a file or directory to override.                      
-                                                                                
- <path>    Generic .md file or directory of .md files.                          
-           Imported as skills by default; pass --as memory to import            
-           each ## section as a separate memory entry.                          
-                                                                                
-                                                                                
- Idempotent                                                                     
- ----------                                                                     
- Re-importing the same files is safe: items already present in the store        
- (matched by stable content-derived id) are counted as skipped, never           
- duplicated.  Use --dry-run to preview without writing.                         
-                                                                                
-                                                                                
- Examples                                                                       
- --------                                                                       
- onmc import omc                                                                
- onmc import omc ~/.omc/skills                                                  
- onmc import hermes                                                             
- onmc import hermes ./MEMORY.md                                                 
- onmc import ./docs/how-tos/                                                    
- onmc import ./RUNBOOK.md --as memory                                           
- onmc import omc --dry-run                                                      
- onmc import hermes --json                                                      
-                                                                                
+Usage: onmc import [OPTIONS] SOURCE [PATH]
+
+ Import skills or memories from an external tool into the ONMC brain.
+
+
+ Sources
+ -------
+ omc       oh-my-claudecode skill files (.omc/skills/*.md).
+           Auto-detects project (.omc/skills) then user (~/.omc/skills).
+           Pass a path to override: onmc import omc /path/to/skills/
+
+ hermes    Nous hermes-agent context files (MEMORY.md, USER.md).
+           Auto-detects in the current directory.
+           Pass a path to a file or directory to override.
+
+ <path>    Generic .md file or directory of .md files.
+           Imported as skills by default; pass --as memory to import
+           each ## section as a separate memory entry.
+
+
+ Idempotent
+ ----------
+ Re-importing the same files is safe: items already present in the store
+ (matched by stable content-derived id) are counted as skipped, never
+ duplicated.  Use --dry-run to preview without writing.
+
+
+ Examples
+ --------
+ onmc import omc
+ onmc import omc ~/.omc/skills
+ onmc import hermes
+ onmc import hermes ./MEMORY.md
+ onmc import ./docs/how-tos/
+ onmc import ./RUNBOOK.md --as memory
+ onmc import omc --dry-run
+ onmc import hermes --json
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    source      TEXT    Source to import from. Use 'omc' for                │
 │                          oh-my-claudecode skills, 'hermes' for Nous          │
@@ -1800,23 +1821,23 @@ Usage: onmc import [OPTIONS] SOURCE [PATH]
 ## `onmc feedback`
 
 ```text
-Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION                             
-                                                                                
- Apply a human trust signal to a stored memory.                                 
-                                                                                
- Use 'up' when a recalled memory proved useful; use 'down' when it was          
- wrong or misleading.  Positive feedback slows confidence decay so              
- corroborated memories stay ranked higher for longer.  Negative feedback        
- demotes but does not erase — the memory remains searchable at a lower          
- rank.                                                                          
-                                                                                
-                                                                                
- Examples                                                                       
- --------                                                                       
- onmc feedback mem_abc123 up                                                    
- onmc feedback mem_abc123 down --note "outdated after refactor"                 
- onmc feedback mem_abc123 up --json                                             
-                                                                                
+Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION
+
+ Apply a human trust signal to a stored memory.
+
+ Use 'up' when a recalled memory proved useful; use 'down' when it was
+ wrong or misleading.  Positive feedback slows confidence decay so
+ corroborated memories stay ranked higher for longer.  Negative feedback
+ demotes but does not erase — the memory remains searchable at a lower
+ rank.
+
+
+ Examples
+ --------
+ onmc feedback mem_abc123 up
+ onmc feedback mem_abc123 down --note "outdated after refactor"
+ onmc feedback mem_abc123 up --json
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    memory_id      TEXT  Memory ID to apply feedback to. [required]         │
 │ *    direction      TEXT  Trust signal: 'up' (useful) or 'down'              │

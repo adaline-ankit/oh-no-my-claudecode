@@ -73,6 +73,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
+from oh_no_my_claudecode.ui import serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 
 app = typer.Typer(
@@ -932,6 +933,35 @@ def check_command(
 
     if strict and check_result.has_warnings:
         raise typer.Exit(code=1)
+
+
+@app.command("ui")
+def ui_command(
+    host: Annotated[
+        str,
+        typer.Option("--host", help="Dashboard bind address."),
+    ] = "127.0.0.1",
+    port: Annotated[
+        int,
+        typer.Option("--port", min=0, max=65535, help="Dashboard TCP port."),
+    ] = 8765,
+    open_browser: Annotated[
+        bool,
+        typer.Option("--open/--no-open", help="Open the dashboard in a browser."),
+    ] = True,
+) -> None:
+    """Open the local read-only ONMC visual dashboard."""
+    service = _service()
+    try:
+        service.status()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        console.print(
+            "[yellow]Warning: non-loopback binding exposes repository memory "
+            "to your network.[/yellow]"
+        )
+    serve_dashboard(service, host=host, port=port, open_browser=open_browser)
 
 
 @app.command("status")
