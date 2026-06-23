@@ -25,6 +25,7 @@ EXPECTED_TOOL_NAMES = {
     "get_coverage",
     "get_digest",
     "get_skills",
+    "get_profile",
 }
 
 
@@ -153,6 +154,10 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert "tags" in by_name["get_skills"].inputSchema["properties"]
     assert "limit" in by_name["get_skills"].inputSchema["properties"]
     assert by_name["get_skills"].inputSchema["properties"]["tags"]["type"] == "array"
+    # get_profile — no required args, optional max_items
+    assert by_name["get_profile"].inputSchema.get("required", []) == []
+    assert "max_items" in by_name["get_profile"].inputSchema["properties"]
+    assert by_name["get_profile"].inputSchema["properties"]["max_items"]["type"] == "integer"
 
 
 def test_search_memory_ranks_seeded_store(
@@ -1037,3 +1042,213 @@ def test_get_skills_returns_toon_by_default(
         is_json = False
     assert not is_json, "Default output should be TOON, not JSON"
     assert "TOON Skill" in text or "name" in text
+
+
+# ---------------------------------------------------------------------------
+# get_profile tool
+# ---------------------------------------------------------------------------
+
+
+def _seed_user_memory_for_profile(
+    svc: object,
+    *,
+    title: str,
+    summary: str,
+    home: Path,
+    kind: str = "decision",
+) -> None:
+    """Seed a memory into the user-scope store at *home* via the service."""
+    from oh_no_my_claudecode.core.service import OnmcService
+
+    assert isinstance(svc, OnmcService)
+    svc.add_user_memory(title=title, summary=summary, home=home)
+
+
+def test_get_profile_appears_in_tool_list_with_schema() -> None:
+    """get_profile is present in list_onmc_tools with the expected schema."""
+    tools = list_onmc_tools()
+    by_name = {tool.name: tool for tool in tools}
+
+    assert "get_profile" in by_name
+    schema = by_name["get_profile"].inputSchema
+    assert schema.get("required", []) == []
+    assert "max_items" in schema["properties"]
+    assert schema["properties"]["max_items"]["type"] == "integer"
+    assert schema["properties"]["max_items"]["minimum"] == 1
+
+
+def test_get_profile_returns_bucket_fields_json(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+    tmp_path: Path,
+) -> None:
+    """get_profile returns a JSON dict with all bucket fields for a seeded user store."""
+    from oh_no_my_claudecode.core.service import OnmcService
+    from oh_no_my_claudecode.models import MemoryKind, SourceType
+    from oh_no_my_claudecode.models.memory import MemoryEntry
+    from oh_no_my_claudecode.utils.text import stable_id
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = init(sample_repo)
+
+    # Seed memories directly into the user store pointed at tmp_path.
+    svc = OnmcService()
+    now = utc_now()
+
+    # Preference (DECISION kind)
+    pref_mem = MemoryEntry(
+        id=stable_id("decision", "Prefer pytest", prefix="um"),
+        kind=MemoryKind.DECISION,
+        title="Prefer pytest",
+        summary="Always use pytest over unittest.",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="user:manual",
+        tags=["user-pref"],
+        confidence=0.9,
+        created_at=now,
+        updated_at=now,
+    )
+    # Mistake (FAILED_APPROACH kind)
+    mistake_mem = MemoryEntry(
+        id=stable_id("failed_approach", "Never bare except", prefix="um"),
+        kind=MemoryKind.FAILED_APPROACH,
+        title="Never bare except",
+        summary="Always name the exception in except clauses.",
+        details="",
+        source_type=SourceType.MANUAL,
+        source_ref="user:manual",
+        tags=[],
+        confidence=0.85,
+        created_at=now,
+        updated_at=now,
+    )
+
+    user_storage = svc._user_storage(home=tmp_path)
+    user_storage.upsert_memories([pref_mem, mistake_mem])
+
+    text = _tool_text(repo, "get_profile", {})
+    payload = json.loads(text)
+
+    assert "preferences" in payload
+    assert "patterns" in payload
+    assert "frequent_mistakes" in payload
+    assert "tooling" in payload
+    assert "derived_from" in payload
+    assert "salient_memory_ids" in payload
+
+    assert isinstance(payload["preferences"], list)
+    assert isinstance(payload["frequent_mistakes"], list)
+    assert isinstance(payload["tooling"], list)
+    assert isinstance(payload["patterns"], list)
+    assert isinstance(payload["derived_from"], int)
+    assert isinstance(payload["salient_memory_ids"], list)
+
+    assert payload["derived_from"] >= 2
+
+    # The preference should appear in preferences bucket.
+    pref_titles = [e["title"] for e in payload["preferences"]]
+    assert "Prefer pytest" in pref_titles
+
+    # The mistake should appear in frequent_mistakes bucket.
+    mistake_titles = [e["title"] for e in payload["frequent_mistakes"]]
+    assert "Never bare except" in mistake_titles
+
+    # Each bucket entry must have title + summary.
+    for entry in payload["preferences"] + payload["frequent_mistakes"]:
+        assert "title" in entry
+        assert "summary" in entry
+
+
+def test_get_profile_empty_user_store_returns_empty_profile_no_error(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+    tmp_path: Path,
+) -> None:
+    """get_profile with an empty (nonexistent) user store returns empty profile, no exception."""
+    monkeypatch.chdir(sample_repo)
+    # Point HOME at a directory with no .onmc/user.db.
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = init(sample_repo)
+
+    text = _tool_text(repo, "get_profile", {})
+    payload = json.loads(text)
+
+    assert payload["preferences"] == []
+    assert payload["frequent_mistakes"] == []
+    assert payload["tooling"] == []
+    assert payload["patterns"] == []
+    assert payload["derived_from"] == 0
+    assert payload["salient_memory_ids"] == []
+
+
+def test_get_profile_respects_max_items(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+    tmp_path: Path,
+) -> None:
+    """get_profile honours the max_items argument."""
+    from oh_no_my_claudecode.core.service import OnmcService
+    from oh_no_my_claudecode.models import MemoryKind, SourceType
+    from oh_no_my_claudecode.models.memory import MemoryEntry
+    from oh_no_my_claudecode.utils.text import stable_id
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = init(sample_repo)
+
+    svc = OnmcService()
+    now = utc_now()
+    user_storage = svc._user_storage(home=tmp_path)
+
+    # Seed 10 DECISION memories (all go to preferences bucket).
+    memories = [
+        MemoryEntry(
+            id=stable_id("decision", f"Pref {i}", prefix="um"),
+            kind=MemoryKind.DECISION,
+            title=f"Pref {i}",
+            summary=f"Prefer approach {i}.",
+            details="",
+            source_type=SourceType.MANUAL,
+            source_ref="user:manual",
+            tags=["user-pref"],
+            confidence=0.9,
+            created_at=now,
+            updated_at=now,
+        )
+        for i in range(10)
+    ]
+    user_storage.upsert_memories(memories)
+
+    text = _tool_text(repo, "get_profile", {"max_items": 2})
+    payload = json.loads(text)
+
+    assert len(payload["preferences"]) <= 2
+
+
+def test_get_profile_returns_toon_by_default(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """get_profile returns TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = init(sample_repo)
+
+    text = _tool_text(repo, "get_profile", {})
+
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    assert "preferences" in text or "derived_from" in text

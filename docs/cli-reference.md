@@ -1660,11 +1660,22 @@ Usage: onmc coverage [OPTIONS]
  have zero memory coverage — those are the landmines most likely to cause
  regressions when touched without context.
 
+ Pass --suggest to turn the gap dashboard into an actionable to-do list.
+ Pass --apply to automatically create stub memory entries for each suggestion
+ (idempotent — re-running skips entries that already exist).
+
  Requires at least one `onmc ingest` run (file stats must exist).
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json          Emit the CoverageReport as JSON instead of the dashboard.    │
-│ --help          Show this message and exit.                                  │
+│ --json             Emit the CoverageReport (and suggestions when --suggest)  │
+│                    as JSON instead of the dashboard.                         │
+│ --suggest          Print actionable documentation suggestions for each       │
+│                    uncovered hotspot. Deterministic — no LLM required.       │
+│ --apply            Create stub memory entries (confidence=0.2,               │
+│                    tag=coverage-stub) for each suggestion that does not      │
+│                    already exist. Implies --suggest. Idempotent: re-running  │
+│                    skips stubs that already exist.                           │
+│ --help             Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

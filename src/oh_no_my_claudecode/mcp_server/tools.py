@@ -313,6 +313,33 @@ def list_onmc_tools() -> list[Tool]:
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="get_profile",
+            title="Evolving user profile",
+            description=(
+                "Return the evolving user profile derived from cross-repo user memories "
+                "(~/.onmc/user.db). Provides preferences, coding patterns, frequent mistakes "
+                "to avoid, and tooling signals. Call this at session start to prime context "
+                "with the user's known habits and anti-patterns. No required arguments."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 5,
+                        "description": (
+                            "Maximum entries per bucket (preferences, patterns, "
+                            "frequent_mistakes, tooling). Defaults to 5."
+                        ),
+                    },
+                },
+                "required": [],
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -343,6 +370,8 @@ def call_onmc_tool(
         text = _get_digest(repo, args)
     elif name == "get_skills":
         text = _get_skills(repo, args)
+    elif name == "get_profile":
+        text = _get_profile(repo, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
@@ -758,6 +787,32 @@ def _get_skills(repo: OnmcRepo, args: dict[str, Any]) -> str:
         for sk in ranked[:limit]
     ]
     return _json_text(results)
+
+
+def _get_profile(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.profile.compiler import compile_user_profile
+
+    max_items = _optional_int(args, "max_items", default=5)
+    if max_items < 1:
+        msg = "Argument 'max_items' must be a positive integer."
+        raise ValueError(msg)
+
+    try:
+        memories = repo._service._load_user_memories()
+    except Exception:  # noqa: BLE001
+        memories = []
+
+    profile = compile_user_profile(memories, max_items=max_items)
+
+    payload: dict[str, object] = {
+        "preferences": [{"title": t, "summary": s} for t, s in profile.preferences],
+        "patterns": [{"title": t, "summary": s} for t, s in profile.patterns],
+        "frequent_mistakes": [{"title": t, "summary": s} for t, s in profile.frequent_mistakes],
+        "tooling": [{"title": t, "summary": s} for t, s in profile.tooling],
+        "derived_from": profile.derived_from,
+        "salient_memory_ids": profile.salient_memory_ids,
+    }
+    return _json_text(payload)
 
 
 def _is_json_format() -> bool:
