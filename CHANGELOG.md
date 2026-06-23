@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-06-23
+
+### Added
+
+- **`onmc pull --all` — federation from config.** Federates from every source in a new `federation.sources` list in `config.yaml` (each a bare path/url or `{path_or_url, label, ref}`), routing git URLs vs local paths to the existing federation engine. One source failing never aborts the rest; `--dry-run` previews, `--json` summarizes. A team's shared brains become one command to sync.
+- **MCP `ask` tool** — exposes the NL-query-over-the-brain to connected agents: ranked, cited memories for a natural-language question, offline (no LLM synthesis in the tool path). Compact TOON-default / JSON; clean on empty brain.
+
 ## [0.24.0] — 2026-06-23
 
 ### Added
