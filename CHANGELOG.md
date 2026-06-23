@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.36.0] — 2026-06-24
+
+### Added
+
+- **Delightful onboarding across CLI and dashboard.** `onmc setup` is now a guided ride: a branded ANSI wordmark splash + version, a 6-step tracker (→ then ✓ per phase), honest staged scan progress, a "first win" panel that runs a real recall right after ingest to show what your repo already knows, a capabilities checklist (✓/○), a "what you can do now" card (brief / loop / why / ui), and a UI handoff (interactive mode offers to open the dashboard; `--yes`/non-interactive only prints a tip and never launches a server).
+- **`onmc ui` first-run welcome overlay** — a dismissible, theme-matched welcome with live stats (memories / hotspots / decisions+invariants) and a 3-step "what now"; shows on a fresh brain, persists dismissal in localStorage, re-openable via a "?" affordance. Self-contained, responsive, reduced-motion aware.
+
 ## [0.35.0] — 2026-06-24
 
 ### Added
