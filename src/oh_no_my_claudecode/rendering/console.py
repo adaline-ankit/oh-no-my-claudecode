@@ -1579,6 +1579,76 @@ def render_savings_card(result: SavingsResult) -> None:
     console.print(footer)
 
 
+def render_benchmark_report(report: object) -> None:
+    """Render a :class:`~oh_no_my_claudecode.benchmark.suite.BenchmarkReport`.
+
+    Displays two labelled sections (MEASURED / SIM) in a Rich table, with a
+    reproducibility footer.  Each metric shows its value, unit, and an honest
+    kind label so the reader always knows what is live vs simulated.
+    """
+    from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
+
+    if not isinstance(report, BenchmarkReport):
+        console.print("[yellow]No benchmark report to display.[/yellow]")
+        return
+
+    # --- headline panel ---
+    brain = report.brain_memory_count
+    brain_color = "green" if brain >= 10 else ("yellow" if brain >= 1 else "dim")  # noqa: PLR2004
+    headline = (
+        f"  [{brain_color}]{brain}[/{brain_color}] memories in brain"
+        "  [dim]· MEASURED = live, SIM = deterministic model[/dim]"
+    )
+    console.print(
+        Panel(
+            f"\n{headline}\n",
+            title="[bold blue]onmc benchmark[/bold blue]",
+            border_style="blue",
+        )
+    )
+
+    # --- MEASURED section ---
+    measured = report.metrics_by_kind("measured")
+    if measured:
+        m_table = Table(
+            title="MEASURED  [dim](live computation — no LLM)[/dim]",
+            show_lines=False,
+            box=None,
+            padding=(0, 2),
+        )
+        m_table.add_column("Metric", style="bold", min_width=36)
+        m_table.add_column("Value", justify="right", width=12)
+        m_table.add_column("Unit", width=14)
+        for metric in measured:
+            m_table.add_row(metric.name, f"{metric.value:g}", metric.unit)
+        console.print(m_table)
+
+    # --- SIM section ---
+    sim = report.metrics_by_kind("sim")
+    if sim:
+        s_table = Table(
+            title="SIM  [dim](deterministic model — identical across runs)[/dim]",
+            show_lines=False,
+            box=None,
+            padding=(0, 2),
+        )
+        s_table.add_column("Metric", style="bold", min_width=36)
+        s_table.add_column("Value", justify="right", width=12)
+        s_table.add_column("Unit", width=14)
+        for metric in sim:
+            val_color = "green" if metric.value > 0 else "dim"
+            s_table.add_row(
+                metric.name,
+                f"[{val_color}]{metric.value:g}[/{val_color}]",
+                metric.unit,
+            )
+        console.print(s_table)
+
+    # --- footer ---
+    console.print()
+    console.print(f"[dim]{report.generated_note}[/dim]")
+
+
 def render_import_summary(result: ImportResult) -> None:
     """Render a compact import summary table."""
     mode_label = "[dim](dry-run — nothing written)[/dim]" if result.dry_run else ""

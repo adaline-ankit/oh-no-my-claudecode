@@ -66,6 +66,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ wiki         Generate a markdown wiki or Obsidian knowledge-graph vault.     │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
+│ benchmark    Run a reproducible benchmark suite against the current repo     │
+│              brain.                                                          │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
 │              wizard).                                                        │
 │ feedback     Apply a human trust signal to a stored memory.                  │
@@ -1713,6 +1715,38 @@ Usage: onmc bench [OPTIONS]
 │ --repo-memory          Run against the current repo's real memory store      │
 │                        instead of built-in scenario.                         │
 │ --json                 Print machine-readable JSON summary to stdout.        │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc benchmark`
+
+```text
+Usage: onmc benchmark [OPTIONS]
+
+ Run a reproducible benchmark suite against the current repo brain.
+
+ Measures five benchmarks — each labelled MEASURED (live, reproducible) or
+ SIM (deterministic model, no LLM):
+
+
+ MEASURED:
+   1. recall_latency      — compile_recall p50/p95 ms + hits/query
+   2. terse_vs_verbose    — mean % char reduction (title+citation vs markdown)
+   3. toon_vs_json        — % char reduction (TOON vs compact JSON)
+   4. brain_composition   — memory count + per-kind breakdown
+
+ SIM (deterministic, identical across runs):
+   5. harness_sim         — repeated-failure delta, wasted-attempts saved,
+                            context-token % reduction, tasks-resolved delta
+
+ Use --json for machine-readable output.  --runs controls timing precision.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --runs        INTEGER  Number of timing repetitions for timed benchmarks     │
+│                        (default: 20).                                        │
+│                        [default: 20]                                         │
+│ --json                 Print machine-readable JSON to stdout.                │
 │ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

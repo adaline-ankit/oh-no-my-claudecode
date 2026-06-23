@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.ask.compiler import AskResult
+    from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
@@ -1916,6 +1917,36 @@ class OnmcService:
             storage.upsert_memories(entries)
 
         return repo_root, report, suggestions
+
+    def benchmark(
+        self,
+        *,
+        runs: int = 20,
+    ) -> tuple[Path, BenchmarkReport]:
+        """Run the reproducible benchmark suite against the current repo brain.
+
+        Entirely offline — no LLM calls, no network access.  Returns a
+        :class:`~oh_no_my_claudecode.benchmark.suite.BenchmarkReport` with
+        metrics labelled MEASURED (live timing / counts) or SIM (deterministic
+        simulation).
+
+        Parameters
+        ----------
+        runs:
+            Number of timing repetitions for each timed benchmark.  Higher
+            values produce more stable p95 latencies (default: 20).
+
+        Returns
+        -------
+        tuple[Path, BenchmarkReport]
+            ``(repo_root, report)``
+        """
+        from oh_no_my_claudecode.benchmark.suite import run_benchmark_suite
+
+        repo_root, _, storage = self._load_context()
+        now_str = isoformat_utc(utc_now())
+        report = run_benchmark_suite(storage, repo_root, runs=runs, now=now_str)
+        return repo_root, report
 
     def savings(self) -> tuple[Path, SavingsResult]:
         """Compute a Memory Wrapped :class:`~oh_no_my_claudecode.savings.compiler.SavingsResult`.
