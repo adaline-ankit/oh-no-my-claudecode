@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-06-23
+
+### Added
+
+- **`onmc coverage --suggest` / `--apply`** — turns the knowledge-gap dashboard into an action list: for each top uncovered hotspot it proposes a memory title + kind (config→decision, hot file→invariant, else doc-fact) with a churn-based rationale, deterministically and with no LLM. `--apply` stubs those as low-confidence `coverage-stub` memories (idempotent by stable id), making the gap board a zero-friction to-do.
+- **MCP `get_profile` tool** — exposes the evolving user profile (preferences / patterns / mistakes-to-avoid / tooling) so an agent connected over MCP starts a session already knowing the user. Compact TOON-default / JSON; graceful-empty when no user DB.
+
 ### Added
 
 - **Obsidian knowledge-graph export.** `onmc wiki --format obsidian` writes provenance-rich memory notes, subsystem indexes, and relationship wikilinks to a private local vault by default.
