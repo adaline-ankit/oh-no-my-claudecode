@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-06-23
+
+### Added
+
+- **`onmc loop` — a memory-grounded SOTA autonomous loop.** A ralph-style loop that doesn't repeat itself: each iteration recalls prior dead-ends (`compile_guard`) and injects a "KNOWN DEAD-ENDS — do not repeat" brief, the agent acts (injectable runner), a verify gate runs, and a falsifiable prediction↔outcome contract records a DECISION/fix on a win or a `FAILED_APPROACH` on a loss — so the next iteration's guard blocks it. Escalates the approach after consecutive losses, detects no-progress/context-rot via an iteration signature, and stops on converged / budget / max-iterations / no-progress. `onmc loop --goal "<text>" | --spec <file> [--max-iterations N] [--budget-tokens N] [--verify "<cmd>"] [--dry-run] [--json]`; `--dry-run` plans one iteration with zero spend. Agent + verify runners are injectable (default subprocess with timeouts). Deterministic, never-hang, no schema migration.
+
 ## [0.25.0] — 2026-06-23
 
 ### Added
