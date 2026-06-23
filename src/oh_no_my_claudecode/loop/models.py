@@ -37,6 +37,7 @@ class LoopResult:
     stop_reason: str = ""
     recorded_memory_ids: list[str] = field(default_factory=list)
     total_tokens: int = 0
+    total_cost_usd: float | None = None
 
 
 @dataclass
@@ -48,6 +49,10 @@ class LoopConfig:
     verify_command: str = "pytest"
     escalation_threshold: int = 3
     no_progress_window: int = 3
+    max_cost_usd: float | None = None
+    """Stop before the next iteration when cumulative cost exceeds this value."""
+    max_wall_seconds: int | None = None
+    """Stop when wall-clock elapsed seconds exceed this value."""
 
 
 @dataclass
@@ -58,6 +63,8 @@ class AgentRunResult:
     prediction: str
     files_touched: list[str]
     tokens: int | None = None
+    cost_usd: float | None = None
+    """Optional USD cost reported by the agent adapter (e.g. from Claude JSON total_cost_usd)."""
 
 
 @dataclass

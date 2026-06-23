@@ -95,9 +95,10 @@ def test_parse_claude_json_layout1_result_key() -> None:
             "usage": {"input_tokens": 100, "output_tokens": 50},
         }
     )
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert text == "Here is the fix."
     assert tokens == 150
+    assert cost_usd is None
 
 
 def test_parse_claude_json_layout2_content_list() -> None:
@@ -111,14 +112,15 @@ def test_parse_claude_json_layout2_content_list() -> None:
             "usage": {"input_tokens": 200, "output_tokens": 80},
         }
     )
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert "Part one." in text
     assert "Part two." in text
     assert tokens == 280
+    assert cost_usd is None
 
 
 def test_parse_claude_json_layout3_message_wrapper() -> None:
-    """Layout 3: nested under 'message' key."""
+    """Layout 3: nested under 'message' key with total_cost_usd."""
     raw = json.dumps(
         {
             "message": {
@@ -128,38 +130,42 @@ def test_parse_claude_json_layout3_message_wrapper() -> None:
             "usage": {"input_tokens": 50, "output_tokens": 20},
         }
     )
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert text == "Fixed it."
     assert tokens == 70
+    assert cost_usd == pytest.approx(0.002, abs=1e-6)
 
 
 def test_parse_claude_json_bad_json_falls_back_to_raw() -> None:
-    """Non-JSON stdout is returned as-is with tokens=None."""
+    """Non-JSON stdout is returned as-is with tokens=None, cost_usd=None."""
     raw = "I applied the changes to main.py."
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert text == raw.strip()
     assert tokens is None
+    assert cost_usd is None
 
 
 def test_parse_claude_json_empty_returns_empty() -> None:
-    """Empty string returns ('', None)."""
-    text, tokens = _parse_claude_json("")
+    """Empty string returns ('', None, None)."""
+    text, tokens, cost_usd = _parse_claude_json("")
     assert text == ""
     assert tokens is None
+    assert cost_usd is None
 
 
 def test_parse_claude_json_no_usage_tokens_none() -> None:
     """Valid JSON with no usage block returns tokens=None."""
     raw = json.dumps({"result": "done"})
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert text == "done"
     assert tokens is None
+    assert cost_usd is None
 
 
 def test_parse_claude_json_top_level_total_tokens() -> None:
     """Some versions emit top-level 'total_tokens'."""
     raw = json.dumps({"result": "ok", "total_tokens": 300})
-    text, tokens = _parse_claude_json(raw)
+    text, tokens, cost_usd = _parse_claude_json(raw)
     assert text == "ok"
     assert tokens == 300
 

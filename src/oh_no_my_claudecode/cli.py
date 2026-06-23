@@ -3575,12 +3575,31 @@ def loop_command(
         bool,
         typer.Option("--json", help="Print the full result as JSON."),
     ] = False,
+    max_cost_usd: Annotated[
+        float | None,
+        typer.Option(
+            "--max-cost-usd",
+            min=0.0,
+            help="Stop before the next iteration when cumulative cost (USD) exceeds this value.",
+        ),
+    ] = None,
+    max_wall_seconds: Annotated[
+        int | None,
+        typer.Option(
+            "--max-wall-seconds",
+            min=1,
+            help="Stop before the next iteration when elapsed wall-clock seconds exceed this.",
+        ),
+    ] = None,
 ) -> None:
     """Run a memory-grounded autonomous loop that avoids recorded dead-ends.
 
     Each iteration recalls FAILED_APPROACH memories so the agent cannot repeat
     known dead-ends.  Wins are recorded as DECISION memories; losses are
     recorded as FAILED_APPROACH memories so future iterations block them.
+
+    A tamper-evident run receipt is written to .agent-memory/receipts/ after
+    every non-dry-run invocation.
 
     \b
     Examples
@@ -3590,7 +3609,10 @@ def loop_command(
     onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
     onmc loop --goal "refactor auth module" --dry-run          # preview prompt only
     onmc loop --goal "fix flaky test" --json                   # machine-readable output
+    onmc loop --goal "fix bug" --max-cost-usd 2.00             # stop at $2 spend
+    onmc loop --goal "fix bug" --max-wall-seconds 300          # stop after 5 minutes
     """
+    import dataclasses
     import json as _json
 
     if goal is None and spec is None:
@@ -3611,21 +3633,33 @@ def loop_command(
         resolved_goal = goal  # type: ignore[assignment]
 
     try:
-        result = _service().loop(
+        result, receipt_path = _service().loop(
             resolved_goal,
             agent=agent,
             max_iterations=max_iterations,
             budget_tokens=budget_tokens,
             verify_command=verify,
             dry_run=dry_run,
+            max_cost_usd=max_cost_usd,
+            max_wall_seconds=max_wall_seconds,
         )
     except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:
-        import dataclasses
+        from oh_no_my_claudecode.loop.receipt import RunReceipt
 
-        console.print_json(_json.dumps(dataclasses.asdict(result)))
+        payload: dict[str, object] = dataclasses.asdict(result)
+        if receipt_path is not None:
+            try:
+                import json as _json2
+
+                receipt_data = _json2.loads(receipt_path.read_text(encoding="utf-8"))
+                payload["receipt"] = receipt_data
+            except Exception:  # noqa: BLE001
+                payload["receipt_path"] = str(receipt_path)
+        _ = RunReceipt  # keep import alive for type checking
+        console.print_json(_json.dumps(payload))
         raise typer.Exit(code=0)
 
     if dry_run:
@@ -3636,7 +3670,10 @@ def loop_command(
             console.print(_Markdown(result.iterations[0].action_summary))
         raise typer.Exit(code=0)
 
+    from oh_no_my_claudecode.rendering.console import render_loop_receipt_block
+
     render_loop_result(result)
+    render_loop_receipt_block(result, receipt_path=receipt_path, verify_command=verify)
     raise typer.Exit(code=0 if result.converged else 1)
 
 

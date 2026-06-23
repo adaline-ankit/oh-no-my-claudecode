@@ -605,7 +605,9 @@ class OnmcService:
         budget_tokens: int | None = None,
         verify_command: str = "pytest",
         dry_run: bool = False,
-    ) -> LoopResult:
+        max_cost_usd: float | None = None,
+        max_wall_seconds: int | None = None,
+    ) -> tuple[LoopResult, Path | None]:
         """Run a memory-grounded autonomous loop against *goal*.
 
         Each iteration recalls recorded dead-ends from memory (via compile_guard)
@@ -635,7 +637,22 @@ class OnmcService:
         dry_run:
             Build the prompt and recall dead-ends without invoking the agent
             or verify.  Safe to run without any configured agent binary.
+        max_cost_usd:
+            Optional USD cost ceiling; the loop stops before the next iteration
+            when cumulative cost exceeds this value.
+        max_wall_seconds:
+            Optional wall-clock timeout in seconds; the loop stops before the
+            next iteration when elapsed time exceeds this value.
+
+        Returns
+        -------
+        tuple[LoopResult, Path | None]
+            ``(result, receipt_path)`` where *receipt_path* is the path to the
+            written tamper-evident run receipt (under
+            ``.agent-memory/receipts/``), or ``None`` for dry-runs.
         """
+        import time as _time
+
         from oh_no_my_claudecode.loop.adapters import (
             agent_binary_available,
             make_agent_runner,
@@ -652,6 +669,7 @@ class OnmcService:
             LoopResult,
             LoopSpec,
         )
+        from oh_no_my_claudecode.loop.receipt import build_receipt, write_receipt
 
         repo_root, _, storage = self._load_context()
         spec = LoopSpec(goal=goal)
@@ -659,6 +677,8 @@ class OnmcService:
             max_iterations=max_iterations,
             budget_tokens=budget_tokens,
             verify_command=verify_command,
+            max_cost_usd=max_cost_usd,
+            max_wall_seconds=max_wall_seconds,
         )
 
         if dry_run:
@@ -674,18 +694,23 @@ class OnmcService:
                 outcome="loss",
                 tokens=None,
             )
-            return LoopResult(
+            dry_result = LoopResult(
                 iterations=[dry_contract],
                 converged=False,
                 stop_reason="dry-run",
                 recorded_memory_ids=[],
                 total_tokens=0,
             )
+            return dry_result, None
 
         # Validate the agent selector and surface a clean error when the binary
         # is missing rather than letting subprocess raise obscure errors.
         if agent not in {"claude", "codex"}:
             raise ValueError(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'.")
+
+        onmc_ver = _installed_onmc_version() or "unknown"
+        wall_start = _time.monotonic()
+        started_at = isoformat_utc(utc_now())
 
         if not agent_binary_available(agent):  # type: ignore[arg-type]
 
@@ -698,7 +723,7 @@ class OnmcService:
                     tokens=None,
                 )
 
-            return run_loop(
+            result = run_loop(
                 storage,
                 repo_root,
                 spec,
@@ -706,16 +731,37 @@ class OnmcService:
                 agent_runner=_missing_agent,
                 verify_runner=_default_verify_runner,
             )
+        else:
+            real_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]
+            result = run_loop(
+                storage,
+                repo_root,
+                spec,
+                config,
+                agent_runner=real_runner,
+                verify_runner=_default_verify_runner,
+            )
 
-        real_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]
-        return run_loop(
-            storage,
-            repo_root,
+        wall_seconds = _time.monotonic() - wall_start
+        ended_at = isoformat_utc(utc_now())
+
+        receipt = build_receipt(
+            result,
             spec,
             config,
-            agent_runner=real_runner,
-            verify_runner=_default_verify_runner,
+            repo_root=str(repo_root),
+            agent=agent,
+            model=None,
+            wall_seconds=wall_seconds,
+            onmc_version=onmc_ver,
+            started_at=started_at,
+            ended_at=ended_at,
         )
+        receipt_path: Path | None = None
+        with contextlib.suppress(Exception):
+            receipt_path = write_receipt(repo_root, receipt)
+
+        return result, receipt_path
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""
