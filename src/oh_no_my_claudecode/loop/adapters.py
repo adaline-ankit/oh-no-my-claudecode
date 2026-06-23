@@ -144,8 +144,8 @@ def _compute_files_touched(
     return sorted(after - before)
 
 
-def _parse_claude_json(raw: str) -> tuple[str, int | None]:
-    """Parse Claude CLI JSON output into (text, tokens).
+def _parse_claude_json(raw: str) -> tuple[str, int | None, float | None]:
+    """Parse Claude CLI JSON output into (text, tokens, cost_usd).
 
     Claude CLI ``--output-format json`` can vary between versions.  We try
     several known key layouts and fall back gracefully to raw stdout when the
@@ -157,16 +157,16 @@ def _parse_claude_json(raw: str) -> tuple[str, int | None]:
     - ``{"message": {"content": [...]}, "total_cost_usd": ..., "usage": {...}}``
     """
     if not raw.strip():
-        return "", None
+        return "", None, None
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         # Not JSON — treat entire stdout as plain text output.
-        return raw.strip(), None
+        return raw.strip(), None, None
 
     if not isinstance(data, dict):
-        return raw.strip(), None
+        return raw.strip(), None, None
 
     # --- Extract text ---
     text: str = ""
@@ -216,7 +216,13 @@ def _parse_claude_json(raw: str) -> tuple[str, int | None]:
     if tokens is None and isinstance(data.get("total_tokens"), int):
         tokens = data["total_tokens"]
 
-    return text, tokens
+    # --- Extract cost ---
+    cost_usd: float | None = None
+    raw_cost = data.get("total_cost_usd")
+    if isinstance(raw_cost, (int, float)) and raw_cost >= 0:
+        cost_usd = float(raw_cost)
+
+    return text, tokens, cost_usd
 
 
 # ---------------------------------------------------------------------------
@@ -279,12 +285,13 @@ class ClaudeCliAdapter:
         after = _git_status_paths(self._cmd_runner, self._repo_root, 30)
         files_touched = _compute_files_touched(before, after)
 
-        output, tokens = _parse_claude_json(proc.stdout)
+        output, tokens, cost_usd = _parse_claude_json(proc.stdout)
 
         # If the agent call failed at the OS level, surface the error clearly.
         if proc.returncode == 127 or (not output and proc.stderr):
             output = proc.stderr.strip() or "[claude: no output]"
             tokens = None
+            cost_usd = None
 
         # Derive a short prediction from the first non-empty line of output.
         prediction = _first_line(output)
@@ -294,6 +301,7 @@ class ClaudeCliAdapter:
             prediction=prediction,
             files_touched=files_touched,
             tokens=tokens,
+            cost_usd=cost_usd,
         )
 
 

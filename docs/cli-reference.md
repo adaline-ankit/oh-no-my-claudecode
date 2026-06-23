@@ -1827,6 +1827,9 @@ Usage: onmc loop [OPTIONS]
  known dead-ends.  Wins are recorded as DECISION memories; losses are
  recorded as FAILED_APPROACH memories so future iterations block them.
 
+ A tamper-evident run receipt is written to .agent-memory/receipts/ after
+ every non-dry-run invocation.
+
 
  Examples
  --------
@@ -1837,28 +1840,41 @@ Usage: onmc loop [OPTIONS]
  only
  onmc loop --goal "fix flaky test" --json                   # machine-readable
  output
+ onmc loop --goal "fix bug" --max-cost-usd 2.00             # stop at $2 spend
+ onmc loop --goal "fix bug" --max-wall-seconds 300          # stop after 5
+ minutes
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --goal                  TEXT                  Goal text for the loop         │
-│                                               (inline).                      │
-│ --spec                  TEXT                  Path to a file containing the  │
-│                                               goal text.                     │
-│ --agent                 TEXT                  Agent CLI to use: claude       │
-│                                               (default) or codex.            │
-│                                               [default: claude]              │
-│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
-│                                               [default: 10]                  │
-│ --budget-tokens         INTEGER RANGE [x>=1]  Stop when total tokens exceed  │
-│                                               this budget.                   │
-│ --verify                TEXT                  Shell command run after each   │
-│                                               iteration to verify success.   │
-│                                               [default: pytest]              │
-│ --dry-run                                     Build the prompt and recall    │
-│                                               dead-ends without invoking the │
-│                                               agent or verify. Safe to run   │
-│                                               without any configured agent.  │
-│ --json                                        Print the full result as JSON. │
-│ --help                                        Show this message and exit.    │
+│ --goal                    TEXT                  Goal text for the loop       │
+│                                                 (inline).                    │
+│ --spec                    TEXT                  Path to a file containing    │
+│                                                 the goal text.               │
+│ --agent                   TEXT                  Agent CLI to use: claude     │
+│                                                 (default) or codex.          │
+│                                                 [default: claude]            │
+│ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
+│                                                 [default: 10]                │
+│ --budget-tokens           INTEGER RANGE [x>=1]  Stop when total tokens       │
+│                                                 exceed this budget.          │
+│ --verify                  TEXT                  Shell command run after each │
+│                                                 iteration to verify success. │
+│                                                 [default: pytest]            │
+│ --dry-run                                       Build the prompt and recall  │
+│                                                 dead-ends without invoking   │
+│                                                 the agent or verify. Safe to │
+│                                                 run without any configured   │
+│                                                 agent.                       │
+│ --json                                          Print the full result as     │
+│                                                 JSON.                        │
+│ --max-cost-usd            FLOAT RANGE [x>=0.0]  Stop before the next         │
+│                                                 iteration when cumulative    │
+│                                                 cost (USD) exceeds this      │
+│                                                 value.                       │
+│ --max-wall-seconds        INTEGER RANGE [x>=1]  Stop before the next         │
+│                                                 iteration when elapsed       │
+│                                                 wall-clock seconds exceed    │
+│                                                 this.                        │
+│ --help                                          Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
