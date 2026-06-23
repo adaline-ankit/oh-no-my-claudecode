@@ -452,23 +452,27 @@ def _make_cli_runner():  # type: ignore[return]
         return CliRunner()
 
 
-def test_cli_loop_help_contains_agent_flag() -> None:
-    """onmc loop --help should mention --agent."""
+def test_cli_loop_accepts_agent_flag(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """onmc loop must accept --agent (functional check, render-independent).
+
+    Asserting against --help output is brittle: Rich injects ANSI styling and
+    wraps in narrow CI terminals, so substring checks for "--agent" flake. A
+    dry-run invocation in an initialized repo proves the option is wired without
+    spawning any agent.
+    """
     from oh_no_my_claudecode.cli import app
 
+    monkeypatch.chdir(sample_repo)
     cli_runner = _make_cli_runner()
+    init = cli_runner.invoke(app, ["init"], prog_name="onmc", color=False)
+    assert init.exit_code == 0, init.output
     result = cli_runner.invoke(
         app,
-        ["loop", "--help"],
+        ["loop", "--goal", "demo task", "--agent", "codex", "--dry-run"],
         prog_name="onmc",
         color=False,
-        # Force a wide terminal so Rich does not wrap/truncate the options panel
-        # (in narrow CI terminals "--agent" would otherwise be split across lines).
-        env={"COLUMNS": "200"},
     )
-    assert result.exit_code == 0
-    normalized = " ".join(result.stdout.split())
-    assert "--agent" in normalized
+    assert result.exit_code == 0, result.output
 
 
 def test_cli_loop_unknown_agent_rejected() -> None:
