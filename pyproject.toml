@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oh-no-my-claudecode"
-version = "0.30.0"
+version = "0.31.0"
 description = "Repo-native memory and context compiler for coding agents."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -71,6 +71,9 @@ ignore = ["S603", "S607"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+# gh_aw.py embeds shell/YAML templates as Python string literals; S608 fires
+# on grep patterns inside those strings (false positive — no SQL involved).
+"src/oh_no_my_claudecode/integrations/gh_aw.py" = ["S608"]
 
 [tool.mypy]
 python_version = "3.11"

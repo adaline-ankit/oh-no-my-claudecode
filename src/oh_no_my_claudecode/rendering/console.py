@@ -18,6 +18,7 @@ from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
 from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
 from oh_no_my_claudecode.importers.base import ImportResult
+from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
 from oh_no_my_claudecode.models import (
     AttemptRecord,
     AttemptStatus,
@@ -48,6 +49,27 @@ from oh_no_my_claudecode.utils.text import shorten
 from oh_no_my_claudecode.why.compiler import WhyReport
 
 console = Console()
+
+
+def render_gh_aw_init_result(result: GhAwInitResult) -> None:
+    """Render the outcome of ``onmc gh-aw init`` to the console."""
+    if result.dry_run:
+        console.print("[bold]Dry-run mode — no files written.[/bold]")
+
+    for path in result.written:
+        verb = "[dim]would write:[/dim]" if result.dry_run else "[green]wrote:[/green]"
+        console.print(f"{verb} {path}")
+
+    for path in result.skipped:
+        console.print(f"[dim]skipped (already managed — use --force to overwrite):[/dim] {path}")
+
+    if not result.written and not result.skipped:
+        console.print("[green]onmc gh-aw init: done (nothing to do).[/green]")
+    elif result.written and not result.dry_run:
+        console.print(
+            f"\n[bold]Generated {len(result.written)} workflow(s). "
+            "Commit the .github/workflows/ files to activate them.[/bold]"
+        )
 
 
 def render_init_summary(repo_root: str, config: ProjectConfig) -> None:

@@ -92,6 +92,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ profile      Show and rebuild the derived user behavioral profile            │
 │              (~/.onmc/user.db).                                              │
 │ notify       Inspect and test the context firewall notification sink.        │
+│ gh-aw        Scaffold memory-aware GitHub Actions agentic workflows.         │
 │ trace        Agent Trace Observatory — instrument a session and get a        │
 │              token-ROI report.                                               │
 │ eval         Measure and gate memory recall quality (offline,                │
@@ -1904,6 +1905,51 @@ Usage: onmc plug [OPTIONS] TARGET
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gh-aw`
+
+```text
+Usage: onmc gh-aw [OPTIONS] COMMAND [ARGS]...
+
+ Scaffold memory-aware GitHub Actions agentic workflows.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Scaffold memory-aware GitHub Actions workflows into a target repo.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gh-aw init`
+
+```text
+Usage: onmc gh-aw init [OPTIONS] [PATH]
+
+ Scaffold memory-aware GitHub Actions workflows into a target repo.
+
+
+ Generates four workflow files in .github/workflows/:
+   onmc-issue-context.yml   — post memory context on new issues
+   onmc-pr-preflight.yml    — blast-radius + memories + audit on PR open
+   onmc-pr-learn.yml        — record merged PR outcome for future agents
+   onmc-weekly-audit.yml    — weekly stale-memory audit via scheduled issue
+
+ All writes are idempotent — re-running skips already-managed files unless
+ --force is passed.  Use --dry-run to preview without writing anything.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   path      [PATH]  Target repo root. Defaults to the current directory (or  │
+│                     nearest git root). The four workflows are written to     │
+│                     PATH/.github/workflows/onmc-*.yml.                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run          Show what would be written without writing anything.      │
+│ --force            Overwrite existing onmc-managed workflow files.           │
+│ --json             Output result as JSON.                                    │
+│ --help             Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

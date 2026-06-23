@@ -36,6 +36,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
+    render_gh_aw_init_result,
     render_hook_status,
     render_hud,
     render_import_summary,
@@ -120,6 +121,10 @@ notify_app = typer.Typer(
     help="Inspect and test the context firewall notification sink.",
     no_args_is_help=True,
 )
+gh_aw_app = typer.Typer(
+    help="Scaffold memory-aware GitHub Actions agentic workflows.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -132,6 +137,7 @@ app.add_typer(skill_app, name="skill")
 app.add_typer(user_app, name="user")
 app.add_typer(profile_app, name="profile")
 app.add_typer(notify_app, name="notify")
+app.add_typer(gh_aw_app, name="gh-aw")
 
 
 @app.command("tui")
@@ -3201,6 +3207,72 @@ def plug_command(
         console.print(f"  {note}")
     if not result.files_written and not result.files_skipped:
         console.print(f"[green]onmc plug {target}: done.[/green]")
+
+
+# ---------------------------------------------------------------------------
+# gh-aw group — memory-aware GitHub Actions agentic workflows
+# ---------------------------------------------------------------------------
+
+
+@gh_aw_app.command("init")
+def gh_aw_init_command(
+    path: Annotated[
+        Path | None,
+        typer.Argument(
+            help=(
+                "Target repo root. Defaults to the current directory (or nearest git root). "
+                "The four workflows are written to PATH/.github/workflows/onmc-*.yml."
+            ),
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be written without writing anything."),
+    ] = False,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite existing onmc-managed workflow files."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output result as JSON."),
+    ] = False,
+) -> None:
+    """Scaffold memory-aware GitHub Actions workflows into a target repo.
+
+    \b
+    Generates four workflow files in .github/workflows/:
+      onmc-issue-context.yml   — post memory context on new issues
+      onmc-pr-preflight.yml    — blast-radius + memories + audit on PR open
+      onmc-pr-learn.yml        — record merged PR outcome for future agents
+      onmc-weekly-audit.yml    — weekly stale-memory audit via scheduled issue
+
+    All writes are idempotent — re-running skips already-managed files unless
+    --force is passed.  Use --dry-run to preview without writing anything.
+    """
+    repo_root = path if path is not None else Path.cwd()
+
+    try:
+        result = _service().gh_aw_init(repo_root, dry_run=dry_run, force=force)
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import json as _json
+
+        console.print(
+            _json.dumps(
+                {
+                    "written": result.written,
+                    "skipped": result.skipped,
+                    "dry_run": result.dry_run,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    render_gh_aw_init_result(result)
 
 
 @app.command("feedback")

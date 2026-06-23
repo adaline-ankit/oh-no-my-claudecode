@@ -107,6 +107,8 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc loop", ["loop"]),
     ("onmc wiki", ["wiki"]),
     ("onmc plug", ["plug"]),
+    ("onmc gh-aw", ["gh-aw"]),
+    ("onmc gh-aw init", ["gh-aw", "init"]),
     ("onmc import", ["import"]),
     ("onmc feedback", ["feedback"]),
     ("onmc trace", ["trace"]),

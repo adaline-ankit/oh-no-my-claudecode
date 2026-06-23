@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
+    from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
@@ -463,6 +464,31 @@ class OnmcService:
 
         repo_root = discover_repo_root(self.cwd)
         return plug_target(target, repo_root=repo_root)
+
+    def gh_aw_init(
+        self,
+        repo_root: Path | None = None,
+        *,
+        dry_run: bool = False,
+        force: bool = False,
+    ) -> GhAwInitResult:
+        """Generate memory-aware GitHub Actions workflows into *repo_root*.
+
+        Scaffolds four ``.github/workflows/onmc-*.yml`` files:
+        onmc-issue-context, onmc-pr-preflight, onmc-pr-learn,
+        onmc-weekly-audit.
+
+        Args:
+            repo_root: target repo path; defaults to the current repo root.
+            dry_run:   report what would be written without writing anything.
+            force:     overwrite existing managed files.
+
+        Returns a :class:`GhAwInitResult`.
+        """
+        from oh_no_my_claudecode.integrations.gh_aw import run_gh_aw_init
+
+        target = repo_root if repo_root is not None else discover_repo_root(self.cwd)
+        return run_gh_aw_init(target, dry_run=dry_run, force=force)
 
     def pre_compact(self, *, transcript_path: Path | None = None) -> CompactionSnapshotRecord:
         """Capture task state (plus live transcript context) into a compaction snapshot."""
