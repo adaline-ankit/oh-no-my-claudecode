@@ -308,8 +308,11 @@ def test_cli_gh_aw_init_help(monkeypatch: pytest.MonkeyPatch, tmp_repo: Path) ->
     monkeypatch.chdir(tmp_repo)
     runner = _cli_runner()
 
-    result = runner.invoke(app, ["gh-aw", "init", "--help"])
+    # Force a wide terminal so Rich does not wrap/truncate option names in CI's
+    # narrow (80-col) terminal — otherwise "--dry-run" can split across lines.
+    result = runner.invoke(app, ["gh-aw", "init", "--help"], env={"COLUMNS": "200"})
     assert result.exit_code == 0
-    assert "--dry-run" in result.output
-    assert "--force" in result.output
-    assert "--json" in result.output
+    normalized = " ".join(result.output.split())
+    assert "--dry-run" in normalized
+    assert "--force" in normalized
+    assert "--json" in normalized
