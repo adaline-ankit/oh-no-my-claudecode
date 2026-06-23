@@ -20,6 +20,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc ingest", ["ingest"]),
     ("onmc brief", ["brief"]),
     ("onmc codegraph", ["codegraph"]),
+    ("onmc ui", ["ui"]),
     ("onmc why", ["why"]),
     ("onmc memory-diff", ["memory-diff"]),
     ("onmc digest", ["digest"]),
@@ -117,7 +118,7 @@ def _runner() -> CliRunner:
 
 def _clean_help(text: str) -> str:
     text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
-    return text.strip()
+    return "\n".join(line.rstrip() for line in text.strip().splitlines())
 
 
 def _help_for(args: list[str]) -> str:

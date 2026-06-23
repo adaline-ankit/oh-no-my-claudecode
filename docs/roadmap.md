@@ -19,6 +19,7 @@ Shipped in this repo:
 - hotspot and git-pattern extraction
 - task brief compilation
 - token-efficient compact/caveman briefs and codegraph navigation
+- local visual dashboard for memory, tasks, codegraph, and health
 - optional LLM-powered commit/doc extraction during ingest
 - optional LLM reranking for briefs
 - `CLAUDE.md` generation, update, and watch mode

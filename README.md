@@ -130,6 +130,7 @@ onmc setup              # full onboarding wizard — run this first
 onmc doctor             # health check: memory freshness, hooks, MCP, CLAUDE.md
 onmc report             # markdown agent-readiness report for PRs and handoffs
 onmc status             # repo root, ingest state, memory counts
+onmc ui                 # local dashboard: memory, tasks, graph, health
 ```
 
 ### Memory extraction
@@ -182,6 +183,15 @@ onmc codegraph --max-files 25
 # LLM-ranked, annotated with relevance reasons
 # Written to .onmc/compiled/ and rendered in terminal
 ```
+
+### Visual dashboard
+
+```bash
+onmc ui
+onmc ui --no-open --port 9001
+```
+
+Dashboard stays local and read-only by default at `http://127.0.0.1:8765`.
 
 ### Agent modes (optional LLM)
 

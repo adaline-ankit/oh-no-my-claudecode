@@ -3,16 +3,127 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
-    <title>ONMC Dashboard</title>
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#17231e">
+    <title>ONMC Memory Console</title>
     <link rel="stylesheet" href="/assets/styles.css">
   </head>
   <body>
-    <main>
-      <h1>ONMC</h1>
-      <p id="loading" role="status">Loading repository memory...</p>
-      <canvas id="codegraph-canvas" aria-label="Repository codegraph"></canvas>
-    </main>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Dashboard navigation">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">O</span>
+          <span class="brand-copy"><strong>ONMC</strong><small>Memory console</small></span>
+        </div>
+        <nav class="nav-list" aria-label="Views">
+          <button class="nav-item is-active" data-view="overview" aria-current="page">
+            <span class="nav-icon" aria-hidden="true">◫</span><span>Overview</span>
+          </button>
+          <button class="nav-item" data-view="memory">
+            <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
+          </button>
+          <button class="nav-item" data-view="tasks">
+            <span class="nav-icon" aria-hidden="true">✓</span><span>Tasks</span>
+          </button>
+          <button class="nav-item" data-view="codegraph">
+            <span class="nav-icon" aria-hidden="true">⌘</span><span>Codegraph</span>
+          </button>
+          <button class="nav-item" data-view="health">
+            <span class="nav-icon" aria-hidden="true">◇</span><span>Health</span>
+          </button>
+        </nav>
+        <div class="sidebar-foot">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span>Local · read only</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="repo-heading">
+            <span class="eyebrow">Repository memory</span>
+            <h1 id="repo-name">Loading...</h1>
+            <span id="repo-path" class="repo-path"></span>
+          </div>
+          <div class="topbar-actions">
+            <span id="last-ingest" class="last-ingest"></span>
+            <button id="refresh-button" class="icon-button" type="button" title="Refresh data" aria-label="Refresh data">↻</button>
+          </div>
+        </header>
+
+        <div id="loading-state" class="loading-state" role="status" aria-live="polite">
+          <div class="loading-line loading-wide"></div>
+          <div class="loading-grid">
+            <div class="loading-block"></div><div class="loading-block"></div>
+            <div class="loading-block"></div><div class="loading-block"></div>
+          </div>
+        </div>
+
+        <div id="error-state" class="error-state" role="alert" hidden>
+          <strong>Dashboard unavailable</strong>
+          <span id="error-message"></span>
+          <button id="retry-button" type="button" class="button">Retry</button>
+        </div>
+
+        <div id="dashboard" hidden>
+          <section id="view-overview" class="view is-active" data-view-panel="overview" aria-labelledby="overview-title">
+            <div class="section-heading">
+              <div><span class="eyebrow">Current state</span><h2 id="overview-title">Overview</h2></div>
+              <span id="readiness-chip" class="status-chip"></span>
+            </div>
+            <div id="metric-grid" class="metric-grid"></div>
+            <div class="overview-grid">
+              <section class="panel distribution-panel" aria-labelledby="distribution-title">
+                <div class="panel-heading"><h3 id="distribution-title">Memory distribution</h3><span id="memory-total"></span></div>
+                <div id="memory-distribution" class="distribution-list"></div>
+              </section>
+              <section class="panel activity-panel" aria-labelledby="activity-title">
+                <div class="panel-heading"><h3 id="activity-title">Active work</h3><span id="active-count"></span></div>
+                <div id="active-tasks"></div>
+              </section>
+            </div>
+            <section class="panel hot-files-panel" aria-labelledby="hot-files-title">
+              <div class="panel-heading"><h3 id="hot-files-title">Repository hotspots</h3><button class="text-button" data-go-view="codegraph" type="button">Open graph →</button></div>
+              <div id="hot-files-overview" class="hot-file-grid"></div>
+            </section>
+          </section>
+
+          <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>
+            <div class="section-heading"><div><span class="eyebrow">Evidence ledger</span><h2 id="memory-title">Memory</h2></div><span id="memory-visible-count"></span></div>
+            <div class="toolbar" role="search">
+              <label class="search-field"><span class="sr-only">Search memory</span><span aria-hidden="true">⌕</span><input id="memory-search" type="search" placeholder="Search title, summary, source" autocomplete="off"></label>
+              <label class="select-field"><span class="sr-only">Filter memory kind</span><select id="memory-kind-filter"><option value="">All kinds</option></select></label>
+            </div>
+            <div class="table-shell"><table><thead><tr><th>Kind</th><th>Memory</th><th>Source</th><th>Confidence</th></tr></thead><tbody id="memory-table-body"></tbody></table></div>
+            <div id="memory-empty" class="empty-state" hidden>No memory matches current filters.</div>
+          </section>
+
+          <section id="view-tasks" class="view" data-view-panel="tasks" aria-labelledby="tasks-title" hidden>
+            <div class="section-heading"><div><span class="eyebrow">Engineering ledger</span><h2 id="tasks-title">Tasks</h2></div><span id="task-total"></span></div>
+            <div id="task-board" class="task-board"></div>
+          </section>
+
+          <section id="view-codegraph" class="view" data-view-panel="codegraph" aria-labelledby="codegraph-title" hidden>
+            <div class="section-heading"><div><span class="eyebrow">Repository structure</span><h2 id="codegraph-title">Codegraph</h2></div><div class="graph-legend"><span><i class="legend-source"></i>Source</span><span><i class="legend-test"></i>Test</span></div></div>
+            <section class="graph-stage panel" aria-label="Repository hotspot graph">
+              <canvas id="codegraph-canvas" aria-label="Repository directories connected to indexed files"></canvas>
+            </section>
+            <div class="graph-detail-grid">
+              <section class="panel"><div class="panel-heading"><h3>Directories</h3><span id="directory-count"></span></div><div id="directory-list" class="rank-list"></div></section>
+              <section class="panel"><div class="panel-heading"><h3>Hot files</h3><span id="graph-file-count"></span></div><div id="graph-file-list" class="rank-list"></div></section>
+            </div>
+          </section>
+
+          <section id="view-health" class="view" data-view-panel="health" aria-labelledby="health-title" hidden>
+            <div class="section-heading"><div><span class="eyebrow">Agent readiness</span><h2 id="health-title">Health</h2></div><button id="copy-report" class="button" type="button">Copy report</button></div>
+            <div id="health-summary" class="health-summary"></div>
+            <div id="health-sections" class="health-grid"></div>
+            <section class="panel report-panel" aria-labelledby="report-title"><div class="panel-heading"><h3 id="report-title">Readiness report</h3><span>Markdown</span></div><pre id="report-content" tabindex="0"></pre></section>
+          </section>
+        </div>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/assets/app.js" defer></script>
   </body>
 </html>

@@ -5,6 +5,9 @@ import threading
 from http.client import HTTPConnection
 from pathlib import Path
 
+from typer.testing import CliRunner
+
+from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import AttemptKind, AttemptStatus
 from oh_no_my_claudecode.ui import build_dashboard_payload, create_ui_server
@@ -84,6 +87,36 @@ def test_ui_server_serves_dashboard_api_and_assets(
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_ui_cli_delegates_to_dashboard_server(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    OnmcService(sample_repo).init_project()
+    captured: dict[str, object] = {}
+
+    def fake_serve(
+        service: OnmcService,
+        *,
+        host: str,
+        port: int,
+        open_browser: bool,
+    ) -> None:
+        captured.update(
+            {"service": service, "host": host, "port": port, "open_browser": open_browser}
+        )
+
+    monkeypatch.setattr("oh_no_my_claudecode.cli.serve_dashboard", fake_serve)
+
+    result = runner.invoke(app, ["ui", "--host", "127.0.0.1", "--port", "9001", "--no-open"])
+
+    assert result.exit_code == 0
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 9001
+    assert captured["open_browser"] is False
 
 
 def _get(port: int, path: str) -> tuple[int, str, str]:

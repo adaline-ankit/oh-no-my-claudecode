@@ -352,6 +352,16 @@ The report command turns the same state into a shareable markdown artifact with 
 memory/task counts, integration state, recommended next actions, and a short snippet that maintainers
 can paste into PRs or handoffs.
 
+### 15. Visual Dashboard
+
+```bash
+onmc ui
+```
+
+The read-only local dashboard exposes overview metrics, searchable memory, task state, repository
+hotspots, health signals, and the shareable readiness report. It binds to `127.0.0.1:8765` by
+default and uses packaged static assets with no hosted service or frontend runtime dependency.
+
 ### 12. Public Python API
 
 ONMC is now usable as a library:
