@@ -9,6 +9,7 @@ from rich.table import Table
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.federation.pull import PullResult
+    from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
 
 from oh_no_my_claudecode.ask.compiler import AskResult
@@ -1658,3 +1659,50 @@ def render_pull_all_summary(
             f"{total_skipped} skipped, "
             f"{error_count} error(s)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Loop rendering
+# ---------------------------------------------------------------------------
+
+
+def render_loop_result(result: LoopResult) -> None:
+    """Render a :class:`LoopResult` to the terminal.
+
+    Displays a per-iteration table (outcome, prediction, action, files) and a
+    summary panel (stop_reason, converged, token count, memory records written).
+    """
+    if result.iterations:
+        table = Table(title="Loop Iterations")
+        table.add_column("#", justify="right", no_wrap=True)
+        table.add_column("Outcome", no_wrap=True)
+        table.add_column("Prediction", overflow="fold")
+        table.add_column("Action", overflow="fold")
+        table.add_column("Files", overflow="fold")
+        for c in result.iterations:
+            color = "green" if c.outcome == "win" else "red"
+            table.add_row(
+                str(c.iteration),
+                f"[{color}]{c.outcome}[/{color}]",
+                shorten(c.prediction, max_length=60),
+                shorten(c.action_summary, max_length=60),
+                ", ".join(c.files_touched[:3]) or "-",
+            )
+        console.print(table)
+
+    status_color = "green" if result.converged else "yellow"
+    token_str = str(result.total_tokens) if result.total_tokens else "-"
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"Stop reason: [{status_color}]{result.stop_reason}[/{status_color}]",
+                    f"Converged:   {'yes' if result.converged else 'no'}",
+                    f"Iterations:  {len(result.iterations)}",
+                    f"Tokens used: {token_str}",
+                    f"Memories written: {len(result.recorded_memory_ids)}",
+                ]
+            ),
+            title="Loop Result",
+        )
+    )

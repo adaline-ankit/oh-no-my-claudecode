@@ -41,6 +41,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_init_summary,
     render_llm_configured,
     render_llm_status,
+    render_loop_result,
     render_memory_artifact_added,
     render_memory_detail,
     render_memory_diff,
@@ -3327,6 +3328,102 @@ def import_command(
             f"[dim]Nothing new to import from {result.source} "
             f"({result.skipped} already present).[/dim]"
         )
+
+
+@app.command("loop")
+def loop_command(
+    goal: Annotated[
+        str | None,
+        typer.Option("--goal", help="Goal text for the loop (inline)."),
+    ] = None,
+    spec: Annotated[
+        str | None,
+        typer.Option("--spec", help="Path to a file containing the goal text."),
+    ] = None,
+    max_iterations: Annotated[
+        int,
+        typer.Option("--max-iterations", min=1, help="Maximum loop iterations."),
+    ] = 10,
+    budget_tokens: Annotated[
+        int | None,
+        typer.Option("--budget-tokens", min=1, help="Stop when total tokens exceed this budget."),
+    ] = None,
+    verify: Annotated[
+        str,
+        typer.Option("--verify", help="Shell command run after each iteration to verify success."),
+    ] = "pytest",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Build the prompt and recall dead-ends without invoking the agent or verify. "
+                "Safe to run without any configured agent."
+            ),
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the full result as JSON."),
+    ] = False,
+) -> None:
+    """Run a memory-grounded autonomous loop that avoids recorded dead-ends.
+
+    Each iteration recalls FAILED_APPROACH memories so the agent cannot repeat
+    known dead-ends.  Wins are recorded as DECISION memories; losses are
+    recorded as FAILED_APPROACH memories so future iterations block them.
+
+    \b
+    Examples
+    --------
+    onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
+    onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
+    onmc loop --goal "refactor auth module" --dry-run          # preview prompt only
+    onmc loop --goal "fix flaky test" --json                   # machine-readable output
+    """
+    import json as _json
+
+    if goal is None and spec is None:
+        raise typer.Exit(code=_fatal("Provide --goal or --spec."))
+    if goal is not None and spec is not None:
+        raise typer.Exit(code=_fatal("Provide either --goal or --spec, not both."))
+
+    resolved_goal: str
+    if spec is not None:
+        spec_path = Path(spec)
+        if not spec_path.exists():
+            raise typer.Exit(code=_fatal(f"Spec file not found: {spec}"))
+        resolved_goal = spec_path.read_text(encoding="utf-8").strip()
+    else:
+        resolved_goal = goal  # type: ignore[assignment]
+
+    try:
+        result = _service().loop(
+            resolved_goal,
+            max_iterations=max_iterations,
+            budget_tokens=budget_tokens,
+            verify_command=verify,
+            dry_run=dry_run,
+        )
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import dataclasses
+
+        console.print_json(_json.dumps(dataclasses.asdict(result)))
+        raise typer.Exit(code=0)
+
+    if dry_run:
+        console.print("[bold]Dry-run: planned prompt (no agent invoked):[/bold]")
+        if result.iterations:
+            from rich.markdown import Markdown as _Markdown
+
+            console.print(_Markdown(result.iterations[0].action_summary))
+        raise typer.Exit(code=0)
+
+    render_loop_result(result)
+    raise typer.Exit(code=0 if result.converged else 1)
 
 
 def _fatal(message: str) -> int:
