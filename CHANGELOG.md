@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-06-23
+
+### Added
+
+- **`onmc eval` — memory evaluation + regression gate.** Proves the brain helps and blocks regressions in CI (the 2026 evals trend). An eval case is a query + expected memory behavior, scored with onmc's own retrieval: correct-files-surfaced (`compile_recall` top-K hit) and failed-path-avoided (`compile_guard` surfaces the known dead-end), plus injected cost. Running with-memory vs without-memory yields a measurable score delta. `onmc eval create --from-task <id>` (cases stored as JSON under `.onmc/evals/`), `onmc eval run [--without-memory] [--fail-under <pct>] [--json]`, `onmc eval compare [--baseline <pct>] [--json]`; `--fail-under`/`--baseline` exit nonzero below threshold so it drops into CI as a regression gate. Deterministic, offline, no LLM, no schema migration.
+
 ## [0.29.0] — 2026-06-23
 
 ### Added
