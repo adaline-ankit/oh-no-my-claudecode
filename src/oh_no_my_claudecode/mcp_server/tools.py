@@ -340,6 +340,39 @@ def list_onmc_tools() -> list[Tool]:
                 "additionalProperties": False,
             },
         ),
+        Tool(
+            name="ask",
+            title="Ask the repo brain a natural-language question",
+            description=(
+                "Query the repo memory brain with a natural-language question and get ranked, "
+                "cited memory entries back. Offline-safe: no LLM synthesis is performed — "
+                "results are deterministically ranked by token overlap and confidence. "
+                "Use this to ask factual questions about past decisions, known gotchas, "
+                "invariants, or any stored knowledge about the codebase."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": (
+                            "Natural-language question to ask the repo brain, "
+                            "e.g. 'Why do we use X instead of Y?' or "
+                            "'What are the known gotchas with the cache module?'"
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 8,
+                        "description": "Maximum number of ranked memory entries to return.",
+                    },
+                },
+                "required": ["question"],
+                "additionalProperties": False,
+            },
+        ),
     ]
 
 
@@ -372,6 +405,8 @@ def call_onmc_tool(
         text = _get_skills(repo, args)
     elif name == "get_profile":
         text = _get_profile(repo, args)
+    elif name == "ask":
+        text = _ask(repo, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
@@ -812,6 +847,41 @@ def _get_profile(repo: OnmcRepo, args: dict[str, Any]) -> str:
         "derived_from": profile.derived_from,
         "salient_memory_ids": profile.salient_memory_ids,
     }
+    return _json_text(payload)
+
+
+def _ask(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    from oh_no_my_claudecode.ask.compiler import compile_ask
+
+    question = _require_str(args, "question")
+    limit = _optional_int(args, "limit", default=8)
+    if limit < 1:
+        msg = "Argument 'limit' must be a positive integer."
+        raise ValueError(msg)
+
+    repo_root, _, storage = repo._service._load_context()
+    result = compile_ask(storage, repo_root, question, limit=limit, provider=None)
+
+    entries: list[dict[str, object]] = []
+    for entry in result.entries:
+        row: dict[str, object] = {
+            "memory_id": entry.memory_id,
+            "title": entry.title,
+            "kind": entry.kind,
+            "relevance": round(entry.relevance, 3),
+        }
+        if entry.citation:
+            row["provenance"] = entry.citation
+        entries.append(row)
+
+    payload: dict[str, object] = {
+        "question": result.question,
+        "entries": entries,
+    }
+    if result.no_data_hint:
+        payload["no_data_hint"] = result.no_data_hint
+    if result.answer is not None:
+        payload["answer"] = result.answer
     return _json_text(payload)
 
 

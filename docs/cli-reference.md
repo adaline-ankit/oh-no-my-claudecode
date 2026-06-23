@@ -436,7 +436,7 @@ Usage: onmc sync [OPTIONS]
 ## `onmc pull`
 
 ```text
-Usage: onmc pull [OPTIONS] SOURCE
+Usage: onmc pull [OPTIONS] [SOURCE]
 
  Import another repo's .agent-memory/ export into this brain (federated
  memories).
@@ -448,6 +448,8 @@ Usage: onmc pull [OPTIONS] SOURCE
    onmc pull https://github.com/org/repo
    onmc pull git@github.com:org/repo.git --ref main
    onmc pull https://github.com/org/repo --label my-label
+   onmc pull --all
+   onmc pull --all --dry-run
 
  Federated memories are tagged ``federated:<repo-label>`` so they are clearly
  attributed to their source and are never confused with local memories.
@@ -457,21 +459,30 @@ Usage: onmc pull [OPTIONS] SOURCE
  its .agent-memory/ export is imported, and the clone is cleaned up
  immediately.
 
+ Use --all to pull from every source configured in ``federation.sources`` in
+ config.yaml.  One failing source never aborts the rest.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      TEXT  Local path to another repo (or its .agent-memory/     │
-│                        dir), or a remote git URL (https://, git@, ssh://).   │
-│                        [required]                                            │
+│   source      [SOURCE]  Local path to another repo (or its .agent-memory/    │
+│                         dir), or a remote git URL (https://, git@, ssh://).  │
+│                         Omit when using --all.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --label        TEXT  Override the short repo label used for the              │
-│                      federated:<label> tag. For local paths defaults to the  │
-│                      source directory name; for git URLs defaults to the     │
-│                      last path segment of the URL.                           │
-│ --ref          TEXT  Branch, tag, or commit-ish to check out when cloning a  │
-│                      remote git URL. Ignored for local paths. Defaults to    │
-│                      the remote's default branch.                            │
-│ --json               Emit a machine-readable JSON summary to stdout.         │
-│ --help               Show this message and exit.                             │
+│ --all                  Pull from every source listed in federation.sources   │
+│                        in config.yaml. Mutually exclusive with the SOURCE    │
+│                        argument.                                             │
+│ --label          TEXT  Override the short repo label used for the            │
+│                        federated:<label> tag. For local paths defaults to    │
+│                        the source directory name; for git URLs defaults to   │
+│                        the last path segment of the URL. Ignored when --all  │
+│                        is used.                                              │
+│ --ref            TEXT  Branch, tag, or commit-ish to check out when cloning  │
+│                        a remote git URL. Ignored for local paths and when    │
+│                        --all is used.                                        │
+│ --dry-run              List what would be pulled without writing any         │
+│                        memories (--all only).                                │
+│ --json                 Emit a machine-readable JSON summary to stdout.       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

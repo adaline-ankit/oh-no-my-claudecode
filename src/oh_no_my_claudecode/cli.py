@@ -52,6 +52,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_detail,
     render_playbook_generate_summary,
     render_playbook_list,
+    render_pull_all_summary,
     render_review_output,
     render_savings_card,
     render_skill_detail,
@@ -1129,14 +1130,25 @@ def sync_command(
 @app.command("pull")
 def pull_command(
     source: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help=(
                 "Local path to another repo (or its .agent-memory/ dir), "
-                "or a remote git URL (https://, git@, ssh://)."
+                "or a remote git URL (https://, git@, ssh://). "
+                "Omit when using --all."
             )
         ),
-    ],
+    ] = None,
+    pull_all: Annotated[
+        bool,
+        typer.Option(
+            "--all",
+            help=(
+                "Pull from every source listed in federation.sources in config.yaml. "
+                "Mutually exclusive with the SOURCE argument."
+            ),
+        ),
+    ] = False,
     repo_label: Annotated[
         str | None,
         typer.Option(
@@ -1144,7 +1156,8 @@ def pull_command(
             help=(
                 "Override the short repo label used for the federated:<label> tag. "
                 "For local paths defaults to the source directory name; "
-                "for git URLs defaults to the last path segment of the URL."
+                "for git URLs defaults to the last path segment of the URL. "
+                "Ignored when --all is used."
             ),
         ),
     ] = None,
@@ -1154,10 +1167,17 @@ def pull_command(
             "--ref",
             help=(
                 "Branch, tag, or commit-ish to check out when cloning a remote git URL. "
-                "Ignored for local paths. Defaults to the remote's default branch."
+                "Ignored for local paths and when --all is used."
             ),
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help="List what would be pulled without writing any memories (--all only).",
+        ),
+    ] = False,
     output_json: Annotated[
         bool,
         typer.Option("--json", help="Emit a machine-readable JSON summary to stdout."),
@@ -1172,6 +1192,8 @@ def pull_command(
       onmc pull https://github.com/org/repo
       onmc pull git@github.com:org/repo.git --ref main
       onmc pull https://github.com/org/repo --label my-label
+      onmc pull --all
+      onmc pull --all --dry-run
 
     Federated memories are tagged ``federated:<repo-label>`` so they are clearly
     attributed to their source and are never confused with local memories.
@@ -1179,8 +1201,66 @@ def pull_command(
 
     When SOURCE is a git URL the repo is shallow-cloned to a temporary directory,
     its .agent-memory/ export is imported, and the clone is cleaned up immediately.
+
+    Use --all to pull from every source configured in ``federation.sources`` in
+    config.yaml.  One failing source never aborts the rest.
     """
     from oh_no_my_claudecode.federation.remote import is_git_url
+
+    # --all mode: pull all configured federation sources
+    if pull_all:
+        if source is not None:
+            raise typer.Exit(
+                code=_fatal("Pass either a SOURCE argument or --all, not both.")
+            )
+        try:
+            _, results = _service().pull_all(dry_run=dry_run)
+        except FileNotFoundError as exc:
+            raise typer.Exit(code=_fatal(str(exc))) from exc
+
+        if not results:
+            console.print(
+                "[yellow]No federation sources configured.[/yellow]\n"
+                "Add sources to config.yaml under [bold]federation.sources[/bold], e.g.:\n\n"
+                "  federation:\n"
+                "    sources:\n"
+                "      - ../sibling-repo\n"
+                "      - https://github.com/org/shared-brain\n"
+            )
+            raise typer.Exit(code=0)
+
+        if output_json:
+            payload: list[dict[str, object]] = []
+            for src_id, outcome in results:
+                if isinstance(outcome, Exception):
+                    payload.append({"source": src_id, "error": str(outcome)})
+                else:
+                    payload.append(
+                        {
+                            "source": outcome.source,
+                            "repo_label": outcome.repo_label,
+                            "imported": outcome.imported,
+                            "skipped": outcome.skipped,
+                        }
+                    )
+            sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+            has_errors = any(isinstance(r, Exception) for _, r in results)
+            raise typer.Exit(code=1 if has_errors else 0)
+
+        render_pull_all_summary(results, dry_run=dry_run)
+        has_errors = any(isinstance(r, Exception) for _, r in results)
+        raise typer.Exit(code=1 if has_errors else 0)
+
+    # Single-source mode (original behaviour)
+    if source is None:
+        raise typer.Exit(
+            code=_fatal(
+                "Provide a SOURCE argument or use --all to pull all configured sources."
+            )
+        )
+
+    if dry_run:
+        raise typer.Exit(code=_fatal("--dry-run is only valid with --all."))
 
     try:
         if is_git_url(source):

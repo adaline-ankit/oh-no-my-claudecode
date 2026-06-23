@@ -8,6 +8,8 @@ from oh_no_my_claudecode.models.brief import BriefArtifact, BriefStyle
 from oh_no_my_claudecode.models.compaction import CompactionSnapshotRecord, HookStatus
 from oh_no_my_claudecode.models.config import (
     BriefSettings,
+    FederationSettings,
+    FederationSource,
     IngestSettings,
     NotifySettings,
     NotifySinkType,
@@ -55,6 +57,8 @@ __all__ = [
     "BriefStyle",
     "CompactionSnapshotRecord",
     "CompiledPrompt",
+    "FederationSettings",
+    "FederationSource",
     "FileStat",
     "IngestResult",
     "IngestSettings",
