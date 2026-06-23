@@ -319,11 +319,18 @@ onmc serve --mcp --repo .
 
 Exposed tools (the agent-facing action surface):
 
+- `recall` — find matching past incidents, failures, and fixes
 - `search_memory` — relevance-ranked memory search by query, kind, and files
 - `get_brief` — compile the task-focused brief as markdown
 - `record_attempt` — record a task-scoped attempt mid-session
 - `record_memory` — write a durable manual memory (never wiped by ingest)
 - `list_tasks` — list task records
+- `guard_task` — surface known failed approaches for a task
+- `get_coverage` — report memory coverage and uncovered hotspots
+- `get_digest` — summarize recent repository learning
+- `get_skills` — list memory-derived reusable skills
+- `get_profile` — return the local cross-repo user profile
+- `ask` — answer a natural-language question from ranked repository memory
 
 Exposed resources:
 
@@ -377,7 +384,70 @@ provenance, kind and confidence metadata, subsystem links, and wikilinks for rec
 `.onmc/obsidian/`, keeping repository knowledge private unless the user explicitly chooses a shared
 `--output` directory.
 
-### 12. Public Python API
+### 17. Accountable Autonomous Loops
+
+```bash
+onmc loop --goal "fix the failing tests" --agent claude --verify "pytest -q"
+onmc loop --goal "fix the failing tests" --agent codex --verify "pytest -q"
+```
+
+The loop uses real headless Claude Code or Codex adapters. Each iteration compiles relevant memory,
+injects known failed approaches, runs the agent, executes the verifier, and records the outcome.
+It stops on convergence, no progress, maximum iterations, token budget, cost budget, or wall time.
+Non-dry runs write a SHA-256 hash-chained receipt under `.agent-memory/receipts/`. A run is verified
+only when the loop converged and the final verifier passed. Receipts are tamper-evident, not signed.
+
+### 18. Trace, Eval, and Replay
+
+```bash
+onmc trace start --label "checkout repair"
+onmc trace stop
+onmc trace report
+onmc eval run --fail-under 80
+onmc eval compare --baseline 10
+onmc replay run <trace-id> --compare
+```
+
+Trace Observatory records session events and reports memory hits, loop signals, tool outcomes, and
+explicitly labelled token estimates. Eval cases deterministically test expected recall and dead-end
+behavior and can gate CI. Replay re-runs recall and guard decisions over a recorded trace against the
+current brain, with or without memory, without an LLM or network call.
+
+### 19. Security and MCP Policy
+
+```bash
+onmc audit . --fail-on high
+onmc mcp policy init
+onmc mcp check tool-calls.jsonl --fail-on approval_required
+```
+
+`audit` statically checks agent configuration for secrets, broad permissions, risky hooks, MCP
+configuration, and prompt-injection surfaces. The MCP trust gateway classifies JSONL records or stdin
+as allow, block, or approval required for hook/CI enforcement. It is not a transparent network proxy
+or process sandbox.
+
+### 20. Memory-Aware GitHub Workflows
+
+```bash
+onmc gh-aw init --dry-run
+onmc gh-aw init
+```
+
+The command scaffolds issue context, PR preflight, merged-PR learning, and weekly memory-audit
+workflows with constrained permissions, pinned actions, and comment-only safe outputs.
+
+### 21. Reproducible Benchmarks
+
+```bash
+onmc benchmark
+onmc bench
+```
+
+`benchmark` labels live recall/compression metrics as measured and harness results as simulation.
+`bench` remains a deterministic synthetic proof harness; its numbers are not presented as production
+LLM measurements.
+
+### 22. Public Python API
 
 ONMC is now usable as a library:
 
@@ -413,19 +483,21 @@ The system is designed as a memory spine with multiple front doors:
 5. `sync` makes that state portable across machines and cloud workspaces.
 6. `hooks` preserve short-term working context across Claude Code compaction.
 7. `serve --mcp` exposes the same state to MCP-compatible agents mid-session.
-8. `import onmc` exposes the same capabilities programmatically.
+8. `loop` executes one selected coding agent against memory and a real verifier.
+9. `trace`, `eval`, and `replay` make memory contribution inspectable and regression-testable.
+10. `import onmc` exposes the same capabilities programmatically.
 
-## What ONMC Does Not Yet Do
+## Current Boundaries
 
 Important boundaries:
 
-- no autonomous multi-agent orchestration runtime
-- no tool-calling loop
-- no background solve mode
-- no vector database or embedding search
+- autonomous execution currently targets one Claude Code or Codex CLI per loop, not a multi-agent swarm
+- loop adapters depend on installed, authenticated agent CLIs
+- receipts are hash-chained but not signed or remotely attested
+- MCP policy classifies recorded/stdin calls; it is not an inline transport proxy or sandbox
 - no hosted sync or remote collaboration
-- no automatic stale-memory pruning
-- MCP is read-only for now
+- no hosted dashboard or account system
+- token/cost data is only recorded when the selected agent CLI exposes it
 
 ## Recommended Mental Model
 
@@ -434,6 +506,8 @@ Use ONMC as:
 - a repo memory database
 - a task memory ledger
 - a deterministic brief compiler
+- a bounded autonomous execution loop for Claude Code and Codex
+- a proof and regression layer for agent memory and run outcomes
 - an optional LLM reasoning layer on top of stored memory
 - a continuity layer for compaction and fresh clones
 
@@ -441,7 +515,8 @@ Do not treat it as:
 
 - a replacement for your coding agent
 - a cloud control plane
-- a generic autonomous agent framework
+- a multi-agent swarm runtime
+- a cryptographic attestation service
 
 ## Best End-to-End Workflow
 
@@ -457,6 +532,13 @@ onmc solve --task "..." --task-id <task_id>
 onmc memory add <task_id> --type did_not_work --title "..." --summary "..."
 onmc task end <task_id> --status solved --summary "..."
 onmc sync --commit
+```
+
+For bounded autonomous work:
+
+```bash
+onmc loop --goal "..." --agent claude --verify "pytest -q" --dry-run
+onmc loop --goal "..." --agent claude --verify "pytest -q" --max-cost-usd 2
 ```
 
 For Claude Code:

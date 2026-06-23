@@ -2,7 +2,7 @@
 
 **Version:** 1  
 **Status:** Open Standard  
-**Reference Implementation:** [oh-no-my-claudecode (onmc)](https://github.com/oh-no-my-claudecode/onmc)  
+**Reference Implementation:** [oh-no-my-claudecode (onmc)](https://github.com/adaline-ankit/oh-no-my-claudecode)
 **License:** MIT (same as the reference implementation)
 
 ---
@@ -70,7 +70,7 @@ The root index. Written by the exporter; validated first by any reader.
   "version": "1",
   "repo_root": ".",
   "exported_at": "2026-06-15T19:49:00.058748Z",
-  "onmc_version": "0.7.0",
+  "onmc_version": "0.36.0",
   "counts": {
     "memories": 3,
     "tasks": 1,

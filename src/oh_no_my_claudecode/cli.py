@@ -84,7 +84,7 @@ from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
 
 app = typer.Typer(
-    help="Repo-native memory and context compiler for coding agents.",
+    help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
