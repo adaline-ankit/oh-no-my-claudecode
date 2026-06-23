@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
@@ -2336,6 +2337,25 @@ class OnmcService:
             return self._user_storage(home=home).list_memories()
         except Exception:
             return []
+
+    def user_profile(
+        self,
+        *,
+        home: Path | None = None,
+        max_items: int = 5,
+    ) -> UserProfile:
+        """Derive a behavioral profile from accumulated user-scope memories.
+
+        Reads ``~/.onmc/user.db``, weights each memory by confidence × feedback ×
+        recency-decay, and buckets entries into preferences, patterns,
+        frequent_mistakes, and tooling.  Entirely offline — no LLM calls.
+
+        Returns an empty ``UserProfile`` when the user store is empty or missing.
+        """
+        from oh_no_my_claudecode.profile.compiler import compile_user_profile
+
+        memories = self._load_user_memories(home=home)
+        return compile_user_profile(memories, max_items=max_items)
 
     def guard(self, task: str, *, limit: int = 8) -> tuple[Path, GuardResult]:
         """Surface recorded dead-ends relevant to *task*.
