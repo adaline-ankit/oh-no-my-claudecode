@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.ask.compiler import AskResult
-    from oh_no_my_claudecode.coverage.compiler import CoverageReport
+    from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
@@ -1712,21 +1712,74 @@ class OnmcService:
         log_path = self._llm_log_path(repo_root, config)
         return compute_memory_health(storage, repo_root, log_path)
 
-    def coverage(self) -> tuple[Path, CoverageReport]:
+    def coverage(
+        self,
+        *,
+        suggest: bool = False,
+        apply: bool = False,
+    ) -> tuple[Path, CoverageReport, list[CoverageSuggestion]]:
         """Compute a knowledge-gap dashboard for this repo.
 
-        Returns ``(repo_root, CoverageReport)`` describing which parts of the
-        repo have memory coverage and which hotspot files are blind spots.
+        Returns ``(repo_root, CoverageReport, suggestions)`` where *suggestions*
+        is non-empty only when *suggest* or *apply* is True.
+
+        Parameters
+        ----------
+        suggest:
+            When True, derive a :class:`~oh_no_my_claudecode.coverage.compiler.CoverageSuggestion`
+            for each top uncovered hotspot.
+        apply:
+            When True, create stub memory entries (low confidence, tagged
+            ``coverage-stub``) for each suggestion that does not already exist
+            in the store.  Implies *suggest*.
 
         Entirely offline — no LLM calls, no network access.  Requires an
         initialised store with at least one ingest run (file stats must exist).
         """
         from oh_no_my_claudecode.coverage.compiler import CoverageReport as _CoverageReport
-        from oh_no_my_claudecode.coverage.compiler import compile_coverage
+        from oh_no_my_claudecode.coverage.compiler import (
+            CoverageSuggestion as _CoverageSuggestion,
+        )
+        from oh_no_my_claudecode.coverage.compiler import compile_coverage, suggest_coverage
 
         repo_root, _, storage = self._load_context()
         report: _CoverageReport = compile_coverage(storage, repo_root)
-        return repo_root, report
+
+        suggestions: list[_CoverageSuggestion] = []
+        if suggest or apply:
+            suggestions = suggest_coverage(report, repo_root)
+
+        if apply and suggestions:
+            now = utc_now()
+            entries: list[MemoryEntry] = []
+            for sug in suggestions:
+                mem_id = stable_id(
+                    "coverage-stub",
+                    sug.file,
+                    sug.suggested_title,
+                    prefix=sug.suggested_kind.value,
+                )
+                summary = (
+                    f"[coverage-stub] {sug.suggested_title}. {sug.rationale}"
+                )
+                entries.append(
+                    MemoryEntry(
+                        id=mem_id,
+                        kind=sug.suggested_kind,
+                        title=sug.suggested_title,
+                        summary=summary,
+                        details=summary,
+                        source_type=SourceType.MANUAL,
+                        source_ref=sug.file,
+                        tags=unique_preserve(["coverage-stub", sug.subsystem]),
+                        confidence=0.2,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+            storage.upsert_memories(entries)
+
+        return repo_root, report, suggestions
 
     def savings(self) -> tuple[Path, SavingsResult]:
         """Compute a Memory Wrapped :class:`~oh_no_my_claudecode.savings.compiler.SavingsResult`.

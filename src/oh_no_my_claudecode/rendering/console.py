@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
-from oh_no_my_claudecode.coverage.compiler import CoverageReport
+from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
 from oh_no_my_claudecode.importers.base import ImportResult
 from oh_no_my_claudecode.models import (
     AttemptRecord,
@@ -1321,6 +1321,33 @@ def render_coverage_summary(report: CoverageReport) -> None:
         console.print(gap_table)
     else:
         console.print("[green]No uncovered hotspot files — well covered![/green]")
+
+
+def render_coverage_suggestions(suggestions: list[CoverageSuggestion]) -> None:
+    """Render the coverage suggestion list to the terminal.
+
+    Prints a table of actionable documentation suggestions derived from
+    uncovered hotspot files.  Each row shows the file, the suggested
+    memory kind, and the one-sentence rationale.
+    """
+    if not suggestions:
+        console.print("[green]No suggestions — all hotspots are covered.[/green]")
+        return
+
+    table = Table(title="Coverage Suggestions  (document these hotspots)")
+    table.add_column("File", min_width=30, no_wrap=False)
+    table.add_column("Kind", width=12)
+    table.add_column("Suggested Title", min_width=36, no_wrap=False)
+    table.add_column("Rationale", min_width=36, no_wrap=False)
+
+    for sug in suggestions:
+        table.add_row(
+            f"[yellow]{sug.file}[/yellow]",
+            f"[dim]{sug.suggested_kind.value}[/dim]",
+            sug.suggested_title,
+            f"[dim]{sug.rationale}[/dim]",
+        )
+    console.print(table)
 
 
 # ---------------------------------------------------------------------------

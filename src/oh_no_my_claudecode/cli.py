@@ -31,6 +31,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_attempt_updated,
     render_blame_result,
     render_brief,
+    render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
     render_hook_status,
@@ -416,7 +417,34 @@ def blame_command(
 def coverage_command(
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Emit the CoverageReport as JSON instead of the dashboard."),
+        typer.Option(
+            "--json",
+            help=(
+                "Emit the CoverageReport (and suggestions when --suggest) "
+                "as JSON instead of the dashboard."
+            ),
+        ),
+    ] = False,
+    suggest: Annotated[
+        bool,
+        typer.Option(
+            "--suggest",
+            help=(
+                "Print actionable documentation suggestions for each uncovered hotspot. "
+                "Deterministic — no LLM required."
+            ),
+        ),
+    ] = False,
+    apply: Annotated[
+        bool,
+        typer.Option(
+            "--apply",
+            help=(
+                "Create stub memory entries (confidence=0.2, tag=coverage-stub) for each "
+                "suggestion that does not already exist. Implies --suggest. "
+                "Idempotent: re-running skips stubs that already exist."
+            ),
+        ),
     ] = False,
 ) -> None:
     """Show a knowledge-gap dashboard: coverage % + uncovered hotspot files.
@@ -426,23 +454,41 @@ def coverage_command(
     have zero memory coverage — those are the landmines most likely to cause
     regressions when touched without context.
 
+    Pass --suggest to turn the gap dashboard into an actionable to-do list.
+    Pass --apply to automatically create stub memory entries for each suggestion
+    (idempotent — re-running skips entries that already exist).
+
     Requires at least one `onmc ingest` run (file stats must exist).
     """
+    do_suggest = suggest or apply
     try:
-        _, report = _service().coverage()
+        _, report, suggestions = _service().coverage(suggest=do_suggest, apply=apply)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:
         import dataclasses
 
-        console.print(
-            json.dumps(dataclasses.asdict(report), indent=2),
-            markup=False,
-        )
+        if do_suggest:
+            payload: dict[str, object] = {
+                "report": dataclasses.asdict(report),
+                "suggestions": [dataclasses.asdict(s) for s in suggestions],
+            }
+            console.print(json.dumps(payload, indent=2), markup=False)
+        else:
+            console.print(
+                json.dumps(dataclasses.asdict(report), indent=2),
+                markup=False,
+            )
         return
 
     render_coverage_summary(report)
+    if do_suggest:
+        render_coverage_suggestions(suggestions)
+        if apply:
+            console.print(
+                f"[green]Applied:[/green] {len(suggestions)} stub(s) created or already present."
+            )
 
 
 @app.command("memory-diff")

@@ -20,6 +20,16 @@ Grouping
 Per-file is too granular for large repos.  We bucket files into their
 top-level directories (mirrors :func:`path_bucket`) and report
 per-subsystem rows, then call out the worst individual hotspot files.
+
+Suggestions (--suggest)
+-----------------------
+:func:`suggest_coverage` layers a deterministic action-item pass over a
+:class:`CoverageReport`.  For each uncovered hotspot in ``report.top_gaps``
+it produces a :class:`CoverageSuggestion` with:
+
+- a deterministic ``suggested_title`` phrased in plain English
+- a heuristic ``suggested_kind`` derived from the file path and churn
+- a ``rationale`` string explaining why this file was chosen
 """
 
 from __future__ import annotations
@@ -29,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from oh_no_my_claudecode.core.repo import path_bucket
-from oh_no_my_claudecode.models import FileStat, MemoryEntry
+from oh_no_my_claudecode.models import FileStat, MemoryEntry, MemoryKind
 from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
 
 # Maximum hotspot files to call out in the top-gaps list.
@@ -92,6 +102,36 @@ class CoverageReport:
     memory_count: int = 0
 
 
+@dataclass(slots=True)
+class CoverageSuggestion:
+    """An actionable documentation suggestion for one uncovered hotspot file.
+
+    Fields
+    ------
+    file:
+        Repo-relative path of the uncovered hotspot file.
+    subsystem:
+        Top-level directory bucket (mirrors :class:`UncoveredHotspot`).
+    suggested_title:
+        Deterministic, human-readable title for the memory stub to create.
+    suggested_kind:
+        Heuristic :class:`~oh_no_my_claudecode.models.MemoryKind` to assign —
+        ``DECISION`` for config/infra, ``INVARIANT`` for core hot files,
+        ``DOC_FACT`` otherwise.
+    rationale:
+        Short explanation of why this file was selected (e.g. churn count).
+    churn:
+        Total commit count for the file (mirrors :attr:`UncoveredHotspot.churn`).
+    """
+
+    file: str
+    subsystem: str
+    suggested_title: str
+    suggested_kind: MemoryKind
+    rationale: str
+    churn: int
+
+
 def compile_coverage(
     storage: SQLiteStorage,
     repo_root: Path,  # noqa: ARG001  (reserved for future file-existence checks)
@@ -152,6 +192,123 @@ def compile_coverage(
         subsystem_rows=subsystem_rows,
         top_gaps=top_gaps,
         memory_count=len(memories),
+    )
+
+
+def suggest_coverage(
+    report: CoverageReport,
+    repo_root: Path,  # noqa: ARG001  (reserved for future per-file heuristics)
+    *,
+    limit: int = 10,
+) -> list[CoverageSuggestion]:
+    """Produce deterministic documentation suggestions for the top uncovered hotspots.
+
+    Pure calculation — reads from *report*; writes nothing.
+
+    For each :class:`UncoveredHotspot` in ``report.top_gaps`` (up to *limit*)
+    the function derives:
+
+    - ``suggested_kind``: :attr:`~MemoryKind.DECISION` when the path contains
+      config/infra/deploy/settings tokens; :attr:`~MemoryKind.INVARIANT` when
+      the file has very high churn (≥ ``_HIGH_CHURN_INVARIANT``);
+      :attr:`~MemoryKind.NOTE` otherwise.
+    - ``suggested_title``: a plain-English sentence that names the file.
+    - ``rationale``: why the file was chosen (commit counts).
+
+    Returns an empty list when ``report.top_gaps`` is empty.
+
+    Parameters
+    ----------
+    report:
+        A :class:`CoverageReport` previously produced by :func:`compile_coverage`.
+    repo_root:
+        Absolute path to the repo root (reserved for future file-content heuristics).
+    limit:
+        Maximum number of suggestions to return.  Defaults to 10.
+    """
+    suggestions: list[CoverageSuggestion] = []
+    for hotspot in report.top_gaps[:limit]:
+        kind = _suggest_kind(hotspot)
+        title = _suggest_title(hotspot, kind)
+        rationale = _suggest_rationale(hotspot)
+        suggestions.append(
+            CoverageSuggestion(
+                file=hotspot.path,
+                subsystem=hotspot.subsystem,
+                suggested_title=title,
+                suggested_kind=kind,
+                rationale=rationale,
+                churn=hotspot.churn,
+            )
+        )
+    return suggestions
+
+
+# Churn threshold above which a file is treated as invariant-worthy (very hot).
+_HIGH_CHURN_INVARIANT = 10
+
+# Path tokens that indicate a configuration / infrastructure / deployment file.
+_CONFIG_TOKENS = frozenset(
+    {
+        "config",
+        "conf",
+        "settings",
+        "infra",
+        "deploy",
+        "deployment",
+        "ci",
+        "workflow",
+        "workflows",
+        "env",
+        "environment",
+        "terraform",
+        "helm",
+        "k8s",
+        "kubernetes",
+        "docker",
+        "compose",
+        "pulumi",
+        "ansible",
+        "makefile",
+    }
+)
+
+
+def _suggest_kind(hotspot: UncoveredHotspot) -> MemoryKind:
+    """Heuristic: derive a MemoryKind from path tokens and churn."""
+    path_lower = hotspot.path.lower()
+    # Split on path separators and common punctuation for token matching.
+    path_tokens = frozenset(
+        token
+        for part in Path(path_lower).parts
+        for token in part.replace("-", "_").replace(".", "_").split("_")
+        if token
+    )
+    if path_tokens & _CONFIG_TOKENS:
+        return MemoryKind.DECISION
+    if hotspot.churn >= _HIGH_CHURN_INVARIANT:
+        return MemoryKind.INVARIANT
+    return MemoryKind.DOC_FACT
+
+
+def _suggest_title(hotspot: UncoveredHotspot, kind: MemoryKind) -> str:
+    """Produce a deterministic plain-English title for a coverage stub."""
+    filename = Path(hotspot.path).name
+    if kind == MemoryKind.DECISION:
+        return f"Document why {filename} changes so often"
+    if kind == MemoryKind.INVARIANT:
+        return f"Record the invariant governing {filename}"
+    return f"Add a note explaining {filename}"
+
+
+def _suggest_rationale(hotspot: UncoveredHotspot) -> str:
+    """One-sentence rationale for why this file needs documentation."""
+    recent_clause = (
+        f", {hotspot.recent_churn} in the last 30 days" if hotspot.recent_churn else ""
+    )
+    return (
+        f"{hotspot.churn} commits in window{recent_clause}, 0 memories — "
+        "high-churn file with no recorded knowledge."
     )
 
 
