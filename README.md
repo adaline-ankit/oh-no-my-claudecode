@@ -59,6 +59,8 @@ This is a **deterministic simulation** over a synthetic 5-task scenario — no l
 
 - **Git-portable brain** — `onmc sync --commit` exports memory to `.agent-memory/` as committable JSON. Any machine that clones the repo runs `onmc sync --restore` and gets full memory instantly. No accounts, no cloud, no config. Works in Gitpod, Codespaces, and GitHub Coding Agent containers.
 
+- **Obsidian knowledge graph** — `onmc wiki --format obsidian` turns repo memory into a local vault with provenance metadata, subsystem indexes, and linked decisions, invariants, gotchas, and failed approaches.
+
 - **Claude Code plugin** — `onmc setup` generates `CLAUDE.md`, installs hooks, and registers the MCP server (`onmc serve --mcp`) exposing `search_memory`, `guard_task`, and `get_brief` tools. A plugin manifest lives at [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) for one-click registration.
 
 ---
@@ -154,7 +156,12 @@ onmc memory confirm <id>            # mark as verified useful
 onmc memory reject <id>             # mark as wrong or stale
 onmc memory edit <id>               # update the summary
 onmc memory add <task_id> --type fix --title "..." --summary "..."
+onmc wiki --format obsidian           # visual knowledge graph in Obsidian
 ```
+
+Obsidian export defaults to `.onmc/obsidian/` so private repo memory stays local. Open that
+directory as a vault, then use Graph View to explore relationships. See
+[Obsidian Vault Export](docs/obsidian.md).
 
 ### CLAUDE.md
 
@@ -189,9 +196,12 @@ onmc codegraph --max-files 25
 ```bash
 onmc ui
 onmc ui --no-open --port 9001
+onmc ui --export onmc-brain.html --no-open
 ```
 
-Dashboard stays local and read-only by default at `http://127.0.0.1:8765`.
+Dashboard stays local and read-only by default at `http://127.0.0.1:8765`. `--export` writes one
+self-contained HTML snapshot for handoffs, demos, and screenshots. Review repository memory before
+sharing the file.
 
 ### Agent modes (optional LLM)
 

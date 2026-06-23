@@ -83,6 +83,37 @@ def create_ui_server(
     return ThreadingHTTPServer((host, port), handler)
 
 
+def export_dashboard_snapshot(service: OnmcService, output: Path) -> Path:
+    """Write a self-contained dashboard HTML snapshot and return its absolute path."""
+    index = STATIC_ROOT.joinpath("index.html").read_text(encoding="utf-8")
+    styles = STATIC_ROOT.joinpath("styles.css").read_text(encoding="utf-8")
+    javascript = STATIC_ROOT.joinpath("app.js").read_text(encoding="utf-8")
+    payload = json.dumps(build_dashboard_payload(service), separators=(",", ":"))
+    payload = payload.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+
+    index = index.replace(
+        '<meta name="color-scheme" content="light">',
+        '<meta name="color-scheme" content="light">\n'
+        '    <meta http-equiv="Content-Security-Policy" '
+        'content="default-src \'none\'; style-src \'unsafe-inline\'; '
+        'script-src \'unsafe-inline\'">',
+    )
+    index = index.replace(
+        '<link rel="stylesheet" href="/assets/styles.css">',
+        f"<style>\n{styles}\n    </style>",
+    )
+    index = index.replace(
+        '<script src="/assets/app.js" defer></script>',
+        '<script id="onmc-dashboard-data" type="application/json">'
+        f"{payload}</script>\n    <script>\n{javascript}\n    </script>",
+    )
+
+    destination = output.expanduser().resolve()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(index, encoding="utf-8")
+    return destination
+
+
 def serve_dashboard(
     service: OnmcService,
     *,

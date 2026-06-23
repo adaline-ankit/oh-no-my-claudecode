@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Obsidian knowledge-graph export.** `onmc wiki --format obsidian` writes provenance-rich memory notes, subsystem indexes, and relationship wikilinks to a private local vault by default.
+- **Portable dashboard snapshots.** `onmc ui --export onmc-brain.html` writes one self-contained, zero-network HTML dashboard for demos, screenshots, and handoffs, with embedded data escaping and a restrictive Content Security Policy.
+
 ## [0.23.0] — 2026-06-23
 
 ### Added

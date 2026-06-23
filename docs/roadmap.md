@@ -20,6 +20,8 @@ Shipped in this repo:
 - task brief compilation
 - token-efficient compact/caveman briefs and codegraph navigation
 - local visual dashboard for memory, tasks, codegraph, and health
+- portable single-file dashboard snapshots for demos and handoffs
+- Obsidian vault export with provenance notes and memory relationship links
 - optional LLM-powered commit/doc extraction during ingest
 - optional LLM reranking for briefs
 - `CLAUDE.md` generation, update, and watch mode

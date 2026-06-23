@@ -13,6 +13,13 @@ const formatNumber = (value) => new Intl.NumberFormat().format(Number(value || 0
 async function renderDashboard() {
   setLoading(true);
   try {
+    const embedded = byId("onmc-dashboard-data");
+    if (embedded) {
+      state.data = JSON.parse(embedded.textContent);
+      hydrateDashboard();
+      setLoading(false);
+      return;
+    }
     const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
     state.data = await response.json();

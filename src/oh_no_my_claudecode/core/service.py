@@ -126,7 +126,7 @@ from oh_no_my_claudecode.timetravel.memory_diff import MemoryDiffResult, diff_me
 from oh_no_my_claudecode.utils.text import shorten, stable_id, tokenize, unique_preserve
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 from oh_no_my_claudecode.why.compiler import WhyReport, compile_why, why_report_to_markdown
-from oh_no_my_claudecode.wiki import build_wiki
+from oh_no_my_claudecode.wiki import WikiFormat, build_obsidian_vault, build_wiki
 
 StructuredOutputT = TypeVar(
     "StructuredOutputT",
@@ -335,6 +335,7 @@ class OnmcService:
         self,
         *,
         output_dir: Path | None = None,
+        format: WikiFormat | str = WikiFormat.MARKDOWN,
     ) -> tuple[Path, list[Path]]:
         """Generate a multi-page markdown wiki from stored memory and write it to disk.
 
@@ -353,10 +354,16 @@ class OnmcService:
             and even the minimal index is written as a single entry).
         """
         repo_root, config, storage = self._load_context()
-        out_dir = output_dir if output_dir is not None else (repo_root / ".onmc" / "wiki")
+        wiki_format = WikiFormat(format)
+        default_dir = "obsidian" if wiki_format is WikiFormat.OBSIDIAN else "wiki"
+        out_dir = output_dir if output_dir is not None else (repo_root / ".onmc" / default_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        pages = build_wiki(storage, repo_root)
+        pages = (
+            build_obsidian_vault(storage, repo_root)
+            if wiki_format is WikiFormat.OBSIDIAN
+            else build_wiki(storage, repo_root)
+        )
         written: list[Path] = []
         for rel_path, content in sorted(pages.items()):
             dest = out_dir / rel_path
