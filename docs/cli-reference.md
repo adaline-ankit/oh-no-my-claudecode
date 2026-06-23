@@ -63,8 +63,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ capture      Heuristically capture durable memory from a session transcript. │
 │ doctor       Run a health check over repo state, memory, provider setup, and │
 │              integrations.                                                   │
-│ wiki         Generate a browsable multi-page markdown wiki from stored       │
-│              memory.                                                         │
+│ wiki         Generate a markdown wiki or Obsidian knowledge-graph vault.     │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
@@ -1715,13 +1714,17 @@ Usage: onmc savings [OPTIONS]
 ```text
 Usage: onmc wiki [OPTIONS]
 
- Generate a browsable multi-page markdown wiki from stored memory.
+ Generate a markdown wiki or Obsidian knowledge-graph vault.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --output        PATH  Directory to write wiki pages into. Defaults to        │
-│                       .onmc/wiki/ (gitignored). Pass e.g. docs/wiki to       │
-│                       produce a committable copy.                            │
-│ --help                Show this message and exit.                            │
+│ --output        PATH                 Directory to write wiki pages into.     │
+│                                      Defaults to .onmc/wiki/ (gitignored).   │
+│                                      Pass e.g. docs/wiki to produce a        │
+│                                      committable copy.                       │
+│ --format        [markdown|obsidian]  Output format: markdown wiki or         │
+│                                      Obsidian vault.                         │
+│                                      [default: markdown]                     │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

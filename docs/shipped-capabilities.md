@@ -362,6 +362,18 @@ The read-only local dashboard exposes overview metrics, searchable memory, task 
 hotspots, health signals, and the shareable readiness report. It binds to `127.0.0.1:8765` by
 default and uses packaged static assets with no hosted service or frontend runtime dependency.
 
+### 16. Obsidian Knowledge Vault
+
+```bash
+onmc wiki --format obsidian
+```
+
+ONMC can export stored memory as an Obsidian-native vault. Every memory becomes a note with YAML
+provenance, kind and confidence metadata, subsystem links, and wikilinks for recorded relationships.
+`Home.md`, `Graph.md`, and subsystem indexes make the vault usable immediately. Output defaults to
+`.onmc/obsidian/`, keeping repository knowledge private unless the user explicitly chooses a shared
+`--output` directory.
+
 ### 12. Public Python API
 
 ONMC is now usable as a library:
