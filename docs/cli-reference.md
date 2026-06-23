@@ -88,6 +88,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ profile      Show and rebuild the derived user behavioral profile            │
 │              (~/.onmc/user.db).                                              │
 │ notify       Inspect and test the context firewall notification sink.        │
+│ trace        Agent Trace Observatory — instrument a session and get a        │
+│              token-ROI report.                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1919,6 +1921,77 @@ Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --note        TEXT  Optional note appended to the memory details.            │
 │ --json              Emit the updated memory as JSON instead of a rich panel. │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc trace`
+
+```text
+Usage: onmc trace [OPTIONS] COMMAND [ARGS]...
+
+ Agent Trace Observatory — instrument a session and get a token-ROI report.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ start   Start a new trace session.                                           │
+│ stop    Close the current trace session.                                     │
+│ report  Show the Agent Trace Observatory token-ROI card for a session.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc trace start`
+
+```text
+Usage: onmc trace start [OPTIONS]
+
+ Start a new trace session.
+
+ Creates a JSONL session file under .onmc/traces/ and sets the active
+ session pointer.  Run 'onmc trace stop' to close the session and then
+ 'onmc trace report' to view the results.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --label  -l      TEXT  Human-readable label for this session.                │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc trace stop`
+
+```text
+Usage: onmc trace stop [OPTIONS]
+
+ Close the current trace session.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc trace report`
+
+```text
+Usage: onmc trace report [OPTIONS] [SESSION_ID]
+
+ Show the Agent Trace Observatory token-ROI card for a session.
+
+ Renders a screenshot-worthy terminal card with: estimated token savings,
+ repeated reads blocked, tool call stats, memory hit-rate, and loop signals.
+
+ Token-savings estimates are labelled (est) — derived from the bench harness,
+ not live LLM measurement.  Use --json for machine-readable output.
+ Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   session_id      [SESSION_ID]  Session ID to report on.  Defaults to the    │
+│                                 current active session.                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Print machine-readable JSON to stdout.                   │
+│ --otel        FILE  Write OpenTelemetry GenAI span JSON to this file path.   │
 │ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

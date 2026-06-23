@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
+    from oh_no_my_claudecode.trace.models import TraceReport
 
 from oh_no_my_claudecode.blame.compiler import BlameResult, blame_result_to_markdown, compile_blame
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
@@ -1936,6 +1937,91 @@ class OnmcService:
         now_str = isoformat_utc(utc_now())
         result: _SavingsResult = compile_savings(storage, repo_root, now=now_str)
         return repo_root, result
+
+    # ------------------------------------------------------------------
+    # Trace Observatory
+    # ------------------------------------------------------------------
+
+    def trace_start(self, *, label: str = "") -> tuple[Path, str | None]:
+        """Start a new trace session.
+
+        Creates ``.onmc/traces/<session_id>.jsonl`` and sets the ``current``
+        pointer.  Entirely offline — no LLM calls.
+
+        Parameters
+        ----------
+        label:
+            Optional human-readable label (e.g. ``"Codex task: add timeout"``).
+
+        Returns
+        -------
+        tuple[Path, str | None]
+            ``(repo_root, session_id)`` — ``session_id`` is ``None`` on I/O
+            failure.
+        """
+        from oh_no_my_claudecode.trace.recorder import start_session
+
+        repo_root, _, _ = self._load_context()
+        session_id = start_session(repo_root, label=label)
+        return repo_root, session_id
+
+    def trace_stop(self) -> tuple[Path, bool]:
+        """Close the current trace session.
+
+        Returns
+        -------
+        tuple[Path, bool]
+            ``(repo_root, success)``
+        """
+        from oh_no_my_claudecode.trace.recorder import stop_session
+
+        repo_root, _, _ = self._load_context()
+        ok = stop_session(repo_root)
+        return repo_root, ok
+
+    def trace_report(
+        self,
+        session_id: str | None = None,
+    ) -> tuple[Path, str, TraceReport]:
+        """Compile and return a :class:`~oh_no_my_claudecode.trace.models.TraceReport`.
+
+        Parameters
+        ----------
+        session_id:
+            Session to report on.  Defaults to the current active session.
+
+        Returns
+        -------
+        tuple[Path, str, TraceReport]
+            ``(repo_root, session_id, report)``
+
+        Raises
+        ------
+        FileNotFoundError
+            If no session is found for *session_id*.
+        """
+        from oh_no_my_claudecode.trace.recorder import (
+            current_session_id,
+            load_session_events,
+        )
+        from oh_no_my_claudecode.trace.report import compile_trace_report
+
+        repo_root, _, _ = self._load_context()
+
+        sid = session_id
+        if sid is None:
+            sid = current_session_id(repo_root)
+        if sid is None:
+            msg = "No active trace session.  Run 'onmc trace start' first."
+            raise FileNotFoundError(msg)
+
+        session, events = load_session_events(repo_root, sid)
+        if session is None:
+            msg = f"Trace session '{sid}' not found."
+            raise FileNotFoundError(msg)
+
+        report = compile_trace_report(events, session=session)
+        return repo_root, sid, report
 
     def statusline(self) -> str:
         """Return a compact one-line health string for Claude Code statusLine.

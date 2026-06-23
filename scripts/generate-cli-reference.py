@@ -107,6 +107,10 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc plug", ["plug"]),
     ("onmc import", ["import"]),
     ("onmc feedback", ["feedback"]),
+    ("onmc trace", ["trace"]),
+    ("onmc trace start", ["trace", "start"]),
+    ("onmc trace stop", ["trace", "stop"]),
+    ("onmc trace report", ["trace", "report"]),
 ]
 
 
