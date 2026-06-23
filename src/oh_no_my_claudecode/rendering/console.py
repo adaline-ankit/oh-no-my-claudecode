@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
+    from oh_no_my_claudecode.trace.models import TraceReport
 
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
@@ -1706,3 +1707,110 @@ def render_loop_result(result: LoopResult) -> None:
             title="Loop Result",
         )
     )
+
+
+def render_trace_card(report: TraceReport) -> None:
+    """Render the viral Agent Trace Observatory card.
+
+    Displays a Rich Panel with:
+    - Big "saved X% (est)" headline (or token counts when no savings data)
+    - Tokens used vs. estimated-without-onmc
+    - Repeated reads blocked
+    - Tool calls / failures
+    - Memory hit-rate
+    - Loops detected
+    - Tasteful footer with honesty label
+    """
+    from oh_no_my_claudecode.trace.models import TraceReport as _TraceReport
+
+    if not isinstance(report, _TraceReport):
+        console.print("[yellow]No trace report to display.[/yellow]")
+        return
+
+    # --- headline ---
+    saved_pct = report.tokens_saved_pct
+    if report.total_tokens > 0 and saved_pct > 0:
+        pct_color = "green" if saved_pct >= 50 else ("yellow" if saved_pct >= 20 else "dim")
+        headline = (
+            f"  [{pct_color}]saved {saved_pct:.0f}%[/{pct_color}]"
+            f"  [dim](est — bench simulation)[/dim]"
+        )
+    elif report.total_tokens > 0:
+        headline = f"  [dim]{report.total_tokens:,} tokens used[/dim]"
+    else:
+        headline = "  [dim]no token events recorded — record TraceEventKind.TOKENS for ROI[/dim]"
+
+    # --- label line ---
+    label_line = ""
+    if report.label:
+        label_line = f"  [bold]{report.label}[/bold]\n"
+
+    # --- session id line ---
+    sid_line = f"  session: [dim]{report.session_id}[/dim]"
+
+    panel_body = "\n".join(filter(None, ["", label_line + headline, "", sid_line, ""]))
+
+    title_label = "[bold cyan]onmc — Agent Trace Observatory[/bold cyan]"
+    console.print(Panel(panel_body, title=title_label, border_style="cyan"))
+
+    # --- stats table ---
+    stats = Table(show_header=True, show_lines=False, box=None, padding=(0, 2))
+    stats.add_column("Metric", style="bold", min_width=34)
+    stats.add_column("Value", justify="right", width=18)
+
+    if report.total_tokens > 0:
+        stats.add_row(
+            "Tokens used",
+            f"{report.total_tokens:,}",
+        )
+    if report.est_tokens_without_onmc > 0:
+        stats.add_row(
+            "Est. without onmc  [dim](est)[/dim]",
+            f"{report.est_tokens_without_onmc:,}",
+        )
+    if report.tool_calls > 0 or report.tool_failures > 0:
+        failures_str = (
+            f"  [red]({report.tool_failures} failed)[/red]" if report.tool_failures > 0 else ""
+        )
+        stats.add_row("Tool calls", f"{report.tool_calls}{failures_str}")
+
+    repeated_reads = report.repeated_reads_blocked
+    if repeated_reads > 0:
+        stats.add_row("Repeated reads blocked", f"[green]{repeated_reads}[/green]")
+
+    hit_rate = report.memory_hit_rate
+    if report.memory_hits + report.memory_misses > 0:
+        hit_color = "green" if hit_rate >= 0.7 else ("yellow" if hit_rate >= 0.4 else "dim")
+        stats.add_row(
+            "Memory hit-rate",
+            f"[{hit_color}]{hit_rate:.0%}[/{hit_color}]"
+            f"  [dim]({report.memory_hits} hits / {report.memory_misses} misses)[/dim]",
+        )
+
+    if report.loops_detected:
+        stats.add_row(
+            "Loops detected  [yellow](potential waste)[/yellow]",
+            str(len(report.loops_detected)),
+        )
+
+    console.print(stats)
+
+    # --- top wasteful ---
+    if report.top_wasteful:
+        console.print("\n  [dim]Top repeated items:[/dim]")
+        for item in report.top_wasteful:
+            console.print(f"    [yellow]×{item.count}[/yellow]  {item.target}")
+
+    # --- repeated reads detail ---
+    if report.repeated_file_reads:
+        console.print("\n  [dim]Repeated file reads:[/dim]")
+        for item in report.repeated_file_reads[:5]:
+            console.print(f"    [yellow]×{item.count}[/yellow]  {item.target}")
+
+    # --- footer ---
+    footer_parts = [
+        "token savings (est): bench-harness simulation — no LLM calls.",
+        "powered by onmc — git-portable memory for coding agents",
+    ]
+    console.print()
+    console.print(f"[dim]{' · '.join(footer_parts)}[/dim]")

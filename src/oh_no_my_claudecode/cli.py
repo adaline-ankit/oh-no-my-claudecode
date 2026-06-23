@@ -3429,3 +3429,150 @@ def loop_command(
 def _fatal(message: str) -> int:
     console.print(f"[red]{message}[/red]")
     return 1
+
+
+# ---------------------------------------------------------------------------
+# Trace Observatory
+# ---------------------------------------------------------------------------
+
+trace_app = typer.Typer(
+    help="Agent Trace Observatory — instrument a session and get a token-ROI report.",
+    no_args_is_help=True,
+)
+app.add_typer(trace_app, name="trace")
+
+
+@trace_app.command("start")
+def trace_start_command(
+    label: Annotated[
+        str,
+        typer.Option("--label", "-l", help="Human-readable label for this session."),
+    ] = "",
+) -> None:
+    """Start a new trace session.
+
+    Creates a JSONL session file under .onmc/traces/ and sets the active
+    session pointer.  Run 'onmc trace stop' to close the session and then
+    'onmc trace report' to view the results.
+    """
+    try:
+        _, session_id = _service().trace_start(label=label)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if session_id is None:
+        raise typer.Exit(code=_fatal("Failed to create trace session (I/O error)."))
+
+    label_part = f"  label: {label}" if label else ""
+    console.print(f"[green]Trace session started[/green]  session_id={session_id}{label_part}")
+    console.print("[dim]Run 'onmc trace stop' when done, then 'onmc trace report'.[/dim]")
+
+
+@trace_app.command("stop")
+def trace_stop_command() -> None:
+    """Close the current trace session."""
+    try:
+        _, ok = _service().trace_stop()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if not ok:
+        raise typer.Exit(
+            code=_fatal("No active trace session found.  Run 'onmc trace start' first.")
+        )
+
+    console.print("[green]Trace session closed.[/green]  Run 'onmc trace report' to view results.")
+
+
+@trace_app.command("report")
+def trace_report_command(
+    session_id: Annotated[
+        str,
+        typer.Argument(help="Session ID to report on.  Defaults to the current active session."),
+    ] = "",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+    otel_output: Annotated[
+        str,
+        typer.Option(
+            "--otel",
+            help="Write OpenTelemetry GenAI span JSON to this file path.",
+            metavar="FILE",
+        ),
+    ] = "",
+) -> None:
+    """Show the Agent Trace Observatory token-ROI card for a session.
+
+    Renders a screenshot-worthy terminal card with: estimated token savings,
+    repeated reads blocked, tool call stats, memory hit-rate, and loop signals.
+
+    Token-savings estimates are labelled (est) — derived from the bench harness,
+    not live LLM measurement.  Use --json for machine-readable output.
+    Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
+    """
+    import json as _json
+
+    sid: str | None = session_id if session_id else None
+
+    try:
+        _, resolved_sid, report = _service().trace_report(sid)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if otel_output:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        spans = to_otel_spans(report, session_id=resolved_sid)
+        otel_path = Path(otel_output)
+        try:
+            otel_path.write_text(_json.dumps(spans, indent=2), encoding="utf-8")
+            console.print(f"[green]OTel spans written to[/green] {otel_path}")
+        except OSError as exc:
+            raise typer.Exit(code=_fatal(f"Failed to write OTel file: {exc}")) from exc
+        if json_output:
+            return
+
+    if json_output:
+        typer.echo(
+            _json.dumps(
+                {
+                    "session_id": report.session_id,
+                    "label": report.label,
+                    "started_at": report.started_at,
+                    "ended_at": report.ended_at,
+                    "total_tokens": report.total_tokens,
+                    "est_tokens_without_onmc": report.est_tokens_without_onmc,
+                    "tokens_saved_pct": report.tokens_saved_pct,
+                    "tool_calls": report.tool_calls,
+                    "tool_failures": report.tool_failures,
+                    "memory_hits": report.memory_hits,
+                    "memory_misses": report.memory_misses,
+                    "memory_hit_rate": report.memory_hit_rate,
+                    "repeated_file_reads": [
+                        {"target": r.target, "count": r.count}
+                        for r in report.repeated_file_reads
+                    ],
+                    "repeated_search_queries": [
+                        {"target": r.target, "count": r.count}
+                        for r in report.repeated_search_queries
+                    ],
+                    "repeated_reads_blocked": report.repeated_reads_blocked,
+                    "loops_detected": [
+                        {"tool": lp.tool, "target": lp.target, "count": lp.count}
+                        for lp in report.loops_detected
+                    ],
+                    "top_wasteful": [
+                        {"target": r.target, "count": r.count} for r in report.top_wasteful
+                    ],
+                    "extra_notes": report.extra_notes,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    from oh_no_my_claudecode.rendering.console import render_trace_card
+
+    render_trace_card(report)
