@@ -1995,3 +1995,149 @@ def render_audit_report(report: AuditReport) -> None:
             shorten(finding.fix, max_length=120),
         )
     console.print(table)
+
+
+def render_eval_result(
+    report: object,
+    *,
+    comparison: object = None,
+) -> None:
+    """Render an :class:`~oh_no_my_claudecode.evals.models.EvalReport` or
+    :class:`~oh_no_my_claudecode.evals.models.EvalComparison`.
+
+    When *comparison* is provided (an ``EvalComparison``), renders a
+    side-by-side delta table as well as both per-condition reports.
+    When only *report* is given (an ``EvalReport``), renders just that report.
+    """
+    from oh_no_my_claudecode.evals.models import EvalComparison, EvalReport
+
+    # --- comparison view ---
+    if isinstance(comparison, EvalComparison):
+        _render_eval_comparison(comparison)
+        return
+
+    if not isinstance(report, EvalReport):
+        console.print("[yellow]No eval report to display.[/yellow]")
+        return
+
+    _render_eval_report(report)
+
+
+def _render_eval_report(report: object) -> None:
+    """Render a single :class:`~oh_no_my_claudecode.evals.models.EvalReport`."""
+    from oh_no_my_claudecode.evals.models import EvalReport
+
+    if not isinstance(report, EvalReport):
+        return
+
+    condition = "WITH memory" if report.with_memory else "WITHOUT memory"
+    score_color = "green" if report.score >= 80 else ("yellow" if report.score >= 50 else "red")  # noqa: PLR2004
+
+    headline = (
+        f"  [{score_color}]{report.score:.1f}[/{score_color}] / 100  "
+        f"[dim]· {report.passed_cases}/{report.total_cases} passed[/dim]"
+    )
+    console.print(
+        Panel(
+            f"\n{headline}\n",
+            title=f"[bold blue]onmc eval — {condition}[/bold blue]",
+            border_style=score_color,
+        )
+    )
+
+    if not report.results:
+        console.print("[yellow]No eval cases found. Run `onmc eval create` to add cases.[/yellow]")
+        return
+
+    table = Table(
+        title=f"Eval Cases ({report.total_cases})",
+        show_lines=False,
+        box=None,
+        padding=(0, 2),
+    )
+    table.add_column("Case ID", style="dim", min_width=18)
+    table.add_column("files_hit", justify="center", width=10)
+    table.add_column("deadend_hit", justify="center", width=12)
+    table.add_column("recall_entries", justify="right", width=14)
+    table.add_column("injected_chars", justify="right", width=14)
+    table.add_column("passed", justify="center", width=8)
+
+    for r in report.results:
+        table.add_row(
+            shorten(r.case_id, max_length=30),
+            "[green]✓[/green]" if r.files_hit else "[red]✗[/red]",
+            "[green]✓[/green]" if r.deadend_hit else "[red]✗[/red]",
+            str(r.recall_entries),
+            str(r.injected_chars),
+            "[green]✓[/green]" if r.passed else "[red]✗[/red]",
+        )
+    console.print(table)
+    console.print(
+        f"\n[dim]Mean injected chars: {report.mean_injected_chars:.0f}[/dim]"
+    )
+
+
+def _render_eval_comparison(comparison: object) -> None:
+    """Render an :class:`~oh_no_my_claudecode.evals.models.EvalComparison`."""
+    from oh_no_my_claudecode.evals.models import EvalComparison
+
+    if not isinstance(comparison, EvalComparison):
+        return
+
+    w = comparison.with_memory
+    n = comparison.without_memory
+
+    if comparison.score_delta > 0:
+        delta_color = "green"
+    elif comparison.score_delta == 0:
+        delta_color = "yellow"
+    else:
+        delta_color = "red"
+    headline = (
+        f"  Score delta: [{delta_color}]+{comparison.score_delta:.1f}[/{delta_color}]"
+        f"  [dim]({n.score:.1f} → {w.score:.1f})[/dim]"
+    )
+    console.print(
+        Panel(
+            f"\n{headline}\n",
+            title="[bold blue]onmc eval compare — with vs without memory[/bold blue]",
+            border_style=delta_color,
+        )
+    )
+
+    table = Table(show_lines=False, box=None, padding=(0, 2))
+    table.add_column("Metric", style="bold", min_width=28)
+    table.add_column("Without memory", justify="right", width=16)
+    table.add_column("With memory", justify="right", width=14)
+    table.add_column("Delta", justify="right", width=10)
+
+    table.add_row(
+        "Score (0–100)",
+        f"{n.score:.2f}",
+        f"[green]{w.score:.2f}[/green]" if w.score > n.score else f"{w.score:.2f}",
+        f"[green]+{comparison.score_delta:.2f}[/green]"
+        if comparison.score_delta > 0
+        else f"{comparison.score_delta:.2f}",
+    )
+    table.add_row(
+        "Pass rate",
+        f"{n.pass_rate:.1%}",
+        f"{w.pass_rate:.1%}",
+        f"+{comparison.pass_rate_delta:.1%}",
+    )
+    table.add_row(
+        "Mean injected chars",
+        f"{n.mean_injected_chars:.0f}",
+        f"{w.mean_injected_chars:.0f}",
+        f"-{comparison.chars_delta:.0f}",
+    )
+    table.add_row(
+        "Cases passed",
+        f"{n.passed_cases}/{n.total_cases}",
+        f"{w.passed_cases}/{w.total_cases}",
+        "—",
+    )
+    console.print(table)
+    console.print()
+    console.print("[dim]Methodology: deterministic, offline — no LLM calls.[/dim]")
+    console.print("[dim]without-memory baseline: all retrieval results treated as empty.[/dim]")

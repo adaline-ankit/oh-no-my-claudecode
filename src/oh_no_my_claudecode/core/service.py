@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
+    from oh_no_my_claudecode.evals.models import EvalCase, EvalComparison, EvalReport
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
@@ -2788,6 +2789,122 @@ class OnmcService:
                 repo_root = self.cwd
         result: _AuditReport = run_audit(repo_root)
         return result
+
+    # ------------------------------------------------------------------
+    # Eval harness
+    # ------------------------------------------------------------------
+
+    def eval_create(
+        self,
+        *,
+        from_memory_id: str | None = None,
+        case_id: str | None = None,
+        query: str | None = None,
+        expected_files: list[str] | None = None,
+        expected_deadend_substrings: list[str] | None = None,
+        note: str = "",
+    ) -> tuple[Path, EvalCase]:
+        """Create and persist an eval case.
+
+        Two creation modes:
+
+        **Derive from memory** (``from_memory_id`` given):
+            Calls :func:`~oh_no_my_claudecode.evals.store.create_eval_case_from_task`
+            to derive query and expectations from an existing memory entry.
+            Raises ``ValueError`` when the memory is not found.
+
+        **Manual** (``query`` given, ``from_memory_id`` omitted):
+            Creates a case from explicit parameters.  ``case_id`` defaults to
+            a hash of the query when omitted.
+
+        Returns
+        -------
+        tuple[Path, EvalCase]
+            ``(repo_root, case)``
+        """
+        from oh_no_my_claudecode.evals.models import EvalCase
+        from oh_no_my_claudecode.evals.store import (
+            create_eval_case_from_task,
+            save_eval_case,
+        )
+        from oh_no_my_claudecode.utils.text import stable_id
+
+        repo_root, _, storage = self._load_context()
+
+        if from_memory_id is not None:
+            case = create_eval_case_from_task(storage, from_memory_id)
+            if case is None:
+                msg = f"No memory found with id: {from_memory_id}"
+                raise ValueError(msg)
+        else:
+            if not query:
+                msg = "Either --from-memory or --query must be provided."
+                raise ValueError(msg)
+            derived_id = case_id or ("eval-" + stable_id("eval", query, "", "", prefix="ev")[:20])
+            case = EvalCase(
+                id=derived_id,
+                query=query,
+                expected_files=expected_files or [],
+                expected_deadend_substrings=expected_deadend_substrings or [],
+                note=note,
+            )
+
+        save_eval_case(repo_root, case)
+        return repo_root, case
+
+    def eval_run(
+        self,
+        *,
+        with_memory: bool = True,
+        recall_limit: int = 8,
+    ) -> tuple[Path, EvalReport]:
+        """Run the eval suite and return an :class:`~oh_no_my_claudecode.evals.models.EvalReport`.
+
+        Loads all cases from ``.onmc/evals/``.  Deterministic and offline.
+
+        Parameters
+        ----------
+        with_memory:
+            When True (default), evaluate against live storage.
+            When False, simulate the cold (no-memory) baseline.
+        recall_limit:
+            Max entries to request from compile_recall per case.
+
+        Returns
+        -------
+        tuple[Path, EvalReport]
+            ``(repo_root, report)``
+        """
+        from oh_no_my_claudecode.evals.harness import run_evals
+        from oh_no_my_claudecode.evals.store import load_all_eval_cases
+
+        repo_root, _, storage = self._load_context()
+        cases = load_all_eval_cases(repo_root)
+        report = run_evals(storage, cases, with_memory=with_memory, recall_limit=recall_limit)
+        return repo_root, report
+
+    def eval_compare(
+        self,
+        *,
+        recall_limit: int = 8,
+    ) -> tuple[Path, EvalComparison]:
+        """Run both conditions and return an :class:`EvalComparison`.
+
+        Runs ``eval_run`` twice (with and without memory) and returns the
+        side-by-side comparison.  Deterministic and offline.
+
+        Returns
+        -------
+        tuple[Path, EvalComparison]
+            ``(repo_root, comparison)``
+        """
+        from oh_no_my_claudecode.evals.harness import compare_evals
+        from oh_no_my_claudecode.evals.store import load_all_eval_cases
+
+        repo_root, _, storage = self._load_context()
+        cases = load_all_eval_cases(repo_root)
+        comparison = compare_evals(storage, cases, recall_limit=recall_limit)
+        return repo_root, comparison
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
         repo_root = discover_repo_root(self.cwd)

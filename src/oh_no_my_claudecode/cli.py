@@ -3709,3 +3709,247 @@ def trace_report_command(
     from oh_no_my_claudecode.rendering.console import render_trace_card
 
     render_trace_card(report)
+
+
+# ---------------------------------------------------------------------------
+# onmc eval — memory evaluation and regression-gate harness
+# ---------------------------------------------------------------------------
+
+eval_app = typer.Typer(
+    help="Measure and gate memory recall quality (offline, deterministic).",
+    no_args_is_help=True,
+)
+app.add_typer(eval_app, name="eval")
+
+
+@eval_app.command("create")
+def eval_create_command(
+    from_memory: Annotated[
+        str,
+        typer.Option("--from-memory", help="Derive eval case from existing memory ID."),
+    ] = "",
+    query: Annotated[
+        str,
+        typer.Option("--query", "-q", help="Query/task for the eval case (manual mode)."),
+    ] = "",
+    case_id: Annotated[
+        str,
+        typer.Option("--id", help="Custom case ID (optional, auto-derived when omitted)."),
+    ] = "",
+    expect_file: Annotated[
+        list[str],
+        typer.Option(
+            "--expect-file",
+            help=(
+                "Expected file/memory ID to appear in recall results. "
+                "Repeatable: --expect-file foo --expect-file bar"
+            ),
+        ),
+    ] = [],  # noqa: B006
+    expect_deadend: Annotated[
+        list[str],
+        typer.Option(
+            "--expect-deadend",
+            help=(
+                "Substring expected in a guard dead-end entry. "
+                "Repeatable: --expect-deadend 'tried X' --expect-deadend 'bad approach'"
+            ),
+        ),
+    ] = [],  # noqa: B006
+    note: Annotated[
+        str,
+        typer.Option("--note", help="Optional human-readable note about what this case tests."),
+    ] = "",
+) -> None:
+    """Create a new eval case and persist it to .onmc/evals/<id>.json.
+
+    Two modes:
+
+      --from-memory <id>   Derive query + expectations from an existing memory entry.
+
+      --query <text>       Manual mode: provide query + optional --expect-file / --expect-deadend.
+    """
+    try:
+        _, case = _service().eval_create(
+            from_memory_id=from_memory or None,
+            case_id=case_id or None,
+            query=query or None,
+            expected_files=list(expect_file),
+            expected_deadend_substrings=list(expect_deadend),
+            note=note,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    console.print(f"[green]Eval case created:[/green] {case.id}")
+    console.print(f"  Query: {case.query[:80]}")
+    if case.expected_files:
+        console.print(f"  Expected files: {', '.join(case.expected_files[:5])}")
+    if case.expected_deadend_substrings:
+        console.print(
+            f"  Expected deadends: {', '.join(case.expected_deadend_substrings[:3])}"
+        )
+
+
+@eval_app.command("run")
+def eval_run_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output results as JSON."),
+    ] = False,
+    fail_under: Annotated[
+        float,
+        typer.Option(
+            "--fail-under",
+            help=(
+                "Exit non-zero when pass_rate (0–100) is below this threshold. "
+                "Use in CI to gate on memory quality regression."
+            ),
+            min=0.0,
+            max=100.0,
+        ),
+    ] = 0.0,
+    without_memory: Annotated[
+        bool,
+        typer.Option(
+            "--without-memory",
+            help="Run the cold baseline (simulate no retrieval). Useful for delta comparison.",
+        ),
+    ] = False,
+    recall_limit: Annotated[
+        int,
+        typer.Option("--recall-limit", help="Max recall entries per case."),
+    ] = 8,
+) -> None:
+    """Run the eval suite and report memory recall quality.
+
+    Loads all cases from .onmc/evals/ and scores them against the live brain.
+    Use --fail-under to gate CI (exits 1 when pass_rate < threshold).
+
+    Examples:
+
+      onmc eval run
+
+      onmc eval run --fail-under 80   # fail CI if <80% of cases pass
+
+      onmc eval run --json            # machine-readable output
+    """
+    try:
+        _, report = _service().eval_run(
+            with_memory=not without_memory,
+            recall_limit=recall_limit,
+        )
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        console.print(
+            json.dumps(
+                {
+                    "with_memory": report.with_memory,
+                    "total_cases": report.total_cases,
+                    "passed_cases": report.passed_cases,
+                    "pass_rate": report.pass_rate,
+                    "score": report.score,
+                    "mean_injected_chars": report.mean_injected_chars,
+                    "results": [
+                        {
+                            "case_id": r.case_id,
+                            "files_hit": r.files_hit,
+                            "deadend_hit": r.deadend_hit,
+                            "recall_entries": r.recall_entries,
+                            "injected_chars": r.injected_chars,
+                            "passed": r.passed,
+                        }
+                        for r in report.results
+                    ],
+                },
+                indent=2,
+            )
+        )
+    else:
+        from oh_no_my_claudecode.rendering.console import render_eval_result
+
+        render_eval_result(report)
+
+    if fail_under > 0 and report.score < fail_under:
+        raise typer.Exit(code=1)
+
+
+@eval_app.command("compare")
+def eval_compare_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output comparison as JSON."),
+    ] = False,
+    baseline: Annotated[
+        float,
+        typer.Option(
+            "--baseline",
+            help=(
+                "Exit non-zero when the with-memory score delta (0–100) is below this value. "
+                "Use in CI to gate on brain contribution regression."
+            ),
+            min=0.0,
+            max=100.0,
+        ),
+    ] = 0.0,
+    recall_limit: Annotated[
+        int,
+        typer.Option("--recall-limit", help="Max recall entries per case."),
+    ] = 8,
+) -> None:
+    """Compare with-memory vs without-memory eval scores.
+
+    Runs the suite twice and shows the delta.  A positive delta proves the brain
+    is contributing.  Use --baseline to gate CI (exits 1 when score_delta < threshold).
+
+    Examples:
+
+      onmc eval compare
+
+      onmc eval compare --baseline 10   # fail CI if brain contributes <10 points
+
+      onmc eval compare --json          # machine-readable output
+    """
+    try:
+        _, comparison = _service().eval_compare(recall_limit=recall_limit)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        w = comparison.with_memory
+        n = comparison.without_memory
+        console.print(
+            json.dumps(
+                {
+                    "with_memory": {
+                        "score": w.score,
+                        "pass_rate": w.pass_rate,
+                        "passed_cases": w.passed_cases,
+                        "total_cases": w.total_cases,
+                        "mean_injected_chars": w.mean_injected_chars,
+                    },
+                    "without_memory": {
+                        "score": n.score,
+                        "pass_rate": n.pass_rate,
+                        "passed_cases": n.passed_cases,
+                        "total_cases": n.total_cases,
+                        "mean_injected_chars": n.mean_injected_chars,
+                    },
+                    "deltas": {
+                        "score_delta": comparison.score_delta,
+                        "pass_rate_delta": comparison.pass_rate_delta,
+                        "chars_delta": comparison.chars_delta,
+                    },
+                },
+                indent=2,
+            )
+        )
+    else:
+        from oh_no_my_claudecode.rendering.console import render_eval_result
+
+        render_eval_result(None, comparison=comparison)
+
+    if baseline > 0 and comparison.score_delta < baseline:
+        raise typer.Exit(code=1)

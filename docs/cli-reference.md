@@ -94,6 +94,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ notify       Inspect and test the context firewall notification sink.        │
 │ trace        Agent Trace Observatory — instrument a session and get a        │
 │              token-ROI report.                                               │
+│ eval         Measure and gate memory recall quality (offline,                │
+│              deterministic).                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2065,5 +2067,127 @@ Usage: onmc trace report [OPTIONS] [SESSION_ID]
 │ --json              Print machine-readable JSON to stdout.                   │
 │ --otel        FILE  Write OpenTelemetry GenAI span JSON to this file path.   │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval`
+
+```text
+Usage: onmc eval [OPTIONS] COMMAND [ARGS]...
+
+ Measure and gate memory recall quality (offline, deterministic).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ create   Create a new eval case and persist it to .onmc/evals/<id>.json.     │
+│ run      Run the eval suite and report memory recall quality.                │
+│ compare  Compare with-memory vs without-memory eval scores.                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval create`
+
+```text
+Usage: onmc eval create [OPTIONS]
+
+ Create a new eval case and persist it to .onmc/evals/<id>.json.
+
+ Two modes:
+
+ --from-memory <id>   Derive query + expectations from an existing memory
+ entry.
+
+ --query <text>       Manual mode: provide query + optional --expect-file /
+ --expect-deadend.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --from-memory             TEXT  Derive eval case from existing memory ID.    │
+│ --query           -q      TEXT  Query/task for the eval case (manual mode).  │
+│ --id                      TEXT  Custom case ID (optional, auto-derived when  │
+│                                 omitted).                                    │
+│ --expect-file             TEXT  Expected file/memory ID to appear in recall  │
+│                                 results. Repeatable: --expect-file foo       │
+│                                 --expect-file bar                            │
+│ --expect-deadend          TEXT  Substring expected in a guard dead-end       │
+│                                 entry. Repeatable: --expect-deadend 'tried   │
+│                                 X' --expect-deadend 'bad approach'           │
+│ --note                    TEXT  Optional human-readable note about what this │
+│                                 case tests.                                  │
+│ --help                          Show this message and exit.                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval run`
+
+```text
+Usage: onmc eval run [OPTIONS]
+
+ Run the eval suite and report memory recall quality.
+
+ Loads all cases from .onmc/evals/ and scores them against the live brain.
+ Use --fail-under to gate CI (exits 1 when pass_rate < threshold).
+
+ Examples:
+
+   onmc eval run
+
+   onmc eval run --fail-under 80   # fail CI if <80% of cases pass
+
+   onmc eval run --json            # machine-readable output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                             Output results as JSON.   │
+│ --fail-under            FLOAT RANGE                Exit non-zero when        │
+│                         [0.0<=x<=100.0]            pass_rate (0–100) is      │
+│                                                    below this threshold. Use │
+│                                                    in CI to gate on memory   │
+│                                                    quality regression.       │
+│                                                    [default: 0.0]            │
+│ --without-memory                                   Run the cold baseline     │
+│                                                    (simulate no retrieval).  │
+│                                                    Useful for delta          │
+│                                                    comparison.               │
+│ --recall-limit          INTEGER                    Max recall entries per    │
+│                                                    case.                     │
+│                                                    [default: 8]              │
+│ --help                                             Show this message and     │
+│                                                    exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval compare`
+
+```text
+Usage: onmc eval compare [OPTIONS]
+
+ Compare with-memory vs without-memory eval scores.
+
+ Runs the suite twice and shows the delta.  A positive delta proves the brain
+ is contributing.  Use --baseline to gate CI (exits 1 when score_delta <
+ threshold).
+
+ Examples:
+
+   onmc eval compare
+
+   onmc eval compare --baseline 10   # fail CI if brain contributes <10 points
+
+   onmc eval compare --json          # machine-readable output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                           Output comparison as JSON.  │
+│ --baseline            FLOAT RANGE                Exit non-zero when the      │
+│                       [0.0<=x<=100.0]            with-memory score delta     │
+│                                                  (0–100) is below this       │
+│                                                  value. Use in CI to gate on │
+│                                                  brain contribution          │
+│                                                  regression.                 │
+│                                                  [default: 0.0]              │
+│ --recall-limit        INTEGER                    Max recall entries per      │
+│                                                  case.                       │
+│                                                  [default: 8]                │
+│ --help                                           Show this message and exit. │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

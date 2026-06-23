@@ -113,6 +113,10 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc trace start", ["trace", "start"]),
     ("onmc trace stop", ["trace", "stop"]),
     ("onmc trace report", ["trace", "report"]),
+    ("onmc eval", ["eval"]),
+    ("onmc eval create", ["eval", "create"]),
+    ("onmc eval run", ["eval", "run"]),
+    ("onmc eval compare", ["eval", "compare"]),
 ]
 
 
