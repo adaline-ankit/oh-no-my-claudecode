@@ -3694,6 +3694,10 @@ def loop_command(
         str | None,
         typer.Option("--spec", help="Path to a file containing the goal text."),
     ] = None,
+    agent: Annotated[
+        str,
+        typer.Option("--agent", help="Agent CLI to use: claude (default) or codex."),
+    ] = "claude",
     max_iterations: Annotated[
         int,
         typer.Option("--max-iterations", min=1, help="Maximum loop iterations."),
@@ -3731,6 +3735,7 @@ def loop_command(
     Examples
     --------
     onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
+    onmc loop --goal "fix the bug" --agent codex --verify "pytest tests/"
     onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
     onmc loop --goal "refactor auth module" --dry-run          # preview prompt only
     onmc loop --goal "fix flaky test" --json                   # machine-readable output
@@ -3741,6 +3746,9 @@ def loop_command(
         raise typer.Exit(code=_fatal("Provide --goal or --spec."))
     if goal is not None and spec is not None:
         raise typer.Exit(code=_fatal("Provide either --goal or --spec, not both."))
+
+    if agent not in {"claude", "codex"}:
+        raise typer.Exit(code=_fatal(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'."))
 
     resolved_goal: str
     if spec is not None:
@@ -3754,12 +3762,13 @@ def loop_command(
     try:
         result = _service().loop(
             resolved_goal,
+            agent=agent,
             max_iterations=max_iterations,
             budget_tokens=budget_tokens,
             verify_command=verify,
             dry_run=dry_run,
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:

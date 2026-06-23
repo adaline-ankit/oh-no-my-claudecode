@@ -602,6 +602,7 @@ class OnmcService:
         self,
         goal: str,
         *,
+        agent: str = "claude",
         max_iterations: int = 10,
         budget_tokens: int | None = None,
         verify_command: str = "pytest",
@@ -618,14 +619,36 @@ class OnmcService:
         the prompt that WOULD be sent is computed and returned in
         ``result.iterations[0].action_summary``.  Safe to call without any
         configured agent.
+
+        Parameters
+        ----------
+        goal:
+            The task description passed to the agent on every iteration.
+        agent:
+            Which CLI agent to use.  One of ``"claude"`` (default) or
+            ``"codex"``.  Ignored when *dry_run* is True.
+        max_iterations:
+            Hard cap on loop iterations.
+        budget_tokens:
+            Optional token budget; the loop stops before the next iteration
+            when total tokens consumed so far would exceed this value.
+        verify_command:
+            Shell command run after each agent iteration; exit-code 0 = win.
+        dry_run:
+            Build the prompt and recall dead-ends without invoking the agent
+            or verify.  Safe to run without any configured agent binary.
         """
+        from oh_no_my_claudecode.loop.adapters import (
+            agent_binary_available,
+            make_agent_runner,
+        )
         from oh_no_my_claudecode.loop.engine import (
             _build_brief,  # noqa: PLC2701
-            _default_agent_runner,
             _default_verify_runner,
             run_loop,
         )
         from oh_no_my_claudecode.loop.models import (
+            AgentRunResult,
             IterationContract,
             LoopConfig,
             LoopResult,
@@ -661,12 +684,38 @@ class OnmcService:
                 total_tokens=0,
             )
 
+        # Validate the agent selector and surface a clean error when the binary
+        # is missing rather than letting subprocess raise obscure errors.
+        if agent not in {"claude", "codex"}:
+            raise ValueError(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'.")
+
+        if not agent_binary_available(agent):  # type: ignore[arg-type]
+
+            def _missing_agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                return AgentRunResult(
+                    output=f"[{agent} binary not found on PATH — install it first]",
+                    prediction="",
+                    files_touched=[],
+                    tokens=None,
+                )
+
+            return run_loop(
+                storage,
+                repo_root,
+                spec,
+                config,
+                agent_runner=_missing_agent,
+                verify_runner=_default_verify_runner,
+            )
+
+        real_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]
         return run_loop(
             storage,
             repo_root,
             spec,
             config,
-            agent_runner=_default_agent_runner,
+            agent_runner=real_runner,
             verify_runner=_default_verify_runner,
         )
 
