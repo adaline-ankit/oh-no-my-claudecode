@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.32.0] — 2026-06-23
+
+### Added
+
+- **`onmc loop` now drives a real agent (P0 of the accountable-loops direction).** Replaced the stub runner that returned "[no agent configured]" with real headless adapters behind one injectable interface: `ClaudeCliAdapter` (`claude -p --output-format json`, defensive token/cost parse) and `CodexCliAdapter` (`codex exec`). `files_touched` is computed from real before/after `git status`; tokens/cost come from the agent's own output (never fabricated). `onmc loop --agent claude|codex`; the `--dry-run` path stays subprocess-free and a missing agent binary degrades cleanly. Cross-agent by design (headless CLI, no SDK lock-in).
+
 ## [0.31.0] — 2026-06-23
 
 ### Added
