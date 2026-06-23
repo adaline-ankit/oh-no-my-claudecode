@@ -125,6 +125,10 @@ gh_aw_app = typer.Typer(
     help="Scaffold memory-aware GitHub Actions agentic workflows.",
     no_args_is_help=True,
 )
+mcp_app = typer.Typer(
+    help="MCP Trust Gateway — classify tool calls against a policy.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -138,6 +142,7 @@ app.add_typer(user_app, name="user")
 app.add_typer(profile_app, name="profile")
 app.add_typer(notify_app, name="notify")
 app.add_typer(gh_aw_app, name="gh-aw")
+app.add_typer(mcp_app, name="mcp")
 
 
 @app.command("tui")
@@ -173,6 +178,150 @@ def setup_command(
 
 def main() -> None:
     app()
+
+
+# ---------------------------------------------------------------------------
+# MCP Trust Gateway commands
+# ---------------------------------------------------------------------------
+
+# mcp policy sub-group
+mcp_policy_app = typer.Typer(
+    help="Manage the MCP trust policy file (.onmc/mcp-policy.yaml).",
+    no_args_is_help=True,
+)
+mcp_app.add_typer(mcp_policy_app, name="policy")
+
+
+@mcp_policy_app.command("init")
+def mcp_policy_init_command(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing policy file."),
+    ] = False,
+    path: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Repo root.  Defaults to current directory.",
+        ),
+    ] = None,
+) -> None:
+    """Write a documented starter .onmc/mcp-policy.yaml for the MCP trust gateway.
+
+    The generated file declares example server allow-lists, tool scopes
+    (read / write / network), and approval-required lists with inline comments.
+
+    Re-running is safe — the file is not overwritten unless --force is passed.
+    """
+    from oh_no_my_claudecode.rendering.console import render_mcp_policy
+
+    repo_root = path.resolve() if path is not None else Path.cwd()
+    policy_path_before = repo_root / ".onmc" / "mcp-policy.yaml"
+    existed = policy_path_before.exists()
+    result_path = _service().mcp_policy_init(force=force, repo_root=repo_root)
+    written = not existed or force
+    render_mcp_policy(result_path, written=written)
+
+
+@mcp_app.command("check")
+def mcp_check_command(
+    calls_file: Annotated[
+        Path | None,
+        typer.Argument(
+            help=(
+                "Path to a JSONL file of recorded tool calls.  "
+                "Each line: {\"server\": \"...\", \"tool\": \"...\", \"args\": {...}}.  "
+                "Omit or pass '-' to read from stdin."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit classifications as JSON to stdout."),
+    ] = False,
+    fail_on: Annotated[
+        str,
+        typer.Option(
+            "--fail-on",
+            help=(
+                "Exit non-zero when any decision has this verdict or worse.  "
+                "One of: block, approval_required.  Default: block."
+            ),
+        ),
+    ] = "block",
+    no_audit_log: Annotated[
+        bool,
+        typer.Option("--no-audit-log", help="Skip writing to .onmc/mcp-audit.log."),
+    ] = False,
+    path: Annotated[
+        Path | None,
+        typer.Option("--repo", help="Repo root for locating .onmc/mcp-policy.yaml."),
+    ] = None,
+) -> None:
+    """Classify MCP tool calls from a JSONL file (or stdin) against the trust policy.
+
+    Reads recorded tool-call events, applies the .onmc/mcp-policy.yaml policy,
+    scans arguments for embedded secrets and prompt-injection phrases, and
+    renders a decision table.
+
+    Exit codes:
+
+    - 0 — all calls pass the --fail-on threshold
+    - 1 — at least one call blocked / requires approval (when threshold met)
+    - 2 — usage error
+
+    Example::
+
+        onmc mcp check calls.jsonl --fail-on block
+        cat calls.jsonl | onmc mcp check - --json
+    """
+    import sys as _sys
+
+    valid_fail_on = ("block", "approval_required")
+    if fail_on not in valid_fail_on:
+        msg = f"--fail-on must be one of: {', '.join(valid_fail_on)}"
+        raise typer.Exit(code=_fatal(msg))
+
+    # Read source
+    if calls_file is None or str(calls_file) == "-":
+        calls_jsonl = _sys.stdin.read()
+    else:
+        if not calls_file.exists():
+            msg = f"File not found: {calls_file}"
+            raise typer.Exit(code=_fatal(msg))
+        calls_jsonl = calls_file.read_text(encoding="utf-8")
+
+    repo_root = path.resolve() if path is not None else Path.cwd()
+
+    results = _service().mcp_check(
+        calls_jsonl,
+        repo_root=repo_root,
+        write_audit_log=not no_audit_log,
+    )
+
+    if as_json:
+        output_rows = []
+        for call_obj, dec_obj in results:
+            output_rows.append(
+                {
+                    "server": call_obj.server,
+                    "tool": call_obj.tool,
+                    "verdict": dec_obj.verdict,
+                    "severity": dec_obj.severity,
+                    "reasons": dec_obj.reasons,
+                }
+            )
+        sys.stdout.write(json.dumps(output_rows, indent=2) + "\n")
+    else:
+        from oh_no_my_claudecode.rendering.console import render_mcp_decision_table
+
+        render_mcp_decision_table(results)
+
+    # Exit code gate
+    _verdict_rank = {"allow": 0, "approval_required": 1, "block": 2}
+    threshold_rank = _verdict_rank.get(fail_on, 2)
+    for _call, dec in results:
+        if _verdict_rank.get(dec.verdict, 0) >= threshold_rank:
+            raise typer.Exit(code=1)
 
 
 def _service() -> OnmcService:
