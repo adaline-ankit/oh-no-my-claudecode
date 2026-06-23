@@ -17,6 +17,20 @@ Options:
 - `--host`: bind address; defaults to loopback
 - `--port`: TCP port; defaults to `8765`
 - `--no-open`: do not open the system browser
+- `--export PATH`: write a standalone HTML snapshot instead of starting the server
+
+## Portable Snapshot
+
+```bash
+onmc ui --export onmc-brain.html
+```
+
+Snapshot export embeds current dashboard data, CSS, and JavaScript into one HTML file. It makes no
+network requests and carries a restrictive Content Security Policy. The same search, filters,
+navigation, codegraph, and health views work without ONMC running.
+
+Snapshots contain repository paths, memories, task state, and health findings. Review the generated
+file before attaching it to an issue, release, or public post. Use `--no-open` in automation.
 
 ## API Contract
 
@@ -48,7 +62,7 @@ Static assets are served from the installed Python package. Unknown paths return
 - local-first: no external assets, telemetry, accounts, or hosted dependency
 - safe default: bind to `127.0.0.1`
 - no new runtime framework dependency
-- browser receives rendered data only through same-origin JSON
+- browser receives rendered data through same-origin JSON or an explicitly exported snapshot
 
 ## Verification
 
@@ -58,3 +72,4 @@ Static assets are served from the installed Python package. Unknown paths return
 - full Python quality gates
 - real-browser desktop and mobile screenshots
 - zero browser console errors
+- standalone snapshot and script-termination escaping tests

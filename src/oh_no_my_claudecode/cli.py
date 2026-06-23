@@ -73,7 +73,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
-from oh_no_my_claudecode.ui import serve_dashboard
+from oh_no_my_claudecode.ui import export_dashboard_snapshot, serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
 
@@ -950,6 +950,10 @@ def ui_command(
         bool,
         typer.Option("--open/--no-open", help="Open the dashboard in a browser."),
     ] = True,
+    export_path: Annotated[
+        Path | None,
+        typer.Option("--export", help="Write a standalone HTML snapshot instead of serving."),
+    ] = None,
 ) -> None:
     """Open the local read-only ONMC visual dashboard."""
     service = _service()
@@ -957,6 +961,15 @@ def ui_command(
         service.status()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+    if export_path is not None:
+        written = export_dashboard_snapshot(service, export_path)
+        console.print(f"[green]Dashboard snapshot:[/green] {written}")
+        console.print("[yellow]Review repository memory before sharing this file.[/yellow]")
+        if open_browser:
+            import webbrowser
+
+            webbrowser.open(written.as_uri())
+        return
     if host not in {"127.0.0.1", "localhost", "::1"}:
         console.print(
             "[yellow]Warning: non-loopback binding exposes repository memory "

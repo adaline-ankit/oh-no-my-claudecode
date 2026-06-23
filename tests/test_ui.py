@@ -10,7 +10,11 @@ from typer.testing import CliRunner
 from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import AttemptKind, AttemptStatus
-from oh_no_my_claudecode.ui import build_dashboard_payload, create_ui_server
+from oh_no_my_claudecode.ui import (
+    build_dashboard_payload,
+    create_ui_server,
+    export_dashboard_snapshot,
+)
 
 
 def _ready_service(sample_repo: Path, monkeypatch: object) -> OnmcService:
@@ -117,6 +121,73 @@ def test_ui_cli_delegates_to_dashboard_server(
     assert captured["host"] == "127.0.0.1"
     assert captured["port"] == 9001
     assert captured["open_browser"] is False
+
+
+def test_dashboard_snapshot_is_standalone(
+    sample_repo: Path,
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    service = _ready_service(sample_repo, monkeypatch)
+    output = tmp_path / "brain.html"
+
+    written = export_dashboard_snapshot(service, output)
+
+    html = written.read_text(encoding="utf-8")
+    assert written == output.resolve()
+    assert '<script id="onmc-dashboard-data" type="application/json">' in html
+    assert "<style>" in html
+    assert '<script src="/assets/app.js"' not in html
+    assert '<link rel="stylesheet" href="/assets/styles.css">' not in html
+    assert '"name":"sample-repo"' in html
+
+
+def test_dashboard_snapshot_escapes_script_termination(
+    sample_repo: Path,
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    service = _ready_service(sample_repo, monkeypatch)
+    dangerous = "</script><script>alert(1)</script>"
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.ui.server.build_dashboard_payload",
+        lambda _: {"repo": {"name": dangerous}},
+    )
+
+    output = export_dashboard_snapshot(service, tmp_path / "safe.html")
+    html = output.read_text(encoding="utf-8")
+
+    assert dangerous not in html
+    assert "\\u003c/script\\u003e" in html
+
+
+def test_ui_cli_exports_without_starting_server(
+    sample_repo: Path,
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    runner = CliRunner()
+    monkeypatch.chdir(sample_repo)
+    OnmcService(sample_repo).init_project()
+    output = tmp_path / "brain.html"
+    calls: list[Path] = []
+
+    def fake_export(service: OnmcService, destination: Path) -> Path:
+        calls.append(destination)
+        destination.write_text("snapshot", encoding="utf-8")
+        return destination
+
+    def fail_serve(*args: object, **kwargs: object) -> None:
+        raise AssertionError("snapshot export must not start dashboard server")
+
+    monkeypatch.setattr("oh_no_my_claudecode.cli.export_dashboard_snapshot", fake_export)
+    monkeypatch.setattr("oh_no_my_claudecode.cli.serve_dashboard", fail_serve)
+
+    result = runner.invoke(app, ["ui", "--export", str(output), "--no-open"])
+
+    assert result.exit_code == 0
+    assert calls == [output]
+    assert output.name in result.output
 
 
 def _get(port: int, path: str) -> tuple[int, str, str]:
