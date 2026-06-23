@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-06-23
+
+### Added
+
+- **`onmc audit` — agent-config security scorecard.** Scans a repo's agent configuration (CLAUDE.md/AGENTS.md, `.claude/settings.json`, `.mcp.json`, hooks) for the 2026 top agent-safety risks and emits a scored, CI-gateable report. 11 rules across over-broad permissions, hook-injection, risky MCP servers, secret detection, and prompt-injection surface — each finding carries a concrete fix. Score = 100 − Σ severity weights → grade A–F. `onmc audit [PATH] [--json] [--fail-on critical|high|medium|low]` exits nonzero at/above the threshold (default high) so it drops into CI. Deterministic, no network, no LLM.
+
 ## [0.28.0] — 2026-06-23
 
 ### Added
