@@ -123,6 +123,8 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc eval create", ["eval", "create"]),
     ("onmc eval run", ["eval", "run"]),
     ("onmc eval compare", ["eval", "compare"]),
+    ("onmc replay", ["replay"]),
+    ("onmc replay run", ["replay", "run"]),
 ]
 
 
