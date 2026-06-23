@@ -1828,6 +1828,7 @@ Usage: onmc loop [OPTIONS]
  Examples
  --------
  onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
+ onmc loop --goal "fix the bug" --agent codex --verify "pytest tests/"
  onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
  onmc loop --goal "refactor auth module" --dry-run          # preview prompt
  only
@@ -1839,6 +1840,9 @@ Usage: onmc loop [OPTIONS]
 │                                               (inline).                      │
 │ --spec                  TEXT                  Path to a file containing the  │
 │                                               goal text.                     │
+│ --agent                 TEXT                  Agent CLI to use: claude       │
+│                                               (default) or codex.            │
+│                                               [default: claude]              │
 │ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
 │                                               [default: 10]                  │
 │ --budget-tokens         INTEGER RANGE [x>=1]  Stop when total tokens exceed  │
