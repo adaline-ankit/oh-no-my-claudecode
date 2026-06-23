@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.34.0] — 2026-06-24
+
+### Added
+
+- **Tamper-evident loop run receipt + proof-based completion (P1 accountability core).** After every real `onmc loop` run, onmc writes a tamper-evident receipt to `.agent-memory/receipts/`: goal, agent, model, `verified`, stop_reason, iterations, tokens/cost/wall, verifier command + final exit code, git tree SHA, diff SHA, loop-spec SHA, output digest, onmc version — bound by a SHA-256 hash chain across iterations (not signed yet). `verified` is true only when the loop converged AND the final verifier passed — never because the model claimed "done". The CLI prints a VERIFIED / NOT-VERIFIED block + receipt path; `--json` embeds the receipt.
+- **Hard cost & wall-time limits:** `onmc loop --max-cost-usd` and `--max-wall-seconds` (deterministic, stop_reason `cost` / `wall-time`), alongside the existing token-budget / max-iterations / no-progress stops. Per-iteration cost is read from the Claude adapter output.
+
 ## [0.33.0] — 2026-06-23
 
 ### Added
