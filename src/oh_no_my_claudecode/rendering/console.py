@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
 
 from oh_no_my_claudecode.ask.compiler import AskResult
@@ -1600,3 +1601,60 @@ def render_import_summary(result: ImportResult) -> None:
         remaining = len(result.items) - 20
         if remaining > 0:
             console.print(f"  [dim]… and {remaining} more[/dim]")
+
+
+def render_pull_all_summary(
+    results: list[tuple[str, PullResult | Exception]],
+    *,
+    dry_run: bool = False,
+) -> None:
+    """Render a combined summary for ``onmc pull --all``.
+
+    One row per configured source.  Successful pulls show imported/skipped
+    counts; failures show the error message.
+    """
+    mode_label = " [dim](dry-run)[/dim]" if dry_run else ""
+    table = Table(title=f"Federation pull --all{mode_label}")
+    table.add_column("Source", overflow="fold", min_width=20)
+    table.add_column("Label", no_wrap=True)
+    if dry_run:
+        table.add_column("Would pull", justify="center")
+    else:
+        table.add_column("Imported", justify="right")
+        table.add_column("Skipped", justify="right")
+    table.add_column("Status", no_wrap=True)
+
+    total_imported = 0
+    total_skipped = 0
+    error_count = 0
+
+    for source_id, outcome in results:
+        if isinstance(outcome, Exception):
+            error_count += 1
+            if dry_run:
+                table.add_row(source_id, "", "", "[red]error[/red]")
+            else:
+                table.add_row(source_id, "", "", "", "[red]error[/red]")
+            console.print(f"  [red]Error pulling {source_id!r}:[/red] {outcome}")
+        else:
+            total_imported += outcome.imported
+            total_skipped += outcome.skipped
+            label = outcome.repo_label or ""
+            if dry_run:
+                table.add_row(source_id, label, "[dim]—[/dim]", "[cyan]dry-run[/cyan]")
+            else:
+                table.add_row(
+                    source_id,
+                    label,
+                    str(outcome.imported),
+                    str(outcome.skipped),
+                    "[green]ok[/green]",
+                )
+
+    console.print(table)
+    if not dry_run:
+        console.print(
+            f"Total: [bold]{total_imported}[/bold] imported, "
+            f"{total_skipped} skipped, "
+            f"{error_count} error(s)"
+        )

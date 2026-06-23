@@ -26,6 +26,7 @@ EXPECTED_TOOL_NAMES = {
     "get_digest",
     "get_skills",
     "get_profile",
+    "ask",
 }
 
 
@@ -158,6 +159,12 @@ def test_list_tools_exposes_expected_names_and_schemas() -> None:
     assert by_name["get_profile"].inputSchema.get("required", []) == []
     assert "max_items" in by_name["get_profile"].inputSchema["properties"]
     assert by_name["get_profile"].inputSchema["properties"]["max_items"]["type"] == "integer"
+    # ask — question required, limit optional
+    assert by_name["ask"].inputSchema["required"] == ["question"]
+    assert "question" in by_name["ask"].inputSchema["properties"]
+    assert by_name["ask"].inputSchema["properties"]["question"]["type"] == "string"
+    assert "limit" in by_name["ask"].inputSchema["properties"]
+    assert by_name["ask"].inputSchema["properties"]["limit"]["type"] == "integer"
 
 
 def test_search_memory_ranks_seeded_store(
@@ -1252,3 +1259,155 @@ def test_get_profile_returns_toon_by_default(
         is_json = False
     assert not is_json, "Default output should be TOON, not JSON"
     assert "preferences" in text or "derived_from" in text
+
+
+# ---------------------------------------------------------------------------
+# ask tool
+# ---------------------------------------------------------------------------
+
+
+def _seed_ask_memory(repo: OnmcRepo, *, title: str, summary: str) -> str:
+    """Seed a DECISION memory for ask tests and return its id."""
+    from oh_no_my_claudecode.models import MemoryKind, SourceType
+    from oh_no_my_claudecode.models.memory import MemoryEntry
+    from oh_no_my_claudecode.utils.text import stable_id
+    from oh_no_my_claudecode.utils.time import utc_now
+
+    now = utc_now()
+    entry = MemoryEntry(
+        id=stable_id(MemoryKind.DECISION.value, title, summary, "test:ask", prefix="ask"),
+        kind=MemoryKind.DECISION,
+        title=title,
+        summary=summary,
+        details=summary,
+        source_type=SourceType.MANUAL,
+        source_ref="test:ask",
+        tags=["decision", "ask"],
+        confidence=0.9,
+        created_at=now,
+        updated_at=now,
+    )
+    _, _, storage = repo._service._load_context()
+    storage.upsert_memories([entry])
+    return entry.id
+
+
+def test_ask_appears_in_tool_list_with_schema() -> None:
+    """ask tool is present in list_onmc_tools with question required and limit optional."""
+    tools = list_onmc_tools()
+    by_name = {tool.name: tool for tool in tools}
+
+    assert "ask" in by_name
+    schema = by_name["ask"].inputSchema
+    assert schema["required"] == ["question"]
+    assert "question" in schema["properties"]
+    assert schema["properties"]["question"]["type"] == "string"
+    assert "limit" in schema["properties"]
+    assert schema["properties"]["limit"]["type"] == "integer"
+    assert schema["properties"]["limit"].get("default") == 8
+
+
+def test_ask_returns_ranked_cited_entries_for_seeded_brain(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """ask returns a JSON payload with question + ranked cited entries for a seeded brain."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+    mem_id = _seed_ask_memory(
+        repo,
+        title="Cache invalidation decision",
+        summary="Always route cache invalidation through the shared cache module.",
+    )
+
+    text = _tool_text(repo, "ask", {"question": "cache invalidation module"})
+    payload = json.loads(text)
+
+    assert "question" in payload
+    assert payload["question"] == "cache invalidation module"
+    assert "entries" in payload
+    assert isinstance(payload["entries"], list)
+    assert len(payload["entries"]) >= 1
+
+    match = next((e for e in payload["entries"] if e["memory_id"] == mem_id), None)
+    assert match is not None, f"Expected seeded memory {mem_id!r} in entries"
+    assert "memory_id" in match
+    assert "title" in match
+    assert "kind" in match
+    assert "relevance" in match
+    assert isinstance(match["relevance"], float)
+
+    # Entries must be sorted by relevance descending.
+    relevances = [e["relevance"] for e in payload["entries"]]
+    assert relevances == sorted(relevances, reverse=True)
+
+
+def test_ask_empty_brain_returns_clean_empty_result(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """ask with an empty brain returns a clean payload with empty entries, no exception."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    # Do NOT ingest or seed; brain is empty.
+
+    text = _tool_text(repo, "ask", {"question": "xyzzy frabbitz quux bizarre question"})
+    payload = json.loads(text)
+
+    assert "question" in payload
+    assert "entries" in payload
+    assert isinstance(payload["entries"], list)
+    assert payload["entries"] == []
+
+
+def test_ask_respects_limit(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    json_format: None,
+) -> None:
+    """ask honours the limit argument."""
+    monkeypatch.chdir(sample_repo)
+    repo = init(sample_repo)
+    repo.ingest()
+    # Seed 5 memories with the same keyword to ensure matches.
+    for i in range(5):
+        _seed_ask_memory(
+            repo,
+            title=f"Cache decision {i}",
+            summary=f"Cache routing rule {i}: always route through the shared cache module.",
+        )
+
+    text = _tool_text(repo, "ask", {"question": "cache routing module", "limit": 2})
+    payload = json.loads(text)
+
+    assert isinstance(payload["entries"], list)
+    assert len(payload["entries"]) <= 2
+
+
+def test_ask_returns_toon_by_default(
+    sample_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ask returns TOON (not JSON) without ONMC_MCP_FORMAT=json."""
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.delenv("ONMC_MCP_FORMAT", raising=False)
+    repo = init(sample_repo)
+    repo.ingest()
+    _seed_ask_memory(
+        repo,
+        title="Cache invalidation decision",
+        summary="Always route cache invalidation through the shared cache module.",
+    )
+
+    text = _tool_text(repo, "ask", {"question": "cache invalidation"})
+
+    try:
+        json.loads(text)
+        is_json = True
+    except json.JSONDecodeError:
+        is_json = False
+    assert not is_json, "Default output should be TOON, not JSON"
+    assert "question" in text or "cache" in text.lower()

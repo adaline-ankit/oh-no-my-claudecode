@@ -1028,6 +1028,61 @@ class OnmcService:
 
         return repo_root, result
 
+    def pull_all(
+        self,
+        *,
+        dry_run: bool = False,
+    ) -> tuple[Path, list[tuple[str, PullResult | Exception]]]:
+        """Pull memories from every source in ``federation.sources`` config.
+
+        Iterates the configured sources in order.  For each source, dispatches
+        to :func:`~oh_no_my_claudecode.federation.remote.clone_and_pull` (git
+        URL) or :func:`~oh_no_my_claudecode.federation.pull.pull_memories`
+        (local path), mirroring :meth:`pull`.
+
+        One source failing never aborts the rest — errors are captured
+        per-source and returned alongside successful :class:`PullResult` objects.
+
+        Parameters
+        ----------
+        dry_run:
+            When *True*, print what would be pulled without writing any
+            memories.
+
+        Returns
+        -------
+        tuple[Path, list[tuple[str, PullResult | Exception]]]
+            ``(local_repo_root, results)`` where *results* is an ordered list of
+            ``(source_identifier, PullResult | Exception)`` — one entry per
+            configured source.
+        """
+        from oh_no_my_claudecode.federation.pull import PullResult as _PullResult
+        from oh_no_my_claudecode.federation.pull import pull_memories
+        from oh_no_my_claudecode.federation.remote import clone_and_pull, is_git_url
+
+        repo_root, config, storage = self._load_context()
+        results: list[tuple[str, _PullResult | Exception]] = []
+
+        for federation_source in config.federation.sources:
+            src = federation_source.path_or_url
+            label = federation_source.label
+            ref = federation_source.ref
+            if dry_run:
+                results.append(
+                    (src, _PullResult(source=src, repo_label=label or "", imported=0, skipped=0))
+                )
+                continue
+            try:
+                if is_git_url(src):
+                    result = clone_and_pull(storage, src, ref=ref, repo_label=label)
+                else:
+                    result = pull_memories(storage, Path(src), repo_label=label)
+                results.append((src, result))
+            except Exception as exc:  # noqa: BLE001
+                results.append((src, exc))
+
+        return repo_root, results
+
     def spec_validate(self, path: Path | None = None) -> tuple[Path, SpecValidationReport]:
         """Validate that a .agent-memory/ directory conforms to the open spec."""
         from oh_no_my_claudecode.spec.validator import validate_agent_memory_dir

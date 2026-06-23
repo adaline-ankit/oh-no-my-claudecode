@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from oh_no_my_claudecode.models.llm import LLMSettings
 
@@ -92,6 +92,72 @@ class BriefSettings(BaseModel):
     max_patterns: int = 5
 
 
+class FederationSource(BaseModel):
+    """A single configured federation source (local path or git URL).
+
+    Accepts either a bare string (resolved to ``source``) or an object with
+    optional ``label`` and ``ref`` fields::
+
+        # bare string form in config.yaml:
+        federation:
+          sources:
+            - ../sibling-repo
+            - https://github.com/org/shared-brain
+
+        # object form with overrides:
+        federation:
+          sources:
+            - path_or_url: ../sibling-repo
+              label: sibling
+            - path_or_url: https://github.com/org/shared-brain
+              label: shared
+              ref: main
+    """
+
+    path_or_url: str
+    """Local filesystem path or remote git URL."""
+
+    label: str | None = None
+    """Optional override for the ``federated:<label>`` tag."""
+
+    ref: str | None = None
+    """Branch/tag/commit to check out when cloning (git URLs only)."""
+
+
+class FederationSettings(BaseModel):
+    """Federation configuration block in config.yaml.
+
+    Example::
+
+        federation:
+          sources:
+            - ../sibling-repo
+            - path_or_url: https://github.com/org/brain
+              label: shared-brain
+              ref: main
+    """
+
+    sources: list[FederationSource] = Field(default_factory=list)
+    """Ordered list of federation sources to pull when ``onmc pull --all`` is run."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_bare_strings(cls, data: object) -> object:
+        """Allow a source list entry to be a plain string (treated as path_or_url)."""
+        if not isinstance(data, dict):
+            return data
+        raw_sources = data.get("sources")
+        if not isinstance(raw_sources, list):
+            return data
+        coerced: list[object] = []
+        for item in raw_sources:
+            if isinstance(item, str):
+                coerced.append({"path_or_url": item})
+            else:
+                coerced.append(item)
+        return {**data, "sources": coerced}
+
+
 class ProjectConfig(BaseModel):
     version: int = 1
     repo_root: str
@@ -100,3 +166,4 @@ class ProjectConfig(BaseModel):
     brief: BriefSettings = Field(default_factory=BriefSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
     notify: NotifySettings = Field(default_factory=NotifySettings)
+    federation: FederationSettings = Field(default_factory=FederationSettings)
