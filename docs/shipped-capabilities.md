@@ -361,6 +361,9 @@ onmc ui
 The read-only local dashboard exposes overview metrics, searchable memory, task state, repository
 hotspots, health signals, and the shareable readiness report. It binds to `127.0.0.1:8765` by
 default and uses packaged static assets with no hosted service or frontend runtime dependency.
+`onmc ui --export onmc-brain.html` writes a self-contained, zero-network snapshot with embedded
+data and a restrictive Content Security Policy. This gives maintainers a portable visual artifact
+for demos and handoffs without introducing a hosted dashboard.
 
 ### 16. Obsidian Knowledge Vault
 

@@ -196,9 +196,12 @@ onmc codegraph --max-files 25
 ```bash
 onmc ui
 onmc ui --no-open --port 9001
+onmc ui --export onmc-brain.html --no-open
 ```
 
-Dashboard stays local and read-only by default at `http://127.0.0.1:8765`.
+Dashboard stays local and read-only by default at `http://127.0.0.1:8765`. `--export` writes one
+self-contained HTML snapshot for handoffs, demos, and screenshots. Review repository memory before
+sharing the file.
 
 ### Agent modes (optional LLM)
 

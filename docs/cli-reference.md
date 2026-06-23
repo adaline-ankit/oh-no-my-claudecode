@@ -183,15 +183,18 @@ Usage: onmc ui [OPTIONS]
  Open the local read-only ONMC visual dashboard.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --host                 TEXT                       Dashboard bind address.    │
-│                                                   [default: 127.0.0.1]       │
-│ --port                 INTEGER RANGE              Dashboard TCP port.        │
-│                        [0<=x<=65535]              [default: 8765]            │
-│ --open    --no-open                               Open the dashboard in a    │
-│                                                   browser.                   │
-│                                                   [default: open]            │
-│ --help                                            Show this message and      │
-│                                                   exit.                      │
+│ --host                   TEXT                      Dashboard bind address.   │
+│                                                    [default: 127.0.0.1]      │
+│ --port                   INTEGER RANGE             Dashboard TCP port.       │
+│                          [0<=x<=65535]             [default: 8765]           │
+│ --open      --no-open                              Open the dashboard in a   │
+│                                                    browser.                  │
+│                                                    [default: open]           │
+│ --export                 PATH                      Write a standalone HTML   │
+│                                                    snapshot instead of       │
+│                                                    serving.                  │
+│ --help                                             Show this message and     │
+│                                                    exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
