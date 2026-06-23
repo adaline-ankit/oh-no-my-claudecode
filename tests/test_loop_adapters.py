@@ -462,9 +462,13 @@ def test_cli_loop_help_contains_agent_flag() -> None:
         ["loop", "--help"],
         prog_name="onmc",
         color=False,
+        # Force a wide terminal so Rich does not wrap/truncate the options panel
+        # (in narrow CI terminals "--agent" would otherwise be split across lines).
+        env={"COLUMNS": "200"},
     )
     assert result.exit_code == 0
-    assert "--agent" in result.stdout
+    normalized = " ".join(result.stdout.split())
+    assert "--agent" in normalized
 
 
 def test_cli_loop_unknown_agent_rejected() -> None:
