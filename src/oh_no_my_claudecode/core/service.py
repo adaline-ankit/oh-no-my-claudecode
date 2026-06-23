@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.savings.compiler import SavingsResult
@@ -564,6 +565,78 @@ class OnmcService:
             return recall_md
         except Exception:  # noqa: BLE001
             return ""
+
+    def loop(
+        self,
+        goal: str,
+        *,
+        max_iterations: int = 10,
+        budget_tokens: int | None = None,
+        verify_command: str = "pytest",
+        dry_run: bool = False,
+    ) -> LoopResult:
+        """Run a memory-grounded autonomous loop against *goal*.
+
+        Each iteration recalls recorded dead-ends from memory (via compile_guard)
+        so the agent cannot repeat known failures.  WIN outcomes are recorded as
+        DECISION memories; LOSS outcomes are recorded as FAILED_APPROACH memories
+        so future iterations skip them automatically via the guard.
+
+        When *dry_run* is True, no agent or verify subprocess is invoked — only
+        the prompt that WOULD be sent is computed and returned in
+        ``result.iterations[0].action_summary``.  Safe to call without any
+        configured agent.
+        """
+        from oh_no_my_claudecode.loop.engine import (
+            _build_brief,  # noqa: PLC2701
+            _default_agent_runner,
+            _default_verify_runner,
+            run_loop,
+        )
+        from oh_no_my_claudecode.loop.models import (
+            IterationContract,
+            LoopConfig,
+            LoopResult,
+            LoopSpec,
+        )
+
+        repo_root, _, storage = self._load_context()
+        spec = LoopSpec(goal=goal)
+        config = LoopConfig(
+            max_iterations=max_iterations,
+            budget_tokens=budget_tokens,
+            verify_command=verify_command,
+        )
+
+        if dry_run:
+            brief = _build_brief(storage, goal, None, 0)
+            planned_prompt = f"## Goal\n\n{goal}\n\n" + brief
+            dry_contract = IterationContract(
+                iteration=0,
+                prediction="[dry-run: no agent invoked]",
+                action_summary=planned_prompt,
+                files_touched=[],
+                verify_passed=False,
+                verify_output="[dry-run: no verify invoked]",
+                outcome="loss",
+                tokens=None,
+            )
+            return LoopResult(
+                iterations=[dry_contract],
+                converged=False,
+                stop_reason="dry-run",
+                recorded_memory_ids=[],
+                total_tokens=0,
+            )
+
+        return run_loop(
+            storage,
+            repo_root,
+            spec,
+            config,
+            agent_runner=_default_agent_runner,
+            verify_runner=_default_verify_runner,
+        )
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""

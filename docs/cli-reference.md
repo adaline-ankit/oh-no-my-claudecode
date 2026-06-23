@@ -71,6 +71,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ feedback     Apply a human trust signal to a stored memory.                  │
 │ import       Import skills or memories from an external tool into the ONMC   │
 │              brain.                                                          │
+│ loop         Run a memory-grounded autonomous loop that avoids recorded      │
+│              dead-ends.                                                      │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -1731,6 +1733,48 @@ Usage: onmc savings [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc loop`
+
+```text
+Usage: onmc loop [OPTIONS]
+
+ Run a memory-grounded autonomous loop that avoids recorded dead-ends.
+
+ Each iteration recalls FAILED_APPROACH memories so the agent cannot repeat
+ known dead-ends.  Wins are recorded as DECISION memories; losses are
+ recorded as FAILED_APPROACH memories so future iterations block them.
+
+
+ Examples
+ --------
+ onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
+ onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
+ onmc loop --goal "refactor auth module" --dry-run          # preview prompt
+ only
+ onmc loop --goal "fix flaky test" --json                   # machine-readable
+ output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --goal                  TEXT                  Goal text for the loop         │
+│                                               (inline).                      │
+│ --spec                  TEXT                  Path to a file containing the  │
+│                                               goal text.                     │
+│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
+│                                               [default: 10]                  │
+│ --budget-tokens         INTEGER RANGE [x>=1]  Stop when total tokens exceed  │
+│                                               this budget.                   │
+│ --verify                TEXT                  Shell command run after each   │
+│                                               iteration to verify success.   │
+│                                               [default: pytest]              │
+│ --dry-run                                     Build the prompt and recall    │
+│                                               dead-ends without invoking the │
+│                                               agent or verify. Safe to run   │
+│                                               without any configured agent.  │
+│ --json                                        Print the full result as JSON. │
+│ --help                                        Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
