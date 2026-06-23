@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
+    from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
@@ -2132,6 +2133,112 @@ class OnmcService:
 
         report = compile_trace_report(events, session=session)
         return repo_root, sid, report
+
+    def replay(
+        self,
+        session_id_or_path: str,
+        *,
+        compare: bool = False,
+        with_memory: bool = True,
+        recall_limit: int = 8,
+    ) -> tuple[Path, ReplayReport | ReplayComparison]:
+        """Re-derive onmc memory hits over a recorded trace session.
+
+        Loads a session from ``.onmc/traces/<session_id>.jsonl`` (by session_id)
+        or from a direct JSONL file path.  For each query-bearing event in the
+        session, runs :func:`~oh_no_my_claudecode.recall.compiler.compile_recall`
+        and :func:`~oh_no_my_claudecode.guard.compiler.compile_guard` against the
+        current brain and returns a regression report.
+
+        No LLM is called.  Deterministic and offline.
+
+        Parameters
+        ----------
+        session_id_or_path:
+            A session ID (``tr_…``) or an absolute / relative file path to a
+            ``.jsonl`` session file.
+        compare:
+            When ``True``, run both ``with_memory=True`` and ``with_memory=False``
+            and return a :class:`~oh_no_my_claudecode.replay.models.ReplayComparison`.
+        with_memory:
+            When ``False`` and *compare* is ``False``, run the cold (no-memory)
+            baseline only.  Ignored when *compare* is ``True``.
+        recall_limit:
+            Max entries per :func:`compile_recall` call.
+
+        Returns
+        -------
+        tuple[Path, ReplayReport | ReplayComparison]
+            ``(repo_root, report_or_comparison)``
+
+        Raises
+        ------
+        FileNotFoundError
+            When the session file cannot be found.
+        """
+        from oh_no_my_claudecode.replay.lab import compare_replay, replay_session
+        from oh_no_my_claudecode.trace.recorder import load_session_events
+
+        repo_root, _, storage = self._load_context()
+
+        # Resolve the session file.
+        candidate_path = Path(session_id_or_path)
+        if candidate_path.exists():
+            # Treat it as a direct JSONL path.
+            resolved_path = candidate_path
+            resolved_sid = candidate_path.stem
+        else:
+            # Treat it as a session_id.
+            traces_dir = repo_root / ".onmc" / "traces"
+            resolved_path = traces_dir / f"{session_id_or_path}.jsonl"
+            resolved_sid = session_id_or_path
+
+        if not resolved_path.exists():
+            msg = (
+                f"Trace session not found: {session_id_or_path!r}. "
+                "Run 'onmc trace start' to record a session."
+            )
+            raise FileNotFoundError(msg)
+
+        # Load events using the standard loader.
+        session, events = load_session_events(
+            resolved_path.parent.parent.parent,  # repo_root for load_session_events
+            resolved_sid,
+        )
+        # If load_session_events fails (e.g. path-based input outside traces dir),
+        # fall back to reading the JSONL file directly.
+        if session is None and not events:
+            import json
+
+            raw_lines = resolved_path.read_text(encoding="utf-8").splitlines()
+            from oh_no_my_claudecode.trace.models import TraceEvent, TraceSession
+
+            for raw_line in raw_lines:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                rec_type = record.get("_type", "")
+                if rec_type == "session":
+                    session = TraceSession.from_record(record)
+                elif rec_type != "session_end":
+                    events.append(TraceEvent.from_record(record))
+
+        sid = session.session_id if session is not None else resolved_sid
+
+        if compare:
+            result: ReplayReport | ReplayComparison = compare_replay(
+                storage, events, session_id=sid, recall_limit=recall_limit
+            )
+        else:
+            result = replay_session(
+                storage,
+                events,
+                session_id=sid,
+                with_memory=with_memory,
+                recall_limit=recall_limit,
+            )
+        return repo_root, result
 
     def statusline(self) -> str:
         """Return a compact one-line health string for Claude Code statusLine.

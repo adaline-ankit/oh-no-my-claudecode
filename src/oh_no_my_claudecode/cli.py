@@ -4183,3 +4183,143 @@ def eval_compare_command(
 
     if baseline > 0 and comparison.score_delta < baseline:
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# onmc replay — Replay Lab
+# ---------------------------------------------------------------------------
+
+replay_app = typer.Typer(
+    help="Replay Lab — re-run a recorded session and produce a regression report.",
+    no_args_is_help=True,
+)
+app.add_typer(replay_app, name="replay")
+
+
+@replay_app.command("run")
+def replay_run_command(
+    session_id_or_path: Annotated[
+        str,
+        typer.Argument(
+            help=(
+                "Session ID (tr_…) to load from .onmc/traces/, "
+                "or a direct path to a .jsonl session file."
+            ),
+        ),
+    ],
+    compare: Annotated[
+        bool,
+        typer.Option(
+            "--compare",
+            help=(
+                "Run both with-memory and without-memory conditions and show a "
+                "side-by-side delta table."
+            ),
+        ),
+    ] = False,
+    without_memory: Annotated[
+        bool,
+        typer.Option(
+            "--without-memory",
+            help="Run the cold (no-memory) baseline only. Ignored when --compare is used.",
+        ),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Re-derive onmc memory hits over a recorded trace session.
+
+    Loads a session from .onmc/traces/<session-id>.jsonl (or a direct JSONL path),
+    then for each query-bearing event re-runs compile_recall and compile_guard
+    against the current brain.  Produces a regression report showing which steps
+    memory would have influenced.
+
+    No LLM is called.  Deterministic and offline.
+
+    Examples:
+
+      onmc replay run tr_abc123def456
+
+      onmc replay run tr_abc123def456 --compare
+
+      onmc replay run /path/to/session.jsonl --json
+
+      onmc replay run tr_abc123def456 --without-memory
+    """
+    import json as _json
+
+    try:
+        _, result = _service().replay(
+            session_id_or_path,
+            compare=compare,
+            with_memory=not without_memory,
+        )
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+
+        if isinstance(result, ReplayComparison):
+            w = result.with_memory
+            n = result.without_memory
+            data: dict[str, object] = {
+                "kind": "comparison",
+                "session_id": w.session_id,
+                "total_steps": w.total_steps,
+                "with_memory": {
+                    "steps_with_recall": w.steps_with_recall,
+                    "steps_with_deadend": w.steps_with_deadend,
+                    "mean_injected_chars": w.mean_injected_chars,
+                },
+                "without_memory": {
+                    "steps_with_recall": n.steps_with_recall,
+                    "steps_with_deadend": n.steps_with_deadend,
+                    "mean_injected_chars": n.mean_injected_chars,
+                },
+                "deltas": result.deltas,
+                "steps": [
+                    {
+                        "index": s.index,
+                        "query": s.query,
+                        "recall_hits": s.recall_hits,
+                        "deadend_hits": s.deadend_hits,
+                        "injected_chars": s.injected_chars,
+                    }
+                    for s in w.steps
+                ],
+            }
+        elif isinstance(result, ReplayReport):
+            data = {
+                "kind": "report",
+                "session_id": result.session_id,
+                "with_memory": result.with_memory,
+                "total_steps": result.total_steps,
+                "steps_with_recall": result.steps_with_recall,
+                "steps_with_deadend": result.steps_with_deadend,
+                "mean_injected_chars": result.mean_injected_chars,
+                "steps": [
+                    {
+                        "index": s.index,
+                        "query": s.query,
+                        "recall_hits": s.recall_hits,
+                        "deadend_hits": s.deadend_hits,
+                        "injected_chars": s.injected_chars,
+                    }
+                    for s in result.steps
+                ],
+            }
+        else:
+            data = {"kind": "unknown"}
+        typer.echo(_json.dumps(data, indent=2))
+        return
+
+    from oh_no_my_claudecode.rendering.console import render_replay_report
+    from oh_no_my_claudecode.replay.models import ReplayComparison
+
+    if isinstance(result, ReplayComparison):
+        render_replay_report(None, comparison=result)
+    else:
+        render_replay_report(result)

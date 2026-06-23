@@ -98,6 +98,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              token-ROI report.                                               │
 │ eval         Measure and gate memory recall quality (offline,                │
 │              deterministic).                                                 │
+│ replay       Replay Lab — re-run a recorded session and produce a regression │
+│              report.                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2334,5 +2336,60 @@ Usage: onmc eval compare [OPTIONS]
 │                                                  case.                       │
 │                                                  [default: 8]                │
 │ --help                                           Show this message and exit. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc replay`
+
+```text
+Usage: onmc replay [OPTIONS] COMMAND [ARGS]...
+
+ Replay Lab — re-run a recorded session and produce a regression report.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ run  Re-derive onmc memory hits over a recorded trace session.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc replay run`
+
+```text
+Usage: onmc replay run [OPTIONS] SESSION_ID_OR_PATH
+
+ Re-derive onmc memory hits over a recorded trace session.
+
+ Loads a session from .onmc/traces/<session-id>.jsonl (or a direct JSONL path),
+ then for each query-bearing event re-runs compile_recall and compile_guard
+ against the current brain.  Produces a regression report showing which steps
+ memory would have influenced.
+
+ No LLM is called.  Deterministic and offline.
+
+ Examples:
+
+   onmc replay run tr_abc123def456
+
+   onmc replay run tr_abc123def456 --compare
+
+   onmc replay run /path/to/session.jsonl --json
+
+   onmc replay run tr_abc123def456 --without-memory
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    session_id_or_path      TEXT  Session ID (tr_…) to load from            │
+│                                    .onmc/traces/, or a direct path to a      │
+│                                    .jsonl session file.                      │
+│                                    [required]                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --compare                 Run both with-memory and without-memory conditions │
+│                           and show a side-by-side delta table.               │
+│ --without-memory          Run the cold (no-memory) baseline only. Ignored    │
+│                           when --compare is used.                            │
+│ --json                    Emit machine-readable JSON to stdout.              │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

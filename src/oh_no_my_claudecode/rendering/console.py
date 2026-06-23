@@ -2247,3 +2247,179 @@ def render_mcp_decision_table(
         f"[dim]({total} total)[/dim]"
     )
     console.print("[dim]without-memory baseline: all retrieval results treated as empty.[/dim]")
+
+
+# ---------------------------------------------------------------------------
+# Replay Lab rendering
+# ---------------------------------------------------------------------------
+
+
+def render_replay_report(report: object, *, comparison: object = None) -> None:
+    """Render a :class:`~oh_no_my_claudecode.replay.models.ReplayReport` or
+    :class:`~oh_no_my_claudecode.replay.models.ReplayComparison`.
+
+    When *comparison* is provided, renders a side-by-side delta table plus both
+    per-condition summaries.  When only *report* is given, renders just that
+    report's step table and aggregate metrics.
+    """
+    from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+
+    if isinstance(comparison, ReplayComparison):
+        _render_replay_comparison(comparison)
+        return
+
+    if not isinstance(report, ReplayReport):
+        console.print("[yellow]No replay report to display.[/yellow]")
+        return
+
+    _render_replay_single(report)
+
+
+def _render_replay_single(report: object) -> None:
+    """Render a single :class:`~oh_no_my_claudecode.replay.models.ReplayReport`."""
+    from oh_no_my_claudecode.replay.models import ReplayReport
+
+    if not isinstance(report, ReplayReport):
+        return
+
+    condition = "WITH memory" if report.with_memory else "WITHOUT memory"
+    recall_color = "green" if report.steps_with_recall > 0 else "dim"
+
+    headline_parts = [
+        f"  [{recall_color}]{report.steps_with_recall} step(s)[/{recall_color}]"
+        f" with recall   "
+        f"[dim]{report.steps_with_deadend} with dead-end guard[/dim]"
+    ]
+    if report.total_steps == 0:
+        headline_parts = ["  [dim]No query-bearing events found in session.[/dim]"]
+
+    console.print(
+        Panel(
+            f"\n{''.join(headline_parts)}\n",
+            title=f"[bold blue]onmc replay — {condition}[/bold blue]",
+            border_style="blue" if report.with_memory else "dim",
+        )
+    )
+
+    if not report.steps:
+        console.print(
+            "[yellow]No query-bearing events to replay. "
+            "Record memory_hit, file_read, or search_query events.[/yellow]"
+        )
+        return
+
+    table = Table(
+        title=f"Replay Steps ({report.total_steps})",
+        show_lines=False,
+        box=None,
+        padding=(0, 2),
+    )
+    table.add_column("#", justify="right", width=5)
+    table.add_column("Query", min_width=32, no_wrap=False)
+    table.add_column("recall_hits", justify="right", width=12)
+    table.add_column("deadend_hits", justify="right", width=13)
+    table.add_column("injected_chars", justify="right", width=14)
+
+    for step in report.steps:
+        query_display = shorten(step.query, max_length=50)
+        recall_str = (
+            f"[green]{step.recall_hits}[/green]" if step.recall_hits > 0 else "[dim]0[/dim]"
+        )
+        deadend_str = (
+            f"[yellow]{step.deadend_hits}[/yellow]"
+            if step.deadend_hits > 0
+            else "[dim]0[/dim]"
+        )
+        table.add_row(
+            str(step.index),
+            query_display,
+            recall_str,
+            deadend_str,
+            str(step.injected_chars),
+        )
+    console.print(table)
+    console.print(
+        f"\n[dim]Total steps: {report.total_steps}  |  "
+        f"Steps with recall: {report.steps_with_recall}  |  "
+        f"Steps with dead-end: {report.steps_with_deadend}  |  "
+        f"Mean injected chars: {report.mean_injected_chars:.0f}[/dim]"
+    )
+    console.print("[dim]Methodology: deterministic, offline — no LLM calls.[/dim]")
+
+
+def _render_replay_comparison(comparison: object) -> None:
+    """Render a :class:`~oh_no_my_claudecode.replay.models.ReplayComparison`."""
+    from oh_no_my_claudecode.replay.models import ReplayComparison
+
+    if not isinstance(comparison, ReplayComparison):
+        return
+
+    w = comparison.with_memory
+    n = comparison.without_memory
+    deltas = comparison.deltas
+
+    added_recall = int(deltas.get("steps_where_recall_added", 0))
+    added_deadend = int(deltas.get("steps_where_deadend_added", 0))
+    changed_ctx = int(deltas.get("steps_where_context_changed", 0))
+    chars_delta = deltas.get("mean_chars_delta", 0.0)
+
+    delta_color = "green" if added_recall > 0 or added_deadend > 0 else "dim"
+
+    headline = (
+        f"  [{delta_color}]memory changed {changed_ctx} of {w.total_steps} step(s)[/{delta_color}]"
+        f"  [dim](recall added: {added_recall}, guard added: {added_deadend})[/dim]"
+    )
+    console.print(
+        Panel(
+            f"\n{headline}\n",
+            title="[bold blue]onmc replay compare — with vs without memory[/bold blue]",
+            border_style=delta_color,
+        )
+    )
+
+    table = Table(show_lines=False, box=None, padding=(0, 2))
+    table.add_column("Metric", style="bold", min_width=36)
+    table.add_column("Without memory", justify="right", width=16)
+    table.add_column("With memory", justify="right", width=14)
+    table.add_column("Delta", justify="right", width=10)
+
+    w_recall_str = (
+        f"[green]{w.steps_with_recall}[/green]"
+        if w.steps_with_recall > n.steps_with_recall
+        else str(w.steps_with_recall)
+    )
+    table.add_row(
+        "Steps with recall",
+        str(n.steps_with_recall),
+        w_recall_str,
+        f"[green]+{added_recall}[/green]" if added_recall > 0 else str(added_recall),
+    )
+    w_deadend_str = (
+        f"[green]{w.steps_with_deadend}[/green]"
+        if w.steps_with_deadend > n.steps_with_deadend
+        else str(w.steps_with_deadend)
+    )
+    table.add_row(
+        "Steps with dead-end guard",
+        str(n.steps_with_deadend),
+        w_deadend_str,
+        f"[green]+{added_deadend}[/green]" if added_deadend > 0 else str(added_deadend),
+    )
+    table.add_row(
+        "Steps where context changed",
+        "—",
+        "—",
+        f"[green]{changed_ctx}[/green]" if changed_ctx > 0 else str(changed_ctx),
+    )
+    table.add_row(
+        "Mean injected chars",
+        f"{n.mean_injected_chars:.0f}",
+        f"{w.mean_injected_chars:.0f}",
+        f"+{chars_delta:.0f}" if chars_delta >= 0 else f"{chars_delta:.0f}",
+    )
+    console.print(table)
+    console.print()
+    console.print("[dim]Methodology: deterministic, offline — no LLM calls.[/dim]")
+    console.print(
+        "[dim]without-memory baseline: all retrieval results treated as empty.[/dim]"
+    )
