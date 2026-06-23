@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-06-23
+
+### Added
+
+- **`onmc trace` — Agent Trace Observatory.** `onmc trace start|stop|report` instruments an agent session and produces a shareable token-ROI card: headline "saved X% (est)", tokens used vs estimated-without-onmc, repeated file reads blocked, tool calls/failures, memory hit-rate, and loop detection. Reuses the existing notify/firewall JSONL event stream (no second event bus) plus a session-scoped `.onmc/traces/<id>.jsonl`. `compile_trace_report` is pure + deterministic with estimates honestly labelled `(est)`. `--json` for machine output; `--otel <file>` emits OpenTelemetry GenAI (`gen_ai.*`) span dicts with zero SDK dependency.
+
 ## [0.26.0] — 2026-06-23
 
 ### Added
