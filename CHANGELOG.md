@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.31.0] — 2026-06-23
+
+### Added
+
+- **`onmc gh-aw init` — memory-aware GitHub Actions workflow pack.** Scaffolds 4 agentic workflows into `.github/workflows/onmc-*.yml` (rides the github/gh-aw trend): issue opened → `recall`/`guard` posts related failures + decisions; PR opened → `blame`/`guard`/`audit` posts blast-radius + related memories + a security check; PR merged → `mine` records the outcome so future agents learn; weekly cron → opens a stale-memory audit issue. Safe by default (read-only default permissions, comment-only safe-outputs, pinned action SHAs, plain `pull_request`, no `curl|bash`, no inline secrets). Idempotent (skip existing unless `--force`); `--dry-run` previews. `onmc gh-aw init [PATH] [--dry-run] [--force] [--json]`.
+
 ## [0.30.0] — 2026-06-23
 
 ### Added
