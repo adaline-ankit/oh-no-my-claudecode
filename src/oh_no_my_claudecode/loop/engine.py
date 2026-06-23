@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -230,6 +232,7 @@ def run_loop(
     agent_runner: AgentRunner,
     verify_runner: VerifyRunner,
     now: datetime | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> LoopResult:
     """Run a memory-grounded loop until convergence, budget, or max iterations.
 
@@ -245,7 +248,8 @@ def run_loop(
         Loop goal and optional success criteria.
     config:
         Runtime knobs: max_iterations, budget_tokens, verify_command,
-        escalation_threshold, no_progress_window.
+        escalation_threshold, no_progress_window, max_cost_usd,
+        max_wall_seconds.
     agent_runner:
         Injectable callable matching the AgentRunner protocol.  The default
         _default_agent_runner is a no-op stub; real runs inject a CLI agent.
@@ -255,23 +259,31 @@ def run_loop(
         _default_verify_runner shells out.  Tests MUST inject a fake.
     now:
         Reference timestamp for memory records (injectable for deterministic tests).
+    clock:
+        Injectable monotonic clock (``Callable[[], float]``).  Defaults to
+        ``time.monotonic``.  Tests inject a fake for deterministic wall-time
+        limit testing.
 
     Returns
     -------
     LoopResult
-        stop_reason is one of: 'converged' | 'max-iterations' | 'budget' | 'no-progress'.
+        stop_reason is one of:
+        'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' | 'wall-time'.
     """
     del repo_root  # reserved for future path-relative operations
 
     ref_now: datetime = now if now is not None else datetime.now(UTC)
+    _clock: Callable[[], float] = clock if clock is not None else time.monotonic
 
     iterations: list[IterationContract] = []
     recorded_memory_ids: list[str] = []
     total_tokens: int = 0
+    total_cost_usd: float = 0.0
     consecutive_losses: int = 0
     escalation_level: int = 0
     last_loss: IterationContract | None = None
     signature_counts: dict[str, int] = {}
+    wall_start: float = _clock()
 
     for i in range(1, config.max_iterations + 1):
         # Budget check before spending more tokens.
@@ -282,7 +294,32 @@ def run_loop(
                 stop_reason="budget",
                 recorded_memory_ids=recorded_memory_ids,
                 total_tokens=total_tokens,
+                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
             )
+
+        # Cost limit check before each iteration.
+        if config.max_cost_usd is not None and total_cost_usd >= config.max_cost_usd:
+            return LoopResult(
+                iterations=iterations,
+                converged=False,
+                stop_reason="cost",
+                recorded_memory_ids=recorded_memory_ids,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
+            )
+
+        # Wall-time limit check before each iteration.
+        if config.max_wall_seconds is not None:
+            elapsed = _clock() - wall_start
+            if elapsed >= config.max_wall_seconds:
+                return LoopResult(
+                    iterations=iterations,
+                    converged=False,
+                    stop_reason="wall-time",
+                    recorded_memory_ids=recorded_memory_ids,
+                    total_tokens=total_tokens,
+                    total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
+                )
 
         # Build the memory-grounded prompt.
         brief = _build_brief(storage, spec.goal, last_loss, escalation_level)
@@ -300,6 +337,8 @@ def run_loop(
         agent_result: AgentRunResult = agent_runner(prompt, escalation_level=escalation_level)
         if agent_result.tokens is not None:
             total_tokens += agent_result.tokens
+        if agent_result.cost_usd is not None:
+            total_cost_usd += agent_result.cost_usd
 
         # Verify.
         verify_outcome: VerifyOutcome = verify_runner(config.verify_command)
@@ -327,6 +366,7 @@ def run_loop(
                 stop_reason="converged",
                 recorded_memory_ids=recorded_memory_ids,
                 total_tokens=total_tokens,
+                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
             )
         else:
             # LOSS: record dead-end so next iteration's guard blocks it.
@@ -350,6 +390,7 @@ def run_loop(
                     stop_reason="no-progress",
                     recorded_memory_ids=recorded_memory_ids,
                     total_tokens=total_tokens,
+                    total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
                 )
 
     return LoopResult(
@@ -358,6 +399,7 @@ def run_loop(
         stop_reason="max-iterations",
         recorded_memory_ids=recorded_memory_ids,
         total_tokens=total_tokens,
+        total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
     )
 
 

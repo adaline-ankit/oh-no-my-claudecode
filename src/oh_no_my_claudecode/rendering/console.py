@@ -9,6 +9,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
@@ -1801,6 +1803,109 @@ def render_loop_result(result: LoopResult) -> None:
                 ]
             ),
             title="Loop Result",
+        )
+    )
+
+
+def render_loop_receipt_block(
+    result: LoopResult,
+    *,
+    receipt_path: Path | None,
+    verify_command: str,
+) -> None:
+    """Render the tamper-evident receipt demo block after a loop run.
+
+    Produces output like::
+
+        VERIFIED   (or: NOT VERIFIED — <stop_reason>)
+        Agent: claude
+        Iterations: 3
+        Budget: 84,230 / 150,000 tokens   (cost $1.42 · 14m)
+        Verifier: pytest → exit 0
+        Repeated failures blocked: N
+        Git tree: 93ac41...
+        Receipt: .agent-memory/receipts/run-....json
+    """
+    from oh_no_my_claudecode.loop.receipt import RunReceipt
+
+    # Try to load the receipt from disk for the most-accurate data.
+    receipt: RunReceipt | None = None
+    if receipt_path is not None:
+        try:
+            import json as _json
+            from dataclasses import fields as _fields
+
+            raw = _json.loads(receipt_path.read_text(encoding="utf-8"))
+            # Reconstruct the dataclass from the JSON dict.
+            known = {f.name for f in _fields(RunReceipt)}
+            receipt = RunReceipt(**{k: v for k, v in raw.items() if k in known})
+        except Exception:  # noqa: BLE001
+            receipt = None
+
+    if result.converged and (not result.iterations or result.iterations[-1].verify_passed):
+        status_line = "[bold green]VERIFIED[/bold green]"
+    else:
+        stop = result.stop_reason or "unknown"
+        status_line = f"[bold yellow]NOT VERIFIED[/bold yellow] — {stop}"
+
+    n_iter = len([c for c in result.iterations if c.iteration > 0])
+    tokens_used = result.total_tokens
+    cost_usd: float | None = result.total_cost_usd
+    wall_seconds: float | None = None
+    git_tree: str | None = None
+    verifier_exit: int | None = None
+
+    if receipt is not None:
+        cost_usd = receipt.cost_usd
+        wall_seconds = receipt.wall_seconds
+        git_tree = receipt.git_tree_sha
+        verifier_exit = receipt.verifier_final_exit
+
+    # Token line
+    token_str = f"{tokens_used:,}" if tokens_used else "0"
+    budget_str = token_str
+    cost_part = ""
+    if cost_usd is not None:
+        cost_part += f"  cost ${cost_usd:.2f}"
+    if wall_seconds is not None:
+        mins = int(wall_seconds // 60)
+        secs = int(wall_seconds % 60)
+        cost_part += f" · {mins}m{secs:02d}s" if mins > 0 else f" · {secs}s"
+    budget_line = f"Budget: {budget_str} tokens{cost_part}"
+
+    # Verifier line
+    exit_str = f"exit {verifier_exit}" if verifier_exit is not None else "exit ?"
+    verifier_line = f"Verifier: {verify_command} → {exit_str}"
+
+    # Repeated failures blocked (loss count)
+    loss_count = sum(1 for c in result.iterations if c.outcome == "loss" and c.iteration > 0)
+    failures_line = f"Repeated failures blocked: {loss_count}"
+
+    # Git tree line
+    git_line = f"Git tree: {git_tree[:12]}..." if git_tree else "Git tree: unavailable"
+
+    # Receipt line
+    if receipt_path is not None:
+        receipt_line = f"Receipt: {receipt_path}"
+    else:
+        receipt_line = "Receipt: (none — dry-run)"
+
+    lines = [
+        status_line,
+        f"Agent: claude  Iterations: {n_iter}",
+        budget_line,
+        verifier_line,
+        failures_line,
+        git_line,
+        receipt_line,
+    ]
+
+    border = "green" if result.converged else "yellow"
+    console.print(
+        Panel.fit(
+            "\n".join(lines),
+            title="Run Receipt",
+            border_style=border,
         )
     )
 
