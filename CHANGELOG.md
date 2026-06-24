@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-06-24
+
+### Added
+
+- **Loop token-storm circuit breaker.** Two tighter guards complement the existing no-progress/budget/cost/wall/max stops: `duplicate-action` (the same iteration signature repeats) and `repeated-error` (the same verify-error head repeats). The CLI/service enables sane defaults so `onmc loop`/`onmc autopilot` are protected from token storms out of the box (the raw engine keeps them off for backward-compat).
+- **Worktree isolation + rollback.** `onmc loop --isolate` runs the agent in a fresh git worktree; on failure the worktree is removed (the caller's working tree stays clean), on success it is kept. Backed by an injectable isolation provider; git-worktree failure degrades gracefully to in-place.
+
 ## [0.45.0] — 2026-06-24
 
 ### Added
