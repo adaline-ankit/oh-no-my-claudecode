@@ -2879,6 +2879,51 @@ class OnmcService:
 
         return pruned
 
+    def skill_export(
+        self,
+        *,
+        out_dir: Path | None = None,
+        scope: str = "project",
+    ) -> list[Path]:
+        """Export all persisted skills as Agent Skills SKILL.md files.
+
+        Writes one ``<out_dir>/<slug>/SKILL.md`` per skill.  The output is
+        compatible with the agentskills.io open standard, understood by 16+
+        tools: Claude Code, Cursor, Codex, Gemini, Copilot, OpenCode, Goose,
+        Letta, Hermes, and more.
+
+        Parameters
+        ----------
+        out_dir:
+            Destination directory.  Defaults to ``<repo_root>/.claude/skills/``
+            (project scope) or ``~/.claude/skills/`` (personal scope).
+        scope:
+            ``"project"`` (default) writes to the current repo's
+            ``.claude/skills/``; ``"personal"`` writes to ``~/.claude/skills/``.
+            Ignored when *out_dir* is supplied explicitly.
+
+        Returns
+        -------
+        list[Path]
+            Paths of SKILL.md files actually written (empty when the store has
+            no skills or when all files were already up to date).
+        """
+        from oh_no_my_claudecode.skill.export import export_skills as _export_skills
+
+        repo_root, _, storage = self._load_context()
+        skills = storage.list_skills()
+        if not skills:
+            return []
+
+        if out_dir is not None:
+            resolved_dir = out_dir
+        elif scope == "personal":
+            resolved_dir = Path.home() / ".claude" / "skills"
+        else:
+            resolved_dir = repo_root / ".claude" / "skills"
+
+        return _export_skills(skills, resolved_dir)
+
     # ── Import from external tool formats ─────────────────────────────────────
 
     def import_from(
