@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.43.0] — 2026-06-24
+
+### Added
+
+- **First-class OpenCode support.** `onmc loop`/`onmc autopilot --agent opencode` drives OpenCode headless (`opencode run --format json [--model provider/model]`) behind the injectable runner, with defensive output/token parsing and graceful missing-binary handling. `onmc plug opencode` writes an idempotent onmc stanza into `AGENTS.md` (coexisting with the codex stanza) plus a `.opencode/skills/` index, and is included in the `all` target. Reaches OpenCode's model-agnostic user base while keeping onmc's vendor-neutral, one-loop-any-agent posture.
+
 ## [0.42.0] — 2026-06-24
 
 ### Added
