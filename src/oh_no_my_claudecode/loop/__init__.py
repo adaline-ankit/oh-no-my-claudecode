@@ -7,6 +7,12 @@ failures, then records the outcome back into storage so future iterations improv
 
 from __future__ import annotations
 
+from oh_no_my_claudecode.loop.checkpoint import (
+    CheckpointState,
+    CheckpointStore,
+    FileCheckpointStore,
+    InMemoryCheckpointStore,
+)
 from oh_no_my_claudecode.loop.engine import run_loop
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
@@ -18,15 +24,23 @@ from oh_no_my_claudecode.loop.models import (
     VerifyOutcome,
     VerifyRunner,
 )
+from oh_no_my_claudecode.loop.templates import LoopTemplate, get_template, list_templates
 
 __all__ = [
     "AgentRunResult",
     "AgentRunner",
+    "CheckpointState",
+    "CheckpointStore",
+    "FileCheckpointStore",
+    "InMemoryCheckpointStore",
     "IterationContract",
     "LoopConfig",
     "LoopResult",
     "LoopSpec",
+    "LoopTemplate",
     "VerifyOutcome",
     "VerifyRunner",
+    "get_template",
+    "list_templates",
     "run_loop",
 ]

@@ -17,93 +17,96 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ --help                        Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ tui          Open the interactive terminal brain-browser for memory          │
-│              curation.                                                       │
-│ setup        Run the interactive ONMC onboarding wizard.                     │
-│ init         Initialize ONMC state in the current git repository.            │
-│ ingest       Ingest repo knowledge into local structured memory.             │
-│ brief        Compile a task-specific context brief.                          │
-│ codegraph    Generate a compact codegraph for token-efficient agent          │
-│              navigation.                                                     │
-│ why          Explain why a file looks the way it does, from memory + git     │
-│              history.                                                        │
-│ onboard      Give a new dev (or agent) the guided five-minute repo tour from │
-│              memory.                                                         │
-│ blame        Git blame for knowledge: map a file's symbols to the memories   │
-│              that govern them.                                               │
-│ coverage     Show a knowledge-gap dashboard: coverage % + uncovered hotspot  │
-│              files.                                                          │
-│ memory-diff  Show what repo knowledge changed between two commits.           │
-│ digest       Show what the repo/team learned since a git ref.                │
-│ guard        Surface recorded dead-ends so you never repeat a known failure. │
-│ recall       Search memory for past incidents matching an error or           │
-│              stacktrace.                                                     │
-│ ask          Ask a natural-language question answered from repo memory.      │
-│ check        Flag staged/changed files that touch recorded invariants or     │
-│              dead-ends.                                                      │
-│ ui           Open the local read-only ONMC visual dashboard.                 │
-│ status       Show local ONMC status.                                         │
-│ statusline   Print a compact one-line brain health string for Claude Code    │
-│              statusLine.                                                     │
-│ hud          Display a rich multi-line memory health HUD panel.              │
-│ report       Generate a shareable agent-readiness report.                    │
-│ sync         Export, restore, or hook git-portable ONMC memory state.        │
-│ pull         Import another repo's .agent-memory/ export into this brain     │
-│              (federated memories).                                           │
-│ serve        Serve ONMC over the requested runtime protocol.                 │
-│ solve        Compile repo-aware context and ask the configured LLM for the   │
-│              next best approach.                                             │
-│ review       Compile repo-aware review context and critique the proposed     │
-│              approach.                                                       │
-│ teach        Compile repo-aware teaching context and generate a learning     │
-│              artifact.                                                       │
-│ consolidate  Clean and strengthen the memory store (dedup, merge,            │
-│              promote/demote, edge graph).                                    │
-│ mine         Mine Claude Code session transcripts into ONMC memory.          │
-│ capture      Heuristically capture durable memory from a session transcript. │
-│ doctor       Run a health check over repo state, memory, provider setup, and │
-│              integrations.                                                   │
-│ audit        Scan agent configuration for security risks and emit a scored   │
-│              report.                                                         │
-│ wiki         Generate a markdown wiki or Obsidian knowledge-graph vault.     │
-│ bench        Measure whether onmc memory actually reduces wasted work.       │
-│ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
-│ evolution    Show the compounding-proof evolution card across loop/autopilot │
-│              runs.                                                           │
-│ benchmark    Run a reproducible benchmark suite against the current repo     │
-│              brain.                                                          │
-│ plug         Wire onmc into a target coding agent (one-shot idempotent       │
-│              wizard).                                                        │
-│ feedback     Apply a human trust signal to a stored memory.                  │
-│ import       Import skills or memories from an external tool into the ONMC   │
-│              brain.                                                          │
-│ loop         Run a memory-grounded autonomous loop that avoids recorded      │
-│              dead-ends.                                                      │
-│ autopilot    Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on a   │
-│              goal.                                                           │
-│ memory       Inspect stored memory.                                          │
-│ spec         Inspect and validate the Agent Memory open spec.                │
-│ task         Manage task lifecycle state.                                    │
-│ attempt      Track task-scoped attempts.                                     │
-│ llm          Configure optional LLM providers.                               │
-│ hooks        Install and run Claude Code compaction hooks.                   │
-│ claude-md    Generate and maintain CLAUDE.md from ONMC memory.               │
-│ playbook     Synthesize and manage memory-derived playbooks.                 │
-│ skill        Manage self-improving skills synthesized from playbooks and     │
-│              memory patterns.                                                │
-│ user         Manage cross-repo user preferences (stored in ~/.onmc, not      │
-│              repo-scoped).                                                   │
-│ profile      Show and rebuild the derived user behavioral profile            │
-│              (~/.onmc/user.db).                                              │
-│ notify       Inspect and test the context firewall notification sink.        │
-│ gh-aw        Scaffold memory-aware GitHub Actions agentic workflows.         │
-│ mcp          MCP Trust Gateway — classify tool calls against a policy.       │
-│ trace        Agent Trace Observatory — instrument a session and get a        │
-│              token-ROI report.                                               │
-│ eval         Measure and gate memory recall quality (offline,                │
-│              deterministic).                                                 │
-│ replay       Replay Lab — re-run a recorded session and produce a regression │
-│              report.                                                         │
+│ tui             Open the interactive terminal brain-browser for memory       │
+│                 curation.                                                    │
+│ setup           Run the interactive ONMC onboarding wizard.                  │
+│ init            Initialize ONMC state in the current git repository.         │
+│ ingest          Ingest repo knowledge into local structured memory.          │
+│ brief           Compile a task-specific context brief.                       │
+│ codegraph       Generate a compact codegraph for token-efficient agent       │
+│                 navigation.                                                  │
+│ why             Explain why a file looks the way it does, from memory + git  │
+│                 history.                                                     │
+│ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
+│                 from memory.                                                 │
+│ blame           Git blame for knowledge: map a file's symbols to the         │
+│                 memories that govern them.                                   │
+│ coverage        Show a knowledge-gap dashboard: coverage % + uncovered       │
+│                 hotspot files.                                               │
+│ memory-diff     Show what repo knowledge changed between two commits.        │
+│ digest          Show what the repo/team learned since a git ref.             │
+│ guard           Surface recorded dead-ends so you never repeat a known       │
+│                 failure.                                                     │
+│ recall          Search memory for past incidents matching an error or        │
+│                 stacktrace.                                                  │
+│ ask             Ask a natural-language question answered from repo memory.   │
+│ check           Flag staged/changed files that touch recorded invariants or  │
+│                 dead-ends.                                                   │
+│ ui              Open the local read-only ONMC visual dashboard.              │
+│ status          Show local ONMC status.                                      │
+│ statusline      Print a compact one-line brain health string for Claude Code │
+│                 statusLine.                                                  │
+│ hud             Display a rich multi-line memory health HUD panel.           │
+│ report          Generate a shareable agent-readiness report.                 │
+│ sync            Export, restore, or hook git-portable ONMC memory state.     │
+│ pull            Import another repo's .agent-memory/ export into this brain  │
+│                 (federated memories).                                        │
+│ serve           Serve ONMC over the requested runtime protocol.              │
+│ solve           Compile repo-aware context and ask the configured LLM for    │
+│                 the next best approach.                                      │
+│ review          Compile repo-aware review context and critique the proposed  │
+│                 approach.                                                    │
+│ teach           Compile repo-aware teaching context and generate a learning  │
+│                 artifact.                                                    │
+│ consolidate     Clean and strengthen the memory store (dedup, merge,         │
+│                 promote/demote, edge graph).                                 │
+│ mine            Mine Claude Code session transcripts into ONMC memory.       │
+│ capture         Heuristically capture durable memory from a session          │
+│                 transcript.                                                  │
+│ doctor          Run a health check over repo state, memory, provider setup,  │
+│                 and integrations.                                            │
+│ audit           Scan agent configuration for security risks and emit a       │
+│                 scored report.                                               │
+│ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
+│ bench           Measure whether onmc memory actually reduces wasted work.    │
+│ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
+│ evolution       Show the compounding-proof evolution card across             │
+│                 loop/autopilot runs.                                         │
+│ benchmark       Run a reproducible benchmark suite against the current repo  │
+│                 brain.                                                       │
+│ plug            Wire onmc into a target coding agent (one-shot idempotent    │
+│                 wizard).                                                     │
+│ feedback        Apply a human trust signal to a stored memory.               │
+│ import          Import skills or memories from an external tool into the     │
+│                 ONMC brain.                                                  │
+│ loop            Run a memory-grounded autonomous loop that avoids recorded   │
+│                 dead-ends.                                                   │
+│ loop-templates  List available built-in loop templates.                      │
+│ autopilot       Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on  │
+│                 a goal.                                                      │
+│ memory          Inspect stored memory.                                       │
+│ spec            Inspect and validate the Agent Memory open spec.             │
+│ task            Manage task lifecycle state.                                 │
+│ attempt         Track task-scoped attempts.                                  │
+│ llm             Configure optional LLM providers.                            │
+│ hooks           Install and run Claude Code compaction hooks.                │
+│ claude-md       Generate and maintain CLAUDE.md from ONMC memory.            │
+│ playbook        Synthesize and manage memory-derived playbooks.              │
+│ skill           Manage self-improving skills synthesized from playbooks and  │
+│                 memory patterns.                                             │
+│ user            Manage cross-repo user preferences (stored in ~/.onmc, not   │
+│                 repo-scoped).                                                │
+│ profile         Show and rebuild the derived user behavioral profile         │
+│                 (~/.onmc/user.db).                                           │
+│ notify          Inspect and test the context firewall notification sink.     │
+│ gh-aw           Scaffold memory-aware GitHub Actions agentic workflows.      │
+│ mcp             MCP Trust Gateway — classify tool calls against a policy.    │
+│ trace           Agent Trace Observatory — instrument a session and get a     │
+│                 token-ROI report.                                            │
+│ eval            Measure and gate memory recall quality (offline,             │
+│                 deterministic).                                              │
+│ replay          Replay Lab — re-run a recorded session and produce a         │
+│                 regression report.                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1885,7 +1888,9 @@ Usage: onmc loop [OPTIONS]
  recorded as FAILED_APPROACH memories so future iterations block them.
 
  A tamper-evident run receipt is written to .agent-memory/receipts/ after
- every non-dry-run invocation.
+ every non-dry-run invocation.  A checkpoint is saved to
+ .onmc/loop-state/ after every iteration so runs can be resumed with
+ --resume.
 
 
  Examples
@@ -1903,23 +1908,40 @@ Usage: onmc loop [OPTIONS]
  minutes
  onmc loop --goal "fix bug" --isolate                       # run in isolated
  worktree
+ onmc loop --goal "fix bug" --max-wall-seconds 60 && onmc loop --goal "fix bug"
+ --resume
+ onmc loop --template ci-healer                             # use built-in
+ template
+ onmc loop --template issue-to-pr --goal "implement #42"   # template + custom
+ goal
+ onmc loop --list-templates                                 # show all
+ templates
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --goal                    TEXT                  Goal text for the loop       │
 │                                                 (inline).                    │
 │ --spec                    TEXT                  Path to a file containing    │
 │                                                 the goal text.               │
+│ --template                TEXT                  Use a built-in loop template │
+│                                                 to prefill goal, verify, and │
+│                                                 limits. Available:           │
+│                                                 ci-healer, pr-babysitter,    │
+│                                                 issue-to-pr. Explicit flags  │
+│                                                 override template defaults.  │
+│                                                 Use --list-templates to see  │
+│                                                 all templates with           │
+│                                                 descriptions.                │
+│ --list-templates                                Print available built-in     │
+│                                                 loop templates and exit.     │
 │ --agent                   TEXT                  Agent CLI to use: claude     │
 │                                                 (default), codex, or         │
 │                                                 opencode.                    │
 │                                                 [default: claude]            │
 │ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
-│                                                 [default: 10]                │
 │ --budget-tokens           INTEGER RANGE [x>=1]  Stop when total tokens       │
 │                                                 exceed this budget.          │
 │ --verify                  TEXT                  Shell command run after each │
 │                                                 iteration to verify success. │
-│                                                 [default: pytest]            │
 │ --dry-run                                       Build the prompt and recall  │
 │                                                 dead-ends without invoking   │
 │                                                 the agent or verify. Safe to │
@@ -1947,7 +1969,39 @@ Usage: onmc loop [OPTIONS]
 │                                                 gracefully (warns + runs     │
 │                                                 in-place) when git worktree  │
 │                                                 add fails.                   │
+│ --resume                                        Resume a previous run from   │
+│                                                 its last checkpoint. Loads   │
+│                                                 the checkpoint for the       │
+│                                                 matching goal + verify pair  │
+│                                                 and continues from the next  │
+│                                                 iteration, preserving all    │
+│                                                 prior contracts and          │
+│                                                 counters. No-op when no      │
+│                                                 matching checkpoint exists.  │
 │ --help                                          Show this message and exit.  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc loop-templates`
+
+```text
+Usage: onmc loop-templates [OPTIONS]
+
+ List available built-in loop templates.
+
+ Each template prefills goal, verify command, and iteration limits for
+ common autonomous-agent workflows.  Pass a template name to
+ ``onmc loop --template <name>`` to use it.
+
+
+ Available templates
+ -------------------
+ ci-healer      Fix failing CI without changing public behaviour.
+ pr-babysitter  Keep a pull request green (rebase, resolve conflicts).
+ issue-to-pr    Implement a GitHub issue as a PR-ready change.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

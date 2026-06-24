@@ -3818,22 +3818,41 @@ def loop_command(
         str | None,
         typer.Option("--spec", help="Path to a file containing the goal text."),
     ] = None,
+    template: Annotated[
+        str | None,
+        typer.Option(
+            "--template",
+            help=(
+                "Use a built-in loop template to prefill goal, verify, and limits. "
+                "Available: ci-healer, pr-babysitter, issue-to-pr. "
+                "Explicit flags override template defaults. "
+                "Use --list-templates to see all templates with descriptions."
+            ),
+        ),
+    ] = None,
+    list_templates: Annotated[
+        bool,
+        typer.Option(
+            "--list-templates",
+            help="Print available built-in loop templates and exit.",
+        ),
+    ] = False,
     agent: Annotated[
         str,
         typer.Option("--agent", help="Agent CLI to use: claude (default), codex, or opencode."),
     ] = "claude",
     max_iterations: Annotated[
-        int,
+        int | None,
         typer.Option("--max-iterations", min=1, help="Maximum loop iterations."),
-    ] = 10,
+    ] = None,
     budget_tokens: Annotated[
         int | None,
         typer.Option("--budget-tokens", min=1, help="Stop when total tokens exceed this budget."),
     ] = None,
     verify: Annotated[
-        str,
+        str | None,
         typer.Option("--verify", help="Shell command run after each iteration to verify success."),
-    ] = "pytest",
+    ] = None,
     dry_run: Annotated[
         bool,
         typer.Option(
@@ -3877,6 +3896,18 @@ def loop_command(
             ),
         ),
     ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help=(
+                "Resume a previous run from its last checkpoint. "
+                "Loads the checkpoint for the matching goal + verify pair "
+                "and continues from the next iteration, preserving all prior "
+                "contracts and counters. No-op when no matching checkpoint exists."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run a memory-grounded autonomous loop that avoids recorded dead-ends.
 
@@ -3885,7 +3916,9 @@ def loop_command(
     recorded as FAILED_APPROACH memories so future iterations block them.
 
     A tamper-evident run receipt is written to .agent-memory/receipts/ after
-    every non-dry-run invocation.
+    every non-dry-run invocation.  A checkpoint is saved to
+    .onmc/loop-state/ after every iteration so runs can be resumed with
+    --resume.
 
     \b
     Examples
@@ -3899,19 +3932,57 @@ def loop_command(
     onmc loop --goal "fix bug" --max-cost-usd 2.00             # stop at $2 spend
     onmc loop --goal "fix bug" --max-wall-seconds 300          # stop after 5 minutes
     onmc loop --goal "fix bug" --isolate                       # run in isolated worktree
+    onmc loop --goal "fix bug" --max-wall-seconds 60 && onmc loop --goal "fix bug" --resume
+    onmc loop --template ci-healer                             # use built-in template
+    onmc loop --template issue-to-pr --goal "implement #42"   # template + custom goal
+    onmc loop --list-templates                                 # show all templates
     """
     import dataclasses
     import json as _json
 
-    if goal is None and spec is None:
-        raise typer.Exit(code=_fatal("Provide --goal or --spec."))
+    from oh_no_my_claudecode.loop.templates import get_template
+    from oh_no_my_claudecode.loop.templates import list_templates as _list_templates
+
+    # --list-templates: print table and exit.
+    if list_templates:
+        console.print("[bold]Available loop templates:[/bold]")
+        for name, desc in _list_templates():
+            console.print(f"  [cyan]{name}[/cyan]  {desc}")
+        raise typer.Exit(code=0)
+
+    # Resolve template defaults first; explicit flags override.
+    _tmpl_goal: str | None = None
+    _tmpl_verify: str | None = None
+    _tmpl_max_iterations: int = 10
+    _tmpl_max_cost_usd: float | None = None
+    _tmpl_max_wall_seconds: int | None = None
+
+    if template is not None:
+        try:
+            tmpl = get_template(template)
+        except ValueError as exc:
+            raise typer.Exit(code=_fatal(str(exc))) from exc
+        _tmpl_goal = tmpl.goal
+        _tmpl_verify = tmpl.verify
+        _tmpl_max_iterations = tmpl.max_iterations
+        _tmpl_max_cost_usd = tmpl.max_cost_usd
+        _tmpl_max_wall_seconds = tmpl.max_wall_seconds
+
+    # Apply flag overrides on top of template defaults.
+    _resolved_verify: str = verify if verify is not None else (_tmpl_verify or "pytest")
+    _resolved_max_iterations: int = (
+        max_iterations if max_iterations is not None else _tmpl_max_iterations
+    )
+    _resolved_max_cost_usd: float | None = (
+        max_cost_usd if max_cost_usd is not None else _tmpl_max_cost_usd
+    )
+    _resolved_max_wall_seconds: int | None = (
+        max_wall_seconds if max_wall_seconds is not None else _tmpl_max_wall_seconds
+    )
+
+    # Goal resolution: explicit --goal / --spec always win; fall back to template goal.
     if goal is not None and spec is not None:
         raise typer.Exit(code=_fatal("Provide either --goal or --spec, not both."))
-
-    if agent not in {"claude", "codex", "opencode"}:
-        raise typer.Exit(
-            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
-        )
 
     resolved_goal: str
     if spec is not None:
@@ -3919,20 +3990,30 @@ def loop_command(
         if not spec_path.exists():
             raise typer.Exit(code=_fatal(f"Spec file not found: {spec}"))
         resolved_goal = spec_path.read_text(encoding="utf-8").strip()
+    elif goal is not None:
+        resolved_goal = goal
+    elif _tmpl_goal is not None:
+        resolved_goal = _tmpl_goal
     else:
-        resolved_goal = goal  # type: ignore[assignment]
+        raise typer.Exit(code=_fatal("Provide --goal, --spec, or --template."))
+
+    if agent not in {"claude", "codex", "opencode"}:
+        raise typer.Exit(
+            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
+        )
 
     try:
         result, receipt_path = _service().loop(
             resolved_goal,
             agent=agent,
-            max_iterations=max_iterations,
+            max_iterations=_resolved_max_iterations,
             budget_tokens=budget_tokens,
-            verify_command=verify,
+            verify_command=_resolved_verify,
             dry_run=dry_run,
-            max_cost_usd=max_cost_usd,
-            max_wall_seconds=max_wall_seconds,
+            max_cost_usd=_resolved_max_cost_usd,
+            max_wall_seconds=_resolved_max_wall_seconds,
             isolate=isolate,
+            resume=resume,
         )
     except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
@@ -3964,8 +4045,31 @@ def loop_command(
     from oh_no_my_claudecode.rendering.console import render_loop_receipt_block
 
     render_loop_result(result)
-    render_loop_receipt_block(result, receipt_path=receipt_path, verify_command=verify)
+    render_loop_receipt_block(result, receipt_path=receipt_path, verify_command=_resolved_verify)
     raise typer.Exit(code=0 if result.converged else 1)
+
+
+@app.command("loop-templates")
+def loop_templates_command() -> None:
+    """List available built-in loop templates.
+
+    Each template prefills goal, verify command, and iteration limits for
+    common autonomous-agent workflows.  Pass a template name to
+    ``onmc loop --template <name>`` to use it.
+
+    \b
+    Available templates
+    -------------------
+    ci-healer      Fix failing CI without changing public behaviour.
+    pr-babysitter  Keep a pull request green (rebase, resolve conflicts).
+    issue-to-pr    Implement a GitHub issue as a PR-ready change.
+    """
+    from oh_no_my_claudecode.loop.templates import list_templates as _list_templates
+
+    console.print("[bold]Available loop templates:[/bold]")
+    for name, desc in _list_templates():
+        console.print(f"  [cyan]{name}[/cyan]  {desc}")
+    raise typer.Exit(code=0)
 
 
 @app.command("autopilot")
