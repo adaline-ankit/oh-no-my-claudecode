@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: "oh-no-my-claudecode (onmc)"
+message: "If you use onmc in your research or tooling, please cite it."
+type: software
+authors:
+  - name: "The onmc contributors"
+repository-code: "https://github.com/adaline-ankit/oh-no-my-claudecode"
+url: "https://github.com/adaline-ankit/oh-no-my-claudecode"
+abstract: >-
+  Git-portable, cross-agent memory for AI coding agents (Claude Code, Codex,
+  Cursor): memory-grounded autonomous loops with verifier gates, replay, evals,
+  agent-config security auditing, and tamper-evident run receipts.
+keywords:
+  - agent-memory
+  - ai-agents
+  - coding-agents
+  - claude-code
+  - codex
+  - mcp
+  - autonomous-agents
+license: MIT
