@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.42.0] — 2026-06-24
+
+### Added
+
+- **`onmc skill export` — official Agent Skills `SKILL.md` export.** Turns a repo's learned skills into portable `SKILL.md` files on the agentskills.io open standard, so they run across 16+ tools (Claude Code, Cursor, Codex, Gemini, Copilot, OpenCode, Goose, Letta, Hermes). Maps the onmc Skill to standard frontmatter (`name`, `description`, `when_to_use`←trigger, `paths`←files, with the 1,536-char combined cap) + body + provenance footer. `onmc skill export [--out DIR] [--scope project|personal] [--json]` writes `<slug>/SKILL.md` to `.claude/skills/` (project) or `~/.claude/skills/` (personal).
+
 ## [0.41.0] — 2026-06-24
 
 ### Added
