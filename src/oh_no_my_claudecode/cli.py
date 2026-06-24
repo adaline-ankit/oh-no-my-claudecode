@@ -2942,6 +2942,69 @@ def skill_prune_command(
     render_skill_pruned([sk for sk in pruned if isinstance(sk, _Skill)])
 
 
+@skill_app.command("export")
+def skill_export_command(
+    out_dir: Annotated[
+        Path | None,
+        typer.Option("--out", help="Output directory (default: .claude/skills/)."),
+    ] = None,
+    scope: Annotated[
+        str,
+        typer.Option(
+            "--scope",
+            help="'project' (default) → .claude/skills/; 'personal' → ~/.claude/skills/.",
+        ),
+    ] = "project",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit list of written paths as JSON."),
+    ] = False,
+) -> None:
+    """Export skills as Agent Skills SKILL.md files (agentskills.io standard).
+
+    Writes one <slug>/SKILL.md per skill.  The output is compatible with
+    Claude Code, Cursor, Codex, Gemini, Copilot, OpenCode, Goose, Letta,
+    Hermes, and 16+ other tools that support the agentskills.io open standard.
+
+    \b
+    Examples
+    --------
+    onmc skill export
+    onmc skill export --out .claude/skills
+    onmc skill export --scope personal
+    onmc skill export --json
+    """
+    if scope not in ("project", "personal"):
+        raise typer.Exit(
+            code=_fatal(f"--scope must be 'project' or 'personal', got {scope!r}.")
+        )
+    try:
+        written = _service().skill_export(out_dir=out_dir, scope=scope)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(json.dumps([str(p) for p in written]))
+        return
+
+    if not written:
+        console.print(
+            "[yellow]No skills yet — promote some with [bold]onmc skill promote[/bold].[/yellow]"
+        )
+        return
+
+    dest_dir = written[0].parent.parent if written else (out_dir or Path(".claude/skills"))
+    console.print(
+        f"[green]Exported {len(written)} skill(s)[/green] to [bold]{dest_dir}[/bold]"
+    )
+    for path in written:
+        console.print(f"  [dim]{path}[/dim]")
+    console.print(
+        "\n[dim]Tip: these SKILL.md files work in Claude Code, Cursor, Codex, Gemini, "
+        "Copilot, OpenCode, Goose, Letta, Hermes, and more.[/dim]"
+    )
+
+
 # ---------------------------------------------------------------------------
 # User-scope (cross-repo) memory commands
 # ---------------------------------------------------------------------------
