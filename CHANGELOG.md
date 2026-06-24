@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.44.0] — 2026-06-24
+
+### Added
+
+- **Reproducibility envelope in the run receipt.** Receipts now prove a run is reproducible + auditable, not just verified: `RunReceipt` gains `model_version`, `prompt_hash`, `tool_defs_hash`, `config_hash`, `python_version`, and `platform` (deterministic hashes over the prompt, verifier/agent, and loop config). All fields are backward-compatible (None defaults; old receipts still parse). Receipt schema bumped 1→2; the CLI shows a `reproducible: model · config <hash> · prompt <hash>` line when present.
+
+### Fixed
+
+- The `greetings` workflow no longer fails CI on maintainer PRs — it now greets only fork PRs and issues (with a safety net), and dropped a bogus `onmc --version` reference.
+
 ## [0.43.0] — 2026-06-24
 
 ### Added
