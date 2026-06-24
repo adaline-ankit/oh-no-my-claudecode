@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-06-24
+
+### Added
+
+- **Durable loop checkpoint/resume.** Each iteration atomically persists loop state to `.onmc/loop-state/`, so a crashed or interrupted `onmc loop`/`autopilot` run can `--resume` and continue from the next iteration with prior dead-ends and contracts intact (no repeated work). Checkpoints clear on terminal stops and are kept on resumable ones (budget/cost/wall). No `--resume` / no checkpoint = unchanged behavior.
+- **Ready-to-run loop templates.** `onmc loop --template ci-healer | pr-babysitter | issue-to-pr` prefill goal + verifier + sane limits (overridable with explicit flags). `onmc loop --list-templates` / `onmc loop-templates` lists them.
+
 ## [0.46.0] — 2026-06-24
 
 ### Added
