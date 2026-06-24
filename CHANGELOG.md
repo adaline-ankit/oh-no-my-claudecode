@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-06-24
+
+### Added
+
+- **Mission Control view in `onmc ui`** — completing the loop-closer trio (autopilot + evolution + Mission Control). The dashboard now both explains and shows the product: a KNOW → ACT → PROVE → LEARN loop strip, the "getting smarter" trend band from `onmc evolution` (↓cost / ↓iterations + verified-rate, with a friendly empty-state), and a recent-runs table that makes the receipt ledger visible (goal · agent · ✓/✗ · iterations · cost · when · receipt hash). Fed by a new exception-safe `loops` payload section (evolution summary + recent receipts); no receipts degrades to a clean empty-state. Self-contained, theme-matched, responsive.
+
 ## [0.38.0] — 2026-06-24
 
 ### Added
