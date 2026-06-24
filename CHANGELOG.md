@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.41.0] — 2026-06-24
+
+### Added
+
+- **Open-source community pack.** `CITATION.cff` (onmc is now citable), `.github/FUNDING.yml` (sponsor button), and three community-automation workflows: **greetings** (welcomes first-time issue/PR contributors), **stale** (ages out abandoned issues/PRs after 60d/+14d, exempting good-first-issue / help-wanted / pinned / security / needs-triage), and **labeler** + `.github/labeler.yml` (auto-applies area labels by changed path). All workflows use read-only default permissions, job-scoped writes, and pinned action SHAs.
+
 ## [0.40.0] — 2026-06-24
 
 ### Fixed
