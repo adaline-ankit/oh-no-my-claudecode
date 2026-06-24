@@ -59,6 +59,81 @@ def test_dashboard_payload_contains_real_repo_state(
     assert "# ONMC Agent Readiness Report" in payload["report"]
 
 
+def test_dashboard_payload_includes_loops_section_exception_safe(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The loops section is always present and never crashes with no receipts."""
+    service = _ready_service(sample_repo, monkeypatch)
+
+    payload = build_dashboard_payload(service)
+
+    assert "loops" in payload
+    loops = payload["loops"]
+    assert "evolution" in loops
+    assert "recent_runs" in loops
+    # No receipts written yet → empty run history, no crash.
+    assert loops["recent_runs"] == []
+
+
+def test_dashboard_payload_loops_reads_receipts(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """recent_runs surfaces receipts written under .agent-memory/receipts/."""
+    service = _ready_service(sample_repo, monkeypatch)
+    receipts_dir = sample_repo / ".agent-memory" / "receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    receipt = {
+        "schema_version": "1",
+        "goal": "make pytest green",
+        "agent": "claude",
+        "verified": True,
+        "stop_reason": "converged",
+        "iterations": 3,
+        "tokens_used": 24000,
+        "cost_usd": 1.42,
+        "wall_seconds": 180.0,
+        "verifier_command": "pytest",
+        "verifier_final_exit": 0,
+        "git_tree_sha": "abc",
+        "diff_sha": "def",
+        "loop_spec_sha": "s1",
+        "output_digest": "o",
+        "onmc_version": "0.38.0",
+        "started_at": "2026-06-24T10:00:00",
+        "ended_at": "2026-06-24T10:03:00",
+        "iteration_hashes": ["h"],
+        "receipt_hash": "deadbeefcafe",
+    }
+    (receipts_dir / "run-1.json").write_text(json.dumps(receipt), encoding="utf-8")
+
+    loops = build_dashboard_payload(service)["loops"]
+
+    assert len(loops["recent_runs"]) == 1
+    assert loops["recent_runs"][0]["goal"] == "make pytest green"
+
+
+def test_dashboard_html_contains_mission_control_view(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard exposes the Mission Control view + the KNOW/ACT/PROVE/LEARN loop."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="view-mission"' in html
+    for label in ("KNOW", "ACT", "PROVE", "LEARN"):
+        assert label in html
+
+
 def test_ui_server_serves_dashboard_api_and_assets(
     sample_repo: Path,
     monkeypatch: object,

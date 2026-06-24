@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import mimetypes
 import webbrowser
@@ -70,6 +71,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
             "errors": errors,
         },
         "report": service.agent_readiness_report(),
+        "loops": _loops_payload(service),
     }
 
 
@@ -184,6 +186,57 @@ def _asset_for_path(path: str) -> Any | None:
     if asset_name is None or PurePosixPath(path).parts.count(".."):
         return None
     return STATIC_ROOT.joinpath(asset_name)
+
+
+def _loops_payload(service: OnmcService) -> dict[str, Any]:
+    """Build the loops section for the dashboard payload.
+
+    Always returns a dict with ``evolution`` and ``recent_runs`` keys.
+    Any failure (missing receipts dir, no runs, import error) returns the
+    safe empty default so the dashboard never 500s.
+    """
+    _empty: dict[str, Any] = {"evolution": None, "recent_runs": []}
+    try:
+        _repo_root, report = service.evolution()
+        evolution_dict = dataclasses.asdict(report)
+        # Trim the large nested `runs` list — we expose only aggregates here.
+        evolution_dict.pop("runs", None)
+        evolution_dict.pop("run_summary", None)
+
+        recent_runs: list[dict[str, Any]] = []
+        receipts_dir = _repo_root / ".agent-memory" / "receipts"
+        if receipts_dir.exists() and receipts_dir.is_dir():
+            entries = sorted(receipts_dir.iterdir(), reverse=True)
+            for entry in entries:
+                if entry.suffix != ".json":
+                    continue
+                try:
+                    data: dict[str, Any] = json.loads(
+                        entry.read_text(encoding="utf-8")
+                    )
+                    if not isinstance(data, dict):
+                        continue
+                    goal_raw = str(data.get("goal") or "")
+                    recent_runs.append(
+                        {
+                            "goal": goal_raw[:80],
+                            "agent": str(data.get("agent") or "unknown"),
+                            "verified": bool(data.get("verified", False)),
+                            "iterations": int(data.get("iterations", 0)),
+                            "tokens": int(data.get("tokens_used", 0)),
+                            "cost_usd": data.get("cost_usd"),
+                            "when": data.get("ended_at") or data.get("started_at"),
+                            "receipt_hash_short": entry.stem[-8:],
+                        }
+                    )
+                except (OSError, json.JSONDecodeError, ValueError, TypeError):
+                    continue
+                if len(recent_runs) >= 10:  # noqa: PLR2004
+                    break
+
+        return {"evolution": evolution_dict, "recent_runs": recent_runs}
+    except Exception:  # noqa: BLE001
+        return _empty
 
 
 def _memory_kind_counts(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
