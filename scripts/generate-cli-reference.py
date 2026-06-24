@@ -84,6 +84,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc skill show", ["skill", "show"]),
     ("onmc skill feedback", ["skill", "feedback"]),
     ("onmc skill prune", ["skill", "prune"]),
+    ("onmc skill export", ["skill", "export"]),
     ("onmc user", ["user"]),
     ("onmc user add", ["user", "add"]),
     ("onmc user list", ["user", "list"]),

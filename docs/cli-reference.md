@@ -1336,6 +1336,8 @@ Usage: onmc skill [OPTIONS] COMMAND [ARGS]...
 │ show      Show a single skill with body, trigger, and metadata.              │
 │ feedback  Apply a trust signal to a stored skill.                            │
 │ prune     Disable auto_inject on low-success, long-unused skills.            │
+│ export    Export skills as Agent Skills SKILL.md files (agentskills.io       │
+│           standard).                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1444,6 +1446,35 @@ Usage: onmc skill prune [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit pruned skills as JSON array.                            │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill export`
+
+```text
+Usage: onmc skill export [OPTIONS]
+
+ Export skills as Agent Skills SKILL.md files (agentskills.io standard).
+
+ Writes one <slug>/SKILL.md per skill.  The output is compatible with
+ Claude Code, Cursor, Codex, Gemini, Copilot, OpenCode, Goose, Letta,
+ Hermes, and 16+ other tools that support the agentskills.io open standard.
+
+
+ Examples
+ --------
+ onmc skill export
+ onmc skill export --out .claude/skills
+ onmc skill export --scope personal
+ onmc skill export --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out          PATH  Output directory (default: .claude/skills/).            │
+│ --scope        TEXT  'project' (default) → .claude/skills/; 'personal' →     │
+│                      ~/.claude/skills/.                                      │
+│                      [default: project]                                      │
+│ --json               Emit list of written paths as JSON.                     │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
