@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -66,7 +67,7 @@ def _default_git_runner(cmd: list[str], cwd: str, timeout: int) -> tuple[int, st
 # Receipt schema
 # ---------------------------------------------------------------------------
 
-_SCHEMA_VERSION = "1"
+_SCHEMA_VERSION = "2"
 _RECEIPT_GIT_TIMEOUT = 15  # seconds
 
 
@@ -121,6 +122,30 @@ class RunReceipt:
     receipt_hash:
         SHA-256 hash chain head: final h_i value.  Changes if ANY iteration
         data changes → tamper evidence.
+
+    Reproducibility envelope (schema_version "2")
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    model_version:
+        Resolved model/version string passed to the agent adapter; None when
+        the adapter does not surface this.  Never fabricated — only set when
+        the caller supplies a non-None value.
+    prompt_hash:
+        SHA-256 of ``spec.goal``.  Identifies the exact natural-language prompt
+        that seeded the run.  Same goal text → same hash, regardless of other
+        config.
+    tool_defs_hash:
+        SHA-256 of ``verify_command || ":" || agent``.  Captures the
+        "tools surface" of the run — what verifier and what agent were wired
+        up.  None only when neither is available (in practice always set).
+    config_hash:
+        SHA-256 of the reproducibility-relevant LoopConfig knobs serialised as
+        ``max_iterations|budget_tokens|max_cost_usd|max_wall_seconds|verify_command|escalation_threshold|no_progress_window``.
+        Same config → same hash; any knob change → different hash.
+    python_version:
+        ``sys.version_info`` formatted as ``"major.minor"`` (e.g. ``"3.12"``).
+        Aids reproducibility analysis across Python upgrades.
+    platform:
+        ``sys.platform`` value (e.g. ``"darwin"``, ``"linux"``).
     """
 
     schema_version: str
@@ -144,6 +169,14 @@ class RunReceipt:
     ended_at: str | None
     iteration_hashes: list[str] = field(default_factory=list)
     receipt_hash: str = ""
+    # Reproducibility envelope — schema_version "2" additions (all optional for
+    # backward-compatible reading of old receipts that lack these keys).
+    model_version: str | None = None
+    prompt_hash: str | None = None
+    tool_defs_hash: str | None = None
+    config_hash: str | None = None
+    python_version: str | None = None
+    platform: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +261,66 @@ def _get_git_diff_sha(
     if rc != 0:
         return None
     return _sha256_hex(stdout)
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility-envelope hash helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_prompt_hash(spec: LoopSpec) -> str:
+    """Return SHA-256 of the run's goal text.
+
+    Hashed input: ``spec.goal`` (UTF-8).
+    Same goal text → same hash across all runs and machines.
+    """
+    return _sha256_hex(spec.goal)
+
+
+def _build_tool_defs_hash(verify_command: str, agent: str) -> str:
+    """Return SHA-256 capturing the tools surface of the run.
+
+    Hashed input: ``verify_command + ":" + agent`` (UTF-8).
+    Covers the verifier (what is run to confirm success) and the agent
+    identity (which CLI adapter is wired up).
+    """
+    return _sha256_hex(f"{verify_command}:{agent}")
+
+
+def _build_config_hash(config: LoopConfig) -> str:
+    """Return SHA-256 of the reproducibility-relevant LoopConfig knobs.
+
+    Hashed input (pipe-separated, None → "None")::
+
+        max_iterations|budget_tokens|max_cost_usd|max_wall_seconds|
+        verify_command|escalation_threshold|no_progress_window
+
+    Any change to any of these knobs produces a different hash, enabling
+    reproducibility checks between runs.
+    """
+    parts = "|".join(
+        [
+            str(config.max_iterations),
+            str(config.budget_tokens),
+            str(config.max_cost_usd),
+            str(config.max_wall_seconds),
+            config.verify_command,
+            str(config.escalation_threshold),
+            str(config.no_progress_window),
+        ]
+    )
+    return _sha256_hex(parts)
+
+
+def _runtime_python_version() -> str:
+    """Return ``sys.version_info`` as ``"major.minor"``."""
+    info = sys.version_info
+    return f"{info.major}.{info.minor}"
+
+
+def _runtime_platform() -> str:
+    """Return ``sys.platform``."""
+    return sys.platform
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +410,11 @@ def build_receipt(
     # Build hash chain.
     iteration_hashes, receipt_hash = _build_hash_chain(result)
 
+    # Reproducibility envelope (schema_version "2").
+    prompt_hash = _build_prompt_hash(spec)
+    tool_defs_hash = _build_tool_defs_hash(config.verify_command, agent)
+    config_hash = _build_config_hash(config)
+
     return RunReceipt(
         schema_version=_SCHEMA_VERSION,
         goal=spec.goal[:500],
@@ -339,6 +437,12 @@ def build_receipt(
         ended_at=ended_at,
         iteration_hashes=iteration_hashes,
         receipt_hash=receipt_hash,
+        model_version=model,  # None when caller does not know the version
+        prompt_hash=prompt_hash,
+        tool_defs_hash=tool_defs_hash,
+        config_hash=config_hash,
+        python_version=_runtime_python_version(),
+        platform=_runtime_platform(),
     )
 
 

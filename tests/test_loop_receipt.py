@@ -327,7 +327,7 @@ def test_write_receipt_writes_valid_json(tmp_path: Path) -> None:
     assert path.name.startswith("run-")
 
     data = json.loads(path.read_text(encoding="utf-8"))
-    assert data["schema_version"] == "1"
+    assert data["schema_version"] == "2"
     assert data["goal"] == "write test"
     assert "receipt_hash" in data
     assert "iteration_hashes" in data
@@ -595,11 +595,18 @@ def test_receipt_schema_fields(tmp_path: Path) -> None:
         "ended_at",
         "iteration_hashes",
         "receipt_hash",
+        # Reproducibility envelope (schema_version "2")
+        "model_version",
+        "prompt_hash",
+        "tool_defs_hash",
+        "config_hash",
+        "python_version",
+        "platform",
     ]
     for field_name in required_fields:
         assert field_name in data, f"missing field: {field_name}"
 
-    assert data["schema_version"] == "1"
+    assert data["schema_version"] == "2"
     assert isinstance(data["iteration_hashes"], list)
     assert isinstance(data["receipt_hash"], str)
     assert len(data["receipt_hash"]) == 64  # SHA-256 hex = 64 chars
@@ -773,3 +780,271 @@ def test_loop_spec_sha_is_deterministic() -> None:
     ]
     hashes = [r.loop_spec_sha for r in receipts]
     assert len(set(hashes)) == 1, "loop_spec_sha must be identical for same spec+config"
+
+
+# ---------------------------------------------------------------------------
+# Test 18 — reproducibility envelope: config_hash and prompt_hash are
+#           deterministic and input-sensitive
+# ---------------------------------------------------------------------------
+
+
+def test_config_hash_is_deterministic_and_input_sensitive() -> None:
+    """config_hash must be identical for the same config and differ on any knob change."""
+    spec = LoopSpec(goal="config hash test")
+    result = _minimal_result()
+
+    cfg_a = LoopConfig(
+        max_iterations=5,
+        budget_tokens=10000,
+        max_cost_usd=1.0,
+        max_wall_seconds=300,
+        verify_command="pytest",
+        escalation_threshold=2,
+        no_progress_window=3,
+    )
+    cfg_b = LoopConfig(
+        max_iterations=10,  # changed
+        budget_tokens=10000,
+        max_cost_usd=1.0,
+        max_wall_seconds=300,
+        verify_command="pytest",
+        escalation_threshold=2,
+        no_progress_window=3,
+    )
+
+    r_a1 = build_receipt(
+        result, spec, cfg_a,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_a2 = build_receipt(
+        result, spec, cfg_a,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=99.0,  # different wall_seconds — must NOT affect config_hash
+        onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_b = build_receipt(
+        result, spec, cfg_b,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+
+    # Same config → same config_hash regardless of wall_seconds.
+    assert r_a1.config_hash == r_a2.config_hash, (
+        "config_hash must be identical for the same LoopConfig knobs"
+    )
+    # Different max_iterations → different config_hash.
+    assert r_a1.config_hash != r_b.config_hash, (
+        "config_hash must differ when max_iterations changes"
+    )
+    # config_hash must be a 64-char hex SHA-256 digest.
+    assert r_a1.config_hash is not None
+    assert len(r_a1.config_hash) == 64
+
+
+def test_prompt_hash_is_deterministic_and_input_sensitive() -> None:
+    """prompt_hash must match sha256(goal) and differ for different goals."""
+    import hashlib
+
+    spec_a = LoopSpec(goal="goal alpha")
+    spec_b = LoopSpec(goal="goal beta")
+    config = LoopConfig(verify_command="pytest")
+    result = _minimal_result()
+
+    r_a = build_receipt(
+        result, spec_a, config,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_b = build_receipt(
+        result, spec_b, config,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+
+    expected_a = hashlib.sha256(b"goal alpha").hexdigest()
+    assert r_a.prompt_hash == expected_a, "prompt_hash must equal sha256(spec.goal)"
+    assert r_a.prompt_hash != r_b.prompt_hash, (
+        "prompt_hash must differ for different goals"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 19 — model_version flows through when provided; None when not
+# ---------------------------------------------------------------------------
+
+
+def test_model_version_flows_through() -> None:
+    """model_version must equal the model arg when provided; None when model=None."""
+    spec = LoopSpec(goal="model version test")
+    config = LoopConfig(verify_command="pytest")
+    result = _minimal_result()
+
+    r_with = build_receipt(
+        result, spec, config,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model="claude-opus-4-5",
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_without = build_receipt(
+        result, spec, config,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+
+    assert r_with.model_version == "claude-opus-4-5", (
+        "model_version must equal the model arg when provided"
+    )
+    assert r_without.model_version is None, (
+        "model_version must be None when model=None"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 20 — schema_version is "2"
+# ---------------------------------------------------------------------------
+
+
+def test_schema_version_is_two() -> None:
+    """schema_version must be '2' in the current implementation."""
+    spec = LoopSpec(goal="schema version test")
+    config = LoopConfig(verify_command="pytest")
+    result = _minimal_result()
+
+    receipt = build_receipt(
+        result, spec, config,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+
+    assert receipt.schema_version == "2"
+
+
+# ---------------------------------------------------------------------------
+# Test 21 — legacy receipt (schema_version "1", no envelope fields) parses
+#           everywhere it is read without crashing
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_receipt_parses_in_evolution_and_dashboard(tmp_path: Path) -> None:
+    """An old receipt JSON (schema_version '1', missing envelope fields) must
+    be handled gracefully by compile_evolution and _loops_payload."""
+    from oh_no_my_claudecode.evolution.compiler import compile_evolution
+
+    receipts_dir = tmp_path / ".agent-memory" / "receipts"
+    receipts_dir.mkdir(parents=True)
+
+    # Write two legacy receipts (schema v1 shape — no envelope fields).
+    legacy_receipt: dict[str, object] = {
+        "schema_version": "1",
+        "goal": "old run goal",
+        "agent": "claude",
+        "model": None,
+        "verified": True,
+        "stop_reason": "converged",
+        "iterations": 2,
+        "tokens_used": 300,
+        "cost_usd": 0.05,
+        "wall_seconds": 12.0,
+        "verifier_command": "pytest",
+        "verifier_final_exit": 0,
+        "git_tree_sha": "abc123",
+        "diff_sha": "def456",
+        "loop_spec_sha": "aabbccdd" * 8,
+        "output_digest": "11223344" * 8,
+        "onmc_version": "0.10.0",
+        "started_at": "2024-01-01T00:00:00+00:00",
+        "ended_at": "2024-01-01T00:00:12+00:00",
+        "iteration_hashes": ["aa" * 32, "bb" * 32],
+        "receipt_hash": "cc" * 32,
+        # Deliberately absent: model_version, prompt_hash, tool_defs_hash,
+        # config_hash, python_version, platform
+    }
+
+    for i in range(2):
+        p = receipts_dir / f"run-legacy{i:04d}.json"
+        p.write_text(json.dumps(legacy_receipt), encoding="utf-8")
+
+    # compile_evolution must not raise and must return a valid report.
+    report = compile_evolution(receipts_dir)
+    assert report.run_count == 2
+    assert not report.insufficient_data
+
+    # The UI server _loops_payload reads receipts defensively — simulate it by
+    # constructing the data dict directly (the function uses .get() throughout).
+    from dataclasses import fields as _fields
+
+    from oh_no_my_claudecode.loop.receipt import RunReceipt
+
+    known = {f.name for f in _fields(RunReceipt)}
+    for i in range(2):
+        p = receipts_dir / f"run-legacy{i:04d}.json"
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        # Reconstruct RunReceipt from legacy dict — unknown keys ignored,
+        # missing keys fall back to field defaults (all new fields default None).
+        receipt_obj = RunReceipt(**{k: v for k, v in raw.items() if k in known})
+        # New envelope fields must be None (not present in legacy receipts).
+        assert receipt_obj.model_version is None
+        assert receipt_obj.prompt_hash is None
+        assert receipt_obj.tool_defs_hash is None
+        assert receipt_obj.config_hash is None
+        assert receipt_obj.python_version is None
+        assert receipt_obj.platform is None
+
+
+# ---------------------------------------------------------------------------
+# Test 22 — tool_defs_hash is deterministic and changes with agent or verifier
+# ---------------------------------------------------------------------------
+
+
+def test_tool_defs_hash_determinism_and_sensitivity() -> None:
+    """tool_defs_hash must match sha256(verify_command:agent) and change on input change."""
+    import hashlib
+
+    spec = LoopSpec(goal="tool defs test")
+    result = _minimal_result()
+
+    cfg_pytest = LoopConfig(verify_command="pytest")
+    cfg_make = LoopConfig(verify_command="make test")
+
+    r_claude_pytest = build_receipt(
+        result, spec, cfg_pytest,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_codex_pytest = build_receipt(
+        result, spec, cfg_pytest,
+        repo_root="/tmp",  # noqa: S108
+        agent="codex", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+    r_claude_make = build_receipt(
+        result, spec, cfg_make,
+        repo_root="/tmp",  # noqa: S108
+        agent="claude", model=None,
+        wall_seconds=1.0, onmc_version="0.1.0",
+        git_runner=_noop_git_runner,
+    )
+
+    expected = hashlib.sha256(b"pytest:claude").hexdigest()
+    assert r_claude_pytest.tool_defs_hash == expected
+    assert r_claude_pytest.tool_defs_hash != r_codex_pytest.tool_defs_hash
+    assert r_claude_pytest.tool_defs_hash != r_claude_make.tool_defs_hash
