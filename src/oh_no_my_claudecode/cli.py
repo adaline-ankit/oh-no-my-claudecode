@@ -4003,17 +4003,41 @@ def autopilot_command(
         str,
         typer.Option("--verify", help="Shell command run after each iteration to verify success."),
     ] = "pytest",
+    plan_with: Annotated[
+        str | None,
+        typer.Option(
+            "--plan-with",
+            help=(
+                "Model name for the PLAN step (expensive model).  When set, a planning "
+                "pass runs before ACT: the model produces a precise implementation plan "
+                "that is injected into the ACT goal and recorded as a memory.  "
+                "Example: --plan-with claude-opus-4-5"
+            ),
+        ),
+    ] = None,
+    execute_with: Annotated[
+        str | None,
+        typer.Option(
+            "--execute-with",
+            help=(
+                "Model name for the ACT (execute) step (cheap model).  When set, the "
+                "loop runs with this model instead of the agent default.  "
+                "Example: --execute-with claude-haiku-4-5"
+            ),
+        ),
+    ] = None,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Print the full result as JSON."),
     ] = False,
 ) -> None:
-    """Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.
+    """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on a goal.
 
     Orchestrates every onmc command in one narrated run:
 
     \b
     🧠 KNOW  — compile_brief + guard (dead-ends) + user_profile (preferences).
+    📋 PLAN  — optional; --plan-with <model> runs an expensive planning pass first.
     ⚙ ACT   — memory-grounded autonomous loop (avoids recorded dead-ends).
     ✅ PROVE  — receipt + verified/not-verified verdict + cost.
     📈 LEARN  — capture session memory + skill_promote + consolidate.
@@ -4029,6 +4053,7 @@ def autopilot_command(
     onmc autopilot "fix flaky test" --agent codex --max-iterations 5
     onmc autopilot "fix flaky test" --agent opencode --max-iterations 5
     onmc autopilot "fix bug" --json                   # machine-readable output
+    onmc autopilot "add feature" --plan-with claude-opus-4-5 --execute-with claude-haiku-4-5
     """
     import dataclasses
 
@@ -4052,6 +4077,8 @@ def autopilot_command(
             max_cost_usd=max_cost_usd,
             max_wall_seconds=max_wall_seconds,
             verify_command=verify,
+            plan_model=plan_with,
+            execute_model=execute_with,
         )
     except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
@@ -4083,6 +4110,11 @@ def autopilot_command(
                     if isinstance(result.loop_result, LoopResult)
                     else None
                 ),
+                "plan_model": result.plan_model,
+                "execute_model": result.execute_model,
+                "plan_used": result.plan_used,
+                "plan_tokens": result.plan_tokens,
+                "plan_cost": result.plan_cost,
             }
             console.print_json(json.dumps(payload))
         raise typer.Exit(code=0)

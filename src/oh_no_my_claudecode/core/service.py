@@ -805,12 +805,17 @@ class OnmcService:
         verify_command: str = "pytest",
         agent_runner: AgentRunner | None = None,
         verify_runner: VerifyRunner | None = None,
+        plan_model: str | None = None,
+        execute_model: str | None = None,
+        plan_runner: AgentRunner | None = None,
     ) -> AutopilotResult:
-        """Run the full KNOW→ACT→PROVE→LEARN autopilot cycle against *goal*.
+        """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle against *goal*.
 
         Orchestrates all existing onmc commands in a single narrated run:
-        KNOW (brief + guard + profile), ACT (loop), PROVE (verify), LEARN
-        (capture + skill_promote + consolidate), ending with a brain-growth delta.
+        KNOW (brief + guard + profile), optional PLAN (expensive model writes a
+        precise implementation plan), ACT (loop with optional cheap execute_model),
+        PROVE (verify), LEARN (capture + skill_promote + consolidate), ending with
+        a brain-growth delta.
 
         Parameters
         ----------
@@ -826,6 +831,17 @@ class OnmcService:
         agent_runner, verify_runner:
             Optional injectable runners for testing.  When ``None`` (default),
             real CLI runners are used.
+        plan_model:
+            Optional expensive model name for the PLAN step.  When set, a planning
+            pass runs before ACT; the plan text is injected into the ACT goal and
+            recorded as a memory.  When ``None`` (default), no plan step runs.
+        execute_model:
+            Optional cheap model name for the ACT step.  When ``None``, the loop
+            uses its own default.  Ignored when *agent_runner* is injected.
+        plan_runner:
+            Optional injectable runner for the PLAN step (testing).  When ``None``
+            and *plan_model* is set, a real runner is built from *agent* +
+            *plan_model*.
 
         Returns
         -------
@@ -846,6 +862,9 @@ class OnmcService:
             verify_command=verify_command,
             agent_runner=agent_runner,
             verify_runner=verify_runner,
+            plan_model=plan_model,
+            execute_model=execute_model,
+            plan_runner=plan_runner,
         )
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:

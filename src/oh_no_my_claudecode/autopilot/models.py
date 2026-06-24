@@ -86,3 +86,9 @@ class AutopilotResult:
     stop_reason: str
     # KNOW context text (for --dry-run inspection and narration)
     know_context: str = field(default="")
+    # PLAN→EXECUTE cost-split mode fields (all optional / backward-compatible)
+    plan_model: str | None = field(default=None)
+    execute_model: str | None = field(default=None)
+    plan_used: bool = field(default=False)
+    plan_tokens: int | None = field(default=None)
+    plan_cost: float | None = field(default=None)
