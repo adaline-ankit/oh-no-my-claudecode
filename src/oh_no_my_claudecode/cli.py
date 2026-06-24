@@ -36,6 +36,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
+    render_evolution_card,
     render_gh_aw_init_result,
     render_hook_status,
     render_hud,
@@ -3255,6 +3256,39 @@ def savings_command(
         return
 
     render_savings_card(result)
+
+
+@app.command("evolution")
+def evolution_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Show the compounding-proof evolution card across loop/autopilot runs.
+
+    Reads all run receipts from ``.agent-memory/receipts/`` and computes
+    trend metrics: cost delta, iterations-to-converge delta, and verified
+    rate.  All numbers come from real receipt data — no simulation.
+
+    Requires at least 2 completed loop/autopilot runs with receipts.  Run
+    ``onmc loop`` or ``onmc autopilot`` to generate receipts first.
+
+    Use ``--json`` for machine-readable output.
+    """
+    import dataclasses
+    import json as _json
+
+    try:
+        _, report = _service().evolution()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        typer.echo(_json.dumps(dataclasses.asdict(report), indent=2))
+        return
+
+    render_evolution_card(report)
 
 
 @app.command("benchmark")

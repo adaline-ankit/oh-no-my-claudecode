@@ -68,6 +68,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ wiki         Generate a markdown wiki or Obsidian knowledge-graph vault.     │
 │ bench        Measure whether onmc memory actually reduces wasted work.       │
 │ savings      Show a shareable 'Memory Wrapped' token-ROI card.               │
+│ evolution    Show the compounding-proof evolution card across loop/autopilot │
+│              runs.                                                           │
 │ benchmark    Run a reproducible benchmark suite against the current repo     │
 │              brain.                                                          │
 │ plug         Wire onmc into a target coding agent (one-shot idempotent       │
@@ -1810,6 +1812,28 @@ Usage: onmc savings [OPTIONS]
  Token-ROI numbers come from the same deterministic bench harness as
  ``onmc bench`` — no LLM is called.  Results are identical across runs on
  the same memory store.  Use ``--json`` for machine-readable output.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc evolution`
+
+```text
+Usage: onmc evolution [OPTIONS]
+
+ Show the compounding-proof evolution card across loop/autopilot runs.
+
+ Reads all run receipts from ``.agent-memory/receipts/`` and computes
+ trend metrics: cost delta, iterations-to-converge delta, and verified
+ rate.  All numbers come from real receipt data — no simulation.
+
+ Requires at least 2 completed loop/autopilot runs with receipts.  Run
+ ``onmc loop`` or ``onmc autopilot`` to generate receipts first.
+
+ Use ``--json`` for machine-readable output.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │

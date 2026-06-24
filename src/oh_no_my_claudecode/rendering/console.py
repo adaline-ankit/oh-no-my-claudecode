@@ -2654,3 +2654,123 @@ def _render_replay_comparison(comparison: object) -> None:
     console.print(
         "[dim]without-memory baseline: all retrieval results treated as empty.[/dim]"
     )
+
+
+def render_evolution_card(report: object) -> None:
+    """Render the compounding-proof evolution card.
+
+    Shows a Rich Panel with:
+    - headline delta (cost % and iterations %, from real receipts)
+    - per-run compact table (index, goal, agent, verified, iterations, cost)
+    - verified rate + totals
+    - honest proxy label and footer
+
+    When ``insufficient_data=True`` renders a friendly prompt to run more
+    tasks first.  ``--json`` path is handled by the caller.
+    """
+    from oh_no_my_claudecode.evolution.compiler import EvolutionReport
+
+    if not isinstance(report, EvolutionReport):
+        console.print("[yellow]No evolution report to display.[/yellow]")
+        return
+
+    if report.insufficient_data:
+        console.print(
+            Panel(
+                "\n"
+                "  Run a few [bold]onmc loop[/bold] or [bold]onmc autopilot[/bold] tasks first.\n"
+                "  [dim]Evolution needs at least 2 run receipts to compute a trend.[/dim]\n"
+                f"\n  Receipts found: [bold]{report.run_count}[/bold]\n",
+                title="[bold cyan]onmc evolution — not enough data yet[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+        return
+
+    # --- headline delta colours ---
+    def _delta_color(pct: float | None) -> str:
+        if pct is None:
+            return "dim"
+        if pct < -5:  # noqa: PLR2004
+            return "green"
+        if pct < 0:
+            return "yellow"
+        return "red"
+
+    def _fmt_pct(pct: float | None, label: str) -> str:
+        if pct is None:
+            return f"[dim]{label}: n/a[/dim]"
+        sign = "↓" if pct < 0 else "↑"
+        color = _delta_color(pct)
+        return f"[{color}]{sign}{abs(pct):.1f}%[/{color}] {label}"
+
+    cost_part = _fmt_pct(report.cost_change_pct, "cost")
+    iter_part = _fmt_pct(report.iterations_change_pct, "iterations-to-converge")
+    headline = f"  {cost_part}  ·  {iter_part}  across {report.run_count} runs"
+
+    if report.cost_unavailable:
+        headline += "  [dim](cost data unavailable — showing iteration trend)[/dim]"
+
+    # --- verified rate ---
+    v_pct = round(report.verified_rate * 100)
+    v_color = "green" if v_pct >= 70 else ("yellow" if v_pct >= 40 else "dim")  # noqa: PLR2004
+    verified_line = (
+        f"  Verified: [{v_color}]{v_pct}%[/{v_color}]"
+        f"  ·  Total tokens: [bold]{report.total_tokens:,}[/bold]"
+    )
+    if report.total_cost_usd > 0:
+        verified_line += f"  ·  Total cost: [bold]${report.total_cost_usd:.4f}[/bold]"
+
+    # --- panel body ---
+    panel_body = "\n".join(["", headline, "", verified_line, ""])
+    console.print(
+        Panel(
+            panel_body,
+            title="[bold cyan]onmc evolution — your agent is learning[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    # --- per-run table ---
+    if report.runs:
+        run_table = Table(
+            show_header=True,
+            show_lines=False,
+            box=None,
+            padding=(0, 1),
+        )
+        run_table.add_column("#", justify="right", style="dim", width=3)
+        run_table.add_column("Goal", min_width=20, max_width=40)
+        run_table.add_column("Agent", style="dim", width=10)
+        run_table.add_column("V", justify="center", width=3)
+        run_table.add_column("Iters", justify="right", width=6)
+        run_table.add_column("Cost", justify="right", width=9)
+        run_table.add_column("When", style="dim", width=20)
+
+        for p in report.runs:
+            verified_str = "[green]✓[/green]" if p.verified else "[dim]✗[/dim]"
+            cost_str = f"${p.cost_usd:.3f}" if p.cost_usd is not None else "[dim]—[/dim]"
+            when_str = (p.when or "")[:19]
+            run_table.add_row(
+                str(p.index + 1),
+                shorten(p.goal_short, max_length=38),
+                p.agent,
+                verified_str,
+                str(p.iterations),
+                cost_str,
+                when_str,
+            )
+
+        console.print(run_table)
+
+    # --- footer ---
+    footer_parts = [
+        "[dim]iterations-to-converge proxy: fewer iterations = less wasted effort.[/dim]",
+        "[dim]All numbers from real run receipts — no simulation.[/dim]",
+    ]
+    if report.first_when or report.latest_when:
+        window = f"{(report.first_when or '')[:10]} → {(report.latest_when or '')[:10]}"
+        footer_parts.append(f"[dim]Window: {window}[/dim]")
+    console.print()
+    for line in footer_parts:
+        console.print(line)
