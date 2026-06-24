@@ -24,13 +24,13 @@ jobs:
     steps:
       - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
         with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          issue-message: >-
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_message: >-
             Thanks for opening your first issue in **onmc**! 🧠 A maintainer
             will triage it soon. If this is a bug, the more repro detail (onmc
             version via `onmc --version`, OS, exact command) the faster we can
             help. New here? See CONTRIBUTING.md and the `good first issue` label.
-          pr-message: >-
+          pr_message: >-
             Thanks for your first pull request to **onmc**! 🎉 CI will run lint,
             types, tests, and the security/brain-freshness checks. Please make
             sure `ruff`, `mypy --strict`, and `pytest` pass locally, and regen
