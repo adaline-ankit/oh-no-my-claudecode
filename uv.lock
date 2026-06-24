@@ -903,7 +903,7 @@ wheels = [
 
 [[package]]
 name = "oh-no-my-claudecode"
-version = "0.36.0"
+version = "0.39.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },

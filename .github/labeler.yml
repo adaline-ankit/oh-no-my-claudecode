@@ -1,0 +1,35 @@
+# Path-based auto-labels for PRs (actions/labeler v6 schema). Labels must
+# already exist in the repo. Reuses the established area labels.
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "scripts/**"
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"
+          - "CITATION.cff"
+
+mcp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/oh_no_my_claudecode/mcp_server/**"
+          - "src/oh_no_my_claudecode/mcp_trust/**"
+
+memory-model:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/oh_no_my_claudecode/storage/**"
+          - "src/oh_no_my_claudecode/recall/**"
+          - "src/oh_no_my_claudecode/models/**"
+          - "src/oh_no_my_claudecode/ingest/**"
+
+setup:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/oh_no_my_claudecode/setup/**"
+          - "src/oh_no_my_claudecode/hooks/**"
+          - "src/oh_no_my_claudecode/integrations/**"
