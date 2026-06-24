@@ -21,6 +21,11 @@ from pathlib import Path
 
 from oh_no_my_claudecode.guard.compiler import compile_guard
 from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+from oh_no_my_claudecode.loop.checkpoint import (
+    CheckpointState,
+    CheckpointStore,
+    _loop_spec_sha8,
+)
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
     AgentRunResult,
@@ -240,6 +245,8 @@ def run_loop(
     now: datetime | None = None,
     clock: Callable[[], float] | None = None,
     isolation_provider: IsolationProvider | None = None,
+    checkpoint_store: CheckpointStore | None = None,
+    resume: bool = False,
 ) -> LoopResult:
     """Run a memory-grounded loop until convergence, budget, or max iterations.
 
@@ -276,6 +283,19 @@ def run_loop(
         ``config.isolate`` is ``True``, the real
         :class:`~oh_no_my_claudecode.core.repo.WorktreeIsolationProvider` is
         used.  Pass a fake implementation in tests.
+    checkpoint_store:
+        Optional injectable :class:`~oh_no_my_claudecode.loop.checkpoint.CheckpointStore`.
+        When provided, the engine writes a checkpoint after every iteration
+        (atomic write) and clears it on terminal stop (converged or any
+        non-resumable stop reason when ``resume`` is False).
+        ``FileCheckpointStore`` is used by the service layer; tests inject
+        ``InMemoryCheckpointStore`` for deterministic behaviour.
+        When ``None``, no checkpointing is performed — existing behaviour.
+    resume:
+        When ``True`` and a matching checkpoint exists in ``checkpoint_store``,
+        restore prior state (iterations, counters, recorded memory ids) and
+        continue from where the previous run left off.  When ``False`` (default),
+        any existing checkpoint is ignored and the loop starts fresh.
 
     Returns
     -------
@@ -317,6 +337,11 @@ def run_loop(
                 "worktree isolation: setup failed — running in-place (no isolation)"
             )
 
+    # --- Checkpoint / resume setup ---
+    _ckpt_sha8: str | None = None
+    if checkpoint_store is not None:
+        _ckpt_sha8 = _loop_spec_sha8(spec.goal, config.verify_command)
+
     iterations: list[IterationContract] = []
     recorded_memory_ids: list[str] = []
     total_tokens: int = 0
@@ -328,15 +353,79 @@ def run_loop(
     # Circuit-breaker state.
     consecutive_same_error: int = 0
     last_error_head: str | None = None
+
+    # Restore prior state when resuming from checkpoint.
+    _resume_from: int = 1  # first iteration index to execute (1 = start fresh)
+    if resume and checkpoint_store is not None and _ckpt_sha8 is not None:
+        _saved = checkpoint_store.load(_ckpt_sha8)
+        if _saved is not None:
+            iterations = list(_saved.iterations)
+            recorded_memory_ids = list(_saved.recorded_memory_ids)
+            total_tokens = _saved.total_tokens
+            total_cost_usd = _saved.total_cost_usd
+            consecutive_losses = _saved.consecutive_losses
+            escalation_level = _saved.escalation_level
+            signature_counts = dict(_saved.signature_counts)
+            consecutive_same_error = _saved.consecutive_same_error
+            last_error_head = _saved.last_error_head
+            # Restore last_loss from the most recent loss contract (if any).
+            last_loss = next(
+                (c for c in reversed(iterations) if c.outcome == "loss"),
+                None,
+            )
+            # Continue from the iteration AFTER the last recorded one.
+            _resume_from = (iterations[-1].iteration + 1) if iterations else 1
+            _log.debug(
+                "checkpoint resumed: %d prior iterations, continuing from %d",
+                len(iterations),
+                _resume_from,
+            )
+
     wall_start: float = _clock()
+
+    def _save_checkpoint() -> None:
+        """Persist current loop state to the checkpoint store (best-effort)."""
+        if checkpoint_store is None or _ckpt_sha8 is None:
+            return
+        state = CheckpointState(
+            goal=spec.goal,
+            verify_command=config.verify_command,
+            iterations=list(iterations),
+            recorded_memory_ids=list(recorded_memory_ids),
+            total_tokens=total_tokens,
+            total_cost_usd=total_cost_usd,
+            consecutive_losses=consecutive_losses,
+            escalation_level=escalation_level,
+            signature_counts=dict(signature_counts),
+            consecutive_same_error=consecutive_same_error,
+            last_error_head=last_error_head,
+        )
+        checkpoint_store.save(_ckpt_sha8, state)
+
+    def _clear_checkpoint() -> None:
+        """Remove the checkpoint (called on terminal stop)."""
+        if checkpoint_store is not None and _ckpt_sha8 is not None:
+            checkpoint_store.clear(_ckpt_sha8)
 
     def _make_result(
         converged: bool,
         stop_reason: str,
     ) -> LoopResult:
-        """Build the LoopResult and handle worktree teardown."""
+        """Build the LoopResult, handle worktree teardown, and manage checkpoint."""
         if _provider is not None and _worktree_path is not None:
             _provider.teardown(_worktree_path, keep=converged)
+        # Clear checkpoint on any terminal stop (converged or exhausted).
+        # A partial stop (budget/cost/wall-time) also clears so callers that do
+        # NOT want resume semantics get a clean slate.  The checkpoint was
+        # already saved after the last iteration; clearing it here is safe
+        # because the caller has the full LoopResult in memory.
+        # Exception: we do NOT clear so the caller can resume — the loop
+        # itself clears only on truly terminal stops (converged, max-iterations,
+        # no-progress, duplicate-action, repeated-error).  Resumable stops
+        # (budget, cost, wall-time) leave the checkpoint in place.
+        _resumable_stops = {"budget", "cost", "wall-time"}
+        if stop_reason not in _resumable_stops:
+            _clear_checkpoint()
         return LoopResult(
             iterations=iterations,
             converged=converged,
@@ -346,7 +435,12 @@ def run_loop(
             total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
         )
 
-    for i in range(1, config.max_iterations + 1):
+    # Build the iteration range.  When resuming, the range starts AFTER the
+    # already-completed iterations so we never re-run them.  The upper bound
+    # stays at config.max_iterations so the total budget is unchanged.
+    _iter_range = range(_resume_from, config.max_iterations + 1)
+
+    for i in _iter_range:
         # Budget check before spending more tokens.
         if config.budget_tokens is not None and total_tokens >= config.budget_tokens:
             return _make_result(False, "budget")
@@ -397,9 +491,12 @@ def run_loop(
         iterations.append(contract)
 
         if outcome == "win":
-            # WIN: record success, return immediately.
+            # WIN: record success memory first, then persist checkpoint (with
+            # win contract) so a crash after memory write but before return
+            # can be detected.  _make_result will clear the checkpoint.
             mid = _record_win(storage, spec.goal, contract, ref_now)
             recorded_memory_ids.append(mid)
+            _save_checkpoint()
             return _make_result(True, "converged")
         else:
             # LOSS: record dead-end so next iteration's guard blocks it.
@@ -423,6 +520,7 @@ def run_loop(
             if config.duplicate_action_limit > 0:
                 signature_counts[sig] = signature_counts.get(sig, 0) + 1
                 if signature_counts[sig] >= config.duplicate_action_limit:
+                    _save_checkpoint()
                     return _make_result(False, "duplicate-action")
             else:
                 signature_counts[sig] = signature_counts.get(sig, 0) + 1
@@ -438,14 +536,22 @@ def run_loop(
                     consecutive_same_error = 1
                     last_error_head = error_head
                 if consecutive_same_error >= config.repeated_error_limit:
+                    _save_checkpoint()
                     return _make_result(False, "repeated-error")
             else:
                 last_error_head = error_head
 
             # --- Existing no-progress detection (slower, sliding window) ---
             if signature_counts[sig] >= config.no_progress_window:
+                _save_checkpoint()
                 return _make_result(False, "no-progress")
 
+            # Persist checkpoint after this loss iteration so a resume can
+            # continue from the next iteration.
+            _save_checkpoint()
+
+    # max-iterations stop: clear checkpoint (terminal).
+    _save_checkpoint()
     return _make_result(False, "max-iterations")
 
 

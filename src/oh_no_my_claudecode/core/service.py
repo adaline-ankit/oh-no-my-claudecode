@@ -621,6 +621,7 @@ class OnmcService:
         agent_runner: AgentRunner | None = None,
         verify_runner: VerifyRunner | None = None,
         isolate: bool = False,
+        resume: bool = False,
     ) -> tuple[LoopResult, Path | None]:
         """Run a memory-grounded autonomous loop against *goal*.
 
@@ -673,6 +674,10 @@ class OnmcService:
             the worktree path is preserved; on failure the worktree is removed
             and no changes leak into the working tree.  Degrades gracefully
             (warns + continues in-place) when ``git worktree add`` fails.
+        resume:
+            When ``True``, load any existing checkpoint for this goal +
+            verify_command pair and continue from the last saved iteration.
+            When ``False`` (default), always start a fresh run.
 
         Returns
         -------
@@ -687,6 +692,7 @@ class OnmcService:
             agent_binary_available,
             make_agent_runner,
         )
+        from oh_no_my_claudecode.loop.checkpoint import FileCheckpointStore
         from oh_no_my_claudecode.loop.engine import (
             _build_brief,  # noqa: PLC2701
             _default_verify_runner,
@@ -771,6 +777,9 @@ class OnmcService:
             else:
                 resolved_agent_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]  # noqa: PGH003
 
+        # Always wire up a FileCheckpointStore so every run is resumable.
+        checkpoint_store = FileCheckpointStore(repo_root)
+
         onmc_ver = _installed_onmc_version() or "unknown"
         wall_start = _time.monotonic()
         started_at = isoformat_utc(utc_now())
@@ -782,6 +791,8 @@ class OnmcService:
             config,
             agent_runner=resolved_agent_runner,
             verify_runner=resolved_verify_runner,
+            checkpoint_store=checkpoint_store,
+            resume=resume,
         )
 
         wall_seconds = _time.monotonic() - wall_start
