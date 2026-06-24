@@ -620,6 +620,7 @@ class OnmcService:
         max_wall_seconds: int | None = None,
         agent_runner: AgentRunner | None = None,
         verify_runner: VerifyRunner | None = None,
+        isolate: bool = False,
     ) -> tuple[LoopResult, Path | None]:
         """Run a memory-grounded autonomous loop against *goal*.
 
@@ -666,6 +667,12 @@ class OnmcService:
             When provided, used directly instead of the default subprocess runner.
             Intended for testing.  When ``None`` (default), the default subprocess
             verify runner is used.
+        isolate:
+            When ``True``, run the loop inside a fresh ``git worktree add`` so
+            all file changes are isolated.  On success (converged + verified)
+            the worktree path is preserved; on failure the worktree is removed
+            and no changes leak into the working tree.  Degrades gracefully
+            (warns + continues in-place) when ``git worktree add`` fails.
 
         Returns
         -------
@@ -702,6 +709,12 @@ class OnmcService:
             verify_command=verify_command,
             max_cost_usd=max_cost_usd,
             max_wall_seconds=max_wall_seconds,
+            isolate=isolate,
+            # Protect user-facing runs from token storms out of the box. The raw
+            # engine leaves these at 0 (off) for backward-compatibility, but the
+            # CLI/service layer enables sane circuit breakers by default.
+            duplicate_action_limit=3,
+            repeated_error_limit=3,
         )
 
         if dry_run:

@@ -24,6 +24,7 @@ from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
     AgentRunResult,
+    IsolationProvider,
     IterationContract,
     LoopConfig,
     LoopResult,
@@ -223,6 +224,11 @@ def _record_loss(
     return mid
 
 
+def _verify_output_head(output: str, *, chars: int = 200) -> str:
+    """Return a normalised head of verify output for repeated-error detection."""
+    return output[:chars]
+
+
 def run_loop(
     storage: SQLiteStorage,
     repo_root: Path,
@@ -233,6 +239,7 @@ def run_loop(
     verify_runner: VerifyRunner,
     now: datetime | None = None,
     clock: Callable[[], float] | None = None,
+    isolation_provider: IsolationProvider | None = None,
 ) -> LoopResult:
     """Run a memory-grounded loop until convergence, budget, or max iterations.
 
@@ -242,14 +249,15 @@ def run_loop(
         Initialised SQLiteStorage instance.  Dead-ends are written here and
         recalled here on the next iteration — this is the memory substrate.
     repo_root:
-        Absolute path to the repo root.  Reserved for future path-relative
-        operations; passed through but not used internally.
+        Absolute path to the repo root.  Used as the base for worktree
+        isolation when ``config.isolate`` is True.
     spec:
         Loop goal and optional success criteria.
     config:
         Runtime knobs: max_iterations, budget_tokens, verify_command,
         escalation_threshold, no_progress_window, max_cost_usd,
-        max_wall_seconds.
+        max_wall_seconds, duplicate_action_limit, repeated_error_limit,
+        isolate.
     agent_runner:
         Injectable callable matching the AgentRunner protocol.  The default
         _default_agent_runner is a no-op stub; real runs inject a CLI agent.
@@ -263,17 +271,51 @@ def run_loop(
         Injectable monotonic clock (``Callable[[], float]``).  Defaults to
         ``time.monotonic``.  Tests inject a fake for deterministic wall-time
         limit testing.
+    isolation_provider:
+        Injectable worktree isolation provider.  When ``None`` and
+        ``config.isolate`` is ``True``, the real
+        :class:`~oh_no_my_claudecode.core.repo.WorktreeIsolationProvider` is
+        used.  Pass a fake implementation in tests.
 
     Returns
     -------
     LoopResult
         stop_reason is one of:
-        'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' | 'wall-time'.
+        'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
+        'wall-time' | 'duplicate-action' | 'repeated-error'.
     """
-    del repo_root  # reserved for future path-relative operations
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
 
     ref_now: datetime = now if now is not None else datetime.now(UTC)
     _clock: Callable[[], float] = clock if clock is not None else time.monotonic
+
+    # --- Worktree isolation setup ---
+    # When config.isolate is True, create a fresh git worktree so the agent's
+    # changes are isolated.  Roll back (remove the worktree) on failure; keep
+    # on success.  Degrade gracefully if git worktree add fails.
+    _provider: IsolationProvider | None = None
+    _worktree_path: Path | None = None
+    _effective_repo_root = repo_root  # may be replaced by worktree path
+
+    if config.isolate:
+        if isolation_provider is not None:
+            _provider = isolation_provider
+        else:
+            from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
+
+            _provider = WorktreeIsolationProvider()
+
+        wt = _provider.setup(repo_root)
+        if wt is not None:
+            _worktree_path = wt
+            _effective_repo_root = wt
+            _log.debug("worktree isolation: using worktree at %s", wt)
+        else:
+            _log.warning(
+                "worktree isolation: setup failed — running in-place (no isolation)"
+            )
 
     iterations: list[IterationContract] = []
     recorded_memory_ids: list[str] = []
@@ -283,43 +325,41 @@ def run_loop(
     escalation_level: int = 0
     last_loss: IterationContract | None = None
     signature_counts: dict[str, int] = {}
+    # Circuit-breaker state.
+    consecutive_same_error: int = 0
+    last_error_head: str | None = None
     wall_start: float = _clock()
+
+    def _make_result(
+        converged: bool,
+        stop_reason: str,
+    ) -> LoopResult:
+        """Build the LoopResult and handle worktree teardown."""
+        if _provider is not None and _worktree_path is not None:
+            _provider.teardown(_worktree_path, keep=converged)
+        return LoopResult(
+            iterations=iterations,
+            converged=converged,
+            stop_reason=stop_reason,
+            recorded_memory_ids=recorded_memory_ids,
+            total_tokens=total_tokens,
+            total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
+        )
 
     for i in range(1, config.max_iterations + 1):
         # Budget check before spending more tokens.
         if config.budget_tokens is not None and total_tokens >= config.budget_tokens:
-            return LoopResult(
-                iterations=iterations,
-                converged=False,
-                stop_reason="budget",
-                recorded_memory_ids=recorded_memory_ids,
-                total_tokens=total_tokens,
-                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-            )
+            return _make_result(False, "budget")
 
         # Cost limit check before each iteration.
         if config.max_cost_usd is not None and total_cost_usd >= config.max_cost_usd:
-            return LoopResult(
-                iterations=iterations,
-                converged=False,
-                stop_reason="cost",
-                recorded_memory_ids=recorded_memory_ids,
-                total_tokens=total_tokens,
-                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-            )
+            return _make_result(False, "cost")
 
         # Wall-time limit check before each iteration.
         if config.max_wall_seconds is not None:
             elapsed = _clock() - wall_start
             if elapsed >= config.max_wall_seconds:
-                return LoopResult(
-                    iterations=iterations,
-                    converged=False,
-                    stop_reason="wall-time",
-                    recorded_memory_ids=recorded_memory_ids,
-                    total_tokens=total_tokens,
-                    total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-                )
+                return _make_result(False, "wall-time")
 
         # Build the memory-grounded prompt.
         brief = _build_brief(storage, spec.goal, last_loss, escalation_level)
@@ -360,14 +400,7 @@ def run_loop(
             # WIN: record success, return immediately.
             mid = _record_win(storage, spec.goal, contract, ref_now)
             recorded_memory_ids.append(mid)
-            return LoopResult(
-                iterations=iterations,
-                converged=True,
-                stop_reason="converged",
-                recorded_memory_ids=recorded_memory_ids,
-                total_tokens=total_tokens,
-                total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-            )
+            return _make_result(True, "converged")
         else:
             # LOSS: record dead-end so next iteration's guard blocks it.
             mid = _record_loss(storage, spec.goal, contract, ref_now)
@@ -380,27 +413,40 @@ def run_loop(
                 escalation_level += 1
                 consecutive_losses = 0
 
-            # No-progress detection.
             sig = _iteration_signature(contract)
-            signature_counts[sig] = signature_counts.get(sig, 0) + 1
-            if signature_counts[sig] >= config.no_progress_window:
-                return LoopResult(
-                    iterations=iterations,
-                    converged=False,
-                    stop_reason="no-progress",
-                    recorded_memory_ids=recorded_memory_ids,
-                    total_tokens=total_tokens,
-                    total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-                )
 
-    return LoopResult(
-        iterations=iterations,
-        converged=False,
-        stop_reason="max-iterations",
-        recorded_memory_ids=recorded_memory_ids,
-        total_tokens=total_tokens,
-        total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
-    )
+            # --- Circuit breaker 1: duplicate-action ---
+            # Fires when the EXACT same (files_touched, verify_output_head)
+            # signature repeats >= duplicate_action_limit times.  This is
+            # tighter than no-progress (which counts a sliding window of
+            # distinct signatures); this fires only on exact repetitions.
+            if config.duplicate_action_limit > 0:
+                signature_counts[sig] = signature_counts.get(sig, 0) + 1
+                if signature_counts[sig] >= config.duplicate_action_limit:
+                    return _make_result(False, "duplicate-action")
+            else:
+                signature_counts[sig] = signature_counts.get(sig, 0) + 1
+
+            # --- Circuit breaker 2: repeated-error ---
+            # Fires when the verify output HEAD is identical for N consecutive
+            # losses in a row (regardless of which files were touched).
+            error_head = _verify_output_head(contract.verify_output)
+            if config.repeated_error_limit > 0:
+                if error_head == last_error_head:
+                    consecutive_same_error += 1
+                else:
+                    consecutive_same_error = 1
+                    last_error_head = error_head
+                if consecutive_same_error >= config.repeated_error_limit:
+                    return _make_result(False, "repeated-error")
+            else:
+                last_error_head = error_head
+
+            # --- Existing no-progress detection (slower, sliding window) ---
+            if signature_counts[sig] >= config.no_progress_window:
+                return _make_result(False, "no-progress")
+
+    return _make_result(False, "max-iterations")
 
 
 # Keep utc_now import for callers who might use it.
@@ -408,6 +454,8 @@ __all__ = [
     "_build_brief",
     "_default_agent_runner",
     "_default_verify_runner",
+    "_iteration_signature",
+    "_verify_output_head",
     "run_loop",
 ]
 

@@ -1901,6 +1901,8 @@ Usage: onmc loop [OPTIONS]
  onmc loop --goal "fix bug" --max-cost-usd 2.00             # stop at $2 spend
  onmc loop --goal "fix bug" --max-wall-seconds 300          # stop after 5
  minutes
+ onmc loop --goal "fix bug" --isolate                       # run in isolated
+ worktree
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --goal                    TEXT                  Goal text for the loop       │
@@ -1933,6 +1935,18 @@ Usage: onmc loop [OPTIONS]
 │                                                 iteration when elapsed       │
 │                                                 wall-clock seconds exceed    │
 │                                                 this.                        │
+│ --isolate                                       Run the loop inside a fresh  │
+│                                                 git worktree so changes are  │
+│                                                 isolated. On success         │
+│                                                 (converged) the worktree     │
+│                                                 path is preserved; on        │
+│                                                 failure the worktree is      │
+│                                                 removed and no partial       │
+│                                                 changes leak into the        │
+│                                                 working tree. Degrades       │
+│                                                 gracefully (warns + runs     │
+│                                                 in-place) when git worktree  │
+│                                                 add fails.                   │
 │ --help                                          Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
