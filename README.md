@@ -16,10 +16,12 @@ Use the execution loop, the memory layer, or both. ONMC is local-first, cross-ag
 without a hosted account.
 
 ```bash
-pip install oh-no-my-claudecode
+uv tool install "git+https://github.com/adaline-ankit/oh-no-my-claudecode"
 cd your-repo
 onmc setup
 ```
+
+**Note:** PyPI release coming soon. The git install above is the recommended path until then.
 
 ## Why ONMC
 
@@ -29,8 +31,10 @@ Coding agents are capable. Their surrounding workflow still has four expensive g
 |---|---|
 | Every session starts cold | Repo memory compiled from git, docs, code, PRs, and transcripts |
 | Autonomous loops repeat failed ideas | `guard` injects recorded dead-ends before each attempt |
-| "Done" can mean the model stopped talking | `loop` requires convergence plus your verifier to mark a run verified |
-| Agent work is hard to inspect or reproduce | Trace, eval, replay, benchmark, and hash-chained run receipts |
+| "Done" can mean the model stopped talking | `loop` and `autopilot` require convergence plus your verifier to mark a run verified |
+| Agent work is hard to inspect or reproduce | Tamper-evident receipts with git tree hash, model/tool hashes, iteration chain, and reproducibility envelope |
+| No proof of agent improvement over time | `evolution` compares cost and iterations across runs; receipt-backed trend showing cheaper and faster loops |
+| Expensive models do all the work | Cost-split execution: `--plan-with <expensive> --execute-with <cheap>` runs precise planning once, cheap execution per iteration |
 
 ONMC does not replace Claude Code or Codex. It gives them durable repository knowledge,
 bounded execution, and evidence.
@@ -57,18 +61,31 @@ onmc why src/checkout/service.py
 onmc ui
 ```
 
-### 3. Preview an autonomous run
+### 3. Run the full loop
+
+The simplest way — one command runs the complete KNOW→PLAN(opt)→ACT→PROVE→LEARN cycle:
 
 ```bash
-onmc loop \
-  --goal "fix checkout coupon failures" \
-  --agent claude \
+onmc autopilot "fix checkout coupon failures" \
   --verify "pytest -q" \
-  --dry-run
+  --max-cost-usd 2.00
 ```
 
-Remove `--dry-run` when the plan looks right. Work on a branch: a real loop invokes the selected
-agent and can edit the repository.
+This compiles the brief, injects dead-ends, runs Claude Code in a loop, verifies success,
+records a receipt, and captures what the repo learned.
+
+Prefer `--plan-with` + `--execute-with` to split cost: expensive model plans once,
+cheap model executes:
+
+```bash
+onmc autopilot "fix the cache invalidation bug" \
+  --plan-with claude-opus-4-5 \
+  --execute-with claude-haiku-4-5 \
+  --verify "pytest -q" \
+  --max-cost-usd 2.00
+```
+
+Or use the lower-level `onmc loop` for more control:
 
 ```bash
 onmc loop \
@@ -80,46 +97,65 @@ onmc loop \
   --max-wall-seconds 900
 ```
 
-Use `--agent codex` to run `codex exec` instead. Claude Code or Codex must already be installed and
-authenticated. Missing binaries fail cleanly.
+Use `--agent codex` or `--agent opencode` to swap agents. Use `--isolate` to run in
+an isolated git worktree so failed attempts don't pollute your working tree. Use
+`--resume` to pick up from the last checkpoint.
 
-## What happens inside a loop
+## The full cycle: KNOW → (PLAN) → ACT → PROVE → LEARN
+
+`onmc autopilot` orchestrates one command:
 
 ```text
-goal
-  -> compile repo brief + relevant memories
+KNOW   → compile repo brief + recall guard (dead-ends) + user profile (preferences)
+PLAN   → [optional] expensive model produces a precise implementation plan
+ACT    → memory-grounded autonomous loop (avoids recorded dead-ends, stops at limits)
+PROVE  → receipt + verified/not-verified verdict + cost (receipt is tamper-evident)
+LEARN  → capture session memory + skill_promote + consolidate brain
+         → "Your brain grew: +N memories · +N skills · N dead-ends known"
+```
+
+Loop iteration details:
+
+```text
+Each ACT iteration:
   -> inject known failed approaches
   -> run Claude Code or Codex
   -> run your verifier
   -> record prediction, outcome, files, tokens/cost when available
-  -> learn win or failed approach
+  -> decide: win, loss, or unknown
   -> continue, converge, or stop at a hard limit
-  -> write receipt under .agent-memory/receipts/
 ```
 
-A run is `verified` only when the loop converged **and** the final verifier exited successfully.
+A run is **verified** only when the loop converged **and** the final verifier exited successfully.
 Model claims alone never produce verified status.
 
-Receipts bind the goal, agent, model, verifier result, git tree, diff, loop spec, output digest,
-limits, and iteration chain with SHA-256. Receipts are tamper-evident, not cryptographically signed.
+**Receipts** (written to `.agent-memory/receipts/`) bind goal, agent, model, verifier result,
+git tree hash, diff SHA, loop spec, output digest, limits, and iteration chain with SHA-256.
+Receipts include a reproducibility envelope (model IDs, tool/prompt hashes, runtime) so runs can
+be reproduced. They are tamper-evident (not cryptographically signed).
 
-## What ships in v0.36
+## What ships in v0.47
 
 | Capability | Command | What it gives you |
 |---|---|---|
-| Accountable autonomous loop | `onmc loop` | Real Claude/Codex execution, dead-end avoidance, verifier gates, hard limits |
+| Full autopilot cycle | `onmc autopilot "<goal>"` | One-verb KNOW→(PLAN)→ACT→PROVE→LEARN; ends with "your brain grew" summary. Use `--plan-with <model> --execute-with <model>` for cost-split |
+| Compounding proof | `onmc evolution` | Shows agent getting cheaper/fewer-iterations across runs, receipt-backed trend |
+| Accountable autonomous loop | `onmc loop` | Real Claude/Codex/OpenCode execution, dead-end avoidance, verifier gates, hard limits |
+| Loop isolation & resume | `onmc loop --isolate --resume` | Run in fresh git worktree; roll back on failure. Resume interrupted runs from last checkpoint |
+| Loop templates | `onmc loop --template ci-healer` | Ready-to-run templates: ci-healer, pr-babysitter, issue-to-pr |
+| Tamper-evident receipts | loop/autopilot receipts | Git tree/diff SHA, hash chain, reproducibility envelope (model/tool/config hashes) for reproducibility |
 | Portable repo brain | `onmc sync --commit` | Human-readable `.agent-memory/` JSON that travels through git |
 | Failure recall | `onmc recall`, `onmc guard` | Past incidents, fixes, and approaches not to repeat |
 | Task context | `onmc brief`, `onmc codegraph` | Compact, task-specific context instead of broad file dumping |
-| Run proof | loop receipts | Hash-chained evidence with verifier and repository state |
 | Replay Lab | `onmc replay run ... --compare` | Re-run memory decisions over a recorded trace, offline |
 | Memory evals | `onmc eval run`, `onmc eval compare` | CI-gate recall quality and measure memory contribution |
 | Trace Observatory | `onmc trace` | Session events, memory hit rate, loop signals, estimated token ROI |
+| Skill export | `onmc skill export` | Export learned skills as Agent Skills SKILL.md (agentskills.io standard, 16+ tools supported) |
 | Agent config audit | `onmc audit` | CI-gateable scan for permissions, secrets, hooks, MCP, prompt-injection risks |
 | MCP trust policy | `onmc mcp` | Classify recorded/stdin MCP calls as allow, block, or approval required |
 | GitHub workflow pack | `onmc gh-aw init` | Issue context, PR preflight, merged-PR learning, weekly memory audit |
-| Visual inspection | `onmc ui`, `onmc tui`, `onmc wiki` | Local dashboard, terminal browser, and Obsidian knowledge graph |
-| Cross-agent integration | `onmc plug` | Claude Code, Codex, Cursor, OMC, and OMX adapters |
+| Visual inspection | `onmc ui`, `onmc tui`, `onmc wiki` | Local dashboard, terminal browser, Mission Control live view, and Obsidian knowledge graph |
+| Cross-agent integration | `onmc plug` | Claude Code, Codex, Cursor, OpenCode adapters for headless loop/autopilot |
 
 ### Release progression
 
@@ -297,11 +333,12 @@ repo-specific numbers.
 | Start | `setup`, `doctor`, `status`, `ui`, `tui` |
 | Understand | `brief`, `why`, `blame`, `codegraph`, `ask`, `onboard`, `digest` |
 | Remember | `ingest`, `mine`, `capture`, `memory`, `consolidate`, `sync`, `pull` |
-| Execute | `loop`, `solve`, `review`, `teach` |
+| Execute | `autopilot`, `loop`, `solve`, `review`, `teach` |
 | Verify | `check`, `guard`, `recall`, `audit`, `eval`, `replay`, `benchmark` |
-| Observe | `trace`, `savings`, `report`, `hud`, `statusline` |
+| Measure | `evolution`, `savings` |
+| Observe | `trace`, `report`, `hud`, `statusline` |
 | Integrate | `plug`, `hooks`, `serve --mcp`, `gh-aw`, `mcp` |
-| Share | `wiki --format obsidian`, `ui --export`, `.agent-memory/` |
+| Share | `wiki --format obsidian`, `ui --export`, `.agent-memory/`, `skill export` |
 
 Full generated options: [docs/cli-reference.md](docs/cli-reference.md).
 
