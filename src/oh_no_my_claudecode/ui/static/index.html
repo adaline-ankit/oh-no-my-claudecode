@@ -31,6 +31,9 @@
           <button class="nav-item" data-view="health">
             <span class="nav-icon" aria-hidden="true">◇</span><span>Health</span>
           </button>
+          <button class="nav-item" data-view="mission">
+            <span class="nav-icon" aria-hidden="true">⟳</span><span>Mission</span>
+          </button>
         </nav>
         <div class="sidebar-foot">
           <span class="connection-dot" aria-hidden="true"></span>
@@ -133,6 +136,55 @@
               <section class="panel"><div class="panel-heading"><h3>Directories</h3><span id="directory-count"></span></div><div id="directory-list" class="rank-list"></div></section>
               <section class="panel"><div class="panel-heading"><h3>Hot files</h3><span id="graph-file-count"></span></div><div id="graph-file-list" class="rank-list"></div></section>
             </div>
+          </section>
+
+          <section id="view-mission" class="view" data-view-panel="mission" aria-labelledby="mission-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Autonomous loop</span><h2 id="mission-title">Mission Control</h2></div>
+              <span id="mission-run-count" class="mission-run-count"></span>
+            </div>
+
+            <!-- KNOW → ACT → PROVE → LEARN loop strip -->
+            <section class="panel loop-strip-panel" aria-label="KNOW ACT PROVE LEARN loop">
+              <div class="loop-strip">
+                <div class="loop-stage" data-stage="know">
+                  <span class="loop-icon" aria-hidden="true">🧠</span>
+                  <span class="loop-label">KNOW</span>
+                  <span class="loop-desc">Index repo, load memory, build context</span>
+                </div>
+                <span class="loop-arrow" aria-hidden="true">→</span>
+                <div class="loop-stage" data-stage="act">
+                  <span class="loop-icon" aria-hidden="true">⚙</span>
+                  <span class="loop-label">ACT</span>
+                  <span class="loop-desc">Run agent loop, apply changes</span>
+                </div>
+                <span class="loop-arrow" aria-hidden="true">→</span>
+                <div class="loop-stage" data-stage="prove">
+                  <span class="loop-icon" aria-hidden="true">✅</span>
+                  <span class="loop-label">PROVE</span>
+                  <span class="loop-desc">Verify with tests and checks</span>
+                </div>
+                <span class="loop-arrow" aria-hidden="true">→</span>
+                <div class="loop-stage" data-stage="learn">
+                  <span class="loop-icon" aria-hidden="true">📈</span>
+                  <span class="loop-label">LEARN</span>
+                  <span class="loop-desc">Write receipts, update memory</span>
+                </div>
+                <span class="loop-arrow loop-arrow-back" aria-hidden="true">↺</span>
+              </div>
+            </section>
+
+            <!-- Getting smarter trend -->
+            <section class="panel evolution-panel" aria-labelledby="evolution-title">
+              <div class="panel-heading"><h3 id="evolution-title">Getting smarter</h3><span id="evolution-window-label"></span></div>
+              <div id="evolution-body"></div>
+            </section>
+
+            <!-- Recent runs table -->
+            <section class="panel runs-panel" aria-labelledby="runs-title">
+              <div class="panel-heading"><h3 id="runs-title">Run history</h3><span id="runs-subtitle"></span></div>
+              <div id="runs-body"></div>
+            </section>
           </section>
 
           <section id="view-health" class="view" data-view-panel="health" aria-labelledby="health-title" hidden>

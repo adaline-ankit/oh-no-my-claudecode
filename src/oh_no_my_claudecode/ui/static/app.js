@@ -45,6 +45,7 @@ function hydrateDashboard() {
   renderTasks();
   renderCodegraphLists();
   renderHealth();
+  renderMission();
   switchView(state.view);
   renderWelcome();
 }
@@ -214,6 +215,87 @@ function drawCodegraph() {
     ctx.textBaseline = "middle";
     ctx.fillText(compact ? String(index + 1) : truncate(directory.path, 14), position.x, compact ? position.y + .5 : 72);
   });
+}
+
+function renderMission() {
+  const loops = state.data.loops || { evolution: null, recent_runs: [] };
+  const { evolution, recent_runs: runs } = loops;
+  const runCount = runs.length;
+
+  byId("mission-run-count").textContent = runCount ? `${runCount} recent run${runCount === 1 ? "" : "s"}` : "";
+
+  // Mark loop stages as "active" when runs exist
+  document.querySelectorAll(".loop-stage").forEach((stage) => {
+    stage.classList.toggle("is-active", runCount > 0);
+  });
+
+  // Evolution trend panel
+  const evoEl = byId("evolution-body");
+  if (!evolution || evolution.insufficient_data) {
+    const hasAny = evolution && evolution.run_count > 0;
+    evoEl.innerHTML = `<div class="evolution-empty">${hasAny
+      ? `Only ${evolution.run_count} run recorded — need at least 2 to compute trend.<br>Run <code>onmc autopilot "your goal"</code> again to see improvement metrics.`
+      : `No runs yet. Run <code>onmc autopilot "your goal"</code> a few times to see your agent improve.`
+    }</div>`;
+    byId("evolution-window-label").textContent = "";
+  } else {
+    const costPct = evolution.cost_change_pct;
+    const iterPct = evolution.iterations_change_pct;
+    const verRate = Math.round((evolution.verified_rate || 0) * 100);
+
+    const formatPct = (pct) => {
+      if (pct === null || pct === undefined) return "—";
+      const sign = pct < 0 ? "↓" : pct > 0 ? "↑" : "—";
+      return `${sign}${Math.abs(pct).toFixed(1)}%`;
+    };
+    const pctClass = (pct) => {
+      if (pct === null || pct === undefined) return "neutral";
+      return pct < 0 ? "improving" : pct > 0 ? "worsening" : "neutral";
+    };
+
+    byId("evolution-window-label").textContent = `${evolution.run_count} runs · ${verRate}% verified`;
+
+    const costLabel = evolution.cost_unavailable ? "—" : formatPct(costPct);
+    const costCls = evolution.cost_unavailable ? "neutral" : pctClass(costPct);
+
+    evoEl.innerHTML = `<div class="evolution-stats">
+      <div class="evolution-stat">
+        <div class="evolution-stat-label">Cost trend</div>
+        <div class="evolution-stat-value ${escapeHtml(costCls)}">${escapeHtml(costLabel)}</div>
+      </div>
+      <div class="evolution-stat">
+        <div class="evolution-stat-label">Iterations trend</div>
+        <div class="evolution-stat-value ${escapeHtml(pctClass(iterPct))}">${escapeHtml(formatPct(iterPct))}</div>
+      </div>
+      <div class="evolution-stat">
+        <div class="evolution-stat-label">Verified rate</div>
+        <div class="evolution-stat-value neutral">${verRate}%</div>
+      </div>
+      <div class="evolution-stat">
+        <div class="evolution-stat-label">Total runs</div>
+        <div class="evolution-stat-value neutral">${formatNumber(evolution.run_count)}</div>
+      </div>
+    </div>`;
+  }
+
+  // Recent runs table
+  const runsEl = byId("runs-body");
+  byId("runs-subtitle").textContent = runs.length ? `last ${runs.length}` : "";
+  if (!runs.length) {
+    runsEl.innerHTML = '<div class="evolution-empty">No runs recorded yet. Receipts appear here after each <code>onmc autopilot</code> run.</div>';
+  } else {
+    runsEl.innerHTML = `<div class="runs-table-shell"><table class="runs-table"><thead><tr>
+      <th>Goal</th><th>Agent</th><th>✓</th><th>Iters</th><th>Cost</th><th>When</th><th>Hash</th>
+    </tr></thead><tbody>${runs.map((run) => `<tr>
+      <td><span class="run-goal">${escapeHtml(truncate(run.goal, 60))}</span></td>
+      <td><span class="run-agent">${escapeHtml(run.agent)}</span></td>
+      <td class="${run.verified ? "run-verified-yes" : "run-verified-no"}">${run.verified ? "✓" : "✗"}</td>
+      <td>${formatNumber(run.iterations)}</td>
+      <td>${run.cost_usd !== null && run.cost_usd !== undefined ? `$${Number(run.cost_usd).toFixed(3)}` : "—"}</td>
+      <td>${escapeHtml(run.when ? formatDate(run.when) : "—")}</td>
+      <td><span class="run-hash">${escapeHtml(run.receipt_hash_short || "")}</span></td>
+    </tr>`).join("")}</tbody></table></div>`;
+  }
 }
 
 function renderHealth() {
