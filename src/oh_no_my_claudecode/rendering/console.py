@@ -1910,6 +1910,132 @@ def render_loop_receipt_block(
     )
 
 
+def render_autopilot_result(result: object) -> None:
+    """Render an :class:`~oh_no_my_claudecode.autopilot.models.AutopilotResult`.
+
+    Displays four narrated phase lines/panels (KNOW / ACT / PROVE / LEARN)
+    followed by a "Your brain grew" summary card showing memory delta, skill
+    delta, dead-ends, cost, and receipt path.
+    """
+    from oh_no_my_claudecode.autopilot.models import AutopilotResult
+
+    if not isinstance(result, AutopilotResult):
+        console.print("[yellow]No autopilot result to display.[/yellow]")
+        return
+
+    r = result
+
+    # ── KNOW ──────────────────────────────────────────────────────────────────
+    profile_tag = " [dim](profile applied)[/dim]" if r.know_profile_applied else ""
+    de_tag = f" · {r.know_dead_ends_count} dead-ends blocked" if r.know_dead_ends_count else ""
+    console.print(
+        Panel.fit(
+            f"[bold]Brief:[/bold] {r.know_brief_summary or '(compiled)'}"
+            f"{de_tag}{profile_tag}",
+            title="[bold cyan]🧠 KNOW[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    # ── ACT ───────────────────────────────────────────────────────────────────
+    from oh_no_my_claudecode.loop.models import LoopResult
+
+    loop_result = r.loop_result
+    if isinstance(loop_result, LoopResult):
+        n_iter = len(loop_result.iterations)
+        stop = loop_result.stop_reason or "unknown"
+        converged_str = (
+            "[green]converged[/green]" if loop_result.converged else f"[yellow]{stop}[/yellow]"
+        )
+        token_str = f"{r.tokens:,}" if r.tokens else "0"
+        act_lines = [
+            f"Iterations: {n_iter}  Status: {converged_str}",
+            f"Tokens: {token_str}",
+        ]
+        if r.stop_reason == "dry-run":
+            act_lines = ["[dim]dry-run — no agent invoked[/dim]"]
+        console.print(
+            Panel.fit(
+                "\n".join(act_lines),
+                title="[bold yellow]⚙ ACT[/bold yellow]",
+                border_style="yellow",
+            )
+        )
+
+    # ── PROVE ─────────────────────────────────────────────────────────────────
+    if r.verified:
+        prove_status = "[bold green]VERIFIED[/bold green]"
+    elif r.stop_reason == "dry-run":
+        prove_status = "[dim]dry-run — not verified[/dim]"
+    else:
+        prove_status = f"[bold yellow]NOT VERIFIED[/bold yellow] — {r.stop_reason}"
+
+    cost_str = f"  cost ${r.cost_usd:.2f}" if r.cost_usd is not None else ""
+    receipt_str = (
+        f"\nReceipt: {r.receipt_path}" if r.receipt_path else "\nReceipt: (none)"
+    )
+    console.print(
+        Panel.fit(
+            f"{prove_status}{cost_str}{receipt_str}",
+            title="[bold green]✅ PROVE[/bold green]",
+            border_style="green" if r.verified else "yellow",
+        )
+    )
+
+    # ── LEARN ─────────────────────────────────────────────────────────────────
+    if r.stop_reason == "dry-run":
+        learn_lines = ["[dim]dry-run — LEARN skipped[/dim]"]
+    else:
+        learn_lines = []
+        if r.memories_added:
+            learn_lines.append(f"Memories added: {r.memories_added}")
+        if r.skills_added:
+            learn_lines.append(f"Skills promoted: {r.skills_added}")
+        if r.dead_ends_recorded:
+            learn_lines.append(f"Dead-ends recorded: {r.dead_ends_recorded}")
+        if r.skill_promoted_name:
+            learn_lines.append(f"Skill name: {r.skill_promoted_name}")
+        if r.consolidated_count:
+            learn_lines.append(f"Consolidation changes: {r.consolidated_count}")
+        if not learn_lines:
+            learn_lines = ["No new memories (loop produced no changes)"]
+    console.print(
+        Panel.fit(
+            "\n".join(learn_lines),
+            title="[bold magenta]📈 LEARN[/bold magenta]",
+            border_style="magenta",
+        )
+    )
+
+    # ── Brain grew ────────────────────────────────────────────────────────────
+    delta_memories = r.brain_after.memories - r.brain_before.memories
+    delta_skills = r.brain_after.skills - r.brain_before.skills
+    delta_de = r.brain_after.dead_ends - r.brain_before.dead_ends
+
+    def _signed(n: int, label: str) -> str:
+        sign = "+" if n >= 0 else ""
+        return f"{sign}{n} {label}"
+
+    summary_parts = [
+        _signed(delta_memories, "memories"),
+        _signed(delta_skills, "skills"),
+        _signed(delta_de, "dead-ends"),
+    ]
+    if r.cost_usd is not None:
+        summary_parts.append(f"${r.cost_usd:.2f} spent")
+    if r.receipt_path:
+        summary_parts.append(str(r.receipt_path))
+
+    grow_color = "green" if (delta_memories > 0 or delta_skills > 0) else "dim"
+    console.print(
+        Panel.fit(
+            f"[{grow_color}]" + "  ·  ".join(summary_parts) + f"[/{grow_color}]",
+            title="[bold]Your brain grew[/bold]",
+            border_style=grow_color,
+        )
+    )
+
+
 def render_trace_card(report: TraceReport) -> None:
     """Render the viral Agent Trace Observatory card.
 

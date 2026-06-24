@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 if TYPE_CHECKING:
     from oh_no_my_claudecode.ask.compiler import AskResult
     from oh_no_my_claudecode.audit.scanner import AuditReport
+    from oh_no_my_claudecode.autopilot.models import AutopilotResult
     from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
-    from oh_no_my_claudecode.loop.models import LoopResult
+    from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.profile.compiler import UserProfile
@@ -610,6 +611,8 @@ class OnmcService:
         dry_run: bool = False,
         max_cost_usd: float | None = None,
         max_wall_seconds: int | None = None,
+        agent_runner: AgentRunner | None = None,
+        verify_runner: VerifyRunner | None = None,
     ) -> tuple[LoopResult, Path | None]:
         """Run a memory-grounded autonomous loop against *goal*.
 
@@ -646,6 +649,16 @@ class OnmcService:
         max_wall_seconds:
             Optional wall-clock timeout in seconds; the loop stops before the
             next iteration when elapsed time exceeds this value.
+        agent_runner:
+            Optional injectable :class:`~oh_no_my_claudecode.loop.models.AgentRunner`.
+            When provided, used directly instead of building a real CLI runner.
+            Intended for testing and for ``autopilot`` orchestration.  When
+            ``None`` (default), a real runner is built from *agent*.
+        verify_runner:
+            Optional injectable :class:`~oh_no_my_claudecode.loop.models.VerifyRunner`.
+            When provided, used directly instead of the default subprocess runner.
+            Intended for testing.  When ``None`` (default), the default subprocess
+            verify runner is used.
 
         Returns
         -------
@@ -706,44 +719,48 @@ class OnmcService:
             )
             return dry_result, None
 
-        # Validate the agent selector and surface a clean error when the binary
-        # is missing rather than letting subprocess raise obscure errors.
-        if agent not in {"claude", "codex"}:
-            raise ValueError(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'.")
+        # Resolve the verify runner (injected takes priority).
+        resolved_verify_runner = (
+            verify_runner if verify_runner is not None else _default_verify_runner
+        )
+
+        # Resolve the agent runner (injected takes priority).
+        resolved_agent_runner: object
+        if agent_runner is not None:
+            resolved_agent_runner = agent_runner
+        else:
+            # Validate the agent selector and surface a clean error when the
+            # binary is missing rather than letting subprocess raise obscure errors.
+            if agent not in {"claude", "codex"}:
+                raise ValueError(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'.")
+
+            if not agent_binary_available(agent):  # type: ignore[arg-type]
+
+                def _missing_agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                    del prompt, escalation_level
+                    return AgentRunResult(
+                        output=f"[{agent} binary not found on PATH — install it first]",
+                        prediction="",
+                        files_touched=[],
+                        tokens=None,
+                    )
+
+                resolved_agent_runner = _missing_agent
+            else:
+                resolved_agent_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]  # noqa: PGH003
 
         onmc_ver = _installed_onmc_version() or "unknown"
         wall_start = _time.monotonic()
         started_at = isoformat_utc(utc_now())
 
-        if not agent_binary_available(agent):  # type: ignore[arg-type]
-
-            def _missing_agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
-                del prompt, escalation_level
-                return AgentRunResult(
-                    output=f"[{agent} binary not found on PATH — install it first]",
-                    prediction="",
-                    files_touched=[],
-                    tokens=None,
-                )
-
-            result = run_loop(
-                storage,
-                repo_root,
-                spec,
-                config,
-                agent_runner=_missing_agent,
-                verify_runner=_default_verify_runner,
-            )
-        else:
-            real_runner = make_agent_runner(agent, repo_root)  # type: ignore[arg-type]
-            result = run_loop(
-                storage,
-                repo_root,
-                spec,
-                config,
-                agent_runner=real_runner,
-                verify_runner=_default_verify_runner,
-            )
+        result = run_loop(
+            storage,
+            repo_root,
+            spec,
+            config,
+            agent_runner=resolved_agent_runner,
+            verify_runner=resolved_verify_runner,
+        )
 
         wall_seconds = _time.monotonic() - wall_start
         ended_at = isoformat_utc(utc_now())
@@ -765,6 +782,62 @@ class OnmcService:
             receipt_path = write_receipt(repo_root, receipt)
 
         return result, receipt_path
+
+    def autopilot(
+        self,
+        goal: str,
+        *,
+        agent: str = "claude",
+        dry_run: bool = False,
+        max_iterations: int = 10,
+        budget_tokens: int | None = None,
+        max_cost_usd: float | None = None,
+        max_wall_seconds: int | None = None,
+        verify_command: str = "pytest",
+        agent_runner: AgentRunner | None = None,
+        verify_runner: VerifyRunner | None = None,
+    ) -> AutopilotResult:
+        """Run the full KNOW→ACT→PROVE→LEARN autopilot cycle against *goal*.
+
+        Orchestrates all existing onmc commands in a single narrated run:
+        KNOW (brief + guard + profile), ACT (loop), PROVE (verify), LEARN
+        (capture + skill_promote + consolidate), ending with a brain-growth delta.
+
+        Parameters
+        ----------
+        goal:
+            The task/goal to work on.
+        agent:
+            Which CLI agent to use (``"claude"`` or ``"codex"``).
+        dry_run:
+            When True, only run KNOW phase and return without invoking any agent
+            or verify subprocess.  No memory writes, no cost.
+        max_iterations, budget_tokens, max_cost_usd, max_wall_seconds, verify_command:
+            Forwarded to :meth:`loop`.
+        agent_runner, verify_runner:
+            Optional injectable runners for testing.  When ``None`` (default),
+            real CLI runners are used.
+
+        Returns
+        -------
+        AutopilotResult
+            Full structured result including brain delta and LEARN outcomes.
+        """
+        from oh_no_my_claudecode.autopilot.orchestrator import run_autopilot
+
+        return run_autopilot(
+            self,
+            goal,
+            agent=agent,
+            dry_run=dry_run,
+            max_iterations=max_iterations,
+            budget_tokens=budget_tokens,
+            max_cost_usd=max_cost_usd,
+            max_wall_seconds=max_wall_seconds,
+            verify_command=verify_command,
+            agent_runner=agent_runner,
+            verify_runner=verify_runner,
+        )
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
         """Return the most recent compaction snapshot."""
