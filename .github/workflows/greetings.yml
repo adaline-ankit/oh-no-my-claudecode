@@ -18,9 +18,16 @@ jobs:
   greeting:
     name: welcome first-time contributor
     runs-on: ubuntu-latest
+    # Only greet external contributors: issues always, but PRs only when they
+    # come from a fork. Same-repo (maintainer) PRs are never first-interactions
+    # and first-interaction errors on them — skip so CI stays green.
+    if: >-
+      github.event_name == 'issues' ||
+      github.event.pull_request.head.repo.full_name != github.repository
     permissions:
       issues: write
       pull-requests: write
+    continue-on-error: true
     steps:
       - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
         with:
@@ -28,8 +35,9 @@ jobs:
           issue_message: >-
             Thanks for opening your first issue in **onmc**! 🧠 A maintainer
             will triage it soon. If this is a bug, the more repro detail (onmc
-            version via `onmc --version`, OS, exact command) the faster we can
-            help. New here? See CONTRIBUTING.md and the `good first issue` label.
+            version via `uv tool list` / `pip show oh-no-my-claudecode`, OS, exact
+            command) the faster we can help. New here? See CONTRIBUTING.md and
+            the `good first issue` label.
           pr_message: >-
             Thanks for your first pull request to **onmc**! 🎉 CI will run lint,
             types, tests, and the security/brain-freshness checks. Please make

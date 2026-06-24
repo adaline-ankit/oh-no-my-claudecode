@@ -1855,11 +1855,21 @@ def render_loop_receipt_block(
     git_tree: str | None = None
     verifier_exit: int | None = None
 
+    model_version: str | None = None
+    config_hash_short: str | None = None
+    prompt_hash_short: str | None = None
+
     if receipt is not None:
         cost_usd = receipt.cost_usd
         wall_seconds = receipt.wall_seconds
         git_tree = receipt.git_tree_sha
         verifier_exit = receipt.verifier_final_exit
+        # Reproducibility envelope fields (schema_version "2"; None on old receipts).
+        model_version = getattr(receipt, "model_version", None)
+        _cfg_hash = getattr(receipt, "config_hash", None)
+        config_hash_short = _cfg_hash[:8] if _cfg_hash else None
+        _prm_hash = getattr(receipt, "prompt_hash", None)
+        prompt_hash_short = _prm_hash[:8] if _prm_hash else None
 
     # Token line
     token_str = f"{tokens_used:,}" if tokens_used else "0"
@@ -1899,6 +1909,17 @@ def render_loop_receipt_block(
         git_line,
         receipt_line,
     ]
+
+    # Reproducibility line — only when envelope fields are present (schema v2+).
+    repro_parts: list[str] = []
+    if model_version:
+        repro_parts.append(f"model {model_version}")
+    if config_hash_short and prompt_hash_short:
+        repro_parts.append(f"config {config_hash_short} · prompt {prompt_hash_short}")
+    elif config_hash_short:
+        repro_parts.append(f"config {config_hash_short}")
+    if repro_parts:
+        lines.append(f"[dim]reproducible: {' · '.join(repro_parts)}[/dim]")
 
     border = "green" if result.converged else "yellow"
     console.print(
