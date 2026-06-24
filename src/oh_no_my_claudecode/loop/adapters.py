@@ -1,18 +1,21 @@
 """Real headless agent adapters for the onmc loop engine.
 
-Two adapters are provided:
+Three adapters are provided:
 
 - ``ClaudeCliAdapter`` — shells out to ``claude -p <prompt> --output-format json``
   and parses the structured JSON response to extract text, tokens, and cost.
 - ``CodexCliAdapter`` — shells out to ``codex exec <prompt>`` (headless mode)
   and returns the raw stdout as output; token usage is not available from the
   Codex CLI in headless mode.
+- ``OpenCodeCliAdapter`` — shells out to
+  ``opencode run --format json [--model <provider/model>] <prompt>``
+  and parses the JSON event stream defensively for text and token usage.
 
-Both adapters compute ``files_touched`` by diffing ``git status --porcelain``
+All adapters compute ``files_touched`` by diffing ``git status --porcelain``
 snapshots taken *before* and *after* the agent call, so the list is always
 derived from the real working tree rather than fabricated.
 
-Both adapters accept an injectable ``CommandRunner`` so that tests can supply
+All adapters accept an injectable ``CommandRunner`` so that tests can supply
 canned subprocess results without ever spawning a real agent process.
 
 Usage::
@@ -21,6 +24,10 @@ Usage::
 
     runner = make_agent_runner("claude", repo_root=Path("/my/repo"))
     result = runner("Fix the broken import", escalation_level=0)
+
+    runner_oc = make_agent_runner("opencode", repo_root=Path("/my/repo"),
+                                  model="anthropic/claude-opus-4-5")
+    result_oc = runner_oc("Fix the broken import", escalation_level=0)
 """
 
 from __future__ import annotations
@@ -366,6 +373,183 @@ class CodexCliAdapter:
 
 
 # ---------------------------------------------------------------------------
+# OpenCodeCliAdapter
+# ---------------------------------------------------------------------------
+
+
+def _parse_opencode_json(raw: str) -> tuple[str, int | None]:
+    """Parse OpenCode ``--format json`` output into ``(text, tokens)``.
+
+    OpenCode emits a stream of JSON events, one per line.  We scan every line
+    defensively:
+
+    - Look for an ``assistant`` event or a ``result`` event that carries the
+      final response text.  Known layouts (non-exhaustive):
+
+      * ``{"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}``
+      * ``{"type": "result", "text": "..."}``
+      * A top-level ``{"text": "..."}`` or ``{"result": "..."}``
+
+    - Token usage, when present, may appear as:
+
+      * ``{"type": "result", "usage": {"input": N, "output": M}}``
+      * ``{"usage": {"input_tokens": N, "output_tokens": M}}``
+
+    All parsing is done defensively; any malformed line is silently skipped.
+    When no structured text is found, the entire raw stdout is returned as-is.
+    Tokens are ``None`` when not present.
+    """
+    if not raw.strip():
+        return "", None
+
+    collected_texts: list[str] = []
+    total_tokens: int | None = None
+
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+
+        # Extract text from various event shapes.
+        event_type = event.get("type", "")
+
+        # Shape: {"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}]}}
+        if event_type == "assistant":
+            msg = event.get("message")
+            if isinstance(msg, dict):
+                content = msg.get("content")
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            t = block.get("text", "")
+                            if t:
+                                collected_texts.append(t)
+                elif isinstance(content, str) and content:
+                    collected_texts.append(content)
+
+        # Shape: {"type": "result", "text": "...", "usage": {...}}
+        elif event_type == "result":
+            t = event.get("text")
+            if isinstance(t, str) and t:
+                collected_texts.append(t)
+            # Usage may live here.
+            usage = event.get("usage")
+            if isinstance(usage, dict) and total_tokens is None:
+                inp = usage.get("input", 0) or usage.get("input_tokens", 0) or 0
+                out = usage.get("output", 0) or usage.get("output_tokens", 0) or 0
+                total = inp + out
+                if total > 0:
+                    total_tokens = total
+
+        # Generic fallback shapes.
+        else:
+            for key in ("text", "result"):
+                val = event.get(key)
+                if isinstance(val, str) and val:
+                    collected_texts.append(val)
+                    break
+
+        # Generic usage extraction (any event type).
+        if total_tokens is None:
+            usage = event.get("usage")
+            if isinstance(usage, dict):
+                inp = usage.get("input", 0) or usage.get("input_tokens", 0) or 0
+                out = usage.get("output", 0) or usage.get("output_tokens", 0) or 0
+                total = inp + out
+                if total > 0:
+                    total_tokens = total
+
+    text = "\n".join(collected_texts).strip()
+    if not text:
+        # Nothing structured found — return raw stdout as a best-effort fallback.
+        text = raw.strip()
+
+    return text, total_tokens
+
+
+class OpenCodeCliAdapter:
+    """Agent adapter that drives the OpenCode CLI in non-interactive run mode.
+
+    Calls ``opencode run --format json [--model <provider/model>] <prompt>``
+    (with ``--dir <repo_root>`` to set the working directory) and parses the
+    JSON event stream to extract the assistant's final response text.  Token
+    usage is extracted when present in the event stream; otherwise ``tokens``
+    is ``None``.
+
+    ``opencode`` reads project context from ``AGENTS.md`` and ``.opencode/``
+    automatically when ``--dir`` is set.
+
+    Parameters
+    ----------
+    repo_root:
+        Working directory for the subprocess (and for git status diffing).
+        Passed as ``--dir`` to ``opencode run``.
+    model:
+        Optional model in ``provider/model`` form
+        (e.g. ``"anthropic/claude-opus-4-5"``).  When ``None``, opencode's
+        configured default is used.
+    command_runner:
+        Injectable subprocess boundary.  Tests inject a fake here.
+    timeout:
+        Seconds before the agent subprocess is killed.
+    """
+
+    def __init__(
+        self,
+        repo_root: Path,
+        *,
+        model: str | None = None,
+        command_runner: CommandRunner | None = None,
+        timeout: int = 600,
+    ) -> None:
+        self._repo_root = str(repo_root)
+        self._model = model
+        self._cmd_runner = command_runner or _default_command_runner
+        self._timeout = timeout
+
+    def __call__(self, prompt: str, *, escalation_level: int) -> AgentRunResult:
+        """Run OpenCode CLI and return a structured AgentRunResult."""
+        effective_prompt = _maybe_escalate_prompt(prompt, escalation_level)
+
+        # Snapshot git status before running.
+        before = _git_status_paths(self._cmd_runner, self._repo_root, 30)
+
+        cmd = ["opencode", "run", "--format", "json", "--dir", self._repo_root]
+        if self._model:
+            cmd.extend(["--model", self._model])
+        cmd.append(effective_prompt)
+
+        proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
+
+        # Snapshot git status after running.
+        after = _git_status_paths(self._cmd_runner, self._repo_root, 30)
+        files_touched = _compute_files_touched(before, after)
+
+        output, tokens = _parse_opencode_json(proc.stdout)
+
+        # Surface OS-level errors cleanly.
+        if proc.returncode == 127 or (not output and proc.stderr):
+            output = proc.stderr.strip() or "[opencode: no output]"
+            tokens = None
+
+        prediction = _first_line(output)
+
+        return AgentRunResult(
+            output=output,
+            prediction=prediction,
+            files_touched=files_touched,
+            tokens=tokens,
+            cost_usd=None,  # OpenCode does not emit cost in headless mode
+        )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -385,25 +569,28 @@ def _first_line(text: str) -> str:
 
 
 def make_agent_runner(
-    agent: Literal["claude", "codex"],
+    agent: Literal["claude", "codex", "opencode"],
     repo_root: Path,
     *,
     model: str | None = None,
     command_runner: CommandRunner | None = None,
     timeout: int = 600,
-) -> ClaudeCliAdapter | CodexCliAdapter:
+) -> ClaudeCliAdapter | CodexCliAdapter | OpenCodeCliAdapter:
     """Build and return a real agent runner matching the AgentRunner protocol.
 
     Parameters
     ----------
     agent:
         Which CLI to use.  ``"claude"`` → ``ClaudeCliAdapter``;
-        ``"codex"`` → ``CodexCliAdapter``.
+        ``"codex"`` → ``CodexCliAdapter``;
+        ``"opencode"`` → ``OpenCodeCliAdapter``.
     repo_root:
         Absolute path to the repository root.  Used as the subprocess CWD
         and for ``git status`` diffing.
     model:
-        Optional model override (Claude only).  Ignored for Codex.
+        Optional model override.  For Claude, a model name
+        (e.g. ``"claude-opus-4-5"``).  For OpenCode, a ``provider/model``
+        string (e.g. ``"anthropic/claude-opus-4-5"``).  Ignored for Codex.
     command_runner:
         Injectable subprocess boundary for testing.  When ``None`` the
         real ``subprocess.run`` wrapper is used.
@@ -418,7 +605,7 @@ def make_agent_runner(
     Raises
     ------
     ValueError
-        When *agent* is not ``"claude"`` or ``"codex"``.
+        When *agent* is not ``"claude"``, ``"codex"``, or ``"opencode"``.
     """
     if agent == "claude":
         return ClaudeCliAdapter(
@@ -433,12 +620,20 @@ def make_agent_runner(
             command_runner=command_runner,
             timeout=timeout,
         )
+    if agent == "opencode":
+        return OpenCodeCliAdapter(
+            repo_root,
+            model=model,
+            command_runner=command_runner,
+            timeout=timeout,
+        )
     raise ValueError(
-        f"Unknown agent {agent!r}. Choose 'claude' or 'codex'."
+        f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
     )
 
 
-def agent_binary_available(agent: Literal["claude", "codex"]) -> bool:
+def agent_binary_available(agent: Literal["claude", "codex", "opencode"]) -> bool:
     """Return True when the agent CLI binary is on PATH."""
-    binary = "claude" if agent == "claude" else "codex"
+    binary_map = {"claude": "claude", "codex": "codex", "opencode": "opencode"}
+    binary = binary_map.get(agent, agent)
     return shutil.which(binary) is not None

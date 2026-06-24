@@ -19,6 +19,7 @@ from oh_no_my_claudecode.hooks.installer import (
 from oh_no_my_claudecode.integrations.plug import (
     _CODEX_MARKER,
     _CURSOR_MARKER,
+    _OPENCODE_MARKER,
     _SENTINEL,
     SLASH_COMMAND_NAMES,
     SUPPORTED_TARGETS,
@@ -284,8 +285,123 @@ def test_cli_plug_unknown_target_exits_nonzero(initialized_repo: Path) -> None:
 
 def test_supported_targets_list() -> None:
     """SUPPORTED_TARGETS contains all expected entries."""
-    expected = {"claude-code", "codex", "cursor", "omc", "omx", "all"}
+    expected = {"claude-code", "codex", "opencode", "cursor", "omc", "omx", "all"}
     assert set(SUPPORTED_TARGETS) == expected
+
+
+# ---------------------------------------------------------------------------
+# opencode target tests
+# ---------------------------------------------------------------------------
+
+
+def test_plug_opencode_writes_agents_md(sample_repo: Path) -> None:
+    """plug_target('opencode') adds an opencode stanza to AGENTS.md."""
+    result = plug_target("opencode", repo_root=sample_repo)
+
+    assert isinstance(result, PlugResult)
+    agents_md = sample_repo / "AGENTS.md"
+    assert agents_md.exists()
+    content = agents_md.read_text(encoding="utf-8")
+    assert _OPENCODE_MARKER in content
+    assert _SENTINEL in content
+    assert "onmc brief" in content
+    assert "onmc guard" in content
+    assert str(agents_md) in result.files_written
+
+
+def test_plug_opencode_is_idempotent(sample_repo: Path) -> None:
+    """Running plug_target('opencode') twice produces exactly one stanza."""
+    plug_target("opencode", repo_root=sample_repo)
+    plug_target("opencode", repo_root=sample_repo)
+
+    agents_md = sample_repo / "AGENTS.md"
+    content = agents_md.read_text(encoding="utf-8")
+    assert content.count(_OPENCODE_MARKER) == 1
+
+
+def test_plug_opencode_skips_on_second_run(sample_repo: Path) -> None:
+    """Second run with identical stanza is reported as skipped."""
+    plug_target("opencode", repo_root=sample_repo)
+    result2 = plug_target("opencode", repo_root=sample_repo)
+
+    agents_md = sample_repo / "AGENTS.md"
+    assert str(agents_md) in result2.files_skipped
+    assert str(agents_md) not in result2.files_written
+
+
+def test_plug_opencode_coexists_with_codex_stanza(sample_repo: Path) -> None:
+    """codex and opencode stanzas can both live in AGENTS.md without collision."""
+    plug_target("codex", repo_root=sample_repo)
+    plug_target("opencode", repo_root=sample_repo)
+
+    content = (sample_repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert _CODEX_MARKER in content
+    assert _OPENCODE_MARKER in content
+    # Each marker must appear exactly once.
+    assert content.count(_CODEX_MARKER) == 1
+    assert content.count(_OPENCODE_MARKER) == 1
+
+
+def test_plug_opencode_writes_skills_index(sample_repo: Path) -> None:
+    """plug_target('opencode') writes .opencode/skills/onmc.md."""
+    plug_target("opencode", repo_root=sample_repo)
+
+    skills_index = sample_repo / ".opencode" / "skills" / "onmc.md"
+    assert skills_index.exists()
+    content = skills_index.read_text(encoding="utf-8")
+    assert _SENTINEL in content
+    assert "onmc" in content.lower()
+
+
+def test_plug_opencode_skills_index_idempotent(sample_repo: Path) -> None:
+    """Second run skips .opencode/skills/onmc.md when already up to date."""
+    plug_target("opencode", repo_root=sample_repo)
+    result2 = plug_target("opencode", repo_root=sample_repo)
+
+    skills_index = sample_repo / ".opencode" / "skills" / "onmc.md"
+    assert str(skills_index) in result2.files_skipped
+
+
+def test_plug_opencode_preserves_existing_agents_md_content(sample_repo: Path) -> None:
+    """Existing AGENTS.md content outside the stanza is preserved."""
+    agents_md = sample_repo / "AGENTS.md"
+    original = "# Existing notes\n\nDo not remove this line.\n"
+    agents_md.write_text(original, encoding="utf-8")
+
+    plug_target("opencode", repo_root=sample_repo)
+
+    content = agents_md.read_text(encoding="utf-8")
+    assert "# Existing notes" in content
+    assert "Do not remove this line." in content
+    assert _OPENCODE_MARKER in content
+
+
+def test_plug_all_now_includes_opencode(sample_repo: Path, fake_home: Path) -> None:
+    """plug_target('all') applies opencode in addition to claude-code + codex + cursor."""
+    result = plug_target("all", repo_root=sample_repo)
+
+    agents_md = sample_repo / "AGENTS.md"
+    assert agents_md.exists()
+    content = agents_md.read_text(encoding="utf-8")
+    # Both codex and opencode stanzas must be present.
+    assert _CODEX_MARKER in content
+    assert _OPENCODE_MARKER in content
+
+    skills_index = sample_repo / ".opencode" / "skills" / "onmc.md"
+    assert skills_index.exists()
+
+    assert result.target == "all"
+
+
+def test_cli_plug_opencode(initialized_repo: Path) -> None:
+    """``onmc plug opencode`` via CLI writes AGENTS.md stanza + skills index."""
+    runner = _cli_runner()
+    result = runner.invoke(app, ["plug", "opencode"], prog_name="onmc")
+
+    assert result.exit_code == 0, result.output
+    agents_md = initialized_repo / "AGENTS.md"
+    assert agents_md.exists()
+    assert _OPENCODE_MARKER in agents_md.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
