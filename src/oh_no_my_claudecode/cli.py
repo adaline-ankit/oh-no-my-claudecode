@@ -7,6 +7,7 @@ from typing import Annotated
 
 import typer
 
+from oh_no_my_claudecode.core.repo import RepoDiscoveryError
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.hooks import session_start_context_json
 from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
@@ -174,11 +175,32 @@ def setup_command(
     ] = False,
 ) -> None:
     """Run the interactive ONMC onboarding wizard."""
-    run_setup_wizard(cwd=Path.cwd(), yes=yes, no_llm=no_llm)
+    try:
+        run_setup_wizard(cwd=Path.cwd(), yes=yes, no_llm=no_llm)
+    except RepoDiscoveryError:
+        raise typer.Exit(
+            code=_fatal(
+                "✗ Not inside a git repository. "
+                "cd into your project (or [bold]git init[/bold]) "
+                "and run [bold]onmc setup[/bold]."
+            )
+        ) from None
 
 
 def main() -> None:
-    app()
+    try:
+        app()
+    except (RepoDiscoveryError, FileNotFoundError) as exc:
+        msg = str(exc)
+        if "Not inside a git repository" in msg or isinstance(exc, RepoDiscoveryError):
+            console.print(
+                "[red]✗ Not inside a git repository.[/red] "
+                "cd into your project (or [bold]git init[/bold]) "
+                "and run [bold]onmc setup[/bold]."
+            )
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise SystemExit(1) from None
 
 
 # ---------------------------------------------------------------------------
