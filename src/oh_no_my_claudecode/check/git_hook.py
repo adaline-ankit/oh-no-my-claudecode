@@ -3,7 +3,7 @@
 The installed hook:
 - Runs ``onmc check --staged`` (warn-only by default).
 - Is idempotent: running ``--install-hook`` twice never duplicates the block.
-- Preserves existing hooks: if ``.git/hooks/pre-commit`` already exists, the
+- Preserves existing hooks: if the pre-commit hook already exists, the
   onmc block is appended (never clobbered).
 - Is safe: uses ``#!/bin/sh``, no shell interpolation of user data.
 
@@ -16,6 +16,8 @@ Security properties:
 from __future__ import annotations
 
 from pathlib import Path
+
+from oh_no_my_claudecode.core.repo import resolve_hooks_dir
 
 # Sentinel that identifies our block in an existing hook file.
 _ONMC_MARKER = "# ONMC pre-commit check"
@@ -38,8 +40,8 @@ def install_pre_commit_hook(repo_root: Path) -> tuple[Path, bool]:
     Parameters
     ----------
     repo_root:
-        Absolute path to the repo root.  The hook is written to
-        ``<repo_root>/.git/hooks/pre-commit``.
+        Absolute path to the repo root.  The hook is written to the
+        resolved git hooks directory (works for linked worktrees too).
 
     Returns
     -------
@@ -51,7 +53,7 @@ def install_pre_commit_hook(repo_root: Path) -> tuple[Path, bool]:
     The install is idempotent: if the hook already contains the onmc marker
     string, this function returns without modifying the file.
     """
-    hook_path = repo_root / ".git" / "hooks" / "pre-commit"
+    hook_path = resolve_hooks_dir(repo_root) / "pre-commit"
     hook_path.parent.mkdir(parents=True, exist_ok=True)
 
     if hook_path.exists():

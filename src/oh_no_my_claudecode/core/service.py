@@ -61,7 +61,13 @@ from oh_no_my_claudecode.config import (
     user_database_path,
     write_config,
 )
-from oh_no_my_claudecode.core.repo import current_branch, discover_repo_root, path_bucket
+from oh_no_my_claudecode.core.repo import (
+    RepoDiscoveryError,
+    current_branch,
+    discover_repo_root,
+    path_bucket,
+    resolve_hooks_dir,
+)
 from oh_no_my_claudecode.hooks import (
     HookInstallResult,
     build_compaction_snapshot,
@@ -1097,7 +1103,7 @@ class OnmcService:
             report["claude"].append("CLAUDE.md present")
         else:
             report["warnings"].append("CLAUDE.md not found — run `onmc claude-md generate`.")
-        post_commit = repo_root / ".git" / "hooks" / "post-commit"
+        post_commit = resolve_hooks_dir(repo_root) / "post-commit"
         if post_commit.exists():
             report["sync"].append("Post-commit hook installed")
         else:
@@ -1186,7 +1192,7 @@ class OnmcService:
         issue_count = len(warnings) + len(errors)
         total_checks = passed_checks + issue_count
         manifest_path = repo_root / ".agent-memory" / "manifest.json"
-        sync_hook_path = repo_root / ".git" / "hooks" / "post-commit"
+        sync_hook_path = resolve_hooks_dir(repo_root) / "post-commit"
         return AgentReadinessSummary(
             ok=ok,
             readiness_label="ready" if ok and not warnings else "needs attention",
@@ -1391,7 +1397,7 @@ class OnmcService:
     def install_sync_hook(self) -> tuple[Path, Path]:
         """Install a post-commit hook that exports ONMC memory to .agent-memory."""
         repo_root = discover_repo_root(self.cwd)
-        hook_path = repo_root / ".git" / "hooks" / "post-commit"
+        hook_path = resolve_hooks_dir(repo_root) / "post-commit"
         hook_path.parent.mkdir(parents=True, exist_ok=True)
         snippet = "#!/bin/sh\nonmc sync --commit\n"
         if hook_path.exists():
@@ -1407,7 +1413,7 @@ class OnmcService:
     def install_ingest_hook(self) -> tuple[Path, Path]:
         """Install a post-commit hook that re-ingests changed files and exports sync state."""
         repo_root = discover_repo_root(self.cwd)
-        hook_path = repo_root / ".git" / "hooks" / "post-commit"
+        hook_path = resolve_hooks_dir(repo_root) / "post-commit"
         hook_path.parent.mkdir(parents=True, exist_ok=True)
         snippet = "\n".join(
             [
@@ -3314,7 +3320,15 @@ class OnmcService:
         return repo_root, comparison
 
     def _load_context(self) -> tuple[Path, ProjectConfig, SQLiteStorage]:
-        repo_root = discover_repo_root(self.cwd)
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except RepoDiscoveryError:
+            msg = (
+                "✗ Not inside a git repository. "
+                "cd into your project (or [bold]git init[/bold]) "
+                "and run [bold]onmc setup[/bold]."
+            )
+            raise FileNotFoundError(msg) from None
         if not config_exists(repo_root):
             msg = "ONMC is not initialized. Run `onmc init` first."
             raise FileNotFoundError(msg)
