@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.evals.models import EvalCase, EvalComparison, EvalReport
+    from oh_no_my_claudecode.evolution.compiler import EvolutionReport
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
@@ -2167,6 +2168,31 @@ class OnmcService:
         now_str = isoformat_utc(utc_now())
         result: _SavingsResult = compile_savings(storage, repo_root, now=now_str)
         return repo_root, result
+
+    def evolution(self) -> tuple[Path, EvolutionReport]:
+        """Compile an evolution report from the run-receipt chain.
+
+        Reads all ``run-*.json`` receipts written by ``onmc loop`` /
+        ``onmc autopilot`` from ``.agent-memory/receipts/`` and computes
+        compounding-proof trend metrics (cost, iterations, verified rate).
+
+        Entirely offline — no LLM calls, no network access.  All numbers
+        come directly from real receipt data; proxies are labelled honestly.
+
+        Returns
+        -------
+        tuple[Path, EvolutionReport]
+            ``(repo_root, report)``
+        """
+        from oh_no_my_claudecode.evolution.compiler import (
+            EvolutionReport as _EvolutionReport,
+        )
+        from oh_no_my_claudecode.evolution.compiler import compile_evolution
+
+        repo_root = discover_repo_root(self.cwd)
+        receipts_dir = repo_root / ".agent-memory" / "receipts"
+        report: _EvolutionReport = compile_evolution(receipts_dir)
+        return repo_root, report
 
     # ------------------------------------------------------------------
     # Trace Observatory
