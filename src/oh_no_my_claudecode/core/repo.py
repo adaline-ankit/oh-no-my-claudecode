@@ -1,7 +1,14 @@
 from __future__ import annotations
 
+import logging
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
+
+_WORKTREE_GIT_TIMEOUT = 30  # seconds
 
 
 class RepoDiscoveryError(RuntimeError):
@@ -92,3 +99,110 @@ def path_bucket(path: str, *, depth: int = 2) -> str:
     if not parts:
         return "."
     return "/".join(parts[:depth])
+
+
+# ---------------------------------------------------------------------------
+# Worktree isolation
+# ---------------------------------------------------------------------------
+
+
+def _run_git(
+    args: list[str],
+    *,
+    cwd: Path,
+    timeout: int = _WORKTREE_GIT_TIMEOUT,
+) -> tuple[int, str]:
+    """Run a git command and return (returncode, stdout+stderr)."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.returncode, result.stdout + result.stderr
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        return 1, str(exc)
+
+
+class WorktreeIsolationProvider:
+    """Real git-worktree-backed isolation provider.
+
+    Creates a linked worktree in a temporary directory so the loop's agent
+    works on an isolated copy of the repo.  On success the worktree persists
+    (caller can inspect the changes); on failure the worktree is fully removed
+    so no partial changes leak into the caller's working tree.
+
+    Implements the ``IsolationProvider`` protocol from
+    ``oh_no_my_claudecode.loop.models``.
+    """
+
+    def __init__(self, *, branch_prefix: str = "onmc-iso") -> None:
+        self._branch_prefix = branch_prefix
+        self._worktree_path: Path | None = None
+        self._branch_name: str | None = None
+        self._repo_root: Path | None = None
+
+    def setup(self, repo_root: Path) -> Path | None:
+        """Create a linked worktree under a temp directory.
+
+        Returns the worktree path on success, ``None`` on failure (the caller
+        falls back to in-place execution).
+        """
+        import secrets as _secrets
+
+        self._repo_root = repo_root
+        suffix = _secrets.token_hex(4)
+        self._branch_name = f"{self._branch_prefix}-{suffix}"
+
+        try:
+            tmp_dir = Path(tempfile.mkdtemp(prefix="onmc-wt-"))
+        except OSError as exc:
+            _log.warning("worktree isolation: failed to create temp dir: %s", exc)
+            return None
+
+        worktree_path = tmp_dir / "worktree"
+        rc, out = _run_git(
+            ["worktree", "add", "-b", self._branch_name, str(worktree_path)],
+            cwd=repo_root,
+        )
+        if rc != 0:
+            _log.warning("worktree isolation: git worktree add failed: %s", out.strip())
+            # Clean up the temp dir we created.
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            return None
+
+        self._worktree_path = worktree_path
+        return worktree_path
+
+    def teardown(self, worktree_path: Path, *, keep: bool) -> None:
+        """Remove the worktree.
+
+        When *keep* is ``True`` (converged) we leave the files in place but
+        remove the git worktree registration.  When *keep* is ``False``
+        (failure/rollback) we remove the directory entirely.
+        """
+        repo_root = self._repo_root
+        branch = self._branch_name
+
+        if not keep:
+            # Failure path: remove the directory so no partial changes leak.
+            shutil.rmtree(worktree_path, ignore_errors=True)
+
+        # Always prune the git worktree bookkeeping entry.
+        if repo_root is not None:
+            _run_git(
+                ["worktree", "remove", "--force", str(worktree_path)],
+                cwd=repo_root,
+            )
+            _run_git(["worktree", "prune"], cwd=repo_root)
+
+        if not keep and branch is not None and repo_root is not None:
+            # Delete the temporary branch created for this worktree.
+            _run_git(["branch", "-D", branch], cwd=repo_root)
+
+        # Remove the parent temp directory if it still exists.
+        parent = worktree_path.parent
+        if not keep and parent.exists():
+            shutil.rmtree(parent, ignore_errors=True)

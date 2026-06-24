@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal, Protocol
 
 
@@ -53,6 +54,22 @@ class LoopConfig:
     """Stop before the next iteration when cumulative cost exceeds this value."""
     max_wall_seconds: int | None = None
     """Stop when wall-clock elapsed seconds exceed this value."""
+    duplicate_action_limit: int = 0
+    """Stop with stop_reason='duplicate-action' when the SAME iteration signature
+    (files_touched + verify_output_head) repeats this many times.  Fires faster
+    than no_progress_window because it counts exact repetitions, not a sliding
+    window of distinct signatures.  Default 0 = disabled (opt-in).  A value of
+    2 is a good starting point for aggressive token-storm prevention."""
+    repeated_error_limit: int = 0
+    """Stop with stop_reason='repeated-error' when the verify-output head is
+    identical for this many *consecutive* losses in a row.  Default 0 = disabled
+    (opt-in).  A value of 3 is a good starting point."""
+    isolate: bool = False
+    """When True, run the loop agent inside a fresh ``git worktree add`` so all
+    file changes are isolated from the caller's working tree.  On success
+    (converged + verified) the worktree path is preserved and reported.  On
+    failure the worktree is removed and no changes leak.  Degrades gracefully
+    to in-place execution when ``git worktree add`` fails."""
 
 
 @dataclass
@@ -88,4 +105,32 @@ class VerifyRunner(Protocol):
 
     def __call__(self, command: str) -> VerifyOutcome:
         """Run verify command and return outcome."""
+        ...
+
+
+class IsolationProvider(Protocol):
+    """Injectable worktree isolation provider.
+
+    Responsible for creating a git worktree, handing the path back, and
+    cleaning it up on failure.  The protocol is separated from the engine so
+    tests can exercise the isolation/rollback logic with a real temp git repo
+    but a fake agent — without ever spawning a real agent subprocess.
+    """
+
+    def setup(self, repo_root: Path) -> Path | None:
+        """Create an isolated worktree and return its path.
+
+        Returns ``None`` when worktree creation fails (graceful degradation).
+        The caller falls back to in-place execution in that case.
+        """
+        ...
+
+    def teardown(self, worktree_path: Path, *, keep: bool) -> None:
+        """Remove the worktree.
+
+        When *keep* is ``True`` (converged run) the worktree is left on disk
+        and only the git bookkeeping entry is removed.  When *keep* is
+        ``False`` (failed run) the worktree directory is removed entirely so no
+        partial changes leak.
+        """
         ...

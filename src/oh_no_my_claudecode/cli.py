@@ -3864,6 +3864,19 @@ def loop_command(
             help="Stop before the next iteration when elapsed wall-clock seconds exceed this.",
         ),
     ] = None,
+    isolate: Annotated[
+        bool,
+        typer.Option(
+            "--isolate",
+            help=(
+                "Run the loop inside a fresh git worktree so changes are isolated. "
+                "On success (converged) the worktree path is preserved; on failure "
+                "the worktree is removed and no partial changes leak into the working "
+                "tree. Degrades gracefully (warns + runs in-place) when git worktree "
+                "add fails."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run a memory-grounded autonomous loop that avoids recorded dead-ends.
 
@@ -3885,6 +3898,7 @@ def loop_command(
     onmc loop --goal "fix flaky test" --json                   # machine-readable output
     onmc loop --goal "fix bug" --max-cost-usd 2.00             # stop at $2 spend
     onmc loop --goal "fix bug" --max-wall-seconds 300          # stop after 5 minutes
+    onmc loop --goal "fix bug" --isolate                       # run in isolated worktree
     """
     import dataclasses
     import json as _json
@@ -3918,6 +3932,7 @@ def loop_command(
             dry_run=dry_run,
             max_cost_usd=max_cost_usd,
             max_wall_seconds=max_wall_seconds,
+            isolate=isolate,
         )
     except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
