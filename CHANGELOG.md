@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-06-24
+
+### Added
+
+- **Plan→execute cost-split for `onmc autopilot`.** `--plan-with <model> --execute-with <model>` runs a new PLAN phase (KNOW→PLAN→ACT→PROVE→LEARN) where an expensive model writes a precise step-by-step plan; the plan is injected into the ACT goal and recorded as a memory, then the loop executes with the cheap model. `onmc evolution` proves the cost drop over time. Backward-compatible (no flags = current behavior); the plan step is exception-safe and dry-run-safe.
+
 ## [0.44.0] — 2026-06-24
 
 ### Added
