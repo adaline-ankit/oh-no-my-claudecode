@@ -79,7 +79,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              brain.                                                          │
 │ loop         Run a memory-grounded autonomous loop that avoids recorded      │
 │              dead-ends.                                                      │
-│ autopilot    Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.    │
+│ autopilot    Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on a   │
+│              goal.                                                           │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -1941,12 +1942,14 @@ Usage: onmc loop [OPTIONS]
 ```text
 Usage: onmc autopilot [OPTIONS] GOAL
 
- Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.
+ Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on a goal.
 
  Orchestrates every onmc command in one narrated run:
 
 
  🧠 KNOW  — compile_brief + guard (dead-ends) + user_profile (preferences).
+ 📋 PLAN  — optional; --plan-with <model> runs an expensive planning pass
+ first.
  ⚙ ACT   — memory-grounded autonomous loop (avoids recorded dead-ends).
  ✅ PROVE  — receipt + verified/not-verified verdict + cost.
  📈 LEARN  — capture session memory + skill_promote + consolidate.
@@ -1963,6 +1966,8 @@ Usage: onmc autopilot [OPTIONS] GOAL
  onmc autopilot "fix flaky test" --agent codex --max-iterations 5
  onmc autopilot "fix flaky test" --agent opencode --max-iterations 5
  onmc autopilot "fix bug" --json                   # machine-readable output
+ onmc autopilot "add feature" --plan-with claude-opus-4-5 --execute-with
+ claude-haiku-4-5
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    goal      TEXT  Goal for the autopilot run. [required]                  │
@@ -1993,6 +1998,23 @@ Usage: onmc autopilot [OPTIONS] GOAL
 │ --verify                  TEXT                  Shell command run after each │
 │                                                 iteration to verify success. │
 │                                                 [default: pytest]            │
+│ --plan-with               TEXT                  Model name for the PLAN step │
+│                                                 (expensive model).  When     │
+│                                                 set, a planning pass runs    │
+│                                                 before ACT: the model        │
+│                                                 produces a precise           │
+│                                                 implementation plan that is  │
+│                                                 injected into the ACT goal   │
+│                                                 and recorded as a memory.    │
+│                                                 Example: --plan-with         │
+│                                                 claude-opus-4-5              │
+│ --execute-with            TEXT                  Model name for the ACT       │
+│                                                 (execute) step (cheap        │
+│                                                 model).  When set, the loop  │
+│                                                 runs with this model instead │
+│                                                 of the agent default.        │
+│                                                 Example: --execute-with      │
+│                                                 claude-haiku-4-5             │
 │ --json                                          Print the full result as     │
 │                                                 JSON.                        │
 │ --help                                          Show this message and exit.  │

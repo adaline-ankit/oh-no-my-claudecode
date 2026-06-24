@@ -1,11 +1,18 @@
-"""Autopilot orchestrator: KNOW→ACT→PROVE→LEARN in one verb.
+"""Autopilot orchestrator: KNOW→(PLAN)→ACT→PROVE→LEARN in one verb.
 
 Architecture
 -----------
 run_autopilot() wraps the existing loop (service.loop) with:
 
   KNOW  — snapshot brain_before; compile_brief + guard + user_profile into context.
-  ACT   — if dry_run → return early; else call service.loop().
+  PLAN  — optional; when plan_model is set, invoke the expensive model once with a
+          planning prompt ("produce a step-by-step implementation plan precise enough
+          that a cheaper model can execute it without re-deriving decisions").  The
+          plan text is (a) injected into the ACT goal and (b) recorded as a DECISION
+          memory tagged ``autopilot-plan``.  A plan failure is exception-safe: the run
+          falls back to normal KNOW context and continues.
+  ACT   — if dry_run → return early; else call service.loop() with execute_model
+          (the cheap model) and the plan-augmented goal.
   PROVE — read verified/tokens/cost from loop_result + receipt.
   LEARN — on WIN: add_memory + skill_promote (best-effort) + consolidate (best-effort).
           on LOSS: loop already recorded FAILED_APPROACH dead-ends automatically.
@@ -18,13 +25,27 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 
 from oh_no_my_claudecode.autopilot.models import AutopilotResult, BrainCounts
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.core.service import OnmcService
-    from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
+    from oh_no_my_claudecode.loop.models import (
+        AgentRunner,
+        AgentRunResult,
+        LoopResult,
+        VerifyRunner,
+    )
+
+#: Planning prompt template — instructs an expensive model to produce a precise plan.
+_PLAN_PROMPT_TEMPLATE = (
+    "Produce a precise, step-by-step implementation plan for the following goal.\n"
+    "Be specific enough that a cheaper model can execute it without re-deriving decisions.\n"
+    "Do NOT write code yet — only plan the approach, list the files to change, the logic\n"
+    "to apply, and the order of operations.\n\n"
+    "## Goal\n\n{goal}"
+)
 
 
 def _snap_brain(service: OnmcService) -> BrainCounts:
@@ -149,6 +170,51 @@ def _run_learn(
     return skill_promoted_name, captured_count, consolidated_count
 
 
+def _run_plan(
+    service: OnmcService,
+    goal: str,
+    plan_runner: AgentRunner,
+) -> tuple[str | None, int | None, float | None]:
+    """Execute the PLAN step: invoke *plan_runner* and return the plan text.
+
+    Parameters
+    ----------
+    service:
+        Initialised :class:`~oh_no_my_claudecode.core.service.OnmcService`.
+    goal:
+        The goal to plan for.
+    plan_runner:
+        An :class:`~oh_no_my_claudecode.loop.models.AgentRunner` backed by the
+        expensive *plan_model*.  Must accept ``(prompt, *, escalation_level)``.
+
+    Returns
+    -------
+    tuple[plan_text | None, tokens | None, cost_usd | None]
+        ``(None, None, None)`` when the plan step fails (exception-safe fallback).
+    """
+    planning_prompt = _PLAN_PROMPT_TEMPLATE.format(goal=goal)
+    try:
+        result: AgentRunResult = plan_runner(planning_prompt, escalation_level=0)
+        plan_text = result.output.strip() or None
+        if plan_text:
+            # Record the plan as a DECISION memory tagged with autopilot-plan.
+            with contextlib.suppress(Exception):
+                service.add_memory(
+                    kind="decision",
+                    title=f"Autopilot plan: {goal[:80]}",
+                    summary=(
+                        f"[autopilot-plan] Implementation plan for: {goal[:200]}.\n\n"
+                        f"{plan_text[:800]}"
+                    ),
+                    source_type="session",
+                    source_ref="autopilot:plan",
+                    confidence=0.9,
+                )
+        return plan_text, result.tokens, result.cost_usd
+    except Exception:  # noqa: BLE001
+        return None, None, None
+
+
 def run_autopilot(
     service: OnmcService,
     goal: str,
@@ -162,9 +228,12 @@ def run_autopilot(
     verify_command: str = "pytest",
     agent_runner: AgentRunner | None = None,
     verify_runner: VerifyRunner | None = None,
+    plan_model: str | None = None,
+    execute_model: str | None = None,
+    plan_runner: AgentRunner | None = None,
     now: datetime | None = None,  # injectable for tests
 ) -> AutopilotResult:
-    """Run the full KNOW→ACT→PROVE→LEARN autopilot cycle.
+    """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle.
 
     Parameters
     ----------
@@ -186,6 +255,19 @@ def run_autopilot(
     verify_runner:
         Optional injectable :class:`~oh_no_my_claudecode.loop.models.VerifyRunner`
         for testing.
+    plan_model:
+        Optional expensive model name to use for the PLAN step.  When set, a
+        planning pass is run first (or *plan_runner* is used if injected).  The
+        plan text is injected into the ACT goal and recorded as a memory.  When
+        ``None``, no plan step runs (current default behavior).
+    execute_model:
+        Optional cheap model name passed to the loop for the ACT step.  When
+        ``None``, the loop uses its own default.  Ignored when *agent_runner* is
+        injected.
+    plan_runner:
+        Optional injectable :class:`~oh_no_my_claudecode.loop.models.AgentRunner`
+        for the PLAN step.  When ``None`` and *plan_model* is set, a real runner
+        is built from *agent* + *plan_model*.  Intended for testing.
     now:
         Injectable reference timestamp (unused currently; reserved for deterministic
         testing of time-dependent logic).
@@ -203,14 +285,33 @@ def run_autopilot(
         service, goal
     )
 
+    # ── PLAN (optional) ───────────────────────────────────────────────────────
+    # Enabled when plan_model is set (or plan_runner is injected for tests).
+    plan_used = False
+    plan_tokens: int | None = None
+    plan_cost: float | None = None
+    act_goal = goal  # may be augmented by the plan below
+
+    want_plan = plan_model is not None or plan_runner is not None
+
     if dry_run:
-        # No ACT, no LEARN — return early with KNOW context only.
+        # No ACT, no LEARN — show the plan prompt it WOULD send if plan_model set.
+        plan_prompt_preview = (
+            _PLAN_PROMPT_TEMPLATE.format(goal=goal) if want_plan else None
+        )
+        dry_know_context = know_context
+        if plan_prompt_preview:
+            dry_know_context = (
+                (dry_know_context + "\n\n" if dry_know_context else "")
+                + "## Plan prompt (dry-run preview)\n\n"
+                + plan_prompt_preview
+            )
         return AutopilotResult(
             goal=goal,
             know_brief_summary=brief_summary,
             know_dead_ends_count=dead_ends_count,
             know_profile_applied=profile_applied,
-            loop_result=_dry_run_loop_result(goal, know_context),
+            loop_result=_dry_run_loop_result(goal, dry_know_context),
             receipt_path=None,
             verified=False,
             tokens=0,
@@ -224,12 +325,50 @@ def run_autopilot(
             captured_count=0,
             consolidated_count=0,
             stop_reason="dry-run",
-            know_context=know_context,
+            know_context=dry_know_context,
+            plan_model=plan_model,
+            execute_model=execute_model,
+            plan_used=False,
+            plan_tokens=None,
+            plan_cost=None,
         )
 
+    if want_plan:
+        # Resolve the plan runner (injected takes priority over building from plan_model).
+        resolved_plan_runner: AgentRunner
+        if plan_runner is not None:
+            resolved_plan_runner = plan_runner
+        else:
+            from oh_no_my_claudecode.loop.adapters import make_agent_runner
+
+            resolved_plan_runner = make_agent_runner(
+                cast("Literal['claude', 'codex', 'opencode']", agent),
+                service._load_context()[0],  # noqa: SLF001
+                model=plan_model,
+            )
+
+        plan_text, plan_tokens, plan_cost = _run_plan(service, goal, resolved_plan_runner)
+        if plan_text:
+            plan_used = True
+            # Augment the goal with the plan so the loop's prompt carries it.
+            act_goal = (
+                f"{goal}\n\n## Implementation plan\n\n{plan_text}"
+            )
+
     # ── ACT ───────────────────────────────────────────────────────────────────
+    # Resolve the execute-step agent runner.
+    resolved_agent_runner: AgentRunner | None = agent_runner
+    if resolved_agent_runner is None and execute_model is not None:
+        from oh_no_my_claudecode.loop.adapters import make_agent_runner as _make
+
+        resolved_agent_runner = _make(
+            cast("Literal['claude', 'codex', 'opencode']", agent),
+            service._load_context()[0],  # noqa: SLF001
+            model=execute_model,
+        )
+
     loop_result, receipt_path = service.loop(
-        goal,
+        act_goal,
         agent=agent,
         max_iterations=max_iterations,
         budget_tokens=budget_tokens,
@@ -237,7 +376,7 @@ def run_autopilot(
         dry_run=False,
         max_cost_usd=max_cost_usd,
         max_wall_seconds=max_wall_seconds,
-        agent_runner=agent_runner,
+        agent_runner=resolved_agent_runner,
         verify_runner=verify_runner,
     )
 
@@ -284,6 +423,11 @@ def run_autopilot(
         consolidated_count=consolidated_count,
         stop_reason=loop_result.stop_reason,
         know_context=know_context,
+        plan_model=plan_model,
+        execute_model=execute_model,
+        plan_used=plan_used,
+        plan_tokens=plan_tokens,
+        plan_cost=plan_cost,
     )
 
 

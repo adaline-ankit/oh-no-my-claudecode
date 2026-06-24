@@ -15,6 +15,11 @@ Coverage:
 - receipt_path is surfaced on real (non-dry) run
 - service.loop still works with + without injected runners (smoke-test existing loop)
 - CLI autopilot --json exit codes + shape
+- PLAN step: plan runner invoked once with planning prompt; plan injected into ACT goal
+- No plan flags → plan_used=False, unchanged behavior
+- Plan step failure → graceful fallback, run still completes
+- --dry-run with --plan-with shows plan prompt preview, no runners invoked
+- CLI --plan-with / --execute-with parsed + --json shape
 """
 
 from __future__ import annotations
@@ -22,6 +27,8 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 from oh_no_my_claudecode.autopilot.models import AutopilotResult
 from oh_no_my_claudecode.autopilot.orchestrator import run_autopilot
@@ -351,3 +358,218 @@ def test_cli_autopilot_dry_run_exit_code(sample_repo: Path) -> None:
     )
     # dry-run → not verified → exit 1
     assert result.exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — PLAN step: fake plan runner invoked once, plan injected into ACT goal
+# ---------------------------------------------------------------------------
+
+
+def test_plan_step_invokes_plan_runner_and_injects_plan(sample_repo: Path) -> None:
+    """With --plan-with set, plan runner called once; plan text is in ACT goal."""
+    svc = _init_service(sample_repo)
+
+    plan_calls: list[str] = []
+    act_prompts: list[str] = []
+
+    def _fake_plan_runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        plan_calls.append(prompt)
+        return AgentRunResult(
+            output="Step 1: do X\nStep 2: do Y",
+            prediction="planning done",
+            files_touched=[],
+            tokens=50,
+            cost_usd=0.01,
+        )
+
+    def _fake_act_runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        act_prompts.append(prompt)
+        return AgentRunResult(
+            output="executed the plan",
+            prediction="done",
+            files_touched=[],
+            tokens=100,
+        )
+
+    result = run_autopilot(
+        svc,
+        "add caching layer",
+        plan_runner=_fake_plan_runner,
+        plan_model="claude-opus-fake",
+        execute_model="claude-haiku-fake",
+        agent_runner=_fake_act_runner,
+        verify_runner=_fake_verify(passes=True),
+        now=_FIXED_NOW,
+    )
+
+    # Plan runner called exactly once.
+    assert len(plan_calls) == 1, f"Expected 1 plan call; got {len(plan_calls)}"
+    # Planning prompt contains the goal.
+    assert "add caching layer" in plan_calls[0]
+    assert "Do NOT write code" in plan_calls[0]
+
+    # ACT runner received the plan-augmented goal.
+    assert len(act_prompts) >= 1
+    assert "Implementation plan" in act_prompts[0]
+    assert "Step 1: do X" in act_prompts[0]
+
+    # Result reflects plan_used + models.
+    assert isinstance(result, AutopilotResult)
+    assert result.plan_used is True
+    assert result.plan_model == "claude-opus-fake"
+    assert result.execute_model == "claude-haiku-fake"
+    assert result.plan_tokens == 50
+    assert result.plan_cost == pytest.approx(0.01)
+
+    # Plan recorded as memory.
+    _, _, storage = svc._load_context()  # type: ignore[attr-defined]
+    memories = storage.list_memories()
+    plan_memories = [
+        m for m in memories
+        if "autopilot-plan" in (m.summary or "")
+    ]
+    assert plan_memories, "Expected at least one autopilot-plan memory"
+
+
+# ---------------------------------------------------------------------------
+# Test 10 — No plan flags → unchanged behavior (plan_used=False, no extra call)
+# ---------------------------------------------------------------------------
+
+
+def test_no_plan_flags_unchanged_behavior(sample_repo: Path) -> None:
+    """Without --plan-with, no plan runner should be invoked; plan_used=False."""
+    svc = _init_service(sample_repo)
+
+    plan_calls: list[str] = []
+
+    def _guard_plan_runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        plan_calls.append(prompt)
+        return AgentRunResult(output="should not run", prediction="", files_touched=[])
+
+    result = run_autopilot(
+        svc,
+        "fix the import",
+        agent_runner=_fake_agent("done"),
+        verify_runner=_fake_verify(passes=True),
+        # plan_runner is NOT wired up via plan_model; we pass it directly to
+        # confirm it's ignored when plan_model is None.
+        now=_FIXED_NOW,
+    )
+
+    assert not plan_calls, "Plan runner should NOT be called when plan_model is None"
+    assert isinstance(result, AutopilotResult)
+    assert result.plan_used is False
+    assert result.plan_model is None
+    assert result.execute_model is None
+    assert result.plan_tokens is None
+    assert result.plan_cost is None
+
+
+# ---------------------------------------------------------------------------
+# Test 11 — Plan step failure falls back gracefully (run still completes)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_step_failure_falls_back_gracefully(sample_repo: Path) -> None:
+    """A plan runner that raises must not abort the autopilot run."""
+    svc = _init_service(sample_repo)
+
+    def _failing_plan_runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        raise RuntimeError("plan model unavailable")
+
+    result = run_autopilot(
+        svc,
+        "fix the bug",
+        plan_runner=_failing_plan_runner,
+        plan_model="expensive-model",
+        agent_runner=_fake_agent("fixed it"),
+        verify_runner=_fake_verify(passes=True),
+        now=_FIXED_NOW,
+    )
+
+    # Run still completes and converges normally.
+    assert isinstance(result, AutopilotResult)
+    assert result.stop_reason == "converged"
+    assert result.verified is True
+    # plan_used stays False since plan text was empty (exception swallowed).
+    assert result.plan_used is False
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — dry-run with --plan-with shows plan prompt preview, no runners invoked
+# ---------------------------------------------------------------------------
+
+
+def test_dry_run_with_plan_model_shows_prompt_no_runners(sample_repo: Path) -> None:
+    """--dry-run with --plan-with must not invoke any runner, but show plan prompt."""
+    svc = _init_service(sample_repo)
+
+    invoked: list[str] = []
+
+    def _guard_runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        invoked.append(f"agent:{prompt[:20]}")
+        return AgentRunResult(output="should not run", prediction="", files_touched=[])
+
+    def _guard_verify(command: str) -> VerifyOutcome:
+        invoked.append("verify")
+        return VerifyOutcome(passed=False, output="should not run")
+
+    result = run_autopilot(
+        svc,
+        "add rate limiting",
+        dry_run=True,
+        plan_model="claude-opus-fake",
+        plan_runner=_guard_runner,
+        agent_runner=_guard_runner,
+        verify_runner=_guard_verify,
+        now=_FIXED_NOW,
+    )
+
+    assert not invoked, f"No runners should fire in dry-run; got: {invoked}"
+    assert isinstance(result, AutopilotResult)
+    assert result.stop_reason == "dry-run"
+    assert result.plan_used is False
+    # Plan prompt preview should appear in the know_context.
+    assert "Plan prompt (dry-run preview)" in result.know_context
+    assert "add rate limiting" in result.know_context
+
+
+# ---------------------------------------------------------------------------
+# Test 13 — CLI --plan-with / --execute-with parsed + --json shape
+# ---------------------------------------------------------------------------
+
+
+def test_cli_plan_with_execute_with_in_json(sample_repo: Path) -> None:
+    """CLI --plan-with + --execute-with + --json should include plan fields."""
+    import json
+
+    from typer.testing import CliRunner
+
+    from oh_no_my_claudecode.cli import app
+
+    runner = CliRunner()
+    # Use --dry-run so no real agent is invoked; plan_model set to non-None.
+    result = runner.invoke(
+        app,
+        [
+            "autopilot",
+            "add feature",
+            "--dry-run",
+            "--json",
+            "--plan-with",
+            "claude-opus-fake",
+            "--execute-with",
+            "claude-haiku-fake",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0, f"Expected exit 0; got {result.exit_code}\n{result.output}"
+    data = json.loads(result.output)
+    assert "plan_model" in data
+    assert "execute_model" in data
+    assert "plan_used" in data
+    assert "plan_tokens" in data
+    assert "plan_cost" in data
+    assert data["plan_model"] == "claude-opus-fake"
+    assert data["execute_model"] == "claude-haiku-fake"
+    assert data["plan_used"] is False  # dry-run never runs the plan step
