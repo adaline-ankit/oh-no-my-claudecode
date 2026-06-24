@@ -77,6 +77,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │              brain.                                                          │
 │ loop         Run a memory-grounded autonomous loop that avoids recorded      │
 │              dead-ends.                                                      │
+│ autopilot    Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.    │
 │ memory       Inspect stored memory.                                          │
 │ spec         Inspect and validate the Agent Memory open spec.                │
 │ task         Manage task lifecycle state.                                    │
@@ -1874,6 +1875,67 @@ Usage: onmc loop [OPTIONS]
 │                                                 iteration when elapsed       │
 │                                                 wall-clock seconds exceed    │
 │                                                 this.                        │
+│ --help                                          Show this message and exit.  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc autopilot`
+
+```text
+Usage: onmc autopilot [OPTIONS] GOAL
+
+ Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.
+
+ Orchestrates every onmc command in one narrated run:
+
+
+ 🧠 KNOW  — compile_brief + guard (dead-ends) + user_profile (preferences).
+ ⚙ ACT   — memory-grounded autonomous loop (avoids recorded dead-ends).
+ ✅ PROVE  — receipt + verified/not-verified verdict + cost.
+ 📈 LEARN  — capture session memory + skill_promote + consolidate.
+
+ Ends with a "Your brain grew" delta (+N memories · +N skills · N dead-ends).
+
+
+ Examples
+ --------
+ onmc autopilot "fix the cache invalidation bug"
+ onmc autopilot "add rate limiting" --verify "pytest tests/" --max-cost-usd
+ 2.00
+ onmc autopilot "refactor auth module" --dry-run   # KNOW only, no spend
+ onmc autopilot "fix flaky test" --agent codex --max-iterations 5
+ onmc autopilot "fix bug" --json                   # machine-readable output
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal for the autopilot run. [required]                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --agent                   TEXT                  Agent CLI to use: claude     │
+│                                                 (default) or codex.          │
+│                                                 [default: claude]            │
+│ --dry-run                                       Run only the KNOW phase      │
+│                                                 (compile brief, guard,       │
+│                                                 profile) without invoking    │
+│                                                 any agent or verify          │
+│                                                 subprocess.  No spend, no    │
+│                                                 memory writes.               │
+│ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
+│                                                 [default: 10]                │
+│ --budget-tokens           INTEGER RANGE [x>=1]  Stop when total tokens       │
+│                                                 exceed this budget.          │
+│ --max-cost-usd            FLOAT RANGE [x>=0.0]  Stop before the next         │
+│                                                 iteration when cumulative    │
+│                                                 cost (USD) exceeds this      │
+│                                                 value.                       │
+│ --max-wall-seconds        INTEGER RANGE [x>=1]  Stop before the next         │
+│                                                 iteration when elapsed       │
+│                                                 wall-clock seconds exceed    │
+│                                                 this.                        │
+│ --verify                  TEXT                  Shell command run after each │
+│                                                 iteration to verify success. │
+│                                                 [default: pytest]            │
+│ --json                                          Print the full result as     │
+│                                                 JSON.                        │
 │ --help                                          Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

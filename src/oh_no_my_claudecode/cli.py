@@ -3826,6 +3826,139 @@ def loop_command(
     raise typer.Exit(code=0 if result.converged else 1)
 
 
+@app.command("autopilot")
+def autopilot_command(
+    goal: Annotated[
+        str,
+        typer.Argument(help="Goal for the autopilot run."),
+    ],
+    agent: Annotated[
+        str,
+        typer.Option("--agent", help="Agent CLI to use: claude (default) or codex."),
+    ] = "claude",
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run",
+            help=(
+                "Run only the KNOW phase (compile brief, guard, profile) without "
+                "invoking any agent or verify subprocess.  No spend, no memory writes."
+            ),
+        ),
+    ] = False,
+    max_iterations: Annotated[
+        int,
+        typer.Option("--max-iterations", min=1, help="Maximum loop iterations."),
+    ] = 10,
+    budget_tokens: Annotated[
+        int | None,
+        typer.Option("--budget-tokens", min=1, help="Stop when total tokens exceed this budget."),
+    ] = None,
+    max_cost_usd: Annotated[
+        float | None,
+        typer.Option(
+            "--max-cost-usd",
+            min=0.0,
+            help="Stop before the next iteration when cumulative cost (USD) exceeds this value.",
+        ),
+    ] = None,
+    max_wall_seconds: Annotated[
+        int | None,
+        typer.Option(
+            "--max-wall-seconds",
+            min=1,
+            help="Stop before the next iteration when elapsed wall-clock seconds exceed this.",
+        ),
+    ] = None,
+    verify: Annotated[
+        str,
+        typer.Option("--verify", help="Shell command run after each iteration to verify success."),
+    ] = "pytest",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print the full result as JSON."),
+    ] = False,
+) -> None:
+    """Run the full KNOW→ACT→PROVE→LEARN autopilot cycle on a goal.
+
+    Orchestrates every onmc command in one narrated run:
+
+    \b
+    🧠 KNOW  — compile_brief + guard (dead-ends) + user_profile (preferences).
+    ⚙ ACT   — memory-grounded autonomous loop (avoids recorded dead-ends).
+    ✅ PROVE  — receipt + verified/not-verified verdict + cost.
+    📈 LEARN  — capture session memory + skill_promote + consolidate.
+
+    Ends with a "Your brain grew" delta (+N memories · +N skills · N dead-ends).
+
+    \b
+    Examples
+    --------
+    onmc autopilot "fix the cache invalidation bug"
+    onmc autopilot "add rate limiting" --verify "pytest tests/" --max-cost-usd 2.00
+    onmc autopilot "refactor auth module" --dry-run   # KNOW only, no spend
+    onmc autopilot "fix flaky test" --agent codex --max-iterations 5
+    onmc autopilot "fix bug" --json                   # machine-readable output
+    """
+    import dataclasses
+
+    from oh_no_my_claudecode.autopilot.models import AutopilotResult
+    from oh_no_my_claudecode.rendering.console import render_autopilot_result
+
+    if agent not in {"claude", "codex"}:
+        raise typer.Exit(code=_fatal(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'."))
+
+    try:
+        result = _service().autopilot(
+            goal,
+            agent=agent,
+            dry_run=dry_run,
+            max_iterations=max_iterations,
+            budget_tokens=budget_tokens,
+            max_cost_usd=max_cost_usd,
+            max_wall_seconds=max_wall_seconds,
+            verify_command=verify,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        if isinstance(result, AutopilotResult):
+            from oh_no_my_claudecode.loop.models import LoopResult
+
+            payload: dict[str, object] = {
+                "goal": result.goal,
+                "verified": result.verified,
+                "stop_reason": result.stop_reason,
+                "tokens": result.tokens,
+                "cost_usd": result.cost_usd,
+                "know_brief_summary": result.know_brief_summary,
+                "know_dead_ends_count": result.know_dead_ends_count,
+                "know_profile_applied": result.know_profile_applied,
+                "memories_added": result.memories_added,
+                "skills_added": result.skills_added,
+                "dead_ends_recorded": result.dead_ends_recorded,
+                "skill_promoted_name": result.skill_promoted_name,
+                "captured_count": result.captured_count,
+                "consolidated_count": result.consolidated_count,
+                "brain_before": dataclasses.asdict(result.brain_before),
+                "brain_after": dataclasses.asdict(result.brain_after),
+                "receipt_path": str(result.receipt_path) if result.receipt_path else None,
+                "loop_result": (
+                    dataclasses.asdict(result.loop_result)
+                    if isinstance(result.loop_result, LoopResult)
+                    else None
+                ),
+            }
+            console.print_json(json.dumps(payload))
+        raise typer.Exit(code=0)
+
+    render_autopilot_result(result)
+    if isinstance(result, AutopilotResult):
+        raise typer.Exit(code=0 if result.verified else 1)
+    raise typer.Exit(code=0)
+
+
 def _fatal(message: str) -> int:
     console.print(f"[red]{message}[/red]")
     return 1

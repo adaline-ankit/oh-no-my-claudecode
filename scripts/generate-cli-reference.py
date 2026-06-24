@@ -105,6 +105,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc benchmark", ["benchmark"]),
     ("onmc savings", ["savings"]),
     ("onmc loop", ["loop"]),
+    ("onmc autopilot", ["autopilot"]),
     ("onmc wiki", ["wiki"]),
     ("onmc plug", ["plug"]),
     ("onmc gh-aw", ["gh-aw"]),
