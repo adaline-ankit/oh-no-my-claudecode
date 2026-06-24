@@ -16,7 +16,9 @@ from oh_no_my_claudecode.loop.adapters import (
     CodexCliAdapter,
     CommandRunner,
     CompletedProc,
+    OpenCodeCliAdapter,
     _parse_claude_json,
+    _parse_opencode_json,
     make_agent_runner,
 )
 from oh_no_my_claudecode.loop.models import AgentRunResult
@@ -493,3 +495,381 @@ def test_cli_loop_unknown_agent_rejected() -> None:
         color=False,
     )
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# _parse_opencode_json unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_opencode_json_assistant_event() -> None:
+    """Parses assistant event with content list."""
+    import json as _json
+
+    raw = _json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": "Fixed the bug."}]
+            },
+        }
+    )
+    text, tokens = _parse_opencode_json(raw)
+    assert text == "Fixed the bug."
+    assert tokens is None
+
+
+def test_parse_opencode_json_result_event_with_usage() -> None:
+    """Parses result event carrying text + usage."""
+    import json as _json
+
+    assistant_event = _json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Done."}]}}
+    )
+    result_event = _json.dumps(
+        {"type": "result", "text": "Done.", "usage": {"input": 100, "output": 50}}
+    )
+    raw = "\n".join([assistant_event, result_event])
+    text, tokens = _parse_opencode_json(raw)
+    assert "Done." in text
+    assert tokens == 150
+
+
+def test_parse_opencode_json_tokens_none_on_missing_usage() -> None:
+    """When no usage block is present, tokens is None."""
+    import json as _json
+
+    raw = _json.dumps({"type": "result", "text": "ok"})
+    text, tokens = _parse_opencode_json(raw)
+    assert text == "ok"
+    assert tokens is None
+
+
+def test_parse_opencode_json_bad_lines_skipped() -> None:
+    """Malformed JSON lines are skipped; valid lines are parsed."""
+    import json as _json
+
+    raw = "not-json\n" + _json.dumps({"type": "result", "text": "success"}) + "\nbad"
+    text, tokens = _parse_opencode_json(raw)
+    assert text == "success"
+    assert tokens is None
+
+
+def test_parse_opencode_json_empty_returns_empty() -> None:
+    """Empty string returns ('', None)."""
+    text, tokens = _parse_opencode_json("")
+    assert text == ""
+    assert tokens is None
+
+
+def test_parse_opencode_json_fallback_to_raw_on_no_text_event() -> None:
+    """When no structured text event is found, raw stdout is returned."""
+    raw = "plain text output"
+    text, tokens = _parse_opencode_json(raw)
+    assert text == "plain text output"
+    assert tokens is None
+
+
+# ---------------------------------------------------------------------------
+# OpenCodeCliAdapter tests
+# ---------------------------------------------------------------------------
+
+
+def _simple_opencode_runner(
+    stdout: str,
+    returncode: int = 0,
+    git_before: str = "",
+    git_after: str = "",
+) -> CommandRunner:
+    return _make_runner(
+        {"opencode": CompletedProc(returncode=returncode, stdout=stdout, stderr="")},
+        git_status_before=git_before,
+        git_status_after=git_after,
+    )
+
+
+def test_opencode_adapter_parses_assistant_text(tmp_path: Path) -> None:
+    """OpenCodeCliAdapter extracts text from a canned assistant event."""
+    import json as _json
+
+    payload = _json.dumps(
+        {
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": "Applied the patch."}]
+            },
+        }
+    )
+    runner = _simple_opencode_runner(payload)
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=runner)
+    result = adapter("Fix the bug", escalation_level=0)
+
+    assert result.output == "Applied the patch."
+    assert result.prediction == "Applied the patch."
+    assert result.tokens is None
+    assert result.cost_usd is None
+
+
+def test_opencode_adapter_parses_tokens_from_result_event(tmp_path: Path) -> None:
+    """OpenCodeCliAdapter extracts token usage from a result event."""
+    import json as _json
+
+    assistant_event = _json.dumps(
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}}
+    )
+    result_event = _json.dumps(
+        {"type": "result", "text": "done", "usage": {"input": 80, "output": 40}}
+    )
+    raw = "\n".join([assistant_event, result_event])
+    runner = _simple_opencode_runner(raw)
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=runner)
+    result = adapter("task", escalation_level=0)
+
+    assert result.tokens == 120
+
+
+def test_opencode_adapter_tokens_none_when_absent(tmp_path: Path) -> None:
+    """tokens is None when the event stream has no usage block."""
+    import json as _json
+
+    payload = _json.dumps({"type": "result", "text": "ok"})
+    runner = _simple_opencode_runner(payload)
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=runner)
+    result = adapter("task", escalation_level=0)
+
+    assert result.tokens is None
+
+
+def test_opencode_adapter_files_touched_from_git_status(tmp_path: Path) -> None:
+    """files_touched is derived from the before/after git status diff."""
+    import json as _json
+
+    payload = _json.dumps({"type": "result", "text": "done"})
+    runner = _simple_opencode_runner(
+        payload,
+        git_before=" M src/a.py\n",
+        git_after=" M src/a.py\n M src/new.py\n",
+    )
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=runner)
+    result = adapter("add file", escalation_level=0)
+
+    assert "src/new.py" in result.files_touched
+    assert "src/a.py" not in result.files_touched
+
+
+def test_opencode_adapter_escalation_appends_hint(tmp_path: Path) -> None:
+    """escalation_level > 0 appends the hint to the prompt passed to opencode."""
+    import json as _json
+
+    seen_prompts: list[str] = []
+
+    def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:
+        if cmd[0] == "opencode":
+            # The prompt is the last positional argument.
+            seen_prompts.append(cmd[-1])
+        if cmd[0] == "git":
+            return CompletedProc(returncode=0, stdout="", stderr="")
+        return CompletedProc(
+            returncode=0,
+            stdout=_json.dumps({"type": "result", "text": "ok"}),
+            stderr="",
+        )
+
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=_tracker)
+    adapter("Fix this", escalation_level=0)
+    adapter("Fix this", escalation_level=1)
+
+    assert len(seen_prompts) == 2
+    assert "materially different" not in seen_prompts[0]
+    assert "materially different" in seen_prompts[1]
+
+
+def test_opencode_adapter_includes_model_flag_when_given(tmp_path: Path) -> None:
+    """When model is set, --model <provider/model> is passed to opencode."""
+    import json as _json
+
+    seen_commands: list[list[str]] = []
+
+    def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:
+        if cmd[0] == "opencode":
+            seen_commands.append(list(cmd))
+        if cmd[0] == "git":
+            return CompletedProc(returncode=0, stdout="", stderr="")
+        return CompletedProc(
+            returncode=0,
+            stdout=_json.dumps({"type": "result", "text": "ok"}),
+            stderr="",
+        )
+
+    adapter = OpenCodeCliAdapter(
+        tmp_path, model="anthropic/claude-opus-4-5", command_runner=_tracker
+    )
+    adapter("task", escalation_level=0)
+
+    assert seen_commands, "opencode was never called"
+    cmd = seen_commands[0]
+    assert "--model" in cmd
+    idx = cmd.index("--model")
+    assert cmd[idx + 1] == "anthropic/claude-opus-4-5"
+
+
+def test_opencode_adapter_no_model_flag_when_none(tmp_path: Path) -> None:
+    """When model is None, --model is NOT passed to opencode."""
+    import json as _json
+
+    seen_commands: list[list[str]] = []
+
+    def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:
+        if cmd[0] == "opencode":
+            seen_commands.append(list(cmd))
+        if cmd[0] == "git":
+            return CompletedProc(returncode=0, stdout="", stderr="")
+        return CompletedProc(
+            returncode=0,
+            stdout=_json.dumps({"type": "result", "text": "ok"}),
+            stderr="",
+        )
+
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=_tracker)
+    adapter("task", escalation_level=0)
+
+    assert seen_commands, "opencode was never called"
+    assert "--model" not in seen_commands[0]
+
+
+def test_opencode_adapter_missing_binary_returns_error(tmp_path: Path) -> None:
+    """returncode=127 surfaces a clean error in output with tokens=None."""
+    runner = _make_runner(
+        {
+            "opencode": CompletedProc(
+                returncode=127, stdout="", stderr="[binary not found: opencode]"
+            )
+        }
+    )
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=runner)
+    result = adapter("anything", escalation_level=0)
+
+    assert result.tokens is None
+    assert result.output  # Some non-empty error text
+
+
+def test_opencode_adapter_builds_correct_argv(tmp_path: Path) -> None:
+    """Verify exact argv: opencode run --format json --dir <root> <prompt>."""
+    import json as _json
+
+    seen_commands: list[list[str]] = []
+
+    def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:
+        if cmd[0] == "opencode":
+            seen_commands.append(list(cmd))
+        if cmd[0] == "git":
+            return CompletedProc(returncode=0, stdout="", stderr="")
+        return CompletedProc(
+            returncode=0,
+            stdout=_json.dumps({"type": "result", "text": "ok"}),
+            stderr="",
+        )
+
+    adapter = OpenCodeCliAdapter(tmp_path, command_runner=_tracker)
+    adapter("Fix the import", escalation_level=0)
+
+    assert seen_commands
+    cmd = seen_commands[0]
+    assert cmd[0] == "opencode"
+    assert cmd[1] == "run"
+    assert "--format" in cmd
+    assert "json" in cmd
+    assert "--dir" in cmd
+    assert cmd[-1] == "Fix the import"
+
+
+# ---------------------------------------------------------------------------
+# make_agent_runner factory — opencode
+# ---------------------------------------------------------------------------
+
+
+def test_make_agent_runner_returns_opencode_adapter(tmp_path: Path) -> None:
+    """make_agent_runner('opencode', ...) returns an OpenCodeCliAdapter."""
+    import json as _json
+
+    runner = _simple_opencode_runner(_json.dumps({"type": "result", "text": "ok"}))
+    adapter = make_agent_runner("opencode", tmp_path, command_runner=runner)
+    assert isinstance(adapter, OpenCodeCliAdapter)
+
+
+def test_make_agent_runner_opencode_produces_valid_result(tmp_path: Path) -> None:
+    """Full round-trip: make_agent_runner('opencode') → call → AgentRunResult."""
+    import json as _json
+
+    payload = _json.dumps(
+        {
+            "type": "result",
+            "text": "Refactored auth module.",
+            "usage": {"input": 60, "output": 30},
+        }
+    )
+    runner = _simple_opencode_runner(payload)
+    adapter = make_agent_runner("opencode", tmp_path, command_runner=runner)
+    result: AgentRunResult = adapter("Refactor auth", escalation_level=0)
+
+    assert isinstance(result, AgentRunResult)
+    assert result.output == "Refactored auth module."
+    assert result.tokens == 90
+    assert isinstance(result.files_touched, list)
+
+
+def test_make_agent_runner_unknown_still_raises(tmp_path: Path) -> None:
+    """Unknown agent still raises ValueError even after opencode is added."""
+    with pytest.raises(ValueError, match="Unknown agent"):
+        make_agent_runner("gpt4o", tmp_path)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# CLI --agent opencode flag
+# ---------------------------------------------------------------------------
+
+
+def test_cli_loop_accepts_opencode_agent(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """onmc loop --agent opencode --dry-run must exit 0 (no binary needed in dry-run)."""
+    from oh_no_my_claudecode.cli import app
+
+    monkeypatch.chdir(sample_repo)
+    cli_runner = _make_cli_runner()
+    init = cli_runner.invoke(app, ["init"], prog_name="onmc", color=False)
+    assert init.exit_code == 0, init.output
+    result = cli_runner.invoke(
+        app,
+        ["loop", "--goal", "demo task", "--agent", "opencode", "--dry-run"],
+        prog_name="onmc",
+        color=False,
+    )
+    assert result.exit_code == 0, result.output
+
+
+def test_cli_autopilot_accepts_opencode_agent(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """onmc autopilot --agent opencode --dry-run must be accepted (not rejected as unknown agent).
+
+    Autopilot --dry-run exits 1 by design (not verified), so we only assert
+    that the exit code is not caused by the unknown-agent rejection path.
+    Unknown agents produce a distinct error message; dry-run produces the
+    KNOW/ACT/PROVE/LEARN output instead.
+    """
+    from oh_no_my_claudecode.cli import app
+
+    monkeypatch.chdir(sample_repo)
+    cli_runner = _make_cli_runner()
+    init = cli_runner.invoke(app, ["init"], prog_name="onmc", color=False)
+    assert init.exit_code == 0, init.output
+    result = cli_runner.invoke(
+        app,
+        ["autopilot", "demo task", "--agent", "opencode", "--dry-run"],
+        prog_name="onmc",
+        color=False,
+    )
+    # autopilot --dry-run exits 1 (not-verified) — that is expected and correct.
+    # We only verify the option was not rejected as an unknown agent.
+    assert "Unknown agent" not in result.output

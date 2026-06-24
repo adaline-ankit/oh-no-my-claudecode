@@ -738,8 +738,10 @@ class OnmcService:
         else:
             # Validate the agent selector and surface a clean error when the
             # binary is missing rather than letting subprocess raise obscure errors.
-            if agent not in {"claude", "codex"}:
-                raise ValueError(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'.")
+            if agent not in {"claude", "codex", "opencode"}:
+                raise ValueError(
+                    f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
+                )
 
             if not agent_binary_available(agent):  # type: ignore[arg-type]
 

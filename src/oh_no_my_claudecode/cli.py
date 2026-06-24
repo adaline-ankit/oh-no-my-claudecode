@@ -3437,7 +3437,10 @@ def plug_command(
     target: Annotated[
         str,
         typer.Argument(
-            help=("Agent to wire onmc into. Choices: claude-code, codex, cursor, omc, omx, all.")
+            help=(
+                "Agent to wire onmc into. "
+                "Choices: claude-code, codex, opencode, cursor, omc, omx, all."
+            )
         ),
     ],
 ) -> None:
@@ -3449,10 +3452,12 @@ def plug_command(
     claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).
     codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief
                   and onmc guard at session start.
+    opencode      Write/refresh an AGENTS.md stanza for OpenCode + export
+                  onmc skills to .opencode/skills/.
     cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).
     omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.
     omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.
-    all           Apply claude-code + codex + cursor (safe subset).
+    all           Apply claude-code + codex + opencode + cursor (safe subset).
 
     All writes are idempotent — running twice never duplicates stanzas.
     """
@@ -3815,7 +3820,7 @@ def loop_command(
     ] = None,
     agent: Annotated[
         str,
-        typer.Option("--agent", help="Agent CLI to use: claude (default) or codex."),
+        typer.Option("--agent", help="Agent CLI to use: claude (default), codex, or opencode."),
     ] = "claude",
     max_iterations: Annotated[
         int,
@@ -3874,6 +3879,7 @@ def loop_command(
     --------
     onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
     onmc loop --goal "fix the bug" --agent codex --verify "pytest tests/"
+    onmc loop --goal "fix the bug" --agent opencode --verify "pytest tests/"
     onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
     onmc loop --goal "refactor auth module" --dry-run          # preview prompt only
     onmc loop --goal "fix flaky test" --json                   # machine-readable output
@@ -3888,8 +3894,10 @@ def loop_command(
     if goal is not None and spec is not None:
         raise typer.Exit(code=_fatal("Provide either --goal or --spec, not both."))
 
-    if agent not in {"claude", "codex"}:
-        raise typer.Exit(code=_fatal(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'."))
+    if agent not in {"claude", "codex", "opencode"}:
+        raise typer.Exit(
+            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
+        )
 
     resolved_goal: str
     if spec is not None:
@@ -3953,7 +3961,9 @@ def autopilot_command(
     ],
     agent: Annotated[
         str,
-        typer.Option("--agent", help="Agent CLI to use: claude (default) or codex."),
+        typer.Option(
+            "--agent", help="Agent CLI to use: claude (default), codex, or opencode."
+        ),
     ] = "claude",
     dry_run: Annotated[
         bool,
@@ -4017,6 +4027,7 @@ def autopilot_command(
     onmc autopilot "add rate limiting" --verify "pytest tests/" --max-cost-usd 2.00
     onmc autopilot "refactor auth module" --dry-run   # KNOW only, no spend
     onmc autopilot "fix flaky test" --agent codex --max-iterations 5
+    onmc autopilot "fix flaky test" --agent opencode --max-iterations 5
     onmc autopilot "fix bug" --json                   # machine-readable output
     """
     import dataclasses
@@ -4024,8 +4035,12 @@ def autopilot_command(
     from oh_no_my_claudecode.autopilot.models import AutopilotResult
     from oh_no_my_claudecode.rendering.console import render_autopilot_result
 
-    if agent not in {"claude", "codex"}:
-        raise typer.Exit(code=_fatal(f"Unknown agent {agent!r}. Choose 'claude' or 'codex'."))
+    if agent not in {"claude", "codex", "opencode"}:
+        raise typer.Exit(
+            code=_fatal(
+                f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
+            )
+        )
 
     try:
         result = _service().autopilot(

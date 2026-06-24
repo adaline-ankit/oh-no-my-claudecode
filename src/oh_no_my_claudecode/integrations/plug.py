@@ -10,6 +10,10 @@ claude-code  Install Claude Code hooks + .mcp.json (delegates to the
 codex        Write/refresh an AGENTS.md stanza so Codex runs
              ``onmc brief`` and ``onmc guard`` at session start and
              knows how to reach the MCP server.
+opencode     Write/refresh an AGENTS.md stanza so OpenCode picks up
+             onmc memory context at session start (OpenCode reads
+             ``AGENTS.md`` natively).  Also exports onmc skills so
+             OpenCode can discover them via the Agent Skills standard.
 cursor       Write/refresh a ``.cursor/rules/onmc.md`` Cursor rules file
              (Cursor >=0.40 style; the older ``.cursorrules`` file is
              written as a fallback note in the docs).
@@ -17,8 +21,8 @@ omc          Write a copy-paste OMC adapter under docs/integrations/omc.md.
              (OMC's hook API is assumed/documented; we never write into
              OMC config directories we don't own.)
 omx          Same approach as omc, targeting oh-my-codex.
-all          Apply claude-code + codex + cursor (the "safe subset" that
-             writes only well-understood config paths).
+all          Apply claude-code + codex + opencode + cursor (the "safe
+             subset" that writes only well-understood config paths).
 
 Idempotency
 -----------
@@ -84,9 +88,17 @@ SLASH_COMMAND_NAMES: tuple[str, ...] = (
 
 _SENTINEL = "<!-- onmc-plug: managed by onmc plug — do not remove this line -->"
 
-TargetName = Literal["claude-code", "codex", "cursor", "omc", "omx", "all"]
+TargetName = Literal["claude-code", "codex", "opencode", "cursor", "omc", "omx", "all"]
 
-SUPPORTED_TARGETS: list[str] = ["claude-code", "codex", "cursor", "omc", "omx", "all"]
+SUPPORTED_TARGETS: list[str] = [
+    "claude-code",
+    "codex",
+    "opencode",
+    "cursor",
+    "omc",
+    "omx",
+    "all",
+]
 
 
 @dataclass(slots=True)
@@ -112,7 +124,7 @@ def plug_target(target: str, *, repo_root: Path) -> PlugResult:
     """
     if target == "all":
         result = PlugResult(target="all")
-        for sub in ("claude-code", "codex", "cursor"):
+        for sub in ("claude-code", "codex", "opencode", "cursor"):
             sub_result = plug_target(sub, repo_root=repo_root)
             result.files_written.extend(sub_result.files_written)
             result.files_skipped.extend(sub_result.files_skipped)
@@ -122,6 +134,7 @@ def plug_target(target: str, *, repo_root: Path) -> PlugResult:
     dispatch: dict[str, Callable[..., PlugResult]] = {
         "claude-code": _plug_claude_code,
         "codex": _plug_codex,
+        "opencode": _plug_opencode,
         "cursor": _plug_cursor,
         "omc": _plug_omc,
         "omx": _plug_omx,
@@ -303,6 +316,152 @@ def _plug_codex(*, repo_root: Path) -> PlugResult:
     agents_md.write_text(existing + separator + _CODEX_STANZA, encoding="utf-8")
     result.files_written.append(str(agents_md))
     result.notes.append("Added onmc stanza to AGENTS.md.")
+    return result
+
+
+# ---------------------------------------------------------------------------
+# opencode
+# ---------------------------------------------------------------------------
+
+_OPENCODE_MARKER = "<!-- onmc-plug:opencode -->"
+_OPENCODE_MARKER_END = "<!-- /onmc-plug:opencode -->"
+
+_OPENCODE_STANZA = textwrap.dedent("""\
+    {marker_start}
+    ## Using ONMC memory with OpenCode (managed by `onmc plug opencode` — do not edit this block)
+
+    {sentinel}
+
+    ONMC ships repo-native memory. Run these commands at session start:
+
+    ```bash
+    # 1. Get a task-focused context brief (fast, no LLM)
+    onmc brief --task "$TASK" --stdout
+
+    # 2. Surface recorded dead-ends — never repeat a known failure
+    onmc guard --task "$TASK"
+
+    # 3. (Optional) MCP tools mid-session
+    onmc serve --mcp &
+    ```
+
+    ### MCP server — OpenCode config (copy-paste)
+
+    Add to `.opencode/config.json` or `~/.config/opencode/config.json`:
+
+    ```json
+    {{
+      "mcp": {{
+        "onmc": {{
+          "command": "onmc",
+          "args": ["serve", "--mcp"]
+        }}
+      }}
+    }}
+    ```
+
+    ### MCP tools (when `onmc serve --mcp` is running)
+
+    | Tool | Purpose |
+    |---|---|
+    | `search_memory` | Semantic search over repo decisions, invariants, hotspots |
+    | `guard_task` | Ranked list of recorded dead-ends for a task |
+    | `get_brief` | Compile a task-focused brief on demand |
+
+    ### Fresh clone / cloud container
+
+    ```bash
+    onmc init && onmc sync --restore
+    onmc brief --task "..." --stdout
+    ```
+
+    See [docs/integrations/opencode.md](docs/integrations/opencode.md) for full instructions.
+    {marker_end}
+""").format(
+    marker_start=_OPENCODE_MARKER,
+    sentinel=_SENTINEL,
+    marker_end=_OPENCODE_MARKER_END,
+)
+
+
+def _plug_opencode(*, repo_root: Path) -> PlugResult:
+    """Write/refresh the AGENTS.md onmc stanza for OpenCode.
+
+    OpenCode reads ``AGENTS.md`` natively (same convention as Codex), so the
+    stanza is appended to the same file.  The opencode-specific marker pair
+    (``<!-- onmc-plug:opencode -->``) keeps it independent of the codex stanza
+    so both can coexist.
+
+    Also exports onmc skills into ``.opencode/skills/`` so OpenCode can
+    discover them via the Agent Skills standard.
+    """
+    result = PlugResult(target="opencode")
+    agents_md = repo_root / "AGENTS.md"
+
+    existing = agents_md.read_text(encoding="utf-8") if agents_md.exists() else ""
+
+    if _OPENCODE_MARKER in existing:
+        if _SENTINEL in existing:
+            # Stanza already present and up to date — nothing to do.
+            result.files_skipped.append(str(agents_md))
+        else:
+            # Markers present but sentinel missing (stanza is stale) — replace.
+            new_content = _replace_between_markers(
+                existing, _OPENCODE_MARKER, _OPENCODE_MARKER_END, _OPENCODE_STANZA
+            )
+            agents_md.write_text(new_content, encoding="utf-8")
+            result.files_written.append(str(agents_md))
+            result.notes.append("Refreshed onmc opencode stanza in AGENTS.md.")
+    else:
+        # Append the stanza.
+        separator = "\n" if existing.endswith("\n") else "\n\n"
+        agents_md.write_text(existing + separator + _OPENCODE_STANZA, encoding="utf-8")
+        result.files_written.append(str(agents_md))
+        result.notes.append("Added onmc opencode stanza to AGENTS.md.")
+
+    # Export skills into .opencode/skills/ so OpenCode can discover them.
+    skills_dir = repo_root / ".opencode" / "skills"
+    try:
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        # Write a minimal onmc skills index file so OpenCode discovers onmc tools.
+        skills_index = skills_dir / "onmc.md"
+        skills_index_content = textwrap.dedent(f"""\
+            # onmc skills
+
+            {_SENTINEL}
+
+            These skills are provided by [onmc](https://github.com/adaline/onmc).
+            Run `onmc skill export` to refresh this file with the latest skills.
+
+            ## Available skills
+
+            - **brief**: Compile a task-focused memory brief.
+              Usage: `onmc brief --task "DESCRIBE YOUR TASK" --stdout`
+            - **guard**: List recorded dead-ends for a task.
+              Usage: `onmc guard --task "DESCRIBE YOUR TASK"`
+            - **search_memory**: Semantic search over repo decisions and hotspots.
+              Usage: `onmc serve --mcp` then call the `search_memory` MCP tool.
+        """)
+        existing_index = skills_index.read_text(encoding="utf-8") if skills_index.exists() else ""
+        if _SENTINEL in existing_index:
+            result.files_skipped.append(str(skills_index))
+        else:
+            skills_index.write_text(skills_index_content, encoding="utf-8")
+            result.files_written.append(str(skills_index))
+            result.notes.append(
+                "Wrote .opencode/skills/onmc.md — onmc skills index for OpenCode."
+            )
+    except OSError:
+        result.notes.append(
+            "Warning: could not write .opencode/skills/onmc.md — check permissions."
+        )
+
+    result.notes.append(
+        "Tip: run `onmc skill export` to sync the latest skills into .opencode/skills/."
+    )
+    result.notes.append(
+        "See docs/integrations/opencode.md for full OpenCode integration instructions."
+    )
     return result
 
 

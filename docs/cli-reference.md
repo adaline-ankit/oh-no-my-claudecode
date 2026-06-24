@@ -1891,6 +1891,7 @@ Usage: onmc loop [OPTIONS]
  --------
  onmc loop --goal "fix the cache invalidation bug" --verify "pytest tests/"
  onmc loop --goal "fix the bug" --agent codex --verify "pytest tests/"
+ onmc loop --goal "fix the bug" --agent opencode --verify "pytest tests/"
  onmc loop --spec goal.txt --max-iterations 5 --budget-tokens 50000
  onmc loop --goal "refactor auth module" --dry-run          # preview prompt
  only
@@ -1906,7 +1907,8 @@ Usage: onmc loop [OPTIONS]
 │ --spec                    TEXT                  Path to a file containing    │
 │                                                 the goal text.               │
 │ --agent                   TEXT                  Agent CLI to use: claude     │
-│                                                 (default) or codex.          │
+│                                                 (default), codex, or         │
+│                                                 opencode.                    │
 │                                                 [default: claude]            │
 │ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
 │                                                 [default: 10]                │
@@ -1959,6 +1961,7 @@ Usage: onmc autopilot [OPTIONS] GOAL
  2.00
  onmc autopilot "refactor auth module" --dry-run   # KNOW only, no spend
  onmc autopilot "fix flaky test" --agent codex --max-iterations 5
+ onmc autopilot "fix flaky test" --agent opencode --max-iterations 5
  onmc autopilot "fix bug" --json                   # machine-readable output
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
@@ -1966,7 +1969,8 @@ Usage: onmc autopilot [OPTIONS] GOAL
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --agent                   TEXT                  Agent CLI to use: claude     │
-│                                                 (default) or codex.          │
+│                                                 (default), codex, or         │
+│                                                 opencode.                    │
 │                                                 [default: claude]            │
 │ --dry-run                                       Run only the KNOW phase      │
 │                                                 (compile brief, guard,       │
@@ -2027,16 +2031,18 @@ Usage: onmc plug [OPTIONS] TARGET
  claude-code   Install Claude Code hooks + .mcp.json (safe to re-run).
  codex         Write/refresh an AGENTS.md stanza so Codex runs onmc brief
                and onmc guard at session start.
+ opencode      Write/refresh an AGENTS.md stanza for OpenCode + export
+               onmc skills to .opencode/skills/.
  cursor        Write/refresh .cursor/rules/onmc.md (Cursor >=0.40 format).
  omc           Write docs/integrations/omc.md with a copy-paste OMC adapter.
  omx           Write docs/integrations/omx.md with a copy-paste OMX adapter.
- all           Apply claude-code + codex + cursor (safe subset).
+ all           Apply claude-code + codex + opencode + cursor (safe subset).
 
  All writes are idempotent — running twice never duplicates stanzas.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    target      TEXT  Agent to wire onmc into. Choices: claude-code, codex, │
-│                        cursor, omc, omx, all.                                │
+│                        opencode, cursor, omc, omx, all.                      │
 │                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
