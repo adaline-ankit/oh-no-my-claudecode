@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-06-24
+
+### Added
+
+- **`onmc autopilot "<goal>"` — one verb that closes the whole loop.** Orchestrates the existing commands into a single narrated run: 🧠 KNOW (`compile_brief` + `guard` dead-ends + `user_profile`) → ⚙ ACT (the memory-grounded loop with real claude/codex adapters + limits) → ✅ PROVE (tamper-evident receipt + VERIFIED verdict) → 📈 LEARN (on a win: capture the approach + promote a skill + consolidate; on a loss the loop records the dead-end). Ends with a "Your brain grew" delta (+N memories · +N skills · N dead-ends · $cost · receipt). `--dry-run` shows the KNOW context with zero spend; reuses all loop limits (`--max-cost-usd` / `--max-wall-seconds` / `--max-iterations` / `--verify`). `--json` for machine output.
+- `service.loop()` now accepts optional injected agent/verify runners (default = build real), enabling composition + deterministic testing.
+
 ## [0.36.0] — 2026-06-24
 
 ### Added
