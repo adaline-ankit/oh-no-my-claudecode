@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.40.0] — 2026-06-24
+
+### Fixed
+
+- **Friendly errors on first contact.** Running any onmc command outside a git repository now prints a clean `✗ Not inside a git repository. cd into your project (or git init) and run onmc setup.` and exits 1 — instead of dumping a raw `RepoDiscoveryError` traceback.
+- **`onmc setup` works in git worktrees.** Setup (and all hook installers) no longer crash with `NotADirectoryError` in a linked worktree, where `.git` is a file. Hook directories are now resolved via `git rev-parse --git-path hooks`, correct for both normal repos and worktrees.
+
 ## [0.39.0] — 2026-06-24
 
 ### Added
