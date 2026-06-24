@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.38.0] — 2026-06-24
+
+### Added
+
+- **`onmc evolution` — compounding proof from the receipt chain.** Reads the run receipts that `onmc loop`/`onmc autopilot` write to `.agent-memory/receipts/` and shows the agent getting cheaper/smarter across runs: "↓X% cost · ↓Y% iterations-to-converge across N runs", with verified-rate and a per-run table. Honest by construction — every number comes from real receipts (no simulation), needs ≥2 receipts or it shows an insufficient-data prompt, cost trend only when cost is present, "iterations-to-converge" is labelled a proxy for wasted effort. Null timestamps and malformed receipts are handled gracefully. `onmc evolution [--json]`.
+
 ## [0.37.0] — 2026-06-24
 
 ### Added
