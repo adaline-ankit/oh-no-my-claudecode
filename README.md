@@ -8,7 +8,7 @@
 
 **Autonomous coding loops that remember what your repo learned and prove when work is done.**
 
-ONMC runs Claude Code or Codex against a goal, injects relevant repository memory on every
+ONMC runs Claude Code, Codex, or OpenCode against a goal, injects relevant repository memory on every
 iteration, warns about known dead-ends, executes your real verifier, enforces time/cost/token
 limits, and writes a tamper-evident run receipt.
 
@@ -16,12 +16,12 @@ Use the execution loop, the memory layer, or both. ONMC is local-first, cross-ag
 without a hosted account.
 
 ```bash
-uv tool install "git+https://github.com/adaline-ankit/oh-no-my-claudecode"
+pip install oh-no-my-claudecode
 cd your-repo
 onmc setup
 ```
 
-**Note:** PyPI release coming soon. The git install above is the recommended path until then.
+Prefer isolated CLI installs? Use `uv tool install oh-no-my-claudecode`.
 
 ## Why ONMC
 
@@ -35,8 +35,9 @@ Coding agents are capable. Their surrounding workflow still has four expensive g
 | Agent work is hard to inspect or reproduce | Tamper-evident receipts with git tree hash, model/tool hashes, iteration chain, and reproducibility envelope |
 | No proof of agent improvement over time | `evolution` compares cost and iterations across runs; receipt-backed trend showing cheaper and faster loops |
 | Expensive models do all the work | Cost-split execution: `--plan-with <expensive> --execute-with <cheap>` runs precise planning once, cheap execution per iteration |
+| PRs need a hard "do not merge unless proven" gate | `nomistakes` runs audit/eval/autopilot and approves only with a verified receipt |
 
-ONMC does not replace Claude Code or Codex. It gives them durable repository knowledge,
+ONMC does not replace Claude Code, Codex, or OpenCode. It gives them durable repository knowledge,
 bounded execution, and evidence.
 
 ## Five-minute first win
@@ -101,6 +102,28 @@ Use `--agent codex` or `--agent opencode` to swap agents. Use `--isolate` to run
 an isolated git worktree so failed attempts don't pollute your working tree. Use
 `--resume` to pick up from the last checkpoint.
 
+### 4. Gate a PR with No-Mistakes mode
+
+`nomistakes` is the merge gate: it runs deterministic preflight, lets the agent act
+inside an isolated worktree, verifies with your command, and approves only when ONMC
+writes a verified receipt.
+
+```bash
+onmc nomistakes "fix failing checkout CI" \
+  --agent claude \
+  --verify "pytest -q" \
+  --eval-fail-under 80 \
+  --max-cost-usd 3.00
+```
+
+Autonomy levels are explicit:
+
+- `L0` observe only
+- `L1` advise only
+- `L2` act, verify, learn, and produce a receipt
+- `L3` extended autonomous gate with the same receipt requirement
+- `L4` reserved for future human-approved merge automation
+
 ## The full cycle: KNOW → (PLAN) → ACT → PROVE → LEARN
 
 `onmc autopilot` orchestrates one command:
@@ -119,7 +142,7 @@ Loop iteration details:
 ```text
 Each ACT iteration:
   -> inject known failed approaches
-  -> run Claude Code or Codex
+  -> run Claude Code, Codex, or OpenCode
   -> run your verifier
   -> record prediction, outcome, files, tokens/cost when available
   -> decide: win, loss, or unknown
@@ -134,10 +157,11 @@ git tree hash, diff SHA, loop spec, output digest, limits, and iteration chain w
 Receipts include a reproducibility envelope (model IDs, tool/prompt hashes, runtime) so runs can
 be reproduced. They are tamper-evident (not cryptographically signed).
 
-## What ships in v0.47
+## What ships in v0.48
 
 | Capability | Command | What it gives you |
 |---|---|---|
+| No-Mistakes PR gate | `onmc nomistakes "<goal>"` | Audit + optional eval + isolated autopilot + verifier + receipt verdict; exits nonzero unless approved |
 | Full autopilot cycle | `onmc autopilot "<goal>"` | One-verb KNOW→(PLAN)→ACT→PROVE→LEARN; ends with "your brain grew" summary. Use `--plan-with <model> --execute-with <model>` for cost-split |
 | Compounding proof | `onmc evolution` | Shows agent getting cheaper/fewer-iterations across runs, receipt-backed trend |
 | Accountable autonomous loop | `onmc loop` | Real Claude/Codex/OpenCode execution, dead-end avoidance, verifier gates, hard limits |
@@ -159,6 +183,8 @@ be reproduced. They are tamper-evident (not cryptographically signed).
 
 ### Release progression
 
+- **v0.48:** No-Mistakes PR gate and `autopilot --isolate`
+- **v0.47:** durable loop checkpoint/resume and ready-to-run loop templates
 - **v0.36:** guided setup and first-run dashboard welcome
 - **v0.35:** deterministic session replay with memory-vs-cold comparison
 - **v0.34:** tamper-evident receipts, cost limits, wall-time limits, proof-based completion

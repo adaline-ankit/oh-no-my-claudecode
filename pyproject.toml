@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oh-no-my-claudecode"
-version = "0.47.0"
+version = "0.48.0"
 description = "Memory-grounded autonomous coding loops for Claude Code and Codex."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -17,9 +17,11 @@ keywords = [
   "claude-code",
   "codex",
   "autonomous-agents",
+  "agent-orchestration",
   "agent-memory",
   "mcp",
   "developer-tools",
+  "verified-execution",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",

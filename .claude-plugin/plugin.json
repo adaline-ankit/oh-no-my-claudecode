@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "oh-no-my-claudecode",
   "displayName": "ONMC - Memory-Grounded Coding Loops",
-  "description": "Run Claude Code with repo memory, known-dead-end guards, verifier gates, hard budgets, and tamper-evident receipts. Also ships lifecycle hooks and 12 MCP memory tools.",
-  "version": "0.36.0",
+  "description": "Run Claude Code with repo memory, No-Mistakes PR gates, known-dead-end guards, verifier gates, hard budgets, and tamper-evident receipts. Also ships lifecycle hooks and 12 MCP memory tools.",
+  "version": "0.48.0",
   "author": {
     "name": "ONMC Contributors",
     "url": "https://github.com/adaline-ankit/oh-no-my-claudecode"

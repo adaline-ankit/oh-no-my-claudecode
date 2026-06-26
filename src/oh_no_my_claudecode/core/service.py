@@ -832,6 +832,7 @@ class OnmcService:
         plan_model: str | None = None,
         execute_model: str | None = None,
         plan_runner: AgentRunner | None = None,
+        isolate: bool = False,
     ) -> AutopilotResult:
         """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle against *goal*.
 
@@ -866,6 +867,8 @@ class OnmcService:
             Optional injectable runner for the PLAN step (testing).  When ``None``
             and *plan_model* is set, a real runner is built from *agent* +
             *plan_model*.
+        isolate:
+            When True, run ACT inside a fresh git worktree via ``loop``.
 
         Returns
         -------
@@ -889,6 +892,7 @@ class OnmcService:
             plan_model=plan_model,
             execute_model=execute_model,
             plan_runner=plan_runner,
+            isolate=isolate,
         )
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:
