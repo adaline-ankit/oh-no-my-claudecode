@@ -389,15 +389,29 @@ provenance, kind and confidence metadata, subsystem links, and wikilinks for rec
 ```bash
 onmc loop --goal "fix the failing tests" --agent claude --verify "pytest -q"
 onmc loop --goal "fix the failing tests" --agent codex --verify "pytest -q"
+onmc loop --goal "fix the failing tests" --agent opencode --verify "pytest -q"
 ```
 
-The loop uses real headless Claude Code or Codex adapters. Each iteration compiles relevant memory,
-injects known failed approaches, runs the agent, executes the verifier, and records the outcome.
-It stops on convergence, no progress, maximum iterations, token budget, cost budget, or wall time.
-Non-dry runs write a SHA-256 hash-chained receipt under `.agent-memory/receipts/`. A run is verified
-only when the loop converged and the final verifier passed. Receipts are tamper-evident, not signed.
+The loop uses real headless Claude Code, Codex, or OpenCode adapters. Each iteration compiles relevant
+memory, injects known failed approaches, runs the agent, executes the verifier, and records the
+outcome. It stops on convergence, no progress, duplicate actions, repeated verifier errors, maximum
+iterations, token budget, cost budget, or wall time. Non-dry runs write a SHA-256 hash-chained receipt
+under `.agent-memory/receipts/`. A run is verified only when the loop converged and the final verifier
+passed. Receipts are tamper-evident, not signed.
 
-### 18. Trace, Eval, and Replay
+### 18. No-Mistakes PR Gate
+
+```bash
+onmc nomistakes "fix failing CI" --verify "pytest -q"
+onmc nomistakes "repair the PR" --agent codex --eval-fail-under 80 --json
+```
+
+`nomistakes` composes the accountability stack into one merge-gate command: deterministic `audit`,
+optional `eval` threshold, explicit autonomy level, isolated worktree execution by default,
+`autopilot` KNOW→PLAN→ACT→PROVE→LEARN, hard limits, and a verified receipt. The command exits
+non-zero unless all blocking gates pass and the final verifier-backed receipt is verified.
+
+### 19. Trace, Eval, and Replay
 
 ```bash
 onmc trace start --label "checkout repair"
@@ -413,7 +427,7 @@ explicitly labelled token estimates. Eval cases deterministically test expected 
 behavior and can gate CI. Replay re-runs recall and guard decisions over a recorded trace against the
 current brain, with or without memory, without an LLM or network call.
 
-### 19. Security and MCP Policy
+### 20. Security and MCP Policy
 
 ```bash
 onmc audit . --fail-on high
@@ -426,7 +440,7 @@ configuration, and prompt-injection surfaces. The MCP trust gateway classifies J
 as allow, block, or approval required for hook/CI enforcement. It is not a transparent network proxy
 or process sandbox.
 
-### 20. Memory-Aware GitHub Workflows
+### 21. Memory-Aware GitHub Workflows
 
 ```bash
 onmc gh-aw init --dry-run
@@ -436,7 +450,7 @@ onmc gh-aw init
 The command scaffolds issue context, PR preflight, merged-PR learning, and weekly memory-audit
 workflows with constrained permissions, pinned actions, and comment-only safe outputs.
 
-### 21. Reproducible Benchmarks
+### 22. Reproducible Benchmarks
 
 ```bash
 onmc benchmark
@@ -484,14 +498,15 @@ The system is designed as a memory spine with multiple front doors:
 6. `hooks` preserve short-term working context across Claude Code compaction.
 7. `serve --mcp` exposes the same state to MCP-compatible agents mid-session.
 8. `loop` executes one selected coding agent against memory and a real verifier.
-9. `trace`, `eval`, and `replay` make memory contribution inspectable and regression-testable.
-10. `import onmc` exposes the same capabilities programmatically.
+9. `nomistakes` wraps loop/autopilot with preflight gates and receipt-based approval.
+10. `trace`, `eval`, and `replay` make memory contribution inspectable and regression-testable.
+11. `import onmc` exposes the same capabilities programmatically.
 
 ## Current Boundaries
 
 Important boundaries:
 
-- autonomous execution currently targets one Claude Code or Codex CLI per loop, not a multi-agent swarm
+- autonomous execution currently targets one Claude Code, Codex, or OpenCode CLI per loop, not a multi-agent swarm
 - loop adapters depend on installed, authenticated agent CLIs
 - receipts are hash-chained but not signed or remotely attested
 - MCP policy classifies recorded/stdin calls; it is not an inline transport proxy or sandbox

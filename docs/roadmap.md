@@ -42,6 +42,8 @@ Shipped in this repo:
 - memory-grounded autonomous loop with real Claude Code and Codex adapters
 - verifier-based completion and hard iteration/token/cost/wall/no-progress limits
 - tamper-evident hash-chained run receipts
+- No-Mistakes PR gate with audit/eval/autopilot/receipt approval
+- isolated worktree mode for autonomous loops and autopilot gates
 - Agent Trace Observatory with JSON/OpenTelemetry export
 - measured/sim-labelled benchmark suite
 - agent-configuration security audit and CI gate
@@ -55,7 +57,6 @@ Shipped in this repo:
 - signed receipts or optional external attestation
 - live MCP transport enforcement in addition to offline/stdin classification
 - richer Codex usage/cost extraction where its CLI exposes stable fields
-- isolated worktree mode for autonomous loops
 - real-world benchmark fixtures and opt-in published case studies
 - richer test-mapping heuristics
 - branch-aware briefing

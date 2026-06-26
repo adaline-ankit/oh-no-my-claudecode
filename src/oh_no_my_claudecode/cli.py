@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
@@ -52,6 +52,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_memory_diff,
     render_memory_list,
     render_mine_result,
+    render_nomistakes_result,
     render_notify_status,
     render_notify_tail,
     render_onboard_summary,
@@ -4145,6 +4146,16 @@ def autopilot_command(
             ),
         ),
     ] = None,
+    isolate: Annotated[
+        bool,
+        typer.Option(
+            "--isolate/--no-isolate",
+            help=(
+                "Run ACT inside a fresh git worktree and keep it only on success. "
+                "Default off for backward compatibility."
+            ),
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Print the full result as JSON."),
@@ -4173,6 +4184,7 @@ def autopilot_command(
     onmc autopilot "fix flaky test" --agent opencode --max-iterations 5
     onmc autopilot "fix bug" --json                   # machine-readable output
     onmc autopilot "add feature" --plan-with claude-opus-4-5 --execute-with claude-haiku-4-5
+    onmc autopilot "fix CI" --isolate                  # safe worktree run
     """
     import dataclasses
 
@@ -4198,6 +4210,7 @@ def autopilot_command(
             verify_command=verify,
             plan_model=plan_with,
             execute_model=execute_with,
+            isolate=isolate,
         )
     except (FileNotFoundError, ValueError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
@@ -4242,6 +4255,178 @@ def autopilot_command(
     if isinstance(result, AutopilotResult):
         raise typer.Exit(code=0 if result.verified else 1)
     raise typer.Exit(code=0)
+
+
+@app.command("nomistakes")
+def nomistakes_command(
+    goal: Annotated[
+        str,
+        typer.Argument(help="Goal for the PR/CI gate."),
+    ],
+    agent: Annotated[
+        str,
+        typer.Option(
+            "--agent", help="Agent CLI to use: claude (default), codex, or opencode."
+        ),
+    ] = "claude",
+    autonomy: Annotated[
+        str,
+        typer.Option(
+            "--autonomy",
+            help="Autonomy level: L0 observe, L1 advise, L2 act+prove, L3 extended, L4 reserved.",
+        ),
+    ] = "L2",
+    verify: Annotated[
+        str,
+        typer.Option("--verify", help="Shell verifier required for approval."),
+    ] = "pytest",
+    max_iterations: Annotated[
+        int,
+        typer.Option("--max-iterations", min=1, help="Maximum loop iterations."),
+    ] = 6,
+    budget_tokens: Annotated[
+        int | None,
+        typer.Option("--budget-tokens", min=1, help="Stop when total tokens exceed this budget."),
+    ] = 80_000,
+    max_cost_usd: Annotated[
+        float | None,
+        typer.Option("--max-cost-usd", min=0.0, help="USD cost ceiling for the run."),
+    ] = 3.0,
+    max_wall_seconds: Annotated[
+        int | None,
+        typer.Option("--max-wall-seconds", min=1, help="Wall-clock ceiling in seconds."),
+    ] = 900,
+    audit_fail_on: Annotated[
+        str,
+        typer.Option(
+            "--audit-fail-on",
+            help="Block on audit findings at or above: critical, high, medium, low, info.",
+        ),
+    ] = "high",
+    eval_fail_under: Annotated[
+        float | None,
+        typer.Option(
+            "--eval-fail-under",
+            min=0.0,
+            max=100.0,
+            help="Run eval gate and block when score is below this threshold.",
+        ),
+    ] = None,
+    plan_with: Annotated[
+        str | None,
+        typer.Option("--plan-with", help="Model for optional PLAN step."),
+    ] = None,
+    execute_with: Annotated[
+        str | None,
+        typer.Option("--execute-with", help="Model for ACT step."),
+    ] = None,
+    isolate: Annotated[
+        bool,
+        typer.Option(
+            "--isolate/--no-isolate",
+            help="Run in an isolated git worktree by default.",
+        ),
+    ] = True,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Run gates and KNOW context without invoking the agent."),
+    ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable gate result."),
+    ] = False,
+) -> None:
+    """Run the No-Mistakes PR gate: audit + eval + autopilot + receipt verdict.
+
+    Approval requires deterministic preflight gates to pass and a verified
+    receipt from the underlying autopilot run.  L0/L1 are no-write modes. L2+
+    can act, verify, learn, and emit a receipt.
+
+    \b
+    Examples
+    --------
+    onmc nomistakes "fix failing CI" --verify "pytest -q"
+    onmc nomistakes "review this PR" --agent codex --eval-fail-under 80
+    onmc nomistakes "stabilize flaky tests" \
+      --plan-with claude-opus-4-5 --execute-with claude-haiku-4-5
+    onmc nomistakes "inspect risk only" --autonomy L1 --dry-run
+    """
+    import dataclasses
+
+    from oh_no_my_claudecode.audit.scanner import AuditSeverity
+    from oh_no_my_claudecode.autopilot.models import AutopilotResult
+    from oh_no_my_claudecode.loop.models import LoopResult
+    from oh_no_my_claudecode.nomistakes import run_nomistakes
+    from oh_no_my_claudecode.nomistakes.models import AutonomyLevel
+
+    if agent not in {"claude", "codex", "opencode"}:
+        raise typer.Exit(
+            code=_fatal(
+                f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
+            )
+        )
+    if autonomy not in {"L0", "L1", "L2", "L3", "L4"}:
+        raise typer.Exit(code=_fatal("Unknown autonomy. Choose L0, L1, L2, L3, or L4."))
+    if audit_fail_on not in {"critical", "high", "medium", "low", "info"}:
+        raise typer.Exit(
+            code=_fatal(
+                "--audit-fail-on must be one of: critical, high, medium, low, info."
+            )
+        )
+
+    try:
+        result = run_nomistakes(
+            _service(),
+            goal,
+            agent=agent,
+            autonomy=cast(AutonomyLevel, autonomy),
+            dry_run=dry_run,
+            max_iterations=max_iterations,
+            budget_tokens=budget_tokens,
+            max_cost_usd=max_cost_usd,
+            max_wall_seconds=max_wall_seconds,
+            verify_command=verify,
+            audit_fail_on=cast(AuditSeverity, audit_fail_on),
+            eval_fail_under=eval_fail_under,
+            plan_model=plan_with,
+            execute_model=execute_with,
+            isolate=isolate,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        autopilot_payload: dict[str, object] | None = None
+        if isinstance(result.autopilot_result, AutopilotResult):
+            ap = result.autopilot_result
+            autopilot_payload = {
+                "verified": ap.verified,
+                "stop_reason": ap.stop_reason,
+                "tokens": ap.tokens,
+                "cost_usd": ap.cost_usd,
+                "receipt_path": str(ap.receipt_path) if ap.receipt_path else None,
+                "loop_result": (
+                    dataclasses.asdict(ap.loop_result)
+                    if isinstance(ap.loop_result, LoopResult)
+                    else None
+                ),
+            }
+        payload = {
+            "goal": result.goal,
+            "approved": result.approved,
+            "dry_run": result.dry_run,
+            "agent": result.agent,
+            "autonomy": result.autonomy,
+            "verify_command": result.verify_command,
+            "receipt_path": result.receipt_path,
+            "gates": [dataclasses.asdict(gate) for gate in result.gates],
+            "autopilot": autopilot_payload,
+        }
+        console.print_json(json.dumps(payload))
+        raise typer.Exit(code=0 if result.approved else 1)
+
+    render_nomistakes_result(result)
+    raise typer.Exit(code=0 if result.approved else 1)
 
 
 def _fatal(message: str) -> int:

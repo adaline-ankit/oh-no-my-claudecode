@@ -231,6 +231,7 @@ def run_autopilot(
     plan_model: str | None = None,
     execute_model: str | None = None,
     plan_runner: AgentRunner | None = None,
+    isolate: bool = False,
     now: datetime | None = None,  # injectable for tests
 ) -> AutopilotResult:
     """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle.
@@ -268,6 +269,9 @@ def run_autopilot(
         Optional injectable :class:`~oh_no_my_claudecode.loop.models.AgentRunner`
         for the PLAN step.  When ``None`` and *plan_model* is set, a real runner
         is built from *agent* + *plan_model*.  Intended for testing.
+    isolate:
+        Forwarded to :meth:`~oh_no_my_claudecode.core.service.OnmcService.loop`
+        to run ACT inside a git worktree.
     now:
         Injectable reference timestamp (unused currently; reserved for deterministic
         testing of time-dependent logic).
@@ -378,6 +382,7 @@ def run_autopilot(
         max_wall_seconds=max_wall_seconds,
         agent_runner=resolved_agent_runner,
         verify_runner=verify_runner,
+        isolate=isolate,
     )
 
     # ── PROVE ─────────────────────────────────────────────────────────────────

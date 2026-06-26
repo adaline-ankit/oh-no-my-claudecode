@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.48.0] — 2026-06-26
+
+### Added
+
+- **`onmc nomistakes` — PR-ready No-Mistakes gate.** Composes the existing accountability stack into one CI/merge command: deterministic `audit` preflight, optional `eval` threshold, autonomy labels (`L0` observe, `L1` advise, `L2+` act+prove), isolated worktree execution by default, `autopilot` KNOW→PLAN→ACT→PROVE→LEARN, hard token/cost/wall limits, and a verified receipt as the only approval path. `onmc nomistakes "<goal>" --verify "pytest -q" [--agent claude|codex|opencode] [--eval-fail-under 80] [--plan-with ... --execute-with ...] [--json]`.
+- **`onmc autopilot --isolate`.** Autopilot can now forward ACT into the existing loop worktree isolation path, so higher-level gates can keep failed agent edits away from the caller's working tree while preserving successful worktrees.
+
 ## [0.47.0] — 2026-06-24
 
 ### Added

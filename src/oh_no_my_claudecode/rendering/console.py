@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
+    from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.trace.models import TraceReport
 
@@ -2055,6 +2056,50 @@ def render_autopilot_result(result: object) -> None:
             border_style=grow_color,
         )
     )
+
+
+def render_nomistakes_result(result: NoMistakesResult) -> None:
+    """Render the No-Mistakes gate result."""
+    status = (
+        "[bold green]APPROVED[/bold green]"
+        if result.approved
+        else "[bold red]BLOCKED[/bold red]"
+    )
+    mode = "dry-run" if result.dry_run else "active"
+    lines = [
+        status,
+        f"Goal: {shorten(result.goal, max_length=96)}",
+        f"Agent: {result.agent}  Autonomy: {result.autonomy}  Mode: {mode}",
+        f"Verifier: {result.verify_command}",
+    ]
+    if result.receipt_path:
+        lines.append(f"Receipt: {result.receipt_path}")
+    console.print(
+        Panel.fit(
+            "\n".join(lines),
+            title="onmc nomistakes",
+            border_style="green" if result.approved else "red",
+        )
+    )
+
+    table = Table(title="Gate Checks")
+    table.add_column("Gate", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Blocking", no_wrap=True)
+    table.add_column("Detail", overflow="fold")
+    for gate in result.gates:
+        color = {
+            "pass": "green",
+            "fail": "red",
+            "skip": "yellow",
+        }.get(gate.status, "white")
+        table.add_row(
+            gate.name,
+            f"[{color}]{gate.status}[/{color}]",
+            "yes" if gate.blocking else "no",
+            gate.detail,
+        )
+    console.print(table)
 
 
 def render_trace_card(report: TraceReport) -> None:

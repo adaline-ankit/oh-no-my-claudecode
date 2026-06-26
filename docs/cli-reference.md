@@ -84,6 +84,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ loop-templates  List available built-in loop templates.                      │
 │ autopilot       Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on  │
 │                 a goal.                                                      │
+│ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
+│                 receipt verdict.                                             │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -2036,56 +2038,86 @@ Usage: onmc autopilot [OPTIONS] GOAL
  onmc autopilot "fix bug" --json                   # machine-readable output
  onmc autopilot "add feature" --plan-with claude-opus-4-5 --execute-with
  claude-haiku-4-5
+ onmc autopilot "fix CI" --isolate                  # safe worktree run
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    goal      TEXT  Goal for the autopilot run. [required]                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --agent                   TEXT                  Agent CLI to use: claude     │
-│                                                 (default), codex, or         │
-│                                                 opencode.                    │
-│                                                 [default: claude]            │
-│ --dry-run                                       Run only the KNOW phase      │
-│                                                 (compile brief, guard,       │
-│                                                 profile) without invoking    │
-│                                                 any agent or verify          │
-│                                                 subprocess.  No spend, no    │
-│                                                 memory writes.               │
-│ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
-│                                                 [default: 10]                │
-│ --budget-tokens           INTEGER RANGE [x>=1]  Stop when total tokens       │
-│                                                 exceed this budget.          │
-│ --max-cost-usd            FLOAT RANGE [x>=0.0]  Stop before the next         │
-│                                                 iteration when cumulative    │
-│                                                 cost (USD) exceeds this      │
-│                                                 value.                       │
-│ --max-wall-seconds        INTEGER RANGE [x>=1]  Stop before the next         │
-│                                                 iteration when elapsed       │
-│                                                 wall-clock seconds exceed    │
-│                                                 this.                        │
-│ --verify                  TEXT                  Shell command run after each │
-│                                                 iteration to verify success. │
-│                                                 [default: pytest]            │
-│ --plan-with               TEXT                  Model name for the PLAN step │
-│                                                 (expensive model).  When     │
-│                                                 set, a planning pass runs    │
-│                                                 before ACT: the model        │
-│                                                 produces a precise           │
-│                                                 implementation plan that is  │
-│                                                 injected into the ACT goal   │
-│                                                 and recorded as a memory.    │
-│                                                 Example: --plan-with         │
-│                                                 claude-opus-4-5              │
-│ --execute-with            TEXT                  Model name for the ACT       │
-│                                                 (execute) step (cheap        │
-│                                                 model).  When set, the loop  │
-│                                                 runs with this model instead │
-│                                                 of the agent default.        │
-│                                                 Example: --execute-with      │
-│                                                 claude-haiku-4-5             │
-│ --json                                          Print the full result as     │
-│                                                 JSON.                        │
-│ --help                                          Show this message and exit.  │
+│ --agent                               TEXT                Agent CLI to use:  │
+│                                                           claude (default),  │
+│                                                           codex, or          │
+│                                                           opencode.          │
+│                                                           [default: claude]  │
+│ --dry-run                                                 Run only the KNOW  │
+│                                                           phase (compile     │
+│                                                           brief, guard,      │
+│                                                           profile) without   │
+│                                                           invoking any agent │
+│                                                           or verify          │
+│                                                           subprocess.  No    │
+│                                                           spend, no memory   │
+│                                                           writes.            │
+│ --max-iterations                      INTEGER RANGE       Maximum loop       │
+│                                       [x>=1]              iterations.        │
+│                                                           [default: 10]      │
+│ --budget-tokens                       INTEGER RANGE       Stop when total    │
+│                                       [x>=1]              tokens exceed this │
+│                                                           budget.            │
+│ --max-cost-usd                        FLOAT RANGE         Stop before the    │
+│                                       [x>=0.0]            next iteration     │
+│                                                           when cumulative    │
+│                                                           cost (USD) exceeds │
+│                                                           this value.        │
+│ --max-wall-seconds                    INTEGER RANGE       Stop before the    │
+│                                       [x>=1]              next iteration     │
+│                                                           when elapsed       │
+│                                                           wall-clock seconds │
+│                                                           exceed this.       │
+│ --verify                              TEXT                Shell command run  │
+│                                                           after each         │
+│                                                           iteration to       │
+│                                                           verify success.    │
+│                                                           [default: pytest]  │
+│ --plan-with                           TEXT                Model name for the │
+│                                                           PLAN step          │
+│                                                           (expensive model). │
+│                                                           When set, a        │
+│                                                           planning pass runs │
+│                                                           before ACT: the    │
+│                                                           model produces a   │
+│                                                           precise            │
+│                                                           implementation     │
+│                                                           plan that is       │
+│                                                           injected into the  │
+│                                                           ACT goal and       │
+│                                                           recorded as a      │
+│                                                           memory.  Example:  │
+│                                                           --plan-with        │
+│                                                           claude-opus-4-5    │
+│ --execute-with                        TEXT                Model name for the │
+│                                                           ACT (execute) step │
+│                                                           (cheap model).     │
+│                                                           When set, the loop │
+│                                                           runs with this     │
+│                                                           model instead of   │
+│                                                           the agent default. │
+│                                                           Example:           │
+│                                                           --execute-with     │
+│                                                           claude-haiku-4-5   │
+│ --isolate             --no-isolate                        Run ACT inside a   │
+│                                                           fresh git worktree │
+│                                                           and keep it only   │
+│                                                           on success.        │
+│                                                           Default off for    │
+│                                                           backward           │
+│                                                           compatibility.     │
+│                                                           [default:          │
+│                                                           no-isolate]        │
+│ --json                                                    Print the full     │
+│                                                           result as JSON.    │
+│ --help                                                    Show this message  │
+│                                                           and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
