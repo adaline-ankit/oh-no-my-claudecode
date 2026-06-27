@@ -133,6 +133,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 regression report.                                           │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
+│ proptest        Generate property/invariant tests for pure functions.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3243,5 +3244,20 @@ Usage: onmc contract [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ init  Emit a failing pytest skeleton + a stub module from a contract spec.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc proptest`
+
+```text
+Usage: onmc proptest [OPTIONS] COMMAND [ARGS]...
+
+ Generate property/invariant tests for pure functions.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Generate a fixed-seed property test from an invariant SPEC.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
