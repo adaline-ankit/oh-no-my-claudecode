@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
     from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
+    from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.trace.models import TraceReport
 
 from oh_no_my_claudecode.ask.compiler import AskResult
@@ -2940,6 +2941,30 @@ def render_codegraph_context(result: ContextSelection) -> None:
     for index, file in enumerate(result.files, start=1):
         table.add_row(str(index), file)
     console.print(table)
+
+
+def render_release_draft(draft: ReleaseDraft, *, written: bool = False) -> None:
+    """Render a drafted release: bump summary table + the CHANGELOG entry.
+
+    When *written* is True, a confirmation line notes that pyproject.toml and
+    CHANGELOG.md were edited; otherwise a dry-run hint is shown.
+    """
+    table = Table(title="Release Draft")
+    table.add_column("Field")
+    table.add_column("Value", justify="right")
+    table.add_row("Current version", draft.current_version)
+    table.add_row("Next version", draft.next_version)
+    table.add_row("Bump", draft.bump)
+    table.add_row(
+        "Commits",
+        str(sum(len(items) for items in draft.commits_by_type.values())),
+    )
+    console.print(table)
+    console.print(Panel(Markdown(draft.changelog_entry), title="CHANGELOG entry"))
+    if written:
+        console.print("[green]Wrote pyproject.toml + CHANGELOG.md.[/green]")
+    else:
+        console.print("[dim]Dry run — nothing written. Pass --write to apply.[/dim]")
 
 
 def render_conventions(conv: Conventions, *, path: Path | None = None) -> None:

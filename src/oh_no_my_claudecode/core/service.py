@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
+    from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
     from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
@@ -3454,6 +3455,58 @@ class OnmcService:
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
         return detect_conventions(repo_root)
+
+    # ------------------------------------------------------------------
+    # Release drafter (deterministic, offline)
+    # ------------------------------------------------------------------
+
+    def release_draft(
+        self,
+        *,
+        write: bool = False,
+        repo_root: Path | None = None,
+    ) -> tuple[Path, ReleaseDraft]:
+        """Draft the next release from conventional-commit history.
+
+        Reads the current version from ``pyproject.toml`` and the commit
+        subjects since the last ``vX.Y.Z`` tag, classifies them into a semver
+        bump, and renders a CHANGELOG entry.  Deterministic given the repo's
+        git history; no network or LLM access.
+
+        Parameters
+        ----------
+        write:
+            When ``True``, edit ``pyproject.toml`` (bump version) and prepend
+            the rendered entry to ``CHANGELOG.md``.  When ``False`` (default),
+            nothing is written — the draft is returned for preview.
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+
+        Returns
+        -------
+        tuple[Path, ReleaseDraft]
+            ``(repo_root, draft)``.
+        """
+        from oh_no_my_claudecode.release import (
+            collect_commits,
+            current_version,
+            draft_release,
+            write_release,
+        )
+
+        if repo_root is None:
+            repo_root = discover_repo_root(self.cwd)
+
+        version = current_version(repo_root)
+        commits = collect_commits(repo_root)
+        draft = draft_release(
+            current_version=version,
+            commits=commits,
+            date=utc_now().strftime("%Y-%m-%d"),
+        )
+        if write:
+            write_release(repo_root, draft)
+        return repo_root, draft
 
     # ------------------------------------------------------------------
     # Eval harness

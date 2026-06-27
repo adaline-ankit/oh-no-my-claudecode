@@ -1,0 +1,359 @@
+"""Deterministic, offline release drafter.
+
+Given the project's current version and a list of conventional-commit subjects
+since the last tag, :func:`draft_release` classifies each subject, computes the
+next semantic version, and groups the commits into a CHANGELOG entry that
+matches the repo's existing style.
+
+Everything in this module is pure: ``draft_release`` takes the commit log,
+date, and current version as arguments (no git, no network, no LLM) so it is
+fully deterministic and unit-testable.  The :func:`collect_commits` and
+:func:`current_version` helpers exist for the CLI to gather those inputs from
+the live repo; they are intentionally *not* used by the pure drafter.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+Bump = Literal["major", "minor", "patch"]
+
+# Conventional-commit type -> CHANGELOG section heading. The order of this dict
+# is the order sections appear in a rendered entry.
+_SECTION_FOR_TYPE: dict[str, str] = {
+    "feat": "Added",
+    "fix": "Fixed",
+}
+_OTHER_SECTION = "Changed"
+
+# Section render order (every section that has at least one entry is rendered).
+_SECTION_ORDER: tuple[str, ...] = ("Added", "Changed", "Fixed")
+
+# `type(scope)!: subject` or `type: subject`.
+_HEADER_RE = re.compile(
+    r"^(?P<type>[a-zA-Z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:\s*(?P<subject>.+)$"
+)
+_BREAKING_RE = re.compile(r"BREAKING[ -]CHANGE", re.IGNORECASE)
+
+
+@dataclass
+class ReleaseDraft:
+    """The drafted next release.
+
+    Attributes
+    ----------
+    current_version:
+        The version currently declared in ``pyproject.toml``.
+    next_version:
+        The computed next version after applying *bump*.
+    bump:
+        The semver bump level implied by the commits (``"major"``,
+        ``"minor"``, or ``"patch"``).
+    changelog_entry:
+        The rendered CHANGELOG entry block (heading + grouped sections),
+        matching the repo's existing format.
+    commits_by_type:
+        Commits grouped by CHANGELOG section heading (e.g. ``"Added"``),
+        preserving input order within each section.
+    """
+
+    current_version: str
+    next_version: str
+    bump: Bump
+    changelog_entry: str
+    commits_by_type: dict[str, list[str]] = field(default_factory=dict)
+
+
+def _parse_version(version: str) -> tuple[int, int, int]:
+    """Parse ``"X.Y.Z"`` into an ``(major, minor, patch)`` tuple.
+
+    Any pre-release / build suffix on the patch component is dropped (e.g.
+    ``"0.5.0rc1"`` -> ``(0, 5, 0)``) so the next stable version is computed.
+    """
+    match = re.match(r"^\s*(\d+)\.(\d+)\.(\d+)", version)
+    if not match:
+        msg = f"Cannot parse version {version!r} as X.Y.Z."
+        raise ValueError(msg)
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
+def _bump_for_subject(subject: str, body: str = "") -> Bump:
+    """Classify a single conventional-commit message into a bump level."""
+    header = subject.strip()
+    if _BREAKING_RE.search(header) or _BREAKING_RE.search(body):
+        return "major"
+    match = _HEADER_RE.match(header)
+    if match is None:
+        # Not a conventional commit — treat conservatively as a patch.
+        return "patch"
+    if match.group("bang"):
+        return "major"
+    commit_type = match.group("type").lower()
+    if commit_type == "feat":
+        return "minor"
+    return "patch"
+
+
+def _section_for_subject(subject: str) -> str:
+    """Return the CHANGELOG section heading for a conventional-commit subject."""
+    match = _HEADER_RE.match(subject.strip())
+    if match is None:
+        return _OTHER_SECTION
+    if match.group("bang") or _BREAKING_RE.search(subject):
+        # Breaking changes are still grouped by their declared type's section.
+        commit_type = match.group("type").lower()
+        return _SECTION_FOR_TYPE.get(commit_type, _OTHER_SECTION)
+    commit_type = match.group("type").lower()
+    return _SECTION_FOR_TYPE.get(commit_type, _OTHER_SECTION)
+
+
+def _clean_subject(subject: str) -> str:
+    """Strip the conventional-commit prefix, leaving a human-readable summary.
+
+    ``"feat(loop): add resume flag"`` -> ``"add resume flag"``.  Non-conforming
+    subjects are returned unchanged (trimmed).
+    """
+    match = _HEADER_RE.match(subject.strip())
+    if match is None:
+        return subject.strip()
+    return match.group("subject").strip()
+
+
+def _apply_bump(version: tuple[int, int, int], bump: Bump) -> tuple[int, int, int]:
+    major, minor, patch = version
+    if bump == "major":
+        return major + 1, 0, 0
+    if bump == "minor":
+        return major, minor + 1, 0
+    return major, minor, patch + 1
+
+
+def _highest_bump(bumps: list[Bump]) -> Bump:
+    """Return the strongest bump in *bumps* (major > minor > patch)."""
+    if "major" in bumps:
+        return "major"
+    if "minor" in bumps:
+        return "minor"
+    return "patch"
+
+
+def _is_release_chore(subject: str) -> bool:
+    """True for ``chore(release): ...`` commits, which are skipped from drafts."""
+    match = _HEADER_RE.match(subject.strip())
+    if match is None:
+        return False
+    return match.group("type").lower() == "chore" and (match.group("scope") or "") == "release"
+
+
+def draft_release(
+    *,
+    current_version: str,
+    commits: list[str],
+    date: str,
+) -> ReleaseDraft:
+    """Draft the next release from conventional-commit subjects.
+
+    Pure and deterministic: the commit log, *date*, and *current_version* are
+    all injected, so the same inputs always produce the same draft (no git,
+    network, or LLM access).
+
+    Parameters
+    ----------
+    current_version:
+        The version currently in ``pyproject.toml`` (``"X.Y.Z"``).
+    commits:
+        Conventional-commit subject lines since the last tag (newest first or
+        oldest first — order is preserved within sections).  ``chore(release):``
+        commits are ignored.  May be empty.
+    date:
+        The release date as ``"YYYY-MM-DD"`` for the CHANGELOG heading.
+
+    Returns
+    -------
+    ReleaseDraft
+        The computed bump, next version, grouped commits, and rendered
+        CHANGELOG entry.
+    """
+    meaningful = [c.strip() for c in commits if c.strip() and not _is_release_chore(c)]
+
+    bumps: list[Bump] = [_bump_for_subject(c) for c in meaningful]
+    bump: Bump = _highest_bump(bumps) if bumps else "patch"
+
+    current_tuple = _parse_version(current_version)
+    next_tuple = _apply_bump(current_tuple, bump)
+    next_version = ".".join(str(part) for part in next_tuple)
+
+    commits_by_type: dict[str, list[str]] = {}
+    for subject in meaningful:
+        section = _section_for_subject(subject)
+        commits_by_type.setdefault(section, []).append(_clean_subject(subject))
+
+    changelog_entry = _render_entry(
+        version=next_version,
+        date=date,
+        commits_by_type=commits_by_type,
+    )
+
+    return ReleaseDraft(
+        current_version=current_version,
+        next_version=next_version,
+        bump=bump,
+        changelog_entry=changelog_entry,
+        commits_by_type=commits_by_type,
+    )
+
+
+def _render_entry(
+    *,
+    version: str,
+    date: str,
+    commits_by_type: dict[str, list[str]],
+) -> str:
+    """Render a CHANGELOG entry block matching the repo's existing format.
+
+    Format (mirrors ``CHANGELOG.md``)::
+
+        ## [X.Y.Z] — YYYY-MM-DD
+
+        ### Added
+
+        - subject
+    """
+    lines: list[str] = [f"## [{version}] — {date}"]
+    has_any = any(commits_by_type.get(section) for section in _SECTION_ORDER)
+    if not has_any:
+        lines.extend(["", "_No notable changes._"])
+        return "\n".join(lines) + "\n"
+
+    for section in _SECTION_ORDER:
+        entries = commits_by_type.get(section)
+        if not entries:
+            continue
+        lines.extend(["", f"### {section}", ""])
+        lines.extend(f"- {entry}" for entry in entries)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Live-repo helpers (used by the CLI, NOT by the pure drafter or its tests)
+# ---------------------------------------------------------------------------
+
+
+def current_version(repo_root: Path) -> str:
+    """Read ``version = "X.Y.Z"`` from ``<repo_root>/pyproject.toml``.
+
+    Raises
+    ------
+    FileNotFoundError
+        When ``pyproject.toml`` does not exist.
+    ValueError
+        When the ``[project] version`` key is absent.
+    """
+    pyproject = repo_root / "pyproject.toml"
+    if not pyproject.exists():
+        msg = f"{pyproject} not found."
+        raise FileNotFoundError(msg)
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    project = data.get("project", {})
+    version = project.get("version") if isinstance(project, dict) else None
+    if not isinstance(version, str) or not version:
+        msg = "No [project] version found in pyproject.toml."
+        raise ValueError(msg)
+    return version
+
+
+def _last_tag(repo_root: Path) -> str | None:
+    """Return the most recent ``vX.Y.Z`` tag reachable from HEAD, or ``None``."""
+    try:
+        result = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    tag = result.stdout.strip()
+    return tag or None
+
+
+def collect_commits(repo_root: Path) -> list[str]:
+    """Collect conventional-commit subjects since the last ``vX.Y.Z`` tag.
+
+    When no tag exists, collects every commit subject.  Returns subjects newest
+    first.  Returns an empty list on any git failure (e.g. not a git repo).
+    """
+    tag = _last_tag(repo_root)
+    rev_range = f"{tag}..HEAD" if tag else "HEAD"
+    try:
+        result = subprocess.run(
+            ["git", "log", "--no-merges", "--pretty=format:%s", rev_range],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+_UNRELEASED_RE = re.compile(r"^## \[Unreleased\]\s*$", re.MULTILINE)
+_VERSION_LINE_RE = re.compile(r'^(version\s*=\s*)"[^"]*"', re.MULTILINE)
+
+
+def write_release(repo_root: Path, draft: ReleaseDraft) -> tuple[Path, Path]:
+    """Apply *draft* to ``pyproject.toml`` and ``CHANGELOG.md`` in place.
+
+    - Bumps the ``[project] version`` to ``draft.next_version``.
+    - Prepends ``draft.changelog_entry`` immediately under the ``[Unreleased]``
+      heading in ``CHANGELOG.md`` (the ``[Unreleased]`` stub is preserved).
+
+    Returns the ``(pyproject_path, changelog_path)`` pair that was edited.
+
+    Raises
+    ------
+    FileNotFoundError
+        When either file is missing.
+    ValueError
+        When the expected anchors (version line / ``[Unreleased]`` heading) are
+        absent.
+    """
+    pyproject = repo_root / "pyproject.toml"
+    changelog = repo_root / "CHANGELOG.md"
+    if not pyproject.exists():
+        msg = f"{pyproject} not found."
+        raise FileNotFoundError(msg)
+    if not changelog.exists():
+        msg = f"{changelog} not found."
+        raise FileNotFoundError(msg)
+
+    pyproject_text = pyproject.read_text(encoding="utf-8")
+    new_pyproject, count = _VERSION_LINE_RE.subn(
+        rf'\1"{draft.next_version}"', pyproject_text, count=1
+    )
+    if count == 0:
+        msg = "No `version = \"...\"` line found in pyproject.toml."
+        raise ValueError(msg)
+    pyproject.write_text(new_pyproject, encoding="utf-8")
+
+    changelog_text = changelog.read_text(encoding="utf-8")
+    match = _UNRELEASED_RE.search(changelog_text)
+    if match is None:
+        msg = "No `## [Unreleased]` heading found in CHANGELOG.md."
+        raise ValueError(msg)
+    head = changelog_text[: match.end()]
+    tail = changelog_text[match.end() :].lstrip("\n")
+    entry = draft.changelog_entry.rstrip("\n")
+    new_changelog = f"{head}\n\n{entry}\n\n{tail}"
+    changelog.write_text(new_changelog, encoding="utf-8")
+
+    return pyproject, changelog
