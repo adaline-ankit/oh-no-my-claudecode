@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.52.1] — 2026-06-27
+
+### Fixed
+
+- **Codex process swarms can now write inside isolated worktrees.** The Codex
+  loop adapter now runs `codex exec --sandbox workspace-write ...` instead of a
+  bare `codex exec`, because non-interactive Codex defaults to a read-only
+  sandbox on this machine. This unblocks `onmc swarm run --agent codex` for real
+  feature work while preserving worktree isolation.
+
 ## [0.52.0] — 2026-06-27
 
 ### Added
