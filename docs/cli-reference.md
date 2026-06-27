@@ -131,6 +131,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 deterministic).                                              │
 │ replay          Replay Lab — re-run a recorded session and produce a         │
 │                 regression report.                                           │
+│ proptest        Generate property/invariant tests for pure functions.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3226,5 +3227,20 @@ Usage: onmc registry-demo [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the confirmation as JSON.                               │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc proptest`
+
+```text
+Usage: onmc proptest [OPTIONS] COMMAND [ARGS]...
+
+ Generate property/invariant tests for pure functions.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Generate a fixed-seed property test from an invariant SPEC.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
