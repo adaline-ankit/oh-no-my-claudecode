@@ -23,6 +23,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
+│ pack            Generate a tiny deterministic context pack for spawned       │
+│                 agents.                                                      │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -119,6 +121,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 ROI) over the run receipts that onmc loop and swarm write.   │
 │                 Honest: cost is n/a when a receipt did not report it — never │
 │                 fabricated.                                                  │
+│ fleet           Operator view for local agent fleets (swarm + claims +       │
+│                 receipts).                                                   │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │

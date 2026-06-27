@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.evals.models import EvalCase, EvalComparison, EvalReport
     from oh_no_my_claudecode.evolution.compiler import EvolutionReport
     from oh_no_my_claudecode.federation.pull import PullResult
+    from oh_no_my_claudecode.fleet import FleetDoctorReport, FleetStatus
     from oh_no_my_claudecode.guard.compiler import GuardResult
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
+    from oh_no_my_claudecode.pack import ContextPack
     from oh_no_my_claudecode.preflight.runner import Executor as PreflightExecutor
     from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
@@ -1292,6 +1294,19 @@ class OnmcService:
 
         graph = self._load_or_build_codegraph()
         return context_files(graph, goal, budget=budget)
+
+    def pack(self, goal: str, *, budget_chars: int = 6000) -> ContextPack:
+        """Build a compact context pack for spawned agents."""
+        from oh_no_my_claudecode.pack import compile_context_pack
+
+        repo_root, config, storage = self._load_context()
+        return compile_context_pack(
+            repo_root,
+            config,
+            storage,
+            goal,
+            budget_chars=budget_chars,
+        )
 
     def _load_or_build_codegraph(self) -> CodeGraph:
         """Return the cached :class:`CodeGraph`, rebuilding if absent or invalid."""
@@ -3444,6 +3459,26 @@ class OnmcService:
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
         return run_preflight(repo_root, steps=steps, executor=executor)
+
+    def fleet_status(self, *, swarm_id: str | None = None) -> FleetStatus:
+        """Summarise local swarm/claim/receipt state."""
+        from oh_no_my_claudecode.fleet import fleet_status
+
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except (FileNotFoundError, RepoDiscoveryError):
+            repo_root = self.cwd
+        return fleet_status(repo_root, swarm_id=swarm_id)
+
+    def fleet_doctor(self) -> FleetDoctorReport:
+        """Diagnose stuck fleet state from local ledgers."""
+        from oh_no_my_claudecode.fleet import fleet_doctor
+
+        try:
+            repo_root = discover_repo_root(self.cwd)
+        except (FileNotFoundError, RepoDiscoveryError):
+            repo_root = self.cwd
+        return fleet_doctor(repo_root)
 
     # ------------------------------------------------------------------
     # MCP Trust Gateway

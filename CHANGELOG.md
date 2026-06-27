@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.56.0] — 2026-06-27
+
+### Added
+
+- add context packs and fleet status (#143)
+
 ## [0.55.0] — 2026-06-24
 
 ### Added
