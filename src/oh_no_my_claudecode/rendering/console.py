@@ -47,6 +47,7 @@ from oh_no_my_claudecode.models import (
     TeachModeOutput,
 )
 from oh_no_my_claudecode.onboard.compiler import OnboardingTour
+from oh_no_my_claudecode.reuse.radar import ReuseHit
 from oh_no_my_claudecode.savings.compiler import SavingsResult
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
@@ -883,6 +884,43 @@ def render_blame_result(result: BlameResult) -> None:
         for memory in result.file_level_memories:
             console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]")
             console.print(f"  {memory.summary}")
+
+
+# ── Reuse radar rendering ───────────────────────────────────────────────────────
+
+
+def render_reuse_hits(hits: list[ReuseHit], query: str) -> None:
+    """Render reuse-radar hits as a table of existing symbols that may match."""
+    if not hits:
+        console.print(
+            f"[yellow]No existing code found matching:[/yellow] {query}\n"
+            "[dim]Nothing to reuse — implementing it fresh is fine.[/dim]"
+        )
+        return
+
+    console.print(
+        Panel.fit(
+            f"[bold]{len(hits)}[/bold] existing symbol(s) may already do this — "
+            "reuse before reimplementing.",
+            title=f"[bold cyan]Reuse radar:[/bold cyan] {query}",
+            border_style="cyan",
+        )
+    )
+    table = Table(show_lines=False)
+    table.add_column("Symbol", style="bold cyan", no_wrap=True)
+    table.add_column("Kind", style="dim", no_wrap=True)
+    table.add_column("Location", style="dim", no_wrap=True)
+    table.add_column("Signature", min_width=20)
+    table.add_column("What it does")
+    for hit in hits:
+        table.add_row(
+            hit.symbol,
+            hit.kind,
+            f"{hit.file}:{hit.lineno}",
+            hit.signature,
+            shorten(hit.doc_excerpt, max_length=60) if hit.doc_excerpt else "[dim]-[/dim]",
+        )
+    console.print(table)
 
 
 # ── Playbook rendering ─────────────────────────────────────────────────────────
