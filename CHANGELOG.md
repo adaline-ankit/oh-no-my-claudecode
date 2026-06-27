@@ -4,7 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [0.48.0] — 2026-06-26
+## [0.49.0] — 2026-06-27
+
+### Added
+
+- **`onmc swarm` — native parallel accountable agent fan-out.** Run many goals at once instead of one loop at a time: `onmc swarm run --file units.txt [--concurrency N]` (or repeated `--task`) launches a bounded worker pool, each unit running a full isolated `run_loop` in its own git worktree with its own tamper-evident receipt. Concurrency defaults to `min(cpu-1, 8)`; `--max-cost-usd` stops launching new units once the swarm's cumulative cost is exceeded. Swarm state persists to `.onmc/swarm/<id>/manifest.json`; `onmc swarm status <id>` / `onmc swarm list` report progress. `--json` everywhere for scripting. Works with claude / codex / opencode agent backends.
+- **Hard abort.** `onmc swarm abort <id>` drops an `ABORT` sentinel that the loop's new `should_continue` hook checks before each iteration: the running unit stops with `stop_reason="aborted"`, queued units never start, and partial receipts are preserved. `/onmc-swarm` and `/onmc-abort` slash commands wire this into Claude Code.
 
 ### Added
 
