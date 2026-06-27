@@ -131,6 +131,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 deterministic).                                              │
 │ replay          Replay Lab — re-run a recorded session and produce a         │
 │                 regression report.                                           │
+│ contract        Spec-as-contract: generate a failing test + stub from an     │
+│                 interface spec.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3226,5 +3228,20 @@ Usage: onmc registry-demo [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the confirmation as JSON.                               │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc contract`
+
+```text
+Usage: onmc contract [OPTIONS] COMMAND [ARGS]...
+
+ Spec-as-contract: generate a failing test + stub from an interface spec.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Emit a failing pytest skeleton + a stub module from a contract spec.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
