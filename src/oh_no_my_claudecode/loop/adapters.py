@@ -232,6 +232,43 @@ def _parse_claude_json(raw: str) -> tuple[str, int | None, float | None]:
     return text, tokens, cost_usd
 
 
+def _detect_claude_error(raw: str) -> str | None:
+    """Return an error message when the Claude CLI JSON signals an API failure.
+
+    The Claude CLI reports API/auth failures *inside* a structurally-successful
+    JSON envelope, e.g.::
+
+        {"type": "result", "subtype": "success", "is_error": true,
+         "api_error_status": 401,
+         "result": "Failed to authenticate. API Error: 401 ..."}
+
+    Without this check the error text would be parsed as ordinary agent output
+    and a lenient verifier could let the loop "converge" on a run where the
+    agent never actually authenticated.  Returns ``None`` for healthy output or
+    when stdout is not the structured JSON envelope.
+    """
+    if not raw.strip():
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    api_status = data.get("api_error_status")
+    if data.get("is_error") is True or (api_status not in (None, 0, False)):
+        # Prefer the human-readable result/error text; fall back to the status.
+        for key in ("result", "error", "message"):
+            val = data.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        if api_status not in (None, 0, False):
+            return f"Claude API error (status {api_status})"
+        return "Claude reported is_error=true with no message"
+    return None
+
+
 # ---------------------------------------------------------------------------
 # ClaudeCliAdapter
 # ---------------------------------------------------------------------------
@@ -294,9 +331,21 @@ class ClaudeCliAdapter:
 
         output, tokens, cost_usd = _parse_claude_json(proc.stdout)
 
+        # Detect an API/auth error reported inside the JSON envelope (e.g. 401).
+        error: str | None = _detect_claude_error(proc.stdout)
+
         # If the agent call failed at the OS level, surface the error clearly.
         if proc.returncode == 127 or (not output and proc.stderr):
             output = proc.stderr.strip() or "[claude: no output]"
+            tokens = None
+            cost_usd = None
+            if error is None:
+                error = output
+        elif error is not None:
+            # Make the error visible in the output too, but keep tokens/cost
+            # off a failed call so accounting never credits work that did not
+            # happen.
+            output = error
             tokens = None
             cost_usd = None
 
@@ -309,6 +358,7 @@ class ClaudeCliAdapter:
             files_touched=files_touched,
             tokens=tokens,
             cost_usd=cost_usd,
+            error=error,
         )
 
 
@@ -359,8 +409,11 @@ class CodexCliAdapter:
         files_touched = _compute_files_touched(before, after)
 
         output = proc.stdout.strip()
+        error: str | None = None
         if proc.returncode == 127 or (not output and proc.stderr):
             output = proc.stderr.strip() or "[codex: no output]"
+        if proc.returncode != 0 and not proc.stdout.strip():
+            error = output
 
         prediction = _first_line(output)
 
@@ -369,6 +422,7 @@ class CodexCliAdapter:
             prediction=prediction,
             files_touched=files_touched,
             tokens=None,  # Codex headless does not emit usage
+            error=error,
         )
 
 
@@ -534,9 +588,12 @@ class OpenCodeCliAdapter:
         output, tokens = _parse_opencode_json(proc.stdout)
 
         # Surface OS-level errors cleanly.
+        error: str | None = None
         if proc.returncode == 127 or (not output and proc.stderr):
             output = proc.stderr.strip() or "[opencode: no output]"
             tokens = None
+        if proc.returncode != 0 and not proc.stdout.strip():
+            error = output
 
         prediction = _first_line(output)
 
@@ -546,6 +603,7 @@ class OpenCodeCliAdapter:
             files_touched=files_touched,
             tokens=tokens,
             cost_usd=None,  # OpenCode does not emit cost in headless mode
+            error=error,
         )
 
 

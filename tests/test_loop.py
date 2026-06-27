@@ -358,3 +358,68 @@ def test_build_brief_includes_dead_ends(tmp_path: Path) -> None:
     # brief would contain the dead-end text.  We check for a key phrase:
     lower = brief.lower()
     assert "dead" in lower or "failed" in lower or "do not" in lower or "avoid" in lower
+
+
+# ---------------------------------------------------------------------------
+# Agent-error: a failed agent invocation can NEVER converge
+# ---------------------------------------------------------------------------
+
+
+def _error_agent(message: str = "Failed to authenticate. API Error: 401") -> AgentRunner:
+    """Agent runner that reports a hard invocation error (e.g. 401)."""
+
+    def _runner(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        del prompt, escalation_level
+        return AgentRunResult(
+            output=message,
+            prediction="",
+            files_touched=[],
+            tokens=None,
+            error=message,
+        )
+
+    return _runner
+
+
+def test_agent_error_stops_with_agent_error_reason(tmp_path: Path) -> None:
+    """An errored agent run stops the loop with stop_reason='agent-error'."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="do the thing")
+    config = LoopConfig(max_iterations=5)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_error_agent(),
+        # Even a verify that ALWAYS PASSES must not rescue an errored agent.
+        verify_runner=_fake_verify(passes=True, output="all good"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "agent-error"
+    assert len(result.iterations) == 1
+    assert result.iterations[0].outcome == "loss"
+    assert "401" in result.iterations[0].verify_output
+
+
+def test_agent_error_does_not_burn_remaining_iterations(tmp_path: Path) -> None:
+    """The loop stops on the first agent error, not after max-iterations."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="do the thing")
+    config = LoopConfig(max_iterations=10)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_error_agent(),
+        verify_runner=_fake_verify(passes=False, output="nope"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.stop_reason == "agent-error"
+    assert len(result.iterations) == 1  # stopped immediately

@@ -309,7 +309,8 @@ def run_loop(
     LoopResult
         stop_reason is one of:
         'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
-        'wall-time' | 'duplicate-action' | 'repeated-error' | 'aborted'.
+        'wall-time' | 'duplicate-action' | 'repeated-error' | 'aborted' |
+        'agent-error'.
     """
     import logging as _logging
 
@@ -484,6 +485,29 @@ def run_loop(
             total_tokens += agent_result.tokens
         if agent_result.cost_usd is not None:
             total_cost_usd += agent_result.cost_usd
+
+        # --- Hard agent failure (auth/API/OS error) ---
+        # The agent invocation itself failed, so no real work happened.  Record
+        # the iteration as a forced loss (NEVER a win, even if a lenient verify
+        # would pass against pre-existing state) and stop loudly.  This closes
+        # the hole where a 401/api-error could be parsed as ordinary output and
+        # a passing verifier reported the run as ``verified``.
+        if agent_result.error is not None:
+            error_contract = IterationContract(
+                iteration=i,
+                prediction=agent_result.prediction,
+                action_summary=agent_result.output[:400],
+                files_touched=list(agent_result.files_touched),
+                verify_passed=False,
+                verify_output=f"[agent-error] {agent_result.error}"[:_MAX_VERIFY_OUTPUT],
+                outcome="loss",
+                tokens=agent_result.tokens,
+            )
+            iterations.append(error_contract)
+            mid = _record_loss(storage, spec.goal, error_contract, ref_now)
+            recorded_memory_ids.append(mid)
+            _save_checkpoint()
+            return _make_result(False, "agent-error")
 
         # Verify.
         verify_outcome: VerifyOutcome = verify_runner(config.verify_command)
