@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.57.0] — 2026-06-24
+
+### Added
+
+- **Swarm staff-engineer mode** — a swarm unit is "verified/done" only when it automatically passes the quality gate in its own worktree. `onmc swarm verify <id> <unit> --worktree <p> [--base main]` runs `onmc preflight` (ruff/mypy/cli-reference/pytest) + `onmc verify-diff` (real, non-empty, lawful diff); `onmc swarm record ... --auto-verify` sets the receipt's `verified` from the real gate (overriding any manual attestation — a lying `--verified` can't pass, and a passing test suite over an empty diff is NOT ok); `onmc swarm pr <id> <unit> --worktree <p>` opens a per-unit PR (PR-and-stop) and refuses an unverified unit. `plan_inline_swarm` gained optional per-unit `claim_paths` leases.
+
 ## [0.56.0] — 2026-06-27
 
 ### Added
