@@ -4,7 +4,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [0.49.0] — 2026-06-27
+## [0.50.0] — 2026-06-27
+
+### Fixed
+
+- **Agent auth/API errors can never be reported as `verified`.** A headless `claude -p --output-format json` returns API failures (401 auth, 529 overload) *inside* a structurally-successful JSON envelope (`is_error: true` / `api_error_status`). The adapter previously parsed that error text as ordinary agent output, so a lenient verifier could let the loop "converge" on a run where the agent never authenticated — yielding a receipt that lied (`verified: true`) and a swarm unit reported `done`. Now: `AgentRunResult` carries an `error` field set by a new `_detect_claude_error()` (and on OS-level failures for the Codex/OpenCode adapters); the loop engine forces a loss and stops with `stop_reason="agent-error"` on any errored agent run (never a win, even if verify passes); and `run_swarm` reports a unit `done` **only** when its loop actually converged — any other terminal stop (agent-error, max-iterations, cost, circuit-breaker) is `failed`, never a silent `done`. Verified live: a real 2-unit swarm against an unauthenticated `claude` now reports both units failed/agent-error (was: silently done/verified).
 
 ### Added
 
