@@ -4,9 +4,10 @@ Three adapters are provided:
 
 - ``ClaudeCliAdapter`` — shells out to ``claude -p <prompt> --output-format json``
   and parses the structured JSON response to extract text, tokens, and cost.
-- ``CodexCliAdapter`` — shells out to ``codex exec <prompt>`` (headless mode)
-  and returns the raw stdout as output; token usage is not available from the
-  Codex CLI in headless mode.
+- ``CodexCliAdapter`` — shells out to
+  ``codex exec --sandbox workspace-write <prompt>`` (headless mode) and returns
+  the raw stdout as output; token usage is not available from the Codex CLI in
+  headless mode.
 - ``OpenCodeCliAdapter`` — shells out to
   ``opencode run --format json [--model <provider/model>] <prompt>``
   and parses the JSON event stream defensively for text and token usage.
@@ -370,8 +371,13 @@ class ClaudeCliAdapter:
 class CodexCliAdapter:
     """Agent adapter that drives the Codex CLI in headless exec mode.
 
-    Calls ``codex exec <prompt>``.  Token usage is not available from the
-    Codex CLI in headless mode; ``tokens`` is always ``None``.
+    Calls ``codex exec --sandbox workspace-write <prompt>``.  Token usage is not
+    available from the Codex CLI in headless mode; ``tokens`` is always ``None``.
+
+    Codex CLI defaults to a read-only sandbox for non-interactive ``exec`` on
+    this machine.  ONMC loops are already isolated in git worktrees, so
+    ``workspace-write`` is the least-privilege mode that still lets the agent
+    make the requested edits.
 
     Parameters
     ----------
@@ -401,7 +407,7 @@ class CodexCliAdapter:
         # Snapshot git status before running.
         before = _git_status_paths(self._cmd_runner, self._repo_root, 30)
 
-        cmd = ["codex", "exec", effective_prompt]
+        cmd = ["codex", "exec", "--sandbox", "workspace-write", effective_prompt]
         proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
 
         # Snapshot git status after running.

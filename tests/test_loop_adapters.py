@@ -308,6 +308,24 @@ def test_codex_adapter_returns_stdout(tmp_path: Path) -> None:
     assert result.tokens is None
 
 
+def test_codex_adapter_uses_workspace_write_sandbox(tmp_path: Path) -> None:
+    """Codex exec must allow writes; bare exec defaults to read-only."""
+    seen_commands: list[list[str]] = []
+
+    def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:  # noqa: ARG001
+        if cmd[0] == "codex":
+            seen_commands.append(cmd)
+            return CompletedProc(returncode=0, stdout="ok", stderr="")
+        if cmd[0] == "git":
+            return CompletedProc(returncode=0, stdout="", stderr="")
+        return CompletedProc(returncode=0, stdout="", stderr="")
+
+    adapter = CodexCliAdapter(tmp_path, command_runner=_tracker)
+    adapter("Fix this", escalation_level=0)
+
+    assert seen_commands == [["codex", "exec", "--sandbox", "workspace-write", "Fix this"]]
+
+
 def test_codex_adapter_files_touched(tmp_path: Path) -> None:
     """CodexCliAdapter computes files_touched from git status diff."""
     runner = _simple_codex_runner(
@@ -328,7 +346,7 @@ def test_codex_adapter_escalation_hint_appended(tmp_path: Path) -> None:
 
     def _tracker(cmd: list[str], cwd: str, timeout: int) -> CompletedProc:
         if cmd[0] == "codex":
-            seen_prompts.append(cmd[2])
+            seen_prompts.append(cmd[-1])
         if cmd[0] == "git":
             return CompletedProc(returncode=0, stdout="", stderr="")
         return CompletedProc(returncode=0, stdout="ok", stderr="")
