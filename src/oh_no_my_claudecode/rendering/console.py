@@ -12,6 +12,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from oh_no_my_claudecode.audit.scanner import AuditReport
+    from oh_no_my_claudecode.codegraph.models import (
+        CodeGraph,
+        ContextSelection,
+        Neighbors,
+    )
+    from oh_no_my_claudecode.conventions import Conventions
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
@@ -47,6 +53,7 @@ from oh_no_my_claudecode.models import (
     TeachModeOutput,
 )
 from oh_no_my_claudecode.onboard.compiler import OnboardingTour
+from oh_no_my_claudecode.reuse.radar import ReuseHit
 from oh_no_my_claudecode.savings.compiler import SavingsResult
 from oh_no_my_claudecode.stats.health import MemoryHealth
 from oh_no_my_claudecode.sync.schema import SyncResult
@@ -883,6 +890,43 @@ def render_blame_result(result: BlameResult) -> None:
         for memory in result.file_level_memories:
             console.print(f"  [{memory.kind.value}] [bold]{memory.title}[/bold]")
             console.print(f"  {memory.summary}")
+
+
+# ── Reuse radar rendering ───────────────────────────────────────────────────────
+
+
+def render_reuse_hits(hits: list[ReuseHit], query: str) -> None:
+    """Render reuse-radar hits as a table of existing symbols that may match."""
+    if not hits:
+        console.print(
+            f"[yellow]No existing code found matching:[/yellow] {query}\n"
+            "[dim]Nothing to reuse — implementing it fresh is fine.[/dim]"
+        )
+        return
+
+    console.print(
+        Panel.fit(
+            f"[bold]{len(hits)}[/bold] existing symbol(s) may already do this — "
+            "reuse before reimplementing.",
+            title=f"[bold cyan]Reuse radar:[/bold cyan] {query}",
+            border_style="cyan",
+        )
+    )
+    table = Table(show_lines=False)
+    table.add_column("Symbol", style="bold cyan", no_wrap=True)
+    table.add_column("Kind", style="dim", no_wrap=True)
+    table.add_column("Location", style="dim", no_wrap=True)
+    table.add_column("Signature", min_width=20)
+    table.add_column("What it does")
+    for hit in hits:
+        table.add_row(
+            hit.symbol,
+            hit.kind,
+            f"{hit.file}:{hit.lineno}",
+            hit.signature,
+            shorten(hit.doc_excerpt, max_length=60) if hit.doc_excerpt else "[dim]-[/dim]",
+        )
+    console.print(table)
 
 
 # ── Playbook rendering ─────────────────────────────────────────────────────────
@@ -2840,3 +2884,82 @@ def render_evolution_card(report: object) -> None:
     console.print()
     for line in footer_parts:
         console.print(line)
+
+
+def render_codegraph_build(cache_path: Path, graph: CodeGraph) -> None:
+    """Render a one-line summary of a freshly built code graph."""
+    edge_count = sum(len(node.imports) for node in graph.nodes.values())
+    test_links = sum(len(tests) for tests in graph.file_tests.values())
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]Files indexed:[/bold] {graph.file_count}",
+                    f"[bold]Symbols:[/bold]      {len(graph.symbols)}",
+                    f"[bold]Import edges:[/bold]  {edge_count}",
+                    f"[bold]Test links:[/bold]    {test_links}",
+                    f"[dim]Cached to: {cache_path}[/dim]",
+                ]
+            ),
+            title="Codegraph",
+        )
+    )
+
+
+def render_codegraph_neighbors(result: Neighbors) -> None:
+    """Render the blast radius of a file or symbol."""
+    console.print(f"[bold]Blast radius for[/bold] [cyan]{result.target}[/cyan]")
+    if not result.target_files:
+        console.print("[yellow]Target not found in the code graph.[/yellow]")
+        return
+    console.print(f"[dim]Resolved to:[/dim] {', '.join(result.target_files)}")
+
+    table = Table(title="Neighbors")
+    table.add_column("Relation", style="bold", width=12)
+    table.add_column("Files", no_wrap=False)
+    for label, files in (
+        ("dependents", result.dependents),
+        ("tests", result.tests),
+        ("imports", result.imports),
+    ):
+        table.add_row(label, "\n".join(files) if files else "[dim]—[/dim]")
+    console.print(table)
+
+
+def render_codegraph_context(result: ContextSelection) -> None:
+    """Render a bounded context-file selection for a goal."""
+    console.print(f"[bold]Context for goal:[/bold] [cyan]{result.goal}[/cyan]")
+    if result.matched_terms:
+        console.print(f"[dim]Matched terms:[/dim] {', '.join(result.matched_terms)}")
+    if not result.files:
+        console.print("[yellow]No matching files found.[/yellow]")
+        return
+    table = Table(title=f"Files (≤{result.budget})")
+    table.add_column("#", justify="right", width=3)
+    table.add_column("File", no_wrap=False)
+    for index, file in enumerate(result.files, start=1):
+        table.add_row(str(index), file)
+    console.print(table)
+
+
+def render_conventions(conv: Conventions, *, path: Path | None = None) -> None:
+    """Render captured repo conventions as a table plus the fixed norms.
+
+    When *path* is given (i.e. after a capture), the written file location is
+    printed below the table.
+    """
+    table = Table(title="Repo Conventions")
+    table.add_column("Setting")
+    table.add_column("Value", justify="right")
+    line_length = str(conv.line_length) if conv.line_length is not None else "unset"
+    target_version = conv.target_version or "unset"
+    rule_codes = ", ".join(conv.ruff_rule_codes) if conv.ruff_rule_codes else "unset"
+    table.add_row("Line length", line_length)
+    table.add_row("Target version", target_version)
+    table.add_row("Ruff rule codes", rule_codes)
+    table.add_row("Type checked", "yes" if conv.type_checked else "no")
+    console.print(table)
+    for norm in conv.norms:
+        console.print(f"[dim]- {norm}[/dim]")
+    if path is not None:
+        console.print(f"[green]Wrote conventions:[/green] {path}")

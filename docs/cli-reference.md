@@ -23,8 +23,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ codegraph       Generate a compact codegraph for token-efficient agent       │
-│                 navigation.                                                  │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -39,6 +37,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 failure.                                                     │
 │ recall          Search memory for past incidents matching an error or        │
 │                 stacktrace.                                                  │
+│ reuse           Surface existing code that already does a thing — reuse      │
+│                 before reimplementing.                                       │
 │ ask             Ask a natural-language question answered from repo memory.   │
 │ check           Flag staged/changed files that touch recorded invariants or  │
 │                 dead-ends.                                                   │
@@ -106,6 +106,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ swarm           Parallel accountable agent loops — a bounded pool of         │
 │                 run_loop workers. Honest: 'many tasks' = a queue drained by  │
 │                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
+│ conventions     Capture and inherit the repo's coding conventions            │
+│                 (.onmc/conventions.md).                                      │
+│ codegraph       Structural repo graph — tiny, smart context for agents.      │
+│                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
 │                 token-ROI report.                                            │
 │ eval            Measure and gate memory recall quality (offline,             │
@@ -186,9 +190,31 @@ Usage: onmc brief [OPTIONS]
 ## `onmc codegraph`
 
 ```text
-Usage: onmc codegraph [OPTIONS]
+Usage: onmc codegraph [OPTIONS] COMMAND [ARGS]...
 
- Generate a compact codegraph for token-efficient agent navigation.
+ Structural repo graph — tiny, smart context for agents. Deterministic, offline
+ (stdlib ast only).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ summary    Generate a compact markdown codegraph for token-efficient         │
+│            navigation.                                                       │
+│ build      Build the structural code graph and cache it to                   │
+│            .onmc/codegraph.json.                                             │
+│ neighbors  Show the blast radius (importers + dependents + tests) of a file  │
+│            or symbol.                                                        │
+│ context    Select a small, bounded set of files relevant to a goal.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph summary`
+
+```text
+Usage: onmc codegraph summary [OPTIONS]
+
+ Generate a compact markdown codegraph for token-efficient navigation.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --max-files          INTEGER RANGE [x>=1]  Maximum hot files to include.     │
@@ -198,6 +224,56 @@ Usage: onmc codegraph [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph build`
+
+```text
+Usage: onmc codegraph build [OPTIONS]
+
+ Build the structural code graph and cache it to .onmc/codegraph.json.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the built graph as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph neighbors`
+
+```text
+Usage: onmc codegraph neighbors [OPTIONS] TARGET
+
+ Show the blast radius (importers + dependents + tests) of a file or symbol.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    target      TEXT  File path or symbol name to compute the blast radius  │
+│                        for.                                                  │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit neighbors as JSON.                                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph context`
+
+```text
+Usage: onmc codegraph context [OPTIONS] GOAL
+
+ Select a small, bounded set of files relevant to a goal.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal or task description to select relevant files for.  │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget        INTEGER RANGE [x>=1]  Maximum number of files to return.     │
+│                                       [default: 8]                           │
+│ --json                                Emit the selection as JSON.            │
+│ --help                                Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -350,6 +426,37 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │                                      [default: 8]                            │
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
+│ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc reuse`
+
+```text
+Usage: onmc reuse [OPTIONS] QUERY
+
+ Surface existing code that already does a thing — reuse before reimplementing.
+
+ Indexes the repo with stdlib `ast` and ranks top-level functions/classes by
+ how well their name, docstring, and argument names match your query.
+ Entirely offline and deterministic — no LLM, no network.
+
+ Examples:
+
+   onmc reuse "tokenize text into words"
+
+   onmc reuse tokenize --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query      TEXT  A description of the behaviour you need, or an         │
+│                       existing symbol name.                                  │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER RANGE [x>=1]  Maximum number of reuse hits to return. │
+│                                      [default: 8]                            │
+│ --json                               Emit the ranked hits as JSON instead of │
+│                                      a table.                                │
 │ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -2796,6 +2903,57 @@ Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions`
+
+```text
+Usage: onmc conventions [OPTIONS] COMMAND [ARGS]...
+
+ Capture and inherit the repo's coding conventions (.onmc/conventions.md).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ capture  Detect the repo's coding conventions and write                      │
+│          .onmc/conventions.md.                                               │
+│ show     Print the repo's coding conventions for injection into spawned      │
+│          agents.                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions capture`
+
+```text
+Usage: onmc conventions capture [OPTIONS]
+
+ Detect the repo's coding conventions and write .onmc/conventions.md.
+
+ Parses pyproject.toml ( line-length / select / target-version and
+  strict) and attaches the fixed repo norms.  Deterministic and
+ offline.  Idempotent: re-running is a no-op unless --force is passed.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --force          Overwrite an existing .onmc/conventions.md.                 │
+│ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions show`
+
+```text
+Usage: onmc conventions show [OPTIONS]
+
+ Print the repo's coding conventions for injection into spawned agents.
+
+ Detects conventions on the fly (does not require a prior capture) and emits
+ them as a table, or as JSON with --json.  Deterministic and offline.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

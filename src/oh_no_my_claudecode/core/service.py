@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.autopilot.models import AutopilotResult
     from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
+    from oh_no_my_claudecode.codegraph.models import (
+        CodeGraph,
+        ContextSelection,
+        Neighbors,
+    )
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.evals.models import EvalCase, EvalComparison, EvalReport
@@ -34,6 +39,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+    from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
@@ -60,6 +66,12 @@ from oh_no_my_claudecode.config import (
     state_dir,
     user_database_path,
     write_config,
+)
+from oh_no_my_claudecode.conventions import (
+    Conventions,
+    conventions_path,
+    detect_conventions,
+    render_conventions_markdown,
 )
 from oh_no_my_claudecode.core.repo import (
     RepoDiscoveryError,
@@ -1228,6 +1240,73 @@ class OnmcService:
         """Return git-derived file activity statistics."""
         _, _, storage = self._load_context()
         return storage.list_file_stats()
+
+    # ------------------------------------------------------------------
+    # Structural code graph (deterministic, offline)
+    # ------------------------------------------------------------------
+
+    def codegraph_build(self) -> tuple[Path, CodeGraph]:
+        """Build the structural code graph and cache it to ``.onmc/codegraph.json``.
+
+        Walks every ``*.py`` file under the repo root via :mod:`ast` (no LLM,
+        no network), assembles symbols + import edges + blast-radius +
+        test-mapping, and writes a deterministic JSON cache.  Returns the
+        ``(cache_path, graph)`` pair.
+        """
+        from oh_no_my_claudecode.codegraph.builder import build_codegraph
+
+        repo_root, config, _ = self._load_context()
+        graph = build_codegraph(repo_root)
+        cache_path = self._codegraph_cache_path(config, repo_root)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(graph.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return cache_path, graph
+
+    def codegraph_neighbors(self, target: str) -> Neighbors:
+        """Return the blast radius (importers + dependents + tests) for *target*.
+
+        Loads the cached graph, building it on demand if no cache exists.
+        *target* may be a repo-relative file path or a bare symbol name.
+        """
+        from oh_no_my_claudecode.codegraph.builder import neighbors
+
+        graph = self._load_or_build_codegraph()
+        return neighbors(graph, target)
+
+    def codegraph_context(self, goal: str, *, budget: int = 8) -> ContextSelection:
+        """Return a bounded set of files relevant to *goal*.
+
+        Loads the cached graph (building on demand), tokenises the goal, and
+        scores files by path + symbol matches, capping the result at *budget*.
+        """
+        from oh_no_my_claudecode.codegraph.builder import context_files
+
+        graph = self._load_or_build_codegraph()
+        return context_files(graph, goal, budget=budget)
+
+    def _load_or_build_codegraph(self) -> CodeGraph:
+        """Return the cached :class:`CodeGraph`, rebuilding if absent or invalid."""
+        from oh_no_my_claudecode.codegraph.builder import build_codegraph
+        from oh_no_my_claudecode.codegraph.models import CodeGraph
+
+        repo_root, config, _ = self._load_context()
+        cache_path = self._codegraph_cache_path(config, repo_root)
+        if cache_path.exists():
+            try:
+                payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                payload = None
+            if isinstance(payload, dict):
+                return CodeGraph.from_dict(payload)
+        return build_codegraph(repo_root)
+
+    @staticmethod
+    def _codegraph_cache_path(config: ProjectConfig, repo_root: Path) -> Path:
+        """Path to the cached code graph JSON (``.onmc/codegraph.json``)."""
+        return state_dir(config, repo_root) / "codegraph.json"
 
     def _build_agent_readiness_summary(self) -> AgentReadinessSummary:
         repo_root, config, storage = self._load_context()
@@ -3132,6 +3211,23 @@ class OnmcService:
         result = compile_recall(storage, query, limit=limit)
         return repo_root, result
 
+    def reuse_find(self, query: str, *, limit: int = 8) -> tuple[Path, list[ReuseHit]]:
+        """Surface existing code that already does what *query* describes.
+
+        Indexes the repo via stdlib ``ast`` and ranks top-level functions and
+        classes by token overlap against *query* (name, docstring, arg names).
+        Entirely offline and deterministic — no LLM calls, no network — so an
+        agent can check "does this already exist?" before reimplementing it.
+
+        Returns ``(repo_root, hits)`` where *hits* is a ranked list of
+        ``ReuseHit`` (may be empty when nothing relevant is found).
+        """
+        from oh_no_my_claudecode.reuse.radar import find_reuse
+
+        repo_root = discover_repo_root(self.cwd)
+        hits = find_reuse(repo_root, query, limit=limit)
+        return repo_root, hits
+
     def ask(
         self,
         question: str,
@@ -3296,6 +3392,68 @@ class OnmcService:
                 append_audit_log(repo_root, call, decision)
             results.append((call, decision))
         return results
+
+    # ------------------------------------------------------------------
+    # Conventions — capture + inherit repo coding conventions
+    # ------------------------------------------------------------------
+
+    def conventions_capture(
+        self,
+        *,
+        force: bool = False,
+        repo_root: Path | None = None,
+    ) -> tuple[Conventions, Path]:
+        """Detect repo conventions and write ``.onmc/conventions.md``.
+
+        Parameters
+        ----------
+        force:
+            Overwrite an existing ``conventions.md``.  Without ``force`` the file
+            is left untouched when it already exists (idempotent no-op write).
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd`` and
+            falling back to ``self.cwd`` when no git repo is found.
+
+        Returns
+        -------
+        tuple[Conventions, Path]
+            The detected conventions and the absolute path to the (written or
+            existing) ``conventions.md`` file.
+        """
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+
+        conv = detect_conventions(repo_root)
+        target = conventions_path(repo_root)
+        if target.exists() and not force:
+            return conv, target
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_conventions_markdown(conv), encoding="utf-8")
+        return conv, target
+
+    def conventions_show(
+        self,
+        *,
+        repo_root: Path | None = None,
+    ) -> Conventions:
+        """Detect and return the repo's conventions without writing anything.
+
+        Parameters
+        ----------
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd`` and
+            falling back to ``self.cwd`` when no git repo is found.
+        """
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return detect_conventions(repo_root)
 
     # ------------------------------------------------------------------
     # Eval harness

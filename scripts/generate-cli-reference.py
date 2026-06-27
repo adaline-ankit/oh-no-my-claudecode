@@ -20,12 +20,17 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc ingest", ["ingest"]),
     ("onmc brief", ["brief"]),
     ("onmc codegraph", ["codegraph"]),
+    ("onmc codegraph summary", ["codegraph", "summary"]),
+    ("onmc codegraph build", ["codegraph", "build"]),
+    ("onmc codegraph neighbors", ["codegraph", "neighbors"]),
+    ("onmc codegraph context", ["codegraph", "context"]),
     ("onmc ui", ["ui"]),
     ("onmc why", ["why"]),
     ("onmc memory-diff", ["memory-diff"]),
     ("onmc digest", ["digest"]),
     ("onmc guard", ["guard"]),
     ("onmc recall", ["recall"]),
+    ("onmc reuse", ["reuse"]),
     ("onmc ask", ["ask"]),
     ("onmc status", ["status"]),
     ("onmc statusline", ["statusline"]),
@@ -134,6 +139,9 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc swarm status", ["swarm", "status"]),
     ("onmc swarm list", ["swarm", "list"]),
     ("onmc swarm abort", ["swarm", "abort"]),
+    ("onmc conventions", ["conventions"]),
+    ("onmc conventions capture", ["conventions", "capture"]),
+    ("onmc conventions show", ["conventions", "show"]),
 ]
 
 

@@ -34,6 +34,10 @@ from oh_no_my_claudecode.rendering.console import (
     render_benchmark_report,
     render_blame_result,
     render_brief,
+    render_codegraph_build,
+    render_codegraph_context,
+    render_codegraph_neighbors,
+    render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
@@ -60,6 +64,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_generate_summary,
     render_playbook_list,
     render_pull_all_summary,
+    render_reuse_hits,
     render_review_output,
     render_savings_card,
     render_skill_detail,
@@ -140,6 +145,10 @@ swarm_app = typer.Typer(
     ),
     no_args_is_help=True,
 )
+conventions_app = typer.Typer(
+    help="Capture and inherit the repo's coding conventions (.onmc/conventions.md).",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -155,6 +164,7 @@ app.add_typer(notify_app, name="notify")
 app.add_typer(gh_aw_app, name="gh-aw")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(swarm_app, name="swarm")
+app.add_typer(conventions_app, name="conventions")
 
 
 @app.command("tui")
@@ -454,8 +464,18 @@ def brief_command(
     console.print(f"[green]Wrote brief:[/green] {artifact.output_path}")
 
 
-@app.command("codegraph")
-def codegraph_command(
+codegraph_app = typer.Typer(
+    help=(
+        "Structural repo graph — tiny, smart context for agents. "
+        "Deterministic, offline (stdlib ast only)."
+    ),
+    no_args_is_help=True,
+)
+app.add_typer(codegraph_app, name="codegraph")
+
+
+@codegraph_app.command("summary")
+def codegraph_summary_command(
     max_files: Annotated[
         int,
         typer.Option("--max-files", min=1, help="Maximum hot files to include."),
@@ -469,7 +489,7 @@ def codegraph_command(
         typer.Option("--output", "-o", help="Write the markdown codegraph to this path."),
     ] = None,
 ) -> None:
-    """Generate a compact codegraph for token-efficient agent navigation."""
+    """Generate a compact markdown codegraph for token-efficient navigation."""
     try:
         markdown = _service().codegraph(max_files=max_files, max_dirs=max_dirs)
     except FileNotFoundError as exc:
@@ -480,6 +500,72 @@ def codegraph_command(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown, encoding="utf-8")
     typer.echo(f"Wrote codegraph: {output}")
+
+
+@codegraph_app.command("build")
+def codegraph_build_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the built graph as JSON."),
+    ] = False,
+) -> None:
+    """Build the structural code graph and cache it to .onmc/codegraph.json."""
+    try:
+        cache_path, graph = _service().codegraph_build()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(graph.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_build(cache_path, graph)
+
+
+@codegraph_app.command("neighbors")
+def codegraph_neighbors_command(
+    target: Annotated[
+        str,
+        typer.Argument(help="File path or symbol name to compute the blast radius for."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit neighbors as JSON."),
+    ] = False,
+) -> None:
+    """Show the blast radius (importers + dependents + tests) of a file or symbol."""
+    try:
+        result = _service().codegraph_neighbors(target)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_neighbors(result)
+
+
+@codegraph_app.command("context")
+def codegraph_context_command(
+    goal: Annotated[
+        str,
+        typer.Argument(help="Goal or task description to select relevant files for."),
+    ],
+    budget: Annotated[
+        int,
+        typer.Option("--budget", min=1, help="Maximum number of files to return."),
+    ] = 8,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the selection as JSON."),
+    ] = False,
+) -> None:
+    """Select a small, bounded set of files relevant to a goal."""
+    try:
+        result = _service().codegraph_context(goal, budget=budget)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_context(result)
 
 
 @app.command("why")
@@ -986,6 +1072,50 @@ def recall_command(
         console.print(f"[green]Wrote recall artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write failure must not break the command
+
+
+@app.command("reuse")
+def reuse_command(
+    query: Annotated[
+        str,
+        typer.Argument(
+            help="A description of the behaviour you need, or an existing symbol name.",
+        ),
+    ],
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of reuse hits to return."),
+    ] = 8,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the ranked hits as JSON instead of a table."),
+    ] = False,
+) -> None:
+    """Surface existing code that already does a thing — reuse before reimplementing.
+
+    Indexes the repo with stdlib `ast` and ranks top-level functions/classes by
+    how well their name, docstring, and argument names match your query.
+    Entirely offline and deterministic — no LLM, no network.
+
+    Examples:
+
+      onmc reuse "tokenize text into words"
+
+      onmc reuse tokenize --json
+    """
+    try:
+        _, hits = _service().reuse_find(query, limit=limit)
+    except RepoDiscoveryError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import dataclasses
+
+        payload = [dataclasses.asdict(hit) for hit in hits]
+        console.print(json.dumps(payload, indent=2), markup=False)
+        return
+
+    render_reuse_hits(hits, query)
 
 
 @app.command("ask")
@@ -4436,6 +4566,44 @@ def nomistakes_command(
 
     render_nomistakes_result(result)
     raise typer.Exit(code=0 if result.approved else 1)
+
+
+@conventions_app.command("capture")
+def conventions_capture_command(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing .onmc/conventions.md."),
+    ] = False,
+) -> None:
+    """Detect the repo's coding conventions and write .onmc/conventions.md.
+
+    Parses pyproject.toml ([tool.ruff] line-length / select / target-version and
+    [tool.mypy] strict) and attaches the fixed repo norms.  Deterministic and
+    offline.  Idempotent: re-running is a no-op unless --force is passed.
+    """
+    conv, path = _service().conventions_capture(force=force)
+    render_conventions(conv, path=path)
+
+
+@conventions_app.command("show")
+def conventions_show_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the conventions as JSON for agent injection."),
+    ] = False,
+) -> None:
+    """Print the repo's coding conventions for injection into spawned agents.
+
+    Detects conventions on the fly (does not require a prior capture) and emits
+    them as a table, or as JSON with --json.  Deterministic and offline.
+    """
+    import dataclasses
+
+    conv = _service().conventions_show()
+    if as_json:
+        sys.stdout.write(json.dumps(dataclasses.asdict(conv), indent=2) + "\n")
+        return
+    render_conventions(conv)
 
 
 def _fatal(message: str) -> int:
