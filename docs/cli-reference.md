@@ -90,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ registry-demo   Proof-of-concept command registered with zero edits to       │
+│                 ``cli.py``.                                                  │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -3201,6 +3203,22 @@ Usage: onmc ledger roi [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc registry-demo`
+
+```text
+Usage: onmc registry-demo [OPTIONS]
+
+ Proof-of-concept command registered with zero edits to ``cli.py``.
+
+ Demonstrates that a self-contained feature package can add a CLI command
+ purely via the auto-discovery hook.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the confirmation as JSON.                               │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

@@ -8,6 +8,7 @@ from typing import Annotated, cast
 import typer
 
 from oh_no_my_claudecode.claim import DEFAULT_TTL_SECONDS, Claim, ClaimLedger
+from oh_no_my_claudecode.command_registry import register_feature_commands
 from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.hooks import session_start_context_json
@@ -6105,3 +6106,9 @@ def swarm_abort_command(
     console.print(
         "[dim]Running units finish their current iteration then stop gracefully.[/dim]"
     )
+
+
+# Additive command auto-discovery: features expose ``<feat>.commands.register(app)``
+# and self-register here with zero further edits to this hub. See
+# ``oh_no_my_claudecode.command_registry`` and CONTRIBUTING.md.
+register_feature_commands(app)
