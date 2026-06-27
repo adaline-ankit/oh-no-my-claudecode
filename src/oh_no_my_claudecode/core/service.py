@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.audit.scanner import AuditReport
     from oh_no_my_claudecode.autopilot.models import AutopilotResult
     from oh_no_my_claudecode.benchmark.suite import BenchmarkReport
+    from oh_no_my_claudecode.codegraph.models import (
+        CodeGraph,
+        ContextSelection,
+        Neighbors,
+    )
     from oh_no_my_claudecode.coverage.compiler import CoverageReport, CoverageSuggestion
     from oh_no_my_claudecode.digest.compiler import DigestResult
     from oh_no_my_claudecode.evals.models import EvalCase, EvalComparison, EvalReport
@@ -1228,6 +1233,73 @@ class OnmcService:
         """Return git-derived file activity statistics."""
         _, _, storage = self._load_context()
         return storage.list_file_stats()
+
+    # ------------------------------------------------------------------
+    # Structural code graph (deterministic, offline)
+    # ------------------------------------------------------------------
+
+    def codegraph_build(self) -> tuple[Path, CodeGraph]:
+        """Build the structural code graph and cache it to ``.onmc/codegraph.json``.
+
+        Walks every ``*.py`` file under the repo root via :mod:`ast` (no LLM,
+        no network), assembles symbols + import edges + blast-radius +
+        test-mapping, and writes a deterministic JSON cache.  Returns the
+        ``(cache_path, graph)`` pair.
+        """
+        from oh_no_my_claudecode.codegraph.builder import build_codegraph
+
+        repo_root, config, _ = self._load_context()
+        graph = build_codegraph(repo_root)
+        cache_path = self._codegraph_cache_path(config, repo_root)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(
+            json.dumps(graph.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return cache_path, graph
+
+    def codegraph_neighbors(self, target: str) -> Neighbors:
+        """Return the blast radius (importers + dependents + tests) for *target*.
+
+        Loads the cached graph, building it on demand if no cache exists.
+        *target* may be a repo-relative file path or a bare symbol name.
+        """
+        from oh_no_my_claudecode.codegraph.builder import neighbors
+
+        graph = self._load_or_build_codegraph()
+        return neighbors(graph, target)
+
+    def codegraph_context(self, goal: str, *, budget: int = 8) -> ContextSelection:
+        """Return a bounded set of files relevant to *goal*.
+
+        Loads the cached graph (building on demand), tokenises the goal, and
+        scores files by path + symbol matches, capping the result at *budget*.
+        """
+        from oh_no_my_claudecode.codegraph.builder import context_files
+
+        graph = self._load_or_build_codegraph()
+        return context_files(graph, goal, budget=budget)
+
+    def _load_or_build_codegraph(self) -> CodeGraph:
+        """Return the cached :class:`CodeGraph`, rebuilding if absent or invalid."""
+        from oh_no_my_claudecode.codegraph.builder import build_codegraph
+        from oh_no_my_claudecode.codegraph.models import CodeGraph
+
+        repo_root, config, _ = self._load_context()
+        cache_path = self._codegraph_cache_path(config, repo_root)
+        if cache_path.exists():
+            try:
+                payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                payload = None
+            if isinstance(payload, dict):
+                return CodeGraph.from_dict(payload)
+        return build_codegraph(repo_root)
+
+    @staticmethod
+    def _codegraph_cache_path(config: ProjectConfig, repo_root: Path) -> Path:
+        """Path to the cached code graph JSON (``.onmc/codegraph.json``)."""
+        return state_dir(config, repo_root) / "codegraph.json"
 
     def _build_agent_readiness_summary(self) -> AgentReadinessSummary:
         repo_root, config, storage = self._load_context()

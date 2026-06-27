@@ -34,6 +34,9 @@ from oh_no_my_claudecode.rendering.console import (
     render_benchmark_report,
     render_blame_result,
     render_brief,
+    render_codegraph_build,
+    render_codegraph_context,
+    render_codegraph_neighbors,
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
@@ -454,8 +457,18 @@ def brief_command(
     console.print(f"[green]Wrote brief:[/green] {artifact.output_path}")
 
 
-@app.command("codegraph")
-def codegraph_command(
+codegraph_app = typer.Typer(
+    help=(
+        "Structural repo graph — tiny, smart context for agents. "
+        "Deterministic, offline (stdlib ast only)."
+    ),
+    no_args_is_help=True,
+)
+app.add_typer(codegraph_app, name="codegraph")
+
+
+@codegraph_app.command("summary")
+def codegraph_summary_command(
     max_files: Annotated[
         int,
         typer.Option("--max-files", min=1, help="Maximum hot files to include."),
@@ -469,7 +482,7 @@ def codegraph_command(
         typer.Option("--output", "-o", help="Write the markdown codegraph to this path."),
     ] = None,
 ) -> None:
-    """Generate a compact codegraph for token-efficient agent navigation."""
+    """Generate a compact markdown codegraph for token-efficient navigation."""
     try:
         markdown = _service().codegraph(max_files=max_files, max_dirs=max_dirs)
     except FileNotFoundError as exc:
@@ -480,6 +493,72 @@ def codegraph_command(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(markdown, encoding="utf-8")
     typer.echo(f"Wrote codegraph: {output}")
+
+
+@codegraph_app.command("build")
+def codegraph_build_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the built graph as JSON."),
+    ] = False,
+) -> None:
+    """Build the structural code graph and cache it to .onmc/codegraph.json."""
+    try:
+        cache_path, graph = _service().codegraph_build()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(graph.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_build(cache_path, graph)
+
+
+@codegraph_app.command("neighbors")
+def codegraph_neighbors_command(
+    target: Annotated[
+        str,
+        typer.Argument(help="File path or symbol name to compute the blast radius for."),
+    ],
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit neighbors as JSON."),
+    ] = False,
+) -> None:
+    """Show the blast radius (importers + dependents + tests) of a file or symbol."""
+    try:
+        result = _service().codegraph_neighbors(target)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_neighbors(result)
+
+
+@codegraph_app.command("context")
+def codegraph_context_command(
+    goal: Annotated[
+        str,
+        typer.Argument(help="Goal or task description to select relevant files for."),
+    ],
+    budget: Annotated[
+        int,
+        typer.Option("--budget", min=1, help="Maximum number of files to return."),
+    ] = 8,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the selection as JSON."),
+    ] = False,
+) -> None:
+    """Select a small, bounded set of files relevant to a goal."""
+    try:
+        result = _service().codegraph_context(goal, budget=budget)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    render_codegraph_context(result)
 
 
 @app.command("why")

@@ -12,6 +12,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from oh_no_my_claudecode.audit.scanner import AuditReport
+    from oh_no_my_claudecode.codegraph.models import (
+        CodeGraph,
+        ContextSelection,
+        Neighbors,
+    )
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
@@ -2840,3 +2845,59 @@ def render_evolution_card(report: object) -> None:
     console.print()
     for line in footer_parts:
         console.print(line)
+
+
+def render_codegraph_build(cache_path: Path, graph: CodeGraph) -> None:
+    """Render a one-line summary of a freshly built code graph."""
+    edge_count = sum(len(node.imports) for node in graph.nodes.values())
+    test_links = sum(len(tests) for tests in graph.file_tests.values())
+    console.print(
+        Panel.fit(
+            "\n".join(
+                [
+                    f"[bold]Files indexed:[/bold] {graph.file_count}",
+                    f"[bold]Symbols:[/bold]      {len(graph.symbols)}",
+                    f"[bold]Import edges:[/bold]  {edge_count}",
+                    f"[bold]Test links:[/bold]    {test_links}",
+                    f"[dim]Cached to: {cache_path}[/dim]",
+                ]
+            ),
+            title="Codegraph",
+        )
+    )
+
+
+def render_codegraph_neighbors(result: Neighbors) -> None:
+    """Render the blast radius of a file or symbol."""
+    console.print(f"[bold]Blast radius for[/bold] [cyan]{result.target}[/cyan]")
+    if not result.target_files:
+        console.print("[yellow]Target not found in the code graph.[/yellow]")
+        return
+    console.print(f"[dim]Resolved to:[/dim] {', '.join(result.target_files)}")
+
+    table = Table(title="Neighbors")
+    table.add_column("Relation", style="bold", width=12)
+    table.add_column("Files", no_wrap=False)
+    for label, files in (
+        ("dependents", result.dependents),
+        ("tests", result.tests),
+        ("imports", result.imports),
+    ):
+        table.add_row(label, "\n".join(files) if files else "[dim]—[/dim]")
+    console.print(table)
+
+
+def render_codegraph_context(result: ContextSelection) -> None:
+    """Render a bounded context-file selection for a goal."""
+    console.print(f"[bold]Context for goal:[/bold] [cyan]{result.goal}[/cyan]")
+    if result.matched_terms:
+        console.print(f"[dim]Matched terms:[/dim] {', '.join(result.matched_terms)}")
+    if not result.files:
+        console.print("[yellow]No matching files found.[/yellow]")
+        return
+    table = Table(title=f"Files (≤{result.budget})")
+    table.add_column("#", justify="right", width=3)
+    table.add_column("File", no_wrap=False)
+    for index, file in enumerate(result.files, start=1):
+        table.add_row(str(index), file)
+    console.print(table)

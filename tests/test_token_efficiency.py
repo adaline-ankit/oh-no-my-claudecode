@@ -87,7 +87,7 @@ def test_codegraph_cli_returns_compact_repo_map(
     service.init_project()
     service.ingest()
 
-    result = runner.invoke(app, ["codegraph", "--max-files", "3"])
+    result = runner.invoke(app, ["codegraph", "summary", "--max-files", "3"])
 
     assert result.exit_code == 0
     assert "# ONMC Codegraph" in result.stdout

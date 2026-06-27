@@ -23,8 +23,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ codegraph       Generate a compact codegraph for token-efficient agent       │
-│                 navigation.                                                  │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -106,6 +104,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ swarm           Parallel accountable agent loops — a bounded pool of         │
 │                 run_loop workers. Honest: 'many tasks' = a queue drained by  │
 │                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
+│ codegraph       Structural repo graph — tiny, smart context for agents.      │
+│                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
 │                 token-ROI report.                                            │
 │ eval            Measure and gate memory recall quality (offline,             │
@@ -186,9 +186,31 @@ Usage: onmc brief [OPTIONS]
 ## `onmc codegraph`
 
 ```text
-Usage: onmc codegraph [OPTIONS]
+Usage: onmc codegraph [OPTIONS] COMMAND [ARGS]...
 
- Generate a compact codegraph for token-efficient agent navigation.
+ Structural repo graph — tiny, smart context for agents. Deterministic, offline
+ (stdlib ast only).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ summary    Generate a compact markdown codegraph for token-efficient         │
+│            navigation.                                                       │
+│ build      Build the structural code graph and cache it to                   │
+│            .onmc/codegraph.json.                                             │
+│ neighbors  Show the blast radius (importers + dependents + tests) of a file  │
+│            or symbol.                                                        │
+│ context    Select a small, bounded set of files relevant to a goal.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph summary`
+
+```text
+Usage: onmc codegraph summary [OPTIONS]
+
+ Generate a compact markdown codegraph for token-efficient navigation.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --max-files          INTEGER RANGE [x>=1]  Maximum hot files to include.     │
@@ -198,6 +220,56 @@ Usage: onmc codegraph [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph build`
+
+```text
+Usage: onmc codegraph build [OPTIONS]
+
+ Build the structural code graph and cache it to .onmc/codegraph.json.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the built graph as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph neighbors`
+
+```text
+Usage: onmc codegraph neighbors [OPTIONS] TARGET
+
+ Show the blast radius (importers + dependents + tests) of a file or symbol.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    target      TEXT  File path or symbol name to compute the blast radius  │
+│                        for.                                                  │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit neighbors as JSON.                                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph context`
+
+```text
+Usage: onmc codegraph context [OPTIONS] GOAL
+
+ Select a small, bounded set of files relevant to a goal.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal or task description to select relevant files for.  │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget        INTEGER RANGE [x>=1]  Maximum number of files to return.     │
+│                                       [default: 8]                           │
+│ --json                                Emit the selection as JSON.            │
+│ --help                                Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -341,8 +413,8 @@ Usage: onmc recall [OPTIONS] [QUERY]
    cat error.log | onmc recall
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [query]      TEXT  Error text or stacktrace to search for. Omit to read    │
-│                      from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).   │
+│   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
+│                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
@@ -489,9 +561,9 @@ Usage: onmc pull [OPTIONS] [SOURCE]
  config.yaml.  One failing source never aborts the rest.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [source]      TEXT  Local path to another repo (or its .agent-memory/      │
-│                       dir), or a remote git URL (https://, git@, ssh://).    │
-│                       Omit when using --all.                                 │
+│   source      [SOURCE]  Local path to another repo (or its .agent-memory/    │
+│                         dir), or a remote git URL (https://, git@, ssh://).  │
+│                         Omit when using --all.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all                  Pull from every source listed in federation.sources   │
@@ -630,7 +702,7 @@ Usage: onmc audit [OPTIONS] [PATH]
  a stricter one.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Repo root to scan.  Defaults to the current directory.   │
+│   path      [PATH]  Repo root to scan.  Defaults to the current directory.   │
 │                     The directory does not need to be an initialised ONMC    │
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1370,7 +1442,8 @@ Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
  onmc skill promote --auto --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [playbook_id]      TEXT  Playbook ID (or prefix) to promote to a skill.    │
+│   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
+│                                   skill.                                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --auto              Auto-detect recurring patterns and promote all.          │
@@ -2207,7 +2280,7 @@ Usage: onmc gh-aw init [OPTIONS] [PATH]
  --force is passed.  Use --dry-run to preview without writing anything.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Target repo root. Defaults to the current directory (or  │
+│   path      [PATH]  Target repo root. Defaults to the current directory (or  │
 │                     nearest git root). The four workflows are written to     │
 │                     PATH/.github/workflows/onmc-*.yml.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -2265,7 +2338,7 @@ Usage: onmc mcp policy init [OPTIONS] [PATH]
  Re-running is safe — the file is not overwritten unless --force is passed.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Repo root.  Defaults to current directory.               │
+│   path      [PATH]  Repo root.  Defaults to current directory.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
@@ -2296,9 +2369,10 @@ Usage: onmc mcp check [OPTIONS] [CALLS_FILE]
      cat calls.jsonl | onmc mcp check - --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [calls_file]      PATH  Path to a JSONL file of recorded tool calls.  Each │
-│                           line: {"server": "...", "tool": "...", "args":     │
-│                           {...}}.  Omit or pass '-' to read from stdin.      │
+│   calls_file      [CALLS_FILE]  Path to a JSONL file of recorded tool calls. │
+│                                 Each line: {"server": "...", "tool": "...",  │
+│                                 "args": {...}}.  Omit or pass '-' to read    │
+│                                 from stdin.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                      Emit classifications as JSON to stdout.          │
@@ -2354,14 +2428,16 @@ Usage: onmc import [OPTIONS] SOURCE [PATH]
  onmc import hermes --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      TEXT  Source to import from. Use 'omc' for oh-my-claudecode │
-│                        skills, 'hermes' for Nous hermes-agent context files, │
-│                        or a path to a .md file / directory.                  │
-│                        [required]                                            │
-│      [path]      PATH  Optional path override. For 'omc': path to            │
-│                        .omc/skills dir. For 'hermes': path to MEMORY.md /    │
-│                        USER.md / containing directory. For generic markdown: │
-│                        the .md file or directory (use as 'source' instead).  │
+│ *    source      TEXT    Source to import from. Use 'omc' for                │
+│                          oh-my-claudecode skills, 'hermes' for Nous          │
+│                          hermes-agent context files, or a path to a .md file │
+│                          / directory.                                        │
+│                          [required]                                          │
+│      path        [PATH]  Optional path override. For 'omc': path to          │
+│                          .omc/skills dir. For 'hermes': path to MEMORY.md /  │
+│                          USER.md / containing directory. For generic         │
+│                          markdown: the .md file or directory (use as         │
+│                          'source' instead).                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --dry-run              Parse and report without writing anything.            │
@@ -2467,8 +2543,8 @@ Usage: onmc trace report [OPTIONS] [SESSION_ID]
  Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [session_id]      TEXT  Session ID to report on.  Defaults to the current  │
-│                           active session.                                    │
+│   session_id      [SESSION_ID]  Session ID to report on.  Defaults to the    │
+│                                 current active session.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json              Print machine-readable JSON to stdout.                   │
@@ -2753,7 +2829,7 @@ Usage: onmc swarm status [OPTIONS] [SWARM_ID]
  Show status of a swarm or all swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [swarm_id]      TEXT  Swarm ID to inspect.  Omit to list all swarms.       │
+│   swarm_id      [SWARM_ID]  Swarm ID to inspect.  Omit to list all swarms.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit status as JSON.                                         │
@@ -2792,7 +2868,7 @@ Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
  onmc swarm abort --all
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [swarm_id]      TEXT  Swarm ID to abort.  Omit when using --all.           │
+│   swarm_id      [SWARM_ID]  Swarm ID to abort.  Omit when using --all.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
