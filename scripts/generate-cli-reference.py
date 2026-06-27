@@ -142,6 +142,11 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc conventions", ["conventions"]),
     ("onmc conventions capture", ["conventions", "capture"]),
     ("onmc conventions show", ["conventions", "show"]),
+    ("onmc claim", ["claim"]),
+    ("onmc claim acquire", ["claim", "acquire"]),
+    ("onmc claim release", ["claim", "release"]),
+    ("onmc claim status", ["claim", "status"]),
+    ("onmc claim check", ["claim", "check"]),
 ]
 
 

@@ -7,7 +7,8 @@ from typing import Annotated, cast
 
 import typer
 
-from oh_no_my_claudecode.core.repo import RepoDiscoveryError
+from oh_no_my_claudecode.claim import DEFAULT_TTL_SECONDS, Claim, ClaimLedger
+from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.hooks import session_start_context_json
 from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
@@ -149,6 +150,10 @@ conventions_app = typer.Typer(
     help="Capture and inherit the repo's coding conventions (.onmc/conventions.md).",
     no_args_is_help=True,
 )
+claim_app = typer.Typer(
+    help="Coordinate file/path leases for parallel agents.",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -165,6 +170,7 @@ app.add_typer(gh_aw_app, name="gh-aw")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(swarm_app, name="swarm")
 app.add_typer(conventions_app, name="conventions")
+app.add_typer(claim_app, name="claim")
 
 
 @app.command("tui")
@@ -369,6 +375,145 @@ def mcp_check_command(
 
 def _service() -> OnmcService:
     return OnmcService(Path.cwd())
+
+
+def _claim_ledger() -> ClaimLedger:
+    return ClaimLedger(discover_repo_root(Path.cwd()))
+
+
+def _claims_payload(claims: list[Claim]) -> list[dict[str, object]]:
+    return [
+        {
+            "owner": claim.owner,
+            "path": claim.path,
+            "acquired_at": claim.acquired_at,
+            "expires_at": claim.expires_at,
+        }
+        for claim in claims
+    ]
+
+
+def _print_claim_conflicts(conflicts: list[Claim]) -> None:
+    for conflict in conflicts:
+        console.print(
+            f"[red]Claim conflict:[/red] {conflict.path} is held by {conflict.owner} "
+            f"until {conflict.expires_at:g}."
+        )
+
+
+@claim_app.command("acquire")
+def claim_acquire_command(
+    owner: Annotated[str, typer.Argument(help="Agent or process claiming the paths.")],
+    paths: Annotated[list[str], typer.Argument(help="One or more file paths to claim.")],
+    ttl_seconds: Annotated[
+        int,
+        typer.Option("--ttl-seconds", min=1, help="Lease duration in seconds."),
+    ] = DEFAULT_TTL_SECONDS,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Acquire file/path leases for an owner."""
+    try:
+        result = _claim_ledger().acquire(owner, paths, ttl_seconds=ttl_seconds)
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    payload = {
+        "ok": result.ok,
+        "claims": _claims_payload(result.claims),
+        "conflicts": _claims_payload(result.conflicts),
+    }
+    if json_output:
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    elif result.ok:
+        console.print(f"[green]Acquired {len(paths)} claim(s) for {owner}.[/green]")
+    else:
+        _print_claim_conflicts(result.conflicts)
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
+@claim_app.command("release")
+def claim_release_command(
+    owner: Annotated[str, typer.Argument(help="Owner whose claim(s) should be released.")],
+    path: Annotated[
+        str | None,
+        typer.Option("--path", help="Release only this path for the owner."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Release one path or all active paths for an owner."""
+    try:
+        result = _claim_ledger().release(owner, path=path)
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    payload = {
+        "released": result.released,
+        "claims": _claims_payload(result.claims),
+    }
+    if json_output:
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    else:
+        console.print(f"[green]Released {result.released} claim(s) for {owner}.[/green]")
+
+
+@claim_app.command("status")
+def claim_status_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Show active path claims."""
+    result = _claim_ledger().status()
+    payload = {"claims": _claims_payload(result.claims)}
+    if json_output:
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        return
+    if not result.claims:
+        console.print("[dim]No active claims.[/dim]")
+        return
+    for claim in result.claims:
+        console.print(f"{claim.path}  [cyan]{claim.owner}[/cyan]  expires {claim.expires_at:g}")
+
+
+@claim_app.command("check")
+def claim_check_command(
+    paths: Annotated[list[str], typer.Argument(help="One or more file paths to check.")],
+    owner: Annotated[
+        str | None,
+        typer.Option("--owner", help="Allow claims already held by this owner."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Check whether paths are free to claim."""
+    try:
+        result = _claim_ledger().check(paths, owner=owner)
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    payload = {
+        "ok": result.ok,
+        "claims": _claims_payload(result.claims),
+        "conflicts": _claims_payload(result.conflicts),
+    }
+    if json_output:
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    elif result.ok:
+        console.print("[green]No active claim conflicts.[/green]")
+    else:
+        _print_claim_conflicts(result.conflicts)
+    if not result.ok:
+        raise typer.Exit(code=1)
 
 
 @app.command("init")

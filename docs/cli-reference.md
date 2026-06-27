@@ -108,6 +108,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
 │ conventions     Capture and inherit the repo's coding conventions            │
 │                 (.onmc/conventions.md).                                      │
+│ claim           Coordinate file/path leases for parallel agents.             │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -2955,5 +2956,90 @@ Usage: onmc conventions show [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc claim`
+
+```text
+Usage: onmc claim [OPTIONS] COMMAND [ARGS]...
+
+ Coordinate file/path leases for parallel agents.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ acquire  Acquire file/path leases for an owner.                              │
+│ release  Release one path or all active paths for an owner.                  │
+│ status   Show active path claims.                                            │
+│ check    Check whether paths are free to claim.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc claim acquire`
+
+```text
+Usage: onmc claim acquire [OPTIONS] OWNER PATHS...
+
+ Acquire file/path leases for an owner.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    owner         TEXT  Agent or process claiming the paths. [required]     │
+│ *    paths...      TEXT  One or more file paths to claim. [required]         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --ttl-seconds        INTEGER RANGE [x>=1]  Lease duration in seconds.        │
+│                                            [default: 3600]                   │
+│ --json                                     Emit machine-readable JSON to     │
+│                                            stdout.                           │
+│ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc claim release`
+
+```text
+Usage: onmc claim release [OPTIONS] OWNER
+
+ Release one path or all active paths for an owner.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    owner      TEXT  Owner whose claim(s) should be released. [required]    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --path        TEXT  Release only this path for the owner.                    │
+│ --json              Emit machine-readable JSON to stdout.                    │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc claim status`
+
+```text
+Usage: onmc claim status [OPTIONS]
+
+ Show active path claims.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit machine-readable JSON to stdout.                        │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc claim check`
+
+```text
+Usage: onmc claim check [OPTIONS] PATHS...
+
+ Check whether paths are free to claim.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    paths...      TEXT  One or more file paths to check. [required]         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --owner        TEXT  Allow claims already held by this owner.                │
+│ --json               Emit machine-readable JSON to stdout.                   │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
