@@ -2668,6 +2668,9 @@ Usage: onmc swarm [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ run     Run a parallel swarm of accountable agent loops.                     │
+│ plan    Allocate an IN-SESSION (subagent) swarm — token-free fan-out.        │
+│ record  Record one finished inline unit: write a receipt + update the        │
+│         manifest.                                                            │
 │ status  Show status of a swarm or all swarms.                                │
 │ list    List all known swarm runs.                                           │
 │ abort   Request graceful abort of a swarm or all swarms.                     │

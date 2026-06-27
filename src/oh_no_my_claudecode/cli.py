@@ -5189,6 +5189,171 @@ def swarm_run_command(
     raise typer.Exit(code=0 if result.units_failed == 0 else 1)
 
 
+@swarm_app.command("plan")
+def swarm_plan_command(
+    task: Annotated[
+        list[str] | None,
+        typer.Option("--task", help="Goal text for one unit.  Repeat for multiple."),
+    ] = None,
+    file: Annotated[
+        Path | None,
+        typer.Option("--file", help="Text file: one task goal per non-empty line."),
+    ] = None,
+    concurrency: Annotated[
+        int | None,
+        typer.Option(
+            "--concurrency",
+            min=1,
+            help="Recommended fan-out width (advisory; Claude Code caps ~10 subagents).",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the plan as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Allocate an IN-SESSION (subagent) swarm — token-free fan-out.
+
+    This does NOT spawn any process or call any model.  It allocates a swarm id
+    + manifest and returns the unit list and abort-sentinel path.  Claude Code
+    then fans subagents out itself (the subagents inherit the session's auth, so
+    NO API key/token is needed), and reports each unit back via
+    ``onmc swarm record``.  Use ``onmc swarm status/list/abort`` exactly as for
+    process swarms.
+
+    \b
+    Examples
+    --------
+    onmc swarm plan --file tasks.txt --json
+    onmc swarm plan --task "audit module A" --task "audit module B" --json
+    """
+    tasks: list[str] = []
+    if task is not None and file is not None:
+        raise typer.Exit(code=_fatal("Provide either --task or --file, not both."))
+    if file is not None:
+        if not file.exists():
+            raise typer.Exit(code=_fatal(f"File not found: {file}"))
+        tasks = [ln.strip() for ln in file.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    elif task is not None:
+        tasks = list(task)
+    else:
+        raise typer.Exit(code=_fatal("Provide at least one --task or a --file."))
+
+    if not tasks:
+        raise typer.Exit(code=_fatal("Task list is empty."))
+
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.swarm.inline import plan_inline_swarm
+
+    width = concurrency if concurrency is not None else min(8, len(tasks))
+    plan = plan_inline_swarm(repo_root, tasks, concurrency=width)
+
+    if json_output:
+        sys.stdout.write(json.dumps(plan, indent=2) + "\n")
+        raise typer.Exit(code=0)
+
+    console.print(
+        f"[bold]onmc swarm plan[/bold] — inline swarm "
+        f"[cyan]{plan['swarm_id']}[/cyan] with {len(tasks)} unit(s)"
+    )
+    console.print(f"[dim]recommended fan-out: {width} · abort: {plan['abort_path']}[/dim]")
+    for u in plan["units"]:
+        console.print(f"  [dim]{u['id']}[/dim]  {u['goal'][:80]}")
+    console.print(
+        "[dim]Claude Code fans subagents out (token-free); "
+        "report each with `onmc swarm record`.[/dim]"
+    )
+
+
+@swarm_app.command("record")
+def swarm_record_command(
+    swarm_id: Annotated[str, typer.Argument(help="Swarm ID returned by `swarm plan`.")],
+    unit_id: Annotated[str, typer.Argument(help="Unit ID (e.g. unit-0000).")],
+    goal: Annotated[
+        str,
+        typer.Option("--goal", help="The unit's goal text (for the receipt)."),
+    ],
+    summary: Annotated[
+        str,
+        typer.Option("--summary", help="What the subagent did (recorded in the receipt)."),
+    ] = "",
+    verified: Annotated[
+        bool,
+        typer.Option(
+            "--verified/--not-verified",
+            help="Did the unit meet its success criteria?  Defaults to NOT verified.",
+        ),
+    ] = False,
+    aborted: Annotated[
+        bool,
+        typer.Option("--aborted", help="Mark the unit as aborted (cut short)."),
+    ] = False,
+    cost_usd: Annotated[
+        float | None,
+        typer.Option("--cost-usd", min=0.0, help="Optional USD cost for this unit."),
+    ] = None,
+    tokens: Annotated[
+        int | None,
+        typer.Option("--tokens", min=0, help="Optional token count for this unit."),
+    ] = None,
+    files: Annotated[
+        str | None,
+        typer.Option("--files", help="Comma-separated list of files the unit touched."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the recorded result as JSON."),
+    ] = False,
+) -> None:
+    """Record one finished inline unit: write a receipt + update the manifest.
+
+    Honest by construction: a unit is ``done`` ONLY with ``--verified``; without
+    it the unit is ``failed`` (a subagent that produced nothing useful can never
+    be a verified success).  The receipt is as auditable as a process unit's
+    (git tree/diff SHA, hash chain, reproducibility envelope).
+
+    \b
+    Example
+    -------
+    onmc swarm record ab12cd34 unit-0000 --goal "audit A" \\
+        --summary "found 2 issues, fixed both" --verified --files src/a.py
+    """
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.swarm.inline import record_inline_unit
+
+    file_list = [f.strip() for f in files.split(",") if f.strip()] if files else None
+    res = record_inline_unit(
+        repo_root,
+        swarm_id,
+        unit_id,
+        goal=goal,
+        summary=summary,
+        verified=verified,
+        aborted=aborted,
+        files_touched=file_list,
+        tokens=tokens,
+        cost_usd=cost_usd,
+    )
+
+    if json_output:
+        sys.stdout.write(json.dumps(res, indent=2) + "\n")
+        raise typer.Exit(code=0 if res["status"] != "failed" else 1)
+
+    color = {"done": "green", "failed": "red", "aborted": "yellow"}.get(res["status"], "white")
+    console.print(
+        f"[{color}]{res['status']}[/{color}] {unit_id} — receipt {Path(res['receipt_path']).name}"
+    )
+    raise typer.Exit(code=0 if res["status"] != "failed" else 1)
+
+
 @swarm_app.command("status")
 def swarm_status_command(
     swarm_id: Annotated[

@@ -663,3 +663,127 @@ class TestSwarmHonestStatus:
         assert ur.status == "failed"
         assert ur.loop_result is not None
         assert ur.loop_result.stop_reason == "agent-error"
+
+
+# ---------------------------------------------------------------------------
+# In-session (inline / subagent) swarm — token-free fan-out ledger
+# ---------------------------------------------------------------------------
+
+
+def _fake_git_runner(cmd: list[str], cwd: str, timeout: int) -> tuple[int, str]:
+    """Deterministic git runner so receipts build without a real repo."""
+    del cwd, timeout
+    if "rev-parse" in cmd or "tree" in " ".join(cmd):
+        return (0, "treesha123")
+    return (0, "diff body")
+
+
+class TestInlineSwarm:
+    """plan_inline_swarm + record_inline_unit (the token-free path)."""
+
+    def test_plan_writes_inline_manifest(self, tmp_path: Path) -> None:
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm
+
+        plan = plan_inline_swarm(
+            tmp_path,
+            ["audit A", "audit B", "audit C"],
+            concurrency=2,
+            swarm_id="deadbeefdeadbeef",
+            now=_FIXED_NOW,
+        )
+        assert plan["swarm_id"] == "deadbeefdeadbeef"
+        assert plan["mode"] == "inline"
+        assert len(plan["units"]) == 3
+        assert plan["units"][0]["id"] == "unit-0000"
+
+        mpath = tmp_path / ".onmc" / "swarm" / "deadbeefdeadbeef" / "manifest.json"
+        assert mpath.exists()
+        manifest = json.loads(mpath.read_text())
+        assert manifest["mode"] == "inline"
+        assert all(u["status"] == "pending" for u in manifest["units"].values())
+
+    def test_record_verified_unit_is_done(self, tmp_path: Path) -> None:
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm, record_inline_unit
+
+        plan_inline_swarm(tmp_path, ["do A"], concurrency=1, swarm_id="aa11", now=_FIXED_NOW)
+        res = record_inline_unit(
+            tmp_path,
+            "aa11",
+            "unit-0000",
+            goal="do A",
+            summary="did A, all good",
+            verified=True,
+            files_touched=["src/a.py"],
+            tokens=42,
+            now=_FIXED_NOW,
+            git_runner=_fake_git_runner,
+        )
+        assert res["status"] == "done"
+        assert res["verified"] is True
+        rp = Path(res["receipt_path"])
+        assert rp.exists()
+        receipt = json.loads(rp.read_text())
+        assert receipt["verified"] is True
+        assert receipt["agent"] == "claude-code-subagent"
+        assert receipt["receipt_hash"]  # tamper-evident chain present
+
+    def test_record_unverified_unit_is_failed(self, tmp_path: Path) -> None:
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm, record_inline_unit
+
+        plan_inline_swarm(tmp_path, ["do B"], concurrency=1, swarm_id="bb22", now=_FIXED_NOW)
+        res = record_inline_unit(
+            tmp_path,
+            "bb22",
+            "unit-0000",
+            goal="do B",
+            summary="could not complete",
+            verified=False,
+            now=_FIXED_NOW,
+            git_runner=_fake_git_runner,
+        )
+        assert res["status"] == "failed"
+        receipt = json.loads(Path(res["receipt_path"]).read_text())
+        assert receipt["verified"] is False
+
+    def test_record_aborted_unit(self, tmp_path: Path) -> None:
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm, record_inline_unit
+
+        plan_inline_swarm(tmp_path, ["do C"], concurrency=1, swarm_id="cc33", now=_FIXED_NOW)
+        res = record_inline_unit(
+            tmp_path,
+            "cc33",
+            "unit-0000",
+            goal="do C",
+            summary="cut short",
+            verified=False,
+            aborted=True,
+            now=_FIXED_NOW,
+            git_runner=_fake_git_runner,
+        )
+        assert res["status"] == "aborted"
+
+    def test_inline_status_visible_via_swarm_state(self, tmp_path: Path) -> None:
+        """The shared .onmc/swarm layout means swarm_state sees inline swarms."""
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm, record_inline_unit
+
+        plan_inline_swarm(
+            tmp_path, ["x", "y"], concurrency=2, swarm_id="dd44", now=_FIXED_NOW
+        )
+        record_inline_unit(
+            tmp_path, "dd44", "unit-0000", goal="x", summary="done x",
+            verified=True, now=_FIXED_NOW, git_runner=_fake_git_runner,
+        )
+        state = swarm_state(tmp_path, "dd44")
+        assert state["mode"] == "inline"
+        assert state["units"]["unit-0000"]["status"] == "done"
+        assert state["units"]["unit-0000"]["verified"] is True
+        assert state["units"]["unit-0001"]["status"] == "pending"
+
+    def test_inline_abort_sentinel_path(self, tmp_path: Path) -> None:
+        """request_abort writes the same sentinel the inline fan-out checks."""
+        from oh_no_my_claudecode.swarm.inline import plan_inline_swarm
+
+        plan = plan_inline_swarm(tmp_path, ["x"], concurrency=1, swarm_id="ee55")
+        assert not Path(plan["abort_path"]).exists()
+        request_abort(tmp_path, "ee55")
+        assert Path(plan["abort_path"]).exists()
