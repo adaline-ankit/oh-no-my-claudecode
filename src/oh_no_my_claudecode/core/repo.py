@@ -186,11 +186,12 @@ class WorktreeIsolationProvider:
         repo_root = self._repo_root
         branch = self._branch_name
 
-        if not keep:
-            # Failure path: remove the directory so no partial changes leak.
-            shutil.rmtree(worktree_path, ignore_errors=True)
+        if keep:
+            return
 
-        # Always prune the git worktree bookkeeping entry.
+        # Failure path: remove the directory so no partial changes leak.
+        shutil.rmtree(worktree_path, ignore_errors=True)
+
         if repo_root is not None:
             _run_git(
                 ["worktree", "remove", "--force", str(worktree_path)],
@@ -198,11 +199,11 @@ class WorktreeIsolationProvider:
             )
             _run_git(["worktree", "prune"], cwd=repo_root)
 
-        if not keep and branch is not None and repo_root is not None:
+        if branch is not None and repo_root is not None:
             # Delete the temporary branch created for this worktree.
             _run_git(["branch", "-D", branch], cwd=repo_root)
 
         # Remove the parent temp directory if it still exists.
         parent = worktree_path.parent
-        if not keep and parent.exists():
+        if parent.exists():
             shutil.rmtree(parent, ignore_errors=True)

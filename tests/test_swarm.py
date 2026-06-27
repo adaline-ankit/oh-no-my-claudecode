@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -55,6 +57,33 @@ def _storage(tmp_path: Path) -> SQLiteStorage:
     s = SQLiteStorage(tmp_path / "onmc.db")
     s.initialize()
     return s
+
+
+def _init_git_repo(path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    (path / "README.md").write_text("# test\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "init"],
+        cwd=path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def _fake_agent(
@@ -210,8 +239,8 @@ def _fake_runner_factory(
         del unit, repo_root
         return _agent
 
-    def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
-        del unit
+    def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+        del unit, repo_root
         return _verify
 
     return _af, _vf
@@ -274,9 +303,11 @@ class TestRunSwarm:
             )
 
         def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit, repo_root
             return _slow_agent
 
-        def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
             return _fake_verify(passes=True)
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -376,9 +407,11 @@ class TestRunSwarm:
             )
 
         def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit, repo_root
             return _abort_agent
 
-        def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
             return _fake_verify(passes=False)  # fail so loop doesn't converge early
 
         result = run_swarm(
@@ -480,9 +513,11 @@ class TestRunSwarm:
             )
 
         def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit, repo_root
             return _boom_agent
 
-        def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
             return _fake_verify(passes=True)
 
         result = run_swarm(
@@ -501,6 +536,74 @@ class TestRunSwarm:
         assert failed[0].error is not None
         # Other units must still complete.
         assert result.units_done >= 2
+
+    def test_isolated_swarm_binds_agent_and_verify_to_worktree(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Process swarm must run agent and verify in the isolated worktree."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_git_repo(repo)
+        storage = _storage(tmp_path)
+        units = _make_units(1)
+        cfg = _make_config(concurrency=1, isolate=True)
+        seen_roots: list[Path] = []
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit
+            seen_roots.append(repo_root)
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                marker = repo_root / "worker.txt"
+                marker.write_text("ok\n", encoding="utf-8")
+                return AgentRunResult(
+                    output="wrote marker",
+                    prediction="worker marker exists",
+                    files_touched=["worker.txt"],
+                    tokens=1,
+                    cost_usd=0.0,
+                )
+
+            return _agent
+
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit
+
+            def _verify(command: str) -> VerifyOutcome:
+                del command
+                return VerifyOutcome(
+                    passed=(repo_root / "worker.txt").read_text(encoding="utf-8") == "ok\n",
+                    output="checked marker",
+                )
+
+            return _verify
+
+        result = run_swarm(
+            storage,
+            repo,
+            units,
+            cfg,
+            runner_factory=_af,
+            verify_factory=_vf,
+            executor=ThreadPoolExecutor(max_workers=1),
+            now=_FIXED_NOW,
+        )
+
+        assert result.units_done == 1
+        assert seen_roots and seen_roots[0] != repo
+        assert not (repo / "worker.txt").exists()
+        assert (seen_roots[0] / "worker.txt").exists()
+
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(seen_roots[0])],
+            cwd=repo,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        shutil.rmtree(seen_roots[0].parent, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -642,8 +745,8 @@ class TestSwarmHonestStatus:
             del unit, repo_root
             return _err_agent
 
-        def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
-            del unit
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
             return _fake_verify(passes=True)  # would falsely pass pre-fix
 
         result = run_swarm(
