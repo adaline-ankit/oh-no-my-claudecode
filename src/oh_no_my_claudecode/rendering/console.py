@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from oh_no_my_claudecode.audit.scanner import AuditReport
+    from oh_no_my_claudecode.conventions import Conventions
     from oh_no_my_claudecode.federation.pull import PullResult
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
@@ -2840,3 +2841,26 @@ def render_evolution_card(report: object) -> None:
     console.print()
     for line in footer_parts:
         console.print(line)
+
+
+def render_conventions(conv: Conventions, *, path: Path | None = None) -> None:
+    """Render captured repo conventions as a table plus the fixed norms.
+
+    When *path* is given (i.e. after a capture), the written file location is
+    printed below the table.
+    """
+    table = Table(title="Repo Conventions")
+    table.add_column("Setting")
+    table.add_column("Value", justify="right")
+    line_length = str(conv.line_length) if conv.line_length is not None else "unset"
+    target_version = conv.target_version or "unset"
+    rule_codes = ", ".join(conv.ruff_rule_codes) if conv.ruff_rule_codes else "unset"
+    table.add_row("Line length", line_length)
+    table.add_row("Target version", target_version)
+    table.add_row("Ruff rule codes", rule_codes)
+    table.add_row("Type checked", "yes" if conv.type_checked else "no")
+    console.print(table)
+    for norm in conv.norms:
+        console.print(f"[dim]- {norm}[/dim]")
+    if path is not None:
+        console.print(f"[green]Wrote conventions:[/green] {path}")

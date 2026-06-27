@@ -61,6 +61,12 @@ from oh_no_my_claudecode.config import (
     user_database_path,
     write_config,
 )
+from oh_no_my_claudecode.conventions import (
+    Conventions,
+    conventions_path,
+    detect_conventions,
+    render_conventions_markdown,
+)
 from oh_no_my_claudecode.core.repo import (
     RepoDiscoveryError,
     current_branch,
@@ -3296,6 +3302,68 @@ class OnmcService:
                 append_audit_log(repo_root, call, decision)
             results.append((call, decision))
         return results
+
+    # ------------------------------------------------------------------
+    # Conventions — capture + inherit repo coding conventions
+    # ------------------------------------------------------------------
+
+    def conventions_capture(
+        self,
+        *,
+        force: bool = False,
+        repo_root: Path | None = None,
+    ) -> tuple[Conventions, Path]:
+        """Detect repo conventions and write ``.onmc/conventions.md``.
+
+        Parameters
+        ----------
+        force:
+            Overwrite an existing ``conventions.md``.  Without ``force`` the file
+            is left untouched when it already exists (idempotent no-op write).
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd`` and
+            falling back to ``self.cwd`` when no git repo is found.
+
+        Returns
+        -------
+        tuple[Conventions, Path]
+            The detected conventions and the absolute path to the (written or
+            existing) ``conventions.md`` file.
+        """
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+
+        conv = detect_conventions(repo_root)
+        target = conventions_path(repo_root)
+        if target.exists() and not force:
+            return conv, target
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(render_conventions_markdown(conv), encoding="utf-8")
+        return conv, target
+
+    def conventions_show(
+        self,
+        *,
+        repo_root: Path | None = None,
+    ) -> Conventions:
+        """Detect and return the repo's conventions without writing anything.
+
+        Parameters
+        ----------
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd`` and
+            falling back to ``self.cwd`` when no git repo is found.
+        """
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return detect_conventions(repo_root)
 
     # ------------------------------------------------------------------
     # Eval harness
