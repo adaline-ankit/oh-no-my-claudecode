@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-06-24
+
+### Added
+
+- **`onmc preflight`** — runs the exact CI gate locally (ruff / mypy --strict / cli-reference --check / pytest, in CI order) with an injectable runner, so any agent validates the way CI does. `--only`, `--json`.
+- **`onmc verify-diff`** — adversarial diff-level gate: passes only when the diff is real (non-empty), introduces every expected symbol/file, is covered, and is lawful (no banned/secret patterns in added lines). Closes the empty-diff false-converge. `--base`, `--expect-symbol`, `--expect-file`, `--json`.
+- **`onmc ledger`** — agent-work accounting (cost / wall-time / success-rate / ROI) over the run receipts that loop + swarm write. Honest: null cost is reported as n/a, never fabricated. `today`/`project`/`roi`, `--json`.
+- **`onmc release`** — drafts the next CHANGELOG entry + proposes the semver bump from conventional-commit subjects since the last tag. `--dry-run`/`--write`; never tags or pushes.
+
+All deterministic, offline, no schema migration. Built in parallel by onmc's token-free in-session swarm.
+
 ## [0.52.1] — 2026-06-27
 
 ### Fixed
