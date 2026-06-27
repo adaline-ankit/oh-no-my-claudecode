@@ -40,7 +40,6 @@ from oh_no_my_claudecode.rendering.console import (
     render_codegraph_build,
     render_codegraph_context,
     render_codegraph_neighbors,
-    render_context_pack,
     render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
@@ -734,41 +733,6 @@ def codegraph_context_command(
         sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
         return
     render_codegraph_context(result)
-
-
-@app.command("pack")
-def pack_command(
-    goal: Annotated[
-        str,
-        typer.Argument(help="Goal or task description for the spawned agent."),
-    ],
-    budget_chars: Annotated[
-        int,
-        typer.Option("--budget-chars", min=500, help="Maximum markdown characters."),
-    ] = 6000,
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Emit the pack metadata + markdown as JSON."),
-    ] = False,
-    out: Annotated[
-        Path | None,
-        typer.Option("--out", help="Write markdown to this file instead of stdout."),
-    ] = None,
-) -> None:
-    """Generate a tiny deterministic context pack for spawned agents."""
-    try:
-        pack = _service().pack(goal, budget_chars=budget_chars)
-    except FileNotFoundError as exc:
-        raise typer.Exit(code=_fatal(str(exc))) from exc
-    if json_output:
-        sys.stdout.write(json.dumps(pack.to_dict(), indent=2, sort_keys=True) + "\n")
-        return
-    if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(pack.markdown, encoding="utf-8")
-        console.print(f"[green]Wrote pack:[/green] {out}")
-        return
-    render_context_pack(pack)
 
 
 @app.command("why")

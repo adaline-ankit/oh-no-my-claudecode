@@ -23,8 +23,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ pack            Generate a tiny deterministic context pack for spawned       │
-│                 agents.                                                      │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -92,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
+│                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
 │ route           Deterministically route a task to an                         │
@@ -133,6 +133,11 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 deterministic).                                              │
 │ replay          Replay Lab — re-run a recorded session and produce a         │
 │                 regression report.                                           │
+│ contract        Spec-as-contract: generate a failing test + stub from an     │
+│                 interface spec.                                              │
+│ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
+│                 + memory.                                                    │
+│ proptest        Generate property/invariant tests for pure functions.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3247,5 +3252,138 @@ Usage: onmc registry-demo [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the confirmation as JSON.                               │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc contract`
+
+```text
+Usage: onmc contract [OPTIONS] COMMAND [ARGS]...
+
+ Spec-as-contract: generate a failing test + stub from an interface spec.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Emit a failing pytest skeleton + a stub module from a contract spec.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc proptest`
+
+```text
+Usage: onmc proptest [OPTIONS] COMMAND [ARGS]...
+
+ Generate property/invariant tests for pure functions.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ init  Generate a fixed-seed property test from an invariant SPEC.            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox`
+
+```text
+Usage: onmc inbox [OPTIONS] COMMAND [ARGS]...
+
+ Ranked work queue: manual adds + TODO/FIXME + coverage gaps + memory.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add   Add a manual work item to the inbox (idempotent on text).              │
+│ list  List persisted manual items (insertion order, unranked).               │
+│ rank  Show the full ranked queue (manual + TODO/FIXME + coverage + memory).  │
+│ run   Emit a plan for the top N ranked items (no execution).                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox add`
+
+```text
+Usage: onmc inbox add [OPTIONS] TEXT
+
+ Add a manual work item to the inbox (idempotent on text).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    text      TEXT  The task description to enqueue. [required]             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the stored item as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox list`
+
+```text
+Usage: onmc inbox list [OPTIONS]
+
+ List persisted manual items (insertion order, unranked).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the manual items as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox rank`
+
+```text
+Usage: onmc inbox rank [OPTIONS]
+
+ Show the full ranked queue (manual + TODO/FIXME + coverage + memory).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the ranked queue as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox run`
+
+```text
+Usage: onmc inbox run [OPTIONS]
+
+ Emit a plan for the top N ranked items (no execution).
+
+ ``run`` is intentionally side-effect-free: it surfaces *what* it would
+ work on next, ranked, so a human or an outer loop can decide. It never
+ spawns work itself.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --top         INTEGER RANGE [x>=1]  How many top-ranked items to plan.       │
+│                                     [default: 3]                             │
+│ --json                              Emit the plan as JSON.                   │
+│ --help                              Show this message and exit.              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc pack`
+
+```text
+Usage: onmc pack [OPTIONS] GOAL
+
+ Build a per-task context pack: dead-ends, decisions, reuse, files.
+
+ Composes recorded dead-ends + decisions with a tiny code-graph slice and
+ reuse hints into a terse, deterministic, offline markdown brief for a
+ spawned agent.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal or task description for the spawned agent.         │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget        INTEGER RANGE [x>=400]  Maximum markdown characters.         │
+│                                         [default: 12000]                     │
+│ --json                                  Emit the pack as JSON instead of     │
+│                                         markdown.                            │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
