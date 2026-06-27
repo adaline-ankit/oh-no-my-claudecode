@@ -133,6 +133,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 regression report.                                           │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
+│ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
+│                 + memory.                                                    │
 │ proptest        Generate property/invariant tests for pure functions.        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -3259,5 +3261,84 @@ Usage: onmc proptest [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ init  Generate a fixed-seed property test from an invariant SPEC.            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox`
+
+```text
+Usage: onmc inbox [OPTIONS] COMMAND [ARGS]...
+
+ Ranked work queue: manual adds + TODO/FIXME + coverage gaps + memory.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add   Add a manual work item to the inbox (idempotent on text).              │
+│ list  List persisted manual items (insertion order, unranked).               │
+│ rank  Show the full ranked queue (manual + TODO/FIXME + coverage + memory).  │
+│ run   Emit a plan for the top N ranked items (no execution).                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox add`
+
+```text
+Usage: onmc inbox add [OPTIONS] TEXT
+
+ Add a manual work item to the inbox (idempotent on text).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    text      TEXT  The task description to enqueue. [required]             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the stored item as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox list`
+
+```text
+Usage: onmc inbox list [OPTIONS]
+
+ List persisted manual items (insertion order, unranked).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the manual items as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox rank`
+
+```text
+Usage: onmc inbox rank [OPTIONS]
+
+ Show the full ranked queue (manual + TODO/FIXME + coverage + memory).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the ranked queue as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc inbox run`
+
+```text
+Usage: onmc inbox run [OPTIONS]
+
+ Emit a plan for the top N ranked items (no execution).
+
+ ``run`` is intentionally side-effect-free: it surfaces *what* it would
+ work on next, ranked, so a human or an outer loop can decide. It never
+ spawns work itself.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --top         INTEGER RANGE [x>=1]  How many top-ranked items to plan.       │
+│                                     [default: 3]                             │
+│ --json                              Emit the plan as JSON.                   │
+│ --help                              Show this message and exit.              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

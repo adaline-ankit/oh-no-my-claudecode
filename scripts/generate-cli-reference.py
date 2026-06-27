@@ -157,6 +157,11 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc registry-demo", ["registry-demo"]),
     ("onmc contract", ["contract"]),
     ("onmc proptest", ["proptest"]),
+    ("onmc inbox", ["inbox"]),
+    ("onmc inbox add", ["inbox", "add"]),
+    ("onmc inbox list", ["inbox", "list"]),
+    ("onmc inbox rank", ["inbox", "rank"]),
+    ("onmc inbox run", ["inbox", "run"]),
 ]
 
 
