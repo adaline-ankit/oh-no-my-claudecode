@@ -4,7 +4,11 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [0.50.0] — 2026-06-27
+## [0.51.0] — 2026-06-27
+
+### Added
+
+- **In-session subagent swarm — token-free parallel fan-out.** A second swarm execution model alongside the process swarm. Instead of shelling out to N independent `claude -p` processes (each of which must authenticate on its own), the inline swarm is driven by the Claude Code session itself: the model fans workers out as **subagents (Task tool)** that inherit the session's authentication — **no API key or OAuth token is needed.** onmc is the accountability ledger, not the spawner. `onmc swarm plan --file tasks.txt --json` allocates a swarm id + manifest (`mode="inline"`, units pending) and returns the abort-sentinel path; Claude Code fans the subagents out and reports each back with `onmc swarm record <id> <unit> --goal … --summary … [--verified] [--files …]`, which writes a tamper-evident receipt per unit (reuses `build_receipt` — git tree/diff SHA, hash chain, reproducibility envelope) and atomically updates the manifest. Honest status: a unit is `done` only with `--verified`. Inline + process swarms share the `.onmc/swarm/<id>/` layout, so `onmc swarm status/list/abort` work identically for both. The `/onmc-swarm` slash command now defaults to the token-free in-session path (fan out via the Task tool → record → summarize), with `--process` to fall back to the shell-out swarm. Trade-off: in-session is token-free but bounded by Claude Code's subagent cap (~10 concurrent, so it batches) with soft-abort; process mode scales further with hard-kill but needs a credential. Both produce the same auditable receipts.
 
 ### Fixed
 
