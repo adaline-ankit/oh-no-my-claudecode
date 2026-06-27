@@ -51,6 +51,51 @@ Open a design issue before adding:
 - a new LLM provider dependency path
 - broad prompt-pack or multi-agent orchestration features
 
+## Adding a command (auto-discovery)
+
+New CLI commands **self-register** — you do **not** edit `cli.py` (or any other
+shared hub). This avoids merge collisions when several feature PRs land in
+parallel.
+
+To add a command for a feature `myfeat`:
+
+1. Create `src/oh_no_my_claudecode/myfeat/commands.py` exposing a top-level
+   `register(app)`:
+
+   ```python
+   from __future__ import annotations
+
+   import typer
+
+   def register(app: typer.Typer) -> None:
+       myfeat_app = typer.Typer(help="...", no_args_is_help=True)
+
+       @myfeat_app.command("run")
+       def run() -> None:
+           ...
+
+       app.add_typer(myfeat_app, name="myfeat")
+       # ...or register a single command directly:
+       # @app.command("myfeat")
+       # def myfeat_cmd() -> None: ...
+   ```
+
+2. Do your **own** rendering inline in that module (e.g. `typer.echo(...)` or a
+   local Rich console). Do not add to the shared rendering hub.
+
+3. That's it. `oh_no_my_claudecode.command_registry.register_feature_commands`,
+   invoked once near the end of `cli.py`, discovers every `<feat>.commands`
+   module and calls its `register(app)` at CLI build time. Discovery is
+   deterministic (sorted), idempotent, and robust — a broken or optional feature
+   is skipped (logged at debug) and never crashes the CLI.
+
+**Do not touch** these shared files when adding a command:
+`cli.py`, `core/service.py`, `rendering/console.py`, `scripts/generate-cli-reference.py`
+(only add a row there if you want the command in the published CLI reference).
+
+See `src/oh_no_my_claudecode/registrydemo/commands.py` for a complete, working
+example (the `onmc registry-demo` command).
+
 ## Pull Requests
 
 - keep changes focused
