@@ -139,6 +139,9 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc swarm status", ["swarm", "status"]),
     ("onmc swarm list", ["swarm", "list"]),
     ("onmc swarm abort", ["swarm", "abort"]),
+    ("onmc conventions", ["conventions"]),
+    ("onmc conventions capture", ["conventions", "capture"]),
+    ("onmc conventions show", ["conventions", "show"]),
 ]
 
 

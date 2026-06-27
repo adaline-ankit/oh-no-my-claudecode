@@ -106,6 +106,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ swarm           Parallel accountable agent loops — a bounded pool of         │
 │                 run_loop workers. Honest: 'many tasks' = a queue drained by  │
 │                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
+│ conventions     Capture and inherit the repo's coding conventions            │
+│                 (.onmc/conventions.md).                                      │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -2905,6 +2907,57 @@ Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions`
+
+```text
+Usage: onmc conventions [OPTIONS] COMMAND [ARGS]...
+
+ Capture and inherit the repo's coding conventions (.onmc/conventions.md).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ capture  Detect the repo's coding conventions and write                      │
+│          .onmc/conventions.md.                                               │
+│ show     Print the repo's coding conventions for injection into spawned      │
+│          agents.                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions capture`
+
+```text
+Usage: onmc conventions capture [OPTIONS]
+
+ Detect the repo's coding conventions and write .onmc/conventions.md.
+
+ Parses pyproject.toml ( line-length / select / target-version and
+  strict) and attaches the fixed repo norms.  Deterministic and
+ offline.  Idempotent: re-running is a no-op unless --force is passed.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --force          Overwrite an existing .onmc/conventions.md.                 │
+│ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc conventions show`
+
+```text
+Usage: onmc conventions show [OPTIONS]
+
+ Print the repo's coding conventions for injection into spawned agents.
+
+ Detects conventions on the fly (does not require a prior capture) and emits
+ them as a table, or as JSON with --json.  Deterministic and offline.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

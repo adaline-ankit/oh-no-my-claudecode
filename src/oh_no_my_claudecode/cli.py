@@ -37,6 +37,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_codegraph_build,
     render_codegraph_context,
     render_codegraph_neighbors,
+    render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
@@ -144,6 +145,10 @@ swarm_app = typer.Typer(
     ),
     no_args_is_help=True,
 )
+conventions_app = typer.Typer(
+    help="Capture and inherit the repo's coding conventions (.onmc/conventions.md).",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -159,6 +164,7 @@ app.add_typer(notify_app, name="notify")
 app.add_typer(gh_aw_app, name="gh-aw")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(swarm_app, name="swarm")
+app.add_typer(conventions_app, name="conventions")
 
 
 @app.command("tui")
@@ -4560,6 +4566,44 @@ def nomistakes_command(
 
     render_nomistakes_result(result)
     raise typer.Exit(code=0 if result.approved else 1)
+
+
+@conventions_app.command("capture")
+def conventions_capture_command(
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Overwrite an existing .onmc/conventions.md."),
+    ] = False,
+) -> None:
+    """Detect the repo's coding conventions and write .onmc/conventions.md.
+
+    Parses pyproject.toml ([tool.ruff] line-length / select / target-version and
+    [tool.mypy] strict) and attaches the fixed repo norms.  Deterministic and
+    offline.  Idempotent: re-running is a no-op unless --force is passed.
+    """
+    conv, path = _service().conventions_capture(force=force)
+    render_conventions(conv, path=path)
+
+
+@conventions_app.command("show")
+def conventions_show_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the conventions as JSON for agent injection."),
+    ] = False,
+) -> None:
+    """Print the repo's coding conventions for injection into spawned agents.
+
+    Detects conventions on the fly (does not require a prior capture) and emits
+    them as a table, or as JSON with --json.  Deterministic and offline.
+    """
+    import dataclasses
+
+    conv = _service().conventions_show()
+    if as_json:
+        sys.stdout.write(json.dumps(dataclasses.asdict(conv), indent=2) + "\n")
+        return
+    render_conventions(conv)
 
 
 def _fatal(message: str) -> int:
