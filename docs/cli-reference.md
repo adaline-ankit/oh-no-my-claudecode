@@ -37,6 +37,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 failure.                                                     │
 │ recall          Search memory for past incidents matching an error or        │
 │                 stacktrace.                                                  │
+│ reuse           Surface existing code that already does a thing — reuse      │
+│                 before reimplementing.                                       │
 │ ask             Ask a natural-language question answered from repo memory.   │
 │ check           Flag staged/changed files that touch recorded invariants or  │
 │                 dead-ends.                                                   │
@@ -422,6 +424,37 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │                                      [default: 8]                            │
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
+│ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc reuse`
+
+```text
+Usage: onmc reuse [OPTIONS] QUERY
+
+ Surface existing code that already does a thing — reuse before reimplementing.
+
+ Indexes the repo with stdlib `ast` and ranks top-level functions/classes by
+ how well their name, docstring, and argument names match your query.
+ Entirely offline and deterministic — no LLM, no network.
+
+ Examples:
+
+   onmc reuse "tokenize text into words"
+
+   onmc reuse tokenize --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query      TEXT  A description of the behaviour you need, or an         │
+│                       existing symbol name.                                  │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER RANGE [x>=1]  Maximum number of reuse hits to return. │
+│                                      [default: 8]                            │
+│ --json                               Emit the ranked hits as JSON instead of │
+│                                      a table.                                │
 │ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

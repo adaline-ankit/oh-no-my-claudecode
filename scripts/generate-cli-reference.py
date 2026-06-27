@@ -30,6 +30,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc digest", ["digest"]),
     ("onmc guard", ["guard"]),
     ("onmc recall", ["recall"]),
+    ("onmc reuse", ["reuse"]),
     ("onmc ask", ["ask"]),
     ("onmc status", ["status"]),
     ("onmc statusline", ["statusline"]),

@@ -63,6 +63,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_generate_summary,
     render_playbook_list,
     render_pull_all_summary,
+    render_reuse_hits,
     render_review_output,
     render_savings_card,
     render_skill_detail,
@@ -1065,6 +1066,50 @@ def recall_command(
         console.print(f"[green]Wrote recall artifact:[/green] {artifact_path}")
     except Exception:  # noqa: BLE001, S110
         pass  # artifact write failure must not break the command
+
+
+@app.command("reuse")
+def reuse_command(
+    query: Annotated[
+        str,
+        typer.Argument(
+            help="A description of the behaviour you need, or an existing symbol name.",
+        ),
+    ],
+    limit: Annotated[
+        int,
+        typer.Option("--limit", min=1, help="Maximum number of reuse hits to return."),
+    ] = 8,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the ranked hits as JSON instead of a table."),
+    ] = False,
+) -> None:
+    """Surface existing code that already does a thing — reuse before reimplementing.
+
+    Indexes the repo with stdlib `ast` and ranks top-level functions/classes by
+    how well their name, docstring, and argument names match your query.
+    Entirely offline and deterministic — no LLM, no network.
+
+    Examples:
+
+      onmc reuse "tokenize text into words"
+
+      onmc reuse tokenize --json
+    """
+    try:
+        _, hits = _service().reuse_find(query, limit=limit)
+    except RepoDiscoveryError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        import dataclasses
+
+        payload = [dataclasses.asdict(hit) for hit in hits]
+        console.print(json.dumps(payload, indent=2), markup=False)
+        return
+
+    render_reuse_hits(hits, query)
 
 
 @app.command("ask")

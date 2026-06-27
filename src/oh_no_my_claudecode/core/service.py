@@ -39,6 +39,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+    from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
@@ -3203,6 +3204,23 @@ class OnmcService:
         repo_root, _, storage = self._load_context()
         result = compile_recall(storage, query, limit=limit)
         return repo_root, result
+
+    def reuse_find(self, query: str, *, limit: int = 8) -> tuple[Path, list[ReuseHit]]:
+        """Surface existing code that already does what *query* describes.
+
+        Indexes the repo via stdlib ``ast`` and ranks top-level functions and
+        classes by token overlap against *query* (name, docstring, arg names).
+        Entirely offline and deterministic — no LLM calls, no network — so an
+        agent can check "does this already exist?" before reimplementing it.
+
+        Returns ``(repo_root, hits)`` where *hits* is a ranked list of
+        ``ReuseHit`` (may be empty when nothing relevant is found).
+        """
+        from oh_no_my_claudecode.reuse.radar import find_reuse
+
+        repo_root = discover_repo_root(self.cwd)
+        hits = find_reuse(repo_root, query, limit=limit)
+        return repo_root, hits
 
     def ask(
         self,
