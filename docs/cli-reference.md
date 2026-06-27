@@ -89,6 +89,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 a goal.                                                      │
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
+│ release         Draft the next release from conventional-commit history.     │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -3028,6 +3029,28 @@ Usage: onmc conventions show [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc release`
+
+```text
+Usage: onmc release [OPTIONS]
+
+ Draft the next release from conventional-commit history.
+
+ Classifies commit subjects since the last tag into a semver bump (feat ->
+ minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
+ next version, and renders a CHANGELOG entry in the repo's format.
+ Deterministic and offline. Dry-run by default — pass --write to bump
+ pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --write    --dry-run      Edit pyproject.toml + CHANGELOG.md (default:       │
+│                           dry-run).                                          │
+│                           [default: dry-run]                                 │
+│ --json                    Emit the drafted release as JSON.                  │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -67,6 +67,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_list,
     render_preflight_report,
     render_pull_all_summary,
+    render_release_draft,
     render_reuse_hits,
     render_review_output,
     render_savings_card,
@@ -4997,6 +4998,41 @@ def conventions_show_command(
         sys.stdout.write(json.dumps(dataclasses.asdict(conv), indent=2) + "\n")
         return
     render_conventions(conv)
+
+
+@app.command("release")
+def release_command(
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write/--dry-run",
+            help="Edit pyproject.toml + CHANGELOG.md (default: dry-run).",
+        ),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the drafted release as JSON."),
+    ] = False,
+) -> None:
+    """Draft the next release from conventional-commit history.
+
+    Classifies commit subjects since the last tag into a semver bump (feat ->
+    minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
+    next version, and renders a CHANGELOG entry in the repo's format.
+    Deterministic and offline. Dry-run by default — pass --write to bump
+    pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+    """
+    import dataclasses
+
+    try:
+        _, draft = _service().release_draft(write=write)
+    except (FileNotFoundError, ValueError, RepoDiscoveryError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        sys.stdout.write(json.dumps(dataclasses.asdict(draft), indent=2) + "\n")
+        return
+    render_release_draft(draft, written=write)
 
 
 def _fatal(message: str) -> int:
