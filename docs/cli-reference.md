@@ -94,6 +94,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
+│ route           Deterministically route a task to an                         │
+│                 agent/model/strategy/gate.                                   │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -684,6 +686,25 @@ Usage: onmc review [OPTIONS]
 │    --no-llm                  Use heuristic fallback instead of the           │
 │                              configured LLM.                                 │
 │    --help                    Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc route`
+
+```text
+Usage: onmc route [OPTIONS] TASK
+
+ Deterministically route a task to an agent/model/strategy/gate.
+
+ Pure keyword/intent matching — no LLM call. The same task always yields
+ the same decision.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    task      TEXT  The task description to route. [required]               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the decision as JSON.                                   │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

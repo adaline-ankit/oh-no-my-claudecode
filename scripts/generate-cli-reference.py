@@ -41,6 +41,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc serve", ["serve"]),
     ("onmc solve", ["solve"]),
     ("onmc review", ["review"]),
+    ("onmc route", ["route"]),
     ("onmc teach", ["teach"]),
     ("onmc mine", ["mine"]),
     ("onmc doctor", ["doctor"]),
