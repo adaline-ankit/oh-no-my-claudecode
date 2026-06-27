@@ -39,11 +39,14 @@ from oh_no_my_claudecode.rendering.console import (
     render_codegraph_build,
     render_codegraph_context,
     render_codegraph_neighbors,
+    render_context_pack,
     render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
     render_doctor_report,
     render_evolution_card,
+    render_fleet_doctor,
+    render_fleet_status,
     render_gh_aw_init_result,
     render_hook_status,
     render_hud,
@@ -167,6 +170,10 @@ ledger_app = typer.Typer(
     ),
     no_args_is_help=True,
 )
+fleet_app = typer.Typer(
+    help="Operator view for local agent fleets (swarm + claims + receipts).",
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -185,6 +192,7 @@ app.add_typer(swarm_app, name="swarm")
 app.add_typer(conventions_app, name="conventions")
 app.add_typer(claim_app, name="claim")
 app.add_typer(ledger_app, name="ledger")
+app.add_typer(fleet_app, name="fleet")
 
 
 @app.command("tui")
@@ -725,6 +733,41 @@ def codegraph_context_command(
         sys.stdout.write(json.dumps(result.to_dict(), indent=2, sort_keys=True) + "\n")
         return
     render_codegraph_context(result)
+
+
+@app.command("pack")
+def pack_command(
+    goal: Annotated[
+        str,
+        typer.Argument(help="Goal or task description for the spawned agent."),
+    ],
+    budget_chars: Annotated[
+        int,
+        typer.Option("--budget-chars", min=500, help="Maximum markdown characters."),
+    ] = 6000,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the pack metadata + markdown as JSON."),
+    ] = False,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Write markdown to this file instead of stdout."),
+    ] = None,
+) -> None:
+    """Generate a tiny deterministic context pack for spawned agents."""
+    try:
+        pack = _service().pack(goal, budget_chars=budget_chars)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if json_output:
+        sys.stdout.write(json.dumps(pack.to_dict(), indent=2, sort_keys=True) + "\n")
+        return
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(pack.markdown, encoding="utf-8")
+        console.print(f"[green]Wrote pack:[/green] {out}")
+        return
+    render_context_pack(pack)
 
 
 @app.command("why")
@@ -3909,6 +3952,42 @@ def ledger_roi_command(
             f"  Agent spend:         [bold]${summary.total_cost_usd:.4f}[/bold]"
         )
     console.print(f"  [dim]{estimate.assumption_note}[/dim]")
+
+
+@fleet_app.command("status")
+def fleet_status_command(
+    swarm_id: Annotated[
+        str | None,
+        typer.Option("--swarm-id", help="Limit output to one swarm id."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Summarize local swarm, claim, and receipt state."""
+    status = _service().fleet_status(swarm_id=swarm_id)
+    if json_output:
+        typer.echo(json.dumps(status.to_dict(), indent=2, sort_keys=True))
+        return
+    render_fleet_status(status)
+
+
+@fleet_app.command("doctor")
+def fleet_doctor_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Diagnose stuck local fleet state."""
+    report = _service().fleet_doctor()
+    if json_output:
+        typer.echo(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        return
+    render_fleet_doctor(report)
+    if not report.ok:
+        raise typer.Exit(code=1)
 
 
 @app.command("benchmark")
