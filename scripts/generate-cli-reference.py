@@ -155,6 +155,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc ledger project", ["ledger", "project"]),
     ("onmc ledger roi", ["ledger", "roi"]),
     ("onmc registry-demo", ["registry-demo"]),
+    ("onmc pack", ["pack"]),
 ]
 
 
