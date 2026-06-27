@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.52.0] — 2026-06-27
+
+### Added
+
+- **Agent Ops batch 1 — codegraph, reuse radar, and conventions.** `onmc codegraph`
+  builds a deterministic structural repo graph for smaller, smarter agent context
+  (`summary`, `neighbors`, `context`). `onmc reuse "<query>"` scans existing
+  functions/classes so agents stop reimplementing patterns already in the repo.
+  `onmc conventions capture/show` records repo conventions into `.onmc/conventions.md`
+  so spawned agents inherit style, test, and tooling expectations. This batch was
+  built through the token-free in-session swarm and shipped with dedicated tests.
+
 ## [0.51.0] — 2026-06-27
 
 ### Added
