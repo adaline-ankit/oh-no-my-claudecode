@@ -2854,6 +2854,8 @@ Usage: onmc swarm [OPTIONS] COMMAND [ARGS]...
 │ plan    Allocate an IN-SESSION (subagent) swarm — token-free fan-out.        │
 │ record  Record one finished inline unit: write a receipt + update the        │
 │         manifest.                                                            │
+│ verify  Run the HONEST per-unit quality gate in the unit's OWN worktree.     │
+│ pr      Open the unit's OWN pull request (push branch + ``gh pr create``).   │
 │ status  Show status of a swarm or all swarms.                                │
 │ list    List all known swarm runs.                                           │
 │ abort   Request graceful abort of a swarm or all swarms.                     │

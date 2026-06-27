@@ -53,6 +53,7 @@ def plan_inline_swarm(
     agent: str = "claude-code-subagent",
     swarm_id: str | None = None,
     now: datetime | None = None,
+    claim_paths: list[list[str]] | None = None,
 ) -> dict[str, Any]:
     """Allocate an inline (subagent-driven) swarm and write its manifest.
 
@@ -73,6 +74,12 @@ def plan_inline_swarm(
         ``None`` a random 16-hex-char id is generated.
     now:
         Injectable timestamp for ``started_at``.
+    claim_paths:
+        Optional per-unit list of repo-relative paths the unit intends to edit.
+        When supplied (and a unit's list is non-empty) a best-effort lease is
+        acquired via the claim ledger so concurrent units don't stomp on the
+        same files.  Lease acquisition is NON-FATAL: a conflict or any error is
+        recorded on the unit but never blocks planning.
 
     Returns
     -------
@@ -85,6 +92,8 @@ def plan_inline_swarm(
     started_at = _now_iso(now)
 
     units = [{"id": f"unit-{i:04d}", "goal": g} for i, g in enumerate(goals)]
+
+    claimed = _acquire_unit_claims(repo_root, sid, units, claim_paths)
 
     manifest: dict[str, Any] = {
         "swarm_id": sid,
@@ -101,6 +110,7 @@ def plan_inline_swarm(
                 "receipt_path": None,
                 "error": None,
                 "verified": None,
+                "claimed_paths": claimed.get(u["id"], []),
             }
             for u in units
         },
@@ -138,15 +148,27 @@ def record_inline_unit(
     onmc_version: str | None = None,
     now: datetime | None = None,
     git_runner: Callable[[list[str], str, int], tuple[int, str]] | None = None,
+    verifier: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Record one finished inline unit: write a receipt + update the manifest.
 
     Honest status (mirrors the process swarm): a unit is ``done`` ONLY when the
     subagent's work was ``verified``; ``failed`` when it was not, and
-    ``aborted`` when it was cut short.  ``verified`` is the caller's attestation
-    that the unit's success criteria were met — it flows straight into the
-    receipt's ``verified`` flag, so a subagent that did nothing useful can never
-    be recorded as a verified success.
+    ``aborted`` when it was cut short.
+
+    Two trust models for ``verified``:
+
+    - **Caller attestation (default).** ``verified`` flows straight into the
+      receipt's ``verified`` flag — the caller asserts the unit met its success
+      criteria.
+    - **Honest gate (``verifier`` supplied).** When a ``verifier`` callable is
+      injected, the passed-in ``verified`` is IGNORED and the verdict is taken
+      from ``verifier()`` — the real per-unit quality gate (see
+      ``swarm/staff.py``).  This is staff-engineer mode: a unit that did not
+      really build (empty diff) or fails the gate CANNOT be recorded as a
+      verified success even if the caller passed ``--verified``.
+
+    The ``verifier`` is not consulted for aborted units (an abort is terminal).
 
     Returns
     -------
@@ -161,6 +183,11 @@ def record_inline_unit(
         LoopSpec,
     )
     from oh_no_my_claudecode.loop.receipt import build_receipt, write_receipt
+
+    if verifier is not None and not aborted:
+        # The honest gate overrides the caller's attestation: verified reflects
+        # the REAL quality-gate result, not the caller's say-so.
+        verified = verifier()
 
     if aborted:
         status, stop_reason = "aborted", "aborted"
@@ -228,6 +255,40 @@ def record_inline_unit(
         "verified": verified,
         "receipt_path": str(receipt_path),
     }
+
+
+def _acquire_unit_claims(
+    repo_root: Path,
+    swarm_id: str,
+    units: list[dict[str, str]],
+    claim_paths: list[list[str]] | None,
+) -> dict[str, list[str]]:
+    """Best-effort, non-fatal per-unit path leases via the claim ledger.
+
+    Returns a mapping of ``unit_id -> [successfully-claimed paths]``.  A unit
+    with no declared paths, a lease conflict, or any ledger error simply gets an
+    empty list — planning never fails because of claims.
+    """
+    if not claim_paths:
+        return {}
+
+    from oh_no_my_claudecode.claim import ClaimLedger
+
+    ledger = ClaimLedger(repo_root)
+    claimed: dict[str, list[str]] = {}
+    for idx, unit in enumerate(units):
+        paths = claim_paths[idx] if idx < len(claim_paths) else []
+        wanted = [p for p in paths if p and p.strip()]
+        if not wanted:
+            continue
+        owner = f"swarm:{swarm_id}:{unit['id']}"
+        try:
+            result = ledger.acquire(owner, wanted)
+        except (OSError, ValueError):
+            continue
+        if result.ok:
+            claimed[unit["id"]] = [c.path for c in result.claims if c.owner == owner]
+    return claimed
 
 
 def _update_inline_manifest(

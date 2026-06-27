@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, cast
 
@@ -5981,6 +5982,24 @@ def swarm_record_command(
         str | None,
         typer.Option("--files", help="Comma-separated list of files the unit touched."),
     ] = None,
+    auto_verify: Annotated[
+        bool,
+        typer.Option(
+            "--auto-verify",
+            help=(
+                "Staff-engineer mode: IGNORE --verified and set the receipt's "
+                "verified flag from the REAL quality gate run in --worktree."
+            ),
+        ),
+    ] = False,
+    worktree: Annotated[
+        Path | None,
+        typer.Option("--worktree", help="The unit's worktree (required with --auto-verify)."),
+    ] = None,
+    base: Annotated[
+        str,
+        typer.Option("--base", help="Base ref the unit's diff is taken against."),
+    ] = "main",
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit the recorded result as JSON."),
@@ -5988,16 +6007,24 @@ def swarm_record_command(
 ) -> None:
     """Record one finished inline unit: write a receipt + update the manifest.
 
-    Honest by construction: a unit is ``done`` ONLY with ``--verified``; without
-    it the unit is ``failed`` (a subagent that produced nothing useful can never
-    be a verified success).  The receipt is as auditable as a process unit's
-    (git tree/diff SHA, hash chain, reproducibility envelope).
+    Honest by construction: a unit is ``done`` ONLY when verified; otherwise it
+    is ``failed`` (a subagent that produced nothing useful can never be a
+    verified success).  The receipt is as auditable as a process unit's (git
+    tree/diff SHA, hash chain, reproducibility envelope).
+
+    Without ``--auto-verify`` the caller's ``--verified`` attestation is used
+    (back-compatible).  With ``--auto-verify`` the caller's flag is IGNORED and
+    the receipt's verified flag reflects the REAL gate result in ``--worktree``
+    (preflight + diff): a unit that did not really build or fails the gate is
+    recorded ``failed`` even if ``--verified`` was passed.
 
     \b
     Example
     -------
     onmc swarm record ab12cd34 unit-0000 --goal "audit A" \\
         --summary "found 2 issues, fixed both" --verified --files src/a.py
+    onmc swarm record ab12cd34 unit-0000 --goal "fix X" --summary "done" \\
+        --auto-verify --worktree /tmp/wt-unit-0000 --base main
     """
     try:
         repo_root, _, _ = _service()._load_context()  # noqa: SLF001
@@ -6005,6 +6032,17 @@ def swarm_record_command(
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     from oh_no_my_claudecode.swarm.inline import record_inline_unit
+
+    verifier: Callable[[], bool] | None = None
+    if auto_verify:
+        if worktree is None:
+            raise typer.Exit(code=_fatal("--auto-verify requires --worktree."))
+        from oh_no_my_claudecode.swarm.staff import verify_unit
+
+        _wt = worktree
+
+        def verifier() -> bool:
+            return verify_unit(repo_root, _wt, base, unit_id=unit_id).ok
 
     file_list = [f.strip() for f in files.split(",") if f.strip()] if files else None
     res = record_inline_unit(
@@ -6018,6 +6056,7 @@ def swarm_record_command(
         files_touched=file_list,
         tokens=tokens,
         cost_usd=cost_usd,
+        verifier=verifier,
     )
 
     if json_output:
@@ -6029,6 +6068,139 @@ def swarm_record_command(
         f"[{color}]{res['status']}[/{color}] {unit_id} — receipt {Path(res['receipt_path']).name}"
     )
     raise typer.Exit(code=0 if res["status"] != "failed" else 1)
+
+
+@swarm_app.command("verify")
+def swarm_verify_command(
+    swarm_id: Annotated[str, typer.Argument(help="Swarm ID returned by `swarm plan`.")],
+    unit_id: Annotated[str, typer.Argument(help="Unit ID (e.g. unit-0000).")],
+    worktree: Annotated[
+        Path,
+        typer.Option("--worktree", help="The unit's worktree to run the quality gate in."),
+    ],
+    base: Annotated[
+        str,
+        typer.Option("--base", help="Base ref the unit's diff is taken against."),
+    ] = "main",
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the verdict as JSON."),
+    ] = False,
+) -> None:
+    """Run the HONEST per-unit quality gate in the unit's OWN worktree.
+
+    This is the trust gate: it runs preflight (ruff/mypy/cli-ref/pytest) in
+    ``--worktree`` and verifies the unit's diff is real + lawful.  A unit that
+    didn't really build (empty diff) or fails the gate CANNOT pass — the command
+    exits nonzero when the verdict is not ``ok``.
+
+    \b
+    Example
+    -------
+    onmc swarm verify ab12cd34 unit-0000 --worktree /tmp/wt-unit-0000 --base main
+    """
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.swarm.staff import verify_unit
+
+    verdict = verify_unit(repo_root, worktree, base, unit_id=unit_id)
+
+    if json_output:
+        payload = {
+            "unit_id": verdict.unit_id,
+            "preflight_ok": verdict.preflight_ok,
+            "diff_ok": verdict.diff_ok,
+            "ok": verdict.ok,
+            "details": verdict.details,
+        }
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        raise typer.Exit(code=0 if verdict.ok else 1)
+
+    color = "green" if verdict.ok else "red"
+    console.print(
+        f"[{color}]{'verified' if verdict.ok else 'NOT verified'}[/{color}] "
+        f"{unit_id} — preflight={verdict.preflight_ok} diff={verdict.diff_ok}"
+    )
+    for line in verdict.details:
+        console.print(f"  [dim]{line}[/dim]")
+    raise typer.Exit(code=0 if verdict.ok else 1)
+
+
+@swarm_app.command("pr")
+def swarm_pr_command(
+    swarm_id: Annotated[str, typer.Argument(help="Swarm ID returned by `swarm plan`.")],
+    unit_id: Annotated[str, typer.Argument(help="Unit ID (e.g. unit-0000).")],
+    worktree: Annotated[
+        Path,
+        typer.Option("--worktree", help="The unit's worktree whose branch is pushed."),
+    ],
+    base: Annotated[
+        str,
+        typer.Option("--base", help="Base branch the PR targets."),
+    ] = "main",
+    title: Annotated[
+        str | None,
+        typer.Option("--title", help="PR title (defaults to a unit-scoped title)."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the PR result as JSON."),
+    ] = False,
+) -> None:
+    """Open the unit's OWN pull request (push branch + ``gh pr create``).
+
+    REFUSES an unverified unit: the unit must be recorded ``done``/verified in
+    the manifest first.  PR-and-stop — this never auto-merges.
+
+    \b
+    Example
+    -------
+    onmc swarm pr ab12cd34 unit-0000 --worktree /tmp/wt-unit-0000 --base main
+    """
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.swarm.orchestrator import swarm_state
+    from oh_no_my_claudecode.swarm.staff import open_unit_pr
+
+    state = swarm_state(repo_root, swarm_id)
+    unit = state.get("units", {}).get(unit_id) if state else None
+    if unit is None:
+        raise typer.Exit(code=_fatal(f"Unknown unit {unit_id} in swarm {swarm_id}."))
+    if not (unit.get("status") == "done" and unit.get("verified")):
+        raise typer.Exit(
+            code=_fatal(
+                f"Refusing to open a PR: {unit_id} is not verified "
+                f"(status={unit.get('status')!r}, verified={unit.get('verified')!r}). "
+                "Verify it first with `onmc swarm verify` / `record --auto-verify`."
+            )
+        )
+
+    result = open_unit_pr(repo_root, worktree, base, unit_id=unit_id, title=title)
+
+    if json_output:
+        payload = {
+            "unit_id": result.unit_id,
+            "ok": result.ok,
+            "branch": result.branch,
+            "pr_url": result.pr_url,
+            "details": result.details,
+        }
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        raise typer.Exit(code=0 if result.ok else 1)
+
+    if result.ok:
+        console.print(f"[green]PR opened[/green] {unit_id} — {result.pr_url}")
+    else:
+        console.print(f"[red]PR failed[/red] {unit_id}")
+    for line in result.details:
+        console.print(f"  [dim]{line}[/dim]")
+    raise typer.Exit(code=0 if result.ok else 1)
 
 
 @swarm_app.command("status")
