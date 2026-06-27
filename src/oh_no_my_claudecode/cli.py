@@ -6325,5 +6325,7 @@ def swarm_abort_command(
 
 # Additive command auto-discovery: features expose ``<feat>.commands.register(app)``
 # and self-register here with zero further edits to this hub. See
-# ``oh_no_my_claudecode.command_registry`` and CONTRIBUTING.md.
-register_feature_commands(app)
+# ``oh_no_my_claudecode.command_registry`` and CONTRIBUTING.md. ``strict=False``
+# so a duplicate-name collision is logged loudly to stderr rather than crashing a
+# user's CLI; CI asserts ``detect_duplicate_commands(app) == []`` to fail the build.
+register_feature_commands(app, strict=False)
