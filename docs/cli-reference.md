@@ -67,6 +67,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 and integrations.                                            │
 │ audit           Scan agent configuration for security risks and emit a       │
 │                 scored report.                                               │
+│ preflight       Run the exact CI quality gate locally, in the same order CI  │
+│                 runs it.                                                     │
+│ verify-diff     Adversarially verify the working diff against a base ref.    │
 │ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
 │ bench           Measure whether onmc memory actually reduces wasted work.    │
 │ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
@@ -86,6 +89,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 a goal.                                                      │
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
+│ release         Draft the next release from conventional-commit history.     │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -109,6 +113,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ conventions     Capture and inherit the repo's coding conventions            │
 │                 (.onmc/conventions.md).                                      │
 │ claim           Coordinate file/path leases for parallel agents.             │
+│ ledger          Agent-work accounting (cost / wall-time / success-rate /     │
+│                 ROI) over the run receipts that onmc loop and swarm write.   │
+│                 Honest: cost is n/a when a receipt did not report it — never │
+│                 fabricated.                                                  │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -749,6 +757,67 @@ Usage: onmc audit [OPTIONS] [PATH]
 │                        medium, low, info.  Default: high.                    │
 │                        [default: high]                                       │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc preflight`
+
+```text
+Usage: onmc preflight [OPTIONS]
+
+ Run the exact CI quality gate locally, in the same order CI runs it.
+
+ Mirrors ``.github/workflows/ci.yml`` step-for-step:
+
+ 1. ``ruff check .``
+ 2. ``mypy --strict src/oh_no_my_claudecode``
+ 3. ``generate-cli-reference.py --check``
+ 4. ``pytest tests/``
+
+ Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only
+ mypy``.
+
+ Exit codes:
+
+ - 0 — every step that ran passed (matches the CI gate)
+ - 1 — one or more steps failed, or no valid step was selected
+ - 2 — usage error
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --only        TEXT  Run only these steps (repeatable).  One or more of:      │
+│                     ruff, mypy, cliref, pytest.  Default: run all, in CI     │
+│                     order.                                                   │
+│ --json              Emit the PreflightReport as JSON to stdout.              │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc verify-diff`
+
+```text
+Usage: onmc verify-diff [OPTIONS]
+
+ Adversarially verify the working diff against a base ref.
+
+ Passes ONLY when the change is real (non-empty), introduces every expected
+ symbol/file, and is lawful (no banned or secret patterns in added lines).
+ Designed to close the empty-diff false-converge: a passing test suite over
+ an unchanged tree must NOT count as success.
+
+ Exit codes:
+
+ - 0 — every check passed
+ - 1 — one or more checks failed
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --base                 TEXT  Git ref to diff against (default: main).        │
+│                              [default: main]                                 │
+│ --expect-symbol        TEXT  Symbol that must appear in added lines.         │
+│                              Repeatable.                                     │
+│ --expect-file          TEXT  Repo-relative path that must receive added      │
+│                              lines.  Repeatable.                             │
+│ --json                       Emit the full VerifyReport as JSON to stdout.   │
+│ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2959,6 +3028,28 @@ Usage: onmc conventions show [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc release`
+
+```text
+Usage: onmc release [OPTIONS]
+
+ Draft the next release from conventional-commit history.
+
+ Classifies commit subjects since the last tag into a semver bump (feat ->
+ minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
+ next version, and renders a CHANGELOG entry in the repo's format.
+ Deterministic and offline. Dry-run by default — pass --write to bump
+ pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --write    --dry-run      Edit pyproject.toml + CHANGELOG.md (default:       │
+│                           dry-run).                                          │
+│                           [default: dry-run]                                 │
+│ --json                    Emit the drafted release as JSON.                  │
+│ --help                    Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc claim`
 
 ```text
@@ -3041,5 +3132,75 @@ Usage: onmc claim check [OPTIONS] PATHS...
 │ --owner        TEXT  Allow claims already held by this owner.                │
 │ --json               Emit machine-readable JSON to stdout.                   │
 │ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger`
+
+```text
+Usage: onmc ledger [OPTIONS] COMMAND [ARGS]...
+
+ Agent-work accounting (cost / wall-time / success-rate / ROI) over the run
+ receipts that onmc loop and swarm write. Honest: cost is n/a when a receipt
+ did not report it — never fabricated.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ today    Account today's agent work: cost, wall-time, success-rate,          │
+│          breakdowns.                                                         │
+│ project  Account all agent work in this project across every run receipt.    │
+│ roi      Show an honestly-labelled ROI *estimate* (est) over all receipts.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger today`
+
+```text
+Usage: onmc ledger today [OPTIONS]
+
+ Account today's agent work: cost, wall-time, success-rate, breakdowns.
+
+ Reads run receipts from ``.agent-memory/receipts/`` dated today (UTC).
+ Cost is shown as ``n/a`` when no receipt reported it — never fabricated.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger project`
+
+```text
+Usage: onmc ledger project [OPTIONS]
+
+ Account all agent work in this project across every run receipt.
+
+ Aggregates cost, wall-time, success-rate, and per-model / per-agent
+ breakdowns from every ``run-*.json`` receipt.  Honest about missing cost
+ data via the summary note.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger roi`
+
+```text
+Usage: onmc ledger roi [OPTIONS]
+
+ Show an honestly-labelled ROI *estimate* (est) over all receipts.
+
+ Compares real agent wall-clock time against a transparent assumption of
+ human minutes per run.  The result is explicitly marked ``est`` and carries
+ its assumption — it is an estimate, not a measurement.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

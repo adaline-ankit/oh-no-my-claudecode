@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
@@ -33,17 +34,22 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.ledger.accounting import LedgerSummary
     from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
+    from oh_no_my_claudecode.preflight.runner import Executor as PreflightExecutor
+    from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
+    from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
     from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
     from oh_no_my_claudecode.trace.models import TraceReport
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
 
 from oh_no_my_claudecode.blame.compiler import BlameResult, blame_result_to_markdown, compile_blame
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
@@ -2328,6 +2334,41 @@ class OnmcService:
         report: _EvolutionReport = compile_evolution(receipts_dir)
         return repo_root, report
 
+    def ledger_summary(self, *, scope: str = "project") -> tuple[Path, LedgerSummary]:
+        """Compile an agent-work accounting summary from run receipts.
+
+        Reads ``RunReceipt`` JSON files written by ``onmc loop`` / ``onmc
+        swarm`` from ``.agent-memory/receipts/`` and aggregates cost, wall-time,
+        success-rate, and per-model / per-agent breakdowns.
+
+        Entirely offline — no LLM calls, no network access.  Honest: receipts
+        with no ``cost_usd`` are excluded from the cost total (never fabricated)
+        and surfaced via the summary's ``cost_unknown_count`` / ``note``.
+
+        Parameters
+        ----------
+        scope:
+            ``"today"`` filters to receipts dated today (UTC); any other value
+            ("project") includes all receipts.
+
+        Returns
+        -------
+        tuple[Path, LedgerSummary]
+            ``(repo_root, summary)``
+        """
+        from oh_no_my_claudecode.ledger.accounting import (
+            LedgerSummary as _LedgerSummary,
+        )
+        from oh_no_my_claudecode.ledger.accounting import (
+            load_receipts,
+            summarize_receipts,
+        )
+
+        repo_root = discover_repo_root(self.cwd)
+        receipts = load_receipts(repo_root, scope=scope)
+        summary: _LedgerSummary = summarize_receipts(receipts, scope=scope)
+        return repo_root, summary
+
     # ------------------------------------------------------------------
     # Trace Observatory
     # ------------------------------------------------------------------
@@ -3315,6 +3356,95 @@ class OnmcService:
         result: _AuditReport = run_audit(repo_root)
         return result
 
+    def verify_diff(
+        self,
+        *,
+        base: str = "main",
+        expect_symbols: tuple[str, ...] = (),
+        expect_files: tuple[str, ...] = (),
+        repo_root: Path | None = None,
+    ) -> VerifyReport:
+        """Adversarially verify the working diff against *base*.
+
+        Shells ``git diff <base>...HEAD`` for the repo and runs the pure,
+        deterministic :func:`~oh_no_my_claudecode.verifydiff.checker.verify_diff`
+        over the result.  No LLM calls.  Passes only when the change is real
+        (non-empty), introduces every expected symbol/file, and is lawful (no
+        banned/secret patterns in added lines).
+
+        Parameters
+        ----------
+        base:
+            Git ref to diff against (default ``main``).
+        expect_symbols:
+            Symbols that must each appear in at least one added line.
+        expect_files:
+            Repo-relative paths that must each receive added lines.
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+
+        Returns
+        -------
+        VerifyReport
+            ``ok`` is ``True`` only when every check passed.
+        """
+        from oh_no_my_claudecode.verifydiff.checker import collect_diff, verify_diff
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except FileNotFoundError:
+                repo_root = self.cwd
+        diff_text = collect_diff(repo_root, base)
+        return verify_diff(
+            diff_text=diff_text,
+            expect_symbols=expect_symbols,
+            expect_files=expect_files,
+        )
+
+    # ------------------------------------------------------------------
+    # Preflight (local CI gate)
+    # ------------------------------------------------------------------
+
+    def preflight(
+        self,
+        *,
+        steps: Sequence[str] | None = None,
+        repo_root: Path | None = None,
+        executor: PreflightExecutor | None = None,
+    ) -> PreflightReport:
+        """Run the exact CI quality gate locally and return the report.
+
+        Mirrors ``.github/workflows/ci.yml`` step-for-step (ruff, mypy,
+        cli-reference ``--check``, pytest) so an agent can validate a change
+        the same way CI will before pushing.
+
+        Parameters
+        ----------
+        steps:
+            Subset of step ids to run (``ruff``/``mypy``/``cliref``/``pytest``).
+            ``None`` runs all of them in CI order.
+        repo_root:
+            Directory the commands run in.  Discovered from ``self.cwd`` when
+            ``None`` (falling back to ``self.cwd`` outside a repo).
+        executor:
+            Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to
+            a subprocess runner; tests inject a fake for deterministic runs.
+
+        Returns
+        -------
+        PreflightReport
+            One step result per executed step, plus an aggregate ``ok``.
+        """
+        from oh_no_my_claudecode.preflight import run_preflight
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return run_preflight(repo_root, steps=steps, executor=executor)
+
     # ------------------------------------------------------------------
     # MCP Trust Gateway
     # ------------------------------------------------------------------
@@ -3454,6 +3584,58 @@ class OnmcService:
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
         return detect_conventions(repo_root)
+
+    # ------------------------------------------------------------------
+    # Release drafter (deterministic, offline)
+    # ------------------------------------------------------------------
+
+    def release_draft(
+        self,
+        *,
+        write: bool = False,
+        repo_root: Path | None = None,
+    ) -> tuple[Path, ReleaseDraft]:
+        """Draft the next release from conventional-commit history.
+
+        Reads the current version from ``pyproject.toml`` and the commit
+        subjects since the last ``vX.Y.Z`` tag, classifies them into a semver
+        bump, and renders a CHANGELOG entry.  Deterministic given the repo's
+        git history; no network or LLM access.
+
+        Parameters
+        ----------
+        write:
+            When ``True``, edit ``pyproject.toml`` (bump version) and prepend
+            the rendered entry to ``CHANGELOG.md``.  When ``False`` (default),
+            nothing is written — the draft is returned for preview.
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+
+        Returns
+        -------
+        tuple[Path, ReleaseDraft]
+            ``(repo_root, draft)``.
+        """
+        from oh_no_my_claudecode.release import (
+            collect_commits,
+            current_version,
+            draft_release,
+            write_release,
+        )
+
+        if repo_root is None:
+            repo_root = discover_repo_root(self.cwd)
+
+        version = current_version(repo_root)
+        commits = collect_commits(repo_root)
+        draft = draft_release(
+            current_version=version,
+            commits=commits,
+            date=utc_now().strftime("%Y-%m-%d"),
+        )
+        if write:
+            write_release(repo_root, draft)
+        return repo_root, draft
 
     # ------------------------------------------------------------------
     # Eval harness

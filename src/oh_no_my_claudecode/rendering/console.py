@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -23,8 +23,11 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
     from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
+    from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
+    from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.trace.models import TraceReport
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
 
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
@@ -2363,6 +2366,68 @@ def render_audit_report(report: AuditReport) -> None:
     console.print(table)
 
 
+def render_preflight_report(report: PreflightReport) -> None:
+    """Render the local CI-gate scorecard for ``onmc preflight``.
+
+    One row per step (ruff / mypy / cli-reference / pytest) with a pass/fail
+    glyph and the step's summary line, followed by an overall verdict.
+    """
+    from oh_no_my_claudecode.preflight.runner import PreflightReport as _PreflightReport
+
+    if not isinstance(report, _PreflightReport):  # pragma: no cover - defensive
+        return
+
+    table = Table(title="onmc preflight — local CI gate", show_lines=False)
+    table.add_column("", width=4, no_wrap=True)
+    table.add_column("Step", min_width=18, no_wrap=True)
+    table.add_column("Result", min_width=30, no_wrap=False)
+
+    for step in report.steps:
+        glyph = "[green]PASS[/green]" if step.ok else "[red]FAIL[/red]"
+        color = "green" if step.ok else "red"
+        table.add_row(glyph, step.label, f"[{color}]{step.summary}[/{color}]")
+
+    console.print(table)
+
+    if report.ok:
+        console.print("[bold green]preflight passed — matches CI gate.[/bold green]")
+    else:
+        names = ", ".join(step.label for step in report.failed)
+        console.print(f"[bold red]preflight failed:[/bold red] {names}")
+
+def render_verify_report(report: VerifyReport) -> None:
+    """Render an ``onmc verify-diff`` adversarial gate result.
+
+    Shows a pass/fail banner followed by a per-check table.  The banner makes
+    the empty-diff false-converge impossible to miss.
+    """
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
+
+    if not isinstance(report, VerifyReport):  # pragma: no cover
+        return
+
+    status = "[green]PASS[/green]" if report.ok else "[bold red]FAIL[/bold red]"
+    passed = sum(1 for f in report.findings if f.ok)
+    total = len(report.findings)
+    border = "green" if report.ok else "red"
+    console.print(
+        Panel(
+            f"  Result: {status}   ({passed}/{total} checks passed)",
+            title="[bold]onmc verify-diff — Adversarial Diff Gate[/bold]",
+            border_style=border,
+        )
+    )
+
+    table = Table(show_lines=False, expand=True)
+    table.add_column("Check", width=20, no_wrap=True)
+    table.add_column("Status", width=8, no_wrap=True)
+    table.add_column("Detail", min_width=40, no_wrap=False)
+    for finding in report.findings:
+        mark = "[green]ok[/green]" if finding.ok else "[bold red]FAIL[/bold red]"
+        table.add_row(f"[dim]{finding.rule}[/dim]", mark, finding.detail)
+    console.print(table)
+
+
 def render_eval_result(
     report: object,
     *,
@@ -2886,6 +2951,103 @@ def render_evolution_card(report: object) -> None:
         console.print(line)
 
 
+def render_ledger_summary(summary: object) -> None:
+    """Render the agent-work ledger card (cost / wall-time / success-rate).
+
+    Shows a Rich Panel headline (runs, cost, success rate, wall-time) plus a
+    per-model and per-agent breakdown table.  Cost is rendered as ``n/a`` when
+    no receipt reported a cost — it is never fabricated.  ``--json`` is handled
+    by the caller.
+    """
+    from oh_no_my_claudecode.ledger.accounting import LedgerSummary
+
+    if not isinstance(summary, LedgerSummary):
+        console.print("[yellow]No ledger summary to display.[/yellow]")
+        return
+
+    if summary.run_count == 0:
+        console.print(
+            Panel(
+                "\n"
+                f"  No run receipts for scope [bold]{summary.scope}[/bold].\n"
+                "  [dim]Run [bold]onmc loop[/bold] or [bold]onmc swarm[/bold] "
+                "to generate receipts.[/dim]\n",
+                title="[bold cyan]onmc ledger — nothing to account yet[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+        return
+
+    sr_pct = round(summary.success_rate * 100)
+    sr_color = "green" if sr_pct >= 70 else ("yellow" if sr_pct >= 40 else "red")  # noqa: PLR2004
+    wall_min = summary.total_wall_seconds / 60.0
+
+    headline = (
+        f"  Runs: [bold]{summary.run_count}[/bold]"
+        f"  ·  Cost: [bold]{summary.cost_label}[/bold]"
+        f"  ·  Success: [{sr_color}]{sr_pct}%[/{sr_color}] "
+        f"[dim]({summary.success_count}/{summary.run_count})[/dim]"
+        f"  ·  Wall: [bold]{wall_min:.1f} min[/bold]"
+    )
+    body_lines = ["", headline, ""]
+    if summary.note:
+        body_lines.append(f"  [dim]{summary.note}[/dim]")
+        body_lines.append("")
+
+    console.print(
+        Panel(
+            "\n".join(body_lines),
+            title=f"[bold cyan]onmc ledger — {summary.scope}[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    _render_ledger_breakdown("By model", summary.by_model)
+    _render_ledger_breakdown("By agent", summary.by_agent)
+
+    console.print()
+    console.print(
+        "[dim]All numbers from real run receipts. "
+        "Receipts without cost_usd are excluded from the cost total.[/dim]"
+    )
+
+
+def _render_ledger_breakdown(title: str, table_data: dict[str, dict[str, Any]]) -> None:
+    """Render one ledger breakdown table (by model or by agent)."""
+    if not table_data:
+        return
+    tbl = Table(
+        title=title,
+        title_justify="left",
+        show_header=True,
+        box=None,
+        padding=(0, 1),
+    )
+    tbl.add_column("Key", min_width=12, max_width=30)
+    tbl.add_column("Runs", justify="right", width=5)
+    tbl.add_column("Cost", justify="right", width=10)
+    tbl.add_column("Wall (min)", justify="right", width=11)
+    tbl.add_column("Success", justify="right", width=9)
+
+    for key in sorted(table_data):
+        bucket = table_data[key]
+        runs = int(bucket.get("runs", 0))
+        unknown = int(bucket.get("cost_unknown_count", 0))
+        cost_v = float(bucket.get("cost_usd", 0.0))
+        cost_str = "[dim]n/a[/dim]" if unknown == runs else f"${cost_v:.4f}"
+        wall_v = float(bucket.get("wall_seconds", 0.0)) / 60.0
+        success = int(bucket.get("success_count", 0))
+        tbl.add_row(
+            key,
+            str(runs),
+            cost_str,
+            f"{wall_v:.1f}",
+            f"{success}/{runs}",
+        )
+    console.print()
+    console.print(tbl)
+
+
 def render_codegraph_build(cache_path: Path, graph: CodeGraph) -> None:
     """Render a one-line summary of a freshly built code graph."""
     edge_count = sum(len(node.imports) for node in graph.nodes.values())
@@ -2940,6 +3102,30 @@ def render_codegraph_context(result: ContextSelection) -> None:
     for index, file in enumerate(result.files, start=1):
         table.add_row(str(index), file)
     console.print(table)
+
+
+def render_release_draft(draft: ReleaseDraft, *, written: bool = False) -> None:
+    """Render a drafted release: bump summary table + the CHANGELOG entry.
+
+    When *written* is True, a confirmation line notes that pyproject.toml and
+    CHANGELOG.md were edited; otherwise a dry-run hint is shown.
+    """
+    table = Table(title="Release Draft")
+    table.add_column("Field")
+    table.add_column("Value", justify="right")
+    table.add_row("Current version", draft.current_version)
+    table.add_row("Next version", draft.next_version)
+    table.add_row("Bump", draft.bump)
+    table.add_row(
+        "Commits",
+        str(sum(len(items) for items in draft.commits_by_type.values())),
+    )
+    console.print(table)
+    console.print(Panel(Markdown(draft.changelog_entry), title="CHANGELOG entry"))
+    if written:
+        console.print("[green]Wrote pyproject.toml + CHANGELOG.md.[/green]")
+    else:
+        console.print("[dim]Dry run — nothing written. Pass --write to apply.[/dim]")
 
 
 def render_conventions(conv: Conventions, *, path: Path | None = None) -> None:

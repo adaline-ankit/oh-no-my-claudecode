@@ -49,6 +49,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_import_summary,
     render_ingest_result,
     render_init_summary,
+    render_ledger_summary,
     render_llm_configured,
     render_llm_status,
     render_loop_result,
@@ -64,7 +65,9 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_detail,
     render_playbook_generate_summary,
     render_playbook_list,
+    render_preflight_report,
     render_pull_all_summary,
+    render_release_draft,
     render_reuse_hits,
     render_review_output,
     render_savings_card,
@@ -85,6 +88,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_user_memory_list,
     render_user_memory_removed,
     render_user_profile,
+    render_verify_report,
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
@@ -154,6 +158,14 @@ claim_app = typer.Typer(
     help="Coordinate file/path leases for parallel agents.",
     no_args_is_help=True,
 )
+ledger_app = typer.Typer(
+    help=(
+        "Agent-work accounting (cost / wall-time / success-rate / ROI) over the "
+        "run receipts that onmc loop and swarm write. Honest: cost is n/a when a "
+        "receipt did not report it — never fabricated."
+    ),
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -171,6 +183,7 @@ app.add_typer(mcp_app, name="mcp")
 app.add_typer(swarm_app, name="swarm")
 app.add_typer(conventions_app, name="conventions")
 app.add_typer(claim_app, name="claim")
+app.add_typer(ledger_app, name="ledger")
 
 
 @app.command("tui")
@@ -2459,6 +2472,128 @@ def audit_command(
         raise typer.Exit(code=1)
 
 
+@app.command("preflight")
+def preflight_command(
+    only: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--only",
+            help=(
+                "Run only these steps (repeatable).  One or more of: "
+                "ruff, mypy, cliref, pytest.  Default: run all, in CI order."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the PreflightReport as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Run the exact CI quality gate locally, in the same order CI runs it.
+
+    Mirrors ``.github/workflows/ci.yml`` step-for-step:
+
+    1. ``ruff check .``
+    2. ``mypy --strict src/oh_no_my_claudecode``
+    3. ``generate-cli-reference.py --check``
+    4. ``pytest tests/``
+
+    Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only mypy``.
+
+    Exit codes:
+
+    - 0 — every step that ran passed (matches the CI gate)
+    - 1 — one or more steps failed, or no valid step was selected
+    - 2 — usage error
+    """
+    from oh_no_my_claudecode.preflight.runner import STEP_IDS
+
+    steps: list[str] | None = None
+    if only:
+        invalid = [s for s in only if s not in STEP_IDS]
+        if invalid:
+            msg = (
+                f"--only must be one of: {', '.join(STEP_IDS)} "
+                f"(got: {', '.join(invalid)})"
+            )
+            raise typer.Exit(code=_fatal(msg))
+        steps = only
+
+    report = _service().preflight(steps=steps)
+
+    if as_json:
+        import dataclasses
+
+        payload = {
+            "ok": report.ok,
+            "steps": [dataclasses.asdict(step) for step in report.steps],
+        }
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    else:
+        render_preflight_report(report)
+
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@app.command("verify-diff")
+def verify_diff_command(
+    base: Annotated[
+        str,
+        typer.Option("--base", help="Git ref to diff against (default: main)."),
+    ] = "main",
+    expect_symbol: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--expect-symbol",
+            help="Symbol that must appear in added lines.  Repeatable.",
+        ),
+    ] = None,
+    expect_file: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--expect-file",
+            help="Repo-relative path that must receive added lines.  Repeatable.",
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the full VerifyReport as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Adversarially verify the working diff against a base ref.
+
+    Passes ONLY when the change is real (non-empty), introduces every expected
+    symbol/file, and is lawful (no banned or secret patterns in added lines).
+    Designed to close the empty-diff false-converge: a passing test suite over
+    an unchanged tree must NOT count as success.
+
+    Exit codes:
+
+    - 0 — every check passed
+    - 1 — one or more checks failed
+    """
+    report = _service().verify_diff(
+        base=base,
+        expect_symbols=tuple(expect_symbol or ()),
+        expect_files=tuple(expect_file or ()),
+    )
+
+    if as_json:
+        import dataclasses
+
+        payload = {
+            "ok": report.ok,
+            "findings": [dataclasses.asdict(f) for f in report.findings],
+        }
+        sys.stdout.write(json.dumps(payload, indent=2, default=str) + "\n")
+    else:
+        render_verify_report(report)
+
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
 @app.command("wiki")
 def wiki_command(
     output: Annotated[
@@ -3661,6 +3796,120 @@ def evolution_command(
     render_evolution_card(report)
 
 
+# ---------------------------------------------------------------------------
+# Ledger — agent-work cost / ROI accounting over receipts
+# ---------------------------------------------------------------------------
+
+
+def _emit_ledger_summary(scope: str, *, json_output: bool) -> None:
+    """Compute and render (or JSON-dump) a ledger summary for *scope*."""
+    import dataclasses
+    import json as _json
+
+    try:
+        _, summary = _service().ledger_summary(scope=scope)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if json_output:
+        payload = dataclasses.asdict(summary)
+        payload["cost_label"] = summary.cost_label
+        typer.echo(_json.dumps(payload, indent=2))
+        return
+
+    render_ledger_summary(summary)
+
+
+@ledger_app.command("today")
+def ledger_today_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Account today's agent work: cost, wall-time, success-rate, breakdowns.
+
+    Reads run receipts from ``.agent-memory/receipts/`` dated today (UTC).
+    Cost is shown as ``n/a`` when no receipt reported it — never fabricated.
+    """
+    _emit_ledger_summary("today", json_output=json_output)
+
+
+@ledger_app.command("project")
+def ledger_project_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Account all agent work in this project across every run receipt.
+
+    Aggregates cost, wall-time, success-rate, and per-model / per-agent
+    breakdowns from every ``run-*.json`` receipt.  Honest about missing cost
+    data via the summary note.
+    """
+    _emit_ledger_summary("project", json_output=json_output)
+
+
+@ledger_app.command("roi")
+def ledger_roi_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Show an honestly-labelled ROI *estimate* (est) over all receipts.
+
+    Compares real agent wall-clock time against a transparent assumption of
+    human minutes per run.  The result is explicitly marked ``est`` and carries
+    its assumption — it is an estimate, not a measurement.
+    """
+    import dataclasses
+    import json as _json
+
+    from oh_no_my_claudecode.ledger.accounting import roi as _roi
+
+    try:
+        _, summary = _service().ledger_summary(scope="project")
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    estimate = _roi(summary)
+
+    if json_output:
+        typer.echo(_json.dumps(dataclasses.asdict(estimate), indent=2))
+        return
+
+    if summary.run_count == 0:
+        console.print(
+            "[yellow]No run receipts yet — run `onmc loop` or `onmc swarm` first.[/yellow]"
+        )
+        return
+
+    saved = estimate.estimated_minutes_saved
+    saved_color = "green" if saved > 0 else "yellow"
+    console.print(
+        f"[bold cyan]onmc ledger ROI [dim](est)[/dim][/bold cyan]  "
+        f"over {summary.run_count} runs"
+    )
+    console.print(
+        f"  Agent wall-time:     [bold]{estimate.agent_wall_minutes:g} min[/bold]"
+    )
+    console.print(
+        f"  Est. human-time:     [bold]{estimate.estimated_human_minutes:g} min[/bold] "
+        f"[dim]({estimate.assumed_human_minutes_per_run:g} min/run assumed)[/dim]"
+    )
+    console.print(
+        f"  Est. time saved:     [{saved_color}]{saved:g} min[/{saved_color}] "
+        "[dim](est)[/dim]"
+    )
+    if summary.total_cost_usd > 0:
+        console.print(
+            f"  Agent spend:         [bold]${summary.total_cost_usd:.4f}[/bold]"
+        )
+    console.print(f"  [dim]{estimate.assumption_note}[/dim]")
+
+
 @app.command("benchmark")
 def benchmark_command(
     runs: Annotated[
@@ -4749,6 +4998,41 @@ def conventions_show_command(
         sys.stdout.write(json.dumps(dataclasses.asdict(conv), indent=2) + "\n")
         return
     render_conventions(conv)
+
+
+@app.command("release")
+def release_command(
+    write: Annotated[
+        bool,
+        typer.Option(
+            "--write/--dry-run",
+            help="Edit pyproject.toml + CHANGELOG.md (default: dry-run).",
+        ),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the drafted release as JSON."),
+    ] = False,
+) -> None:
+    """Draft the next release from conventional-commit history.
+
+    Classifies commit subjects since the last tag into a semver bump (feat ->
+    minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
+    next version, and renders a CHANGELOG entry in the repo's format.
+    Deterministic and offline. Dry-run by default — pass --write to bump
+    pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+    """
+    import dataclasses
+
+    try:
+        _, draft = _service().release_draft(write=write)
+    except (FileNotFoundError, ValueError, RepoDiscoveryError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        sys.stdout.write(json.dumps(dataclasses.asdict(draft), indent=2) + "\n")
+        return
+    render_release_draft(draft, written=write)
 
 
 def _fatal(message: str) -> int:
