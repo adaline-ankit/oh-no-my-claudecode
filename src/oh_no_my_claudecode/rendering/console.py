@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
     from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
+    from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.trace.models import TraceReport
 
@@ -2361,6 +2362,36 @@ def render_audit_report(report: AuditReport) -> None:
             shorten(finding.fix, max_length=120),
         )
     console.print(table)
+
+
+def render_preflight_report(report: PreflightReport) -> None:
+    """Render the local CI-gate scorecard for ``onmc preflight``.
+
+    One row per step (ruff / mypy / cli-reference / pytest) with a pass/fail
+    glyph and the step's summary line, followed by an overall verdict.
+    """
+    from oh_no_my_claudecode.preflight.runner import PreflightReport as _PreflightReport
+
+    if not isinstance(report, _PreflightReport):  # pragma: no cover - defensive
+        return
+
+    table = Table(title="onmc preflight — local CI gate", show_lines=False)
+    table.add_column("", width=4, no_wrap=True)
+    table.add_column("Step", min_width=18, no_wrap=True)
+    table.add_column("Result", min_width=30, no_wrap=False)
+
+    for step in report.steps:
+        glyph = "[green]PASS[/green]" if step.ok else "[red]FAIL[/red]"
+        color = "green" if step.ok else "red"
+        table.add_row(glyph, step.label, f"[{color}]{step.summary}[/{color}]")
+
+    console.print(table)
+
+    if report.ok:
+        console.print("[bold green]preflight passed — matches CI gate.[/bold green]")
+    else:
+        names = ", ".join(step.label for step in report.failed)
+        console.print(f"[bold red]preflight failed:[/bold red] {names}")
 
 
 def render_eval_result(

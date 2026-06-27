@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
@@ -36,6 +37,8 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
+    from oh_no_my_claudecode.preflight.runner import Executor as PreflightExecutor
+    from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
@@ -3314,6 +3317,49 @@ class OnmcService:
                 repo_root = self.cwd
         result: _AuditReport = run_audit(repo_root)
         return result
+
+    # ------------------------------------------------------------------
+    # Preflight (local CI gate)
+    # ------------------------------------------------------------------
+
+    def preflight(
+        self,
+        *,
+        steps: Sequence[str] | None = None,
+        repo_root: Path | None = None,
+        executor: PreflightExecutor | None = None,
+    ) -> PreflightReport:
+        """Run the exact CI quality gate locally and return the report.
+
+        Mirrors ``.github/workflows/ci.yml`` step-for-step (ruff, mypy,
+        cli-reference ``--check``, pytest) so an agent can validate a change
+        the same way CI will before pushing.
+
+        Parameters
+        ----------
+        steps:
+            Subset of step ids to run (``ruff``/``mypy``/``cliref``/``pytest``).
+            ``None`` runs all of them in CI order.
+        repo_root:
+            Directory the commands run in.  Discovered from ``self.cwd`` when
+            ``None`` (falling back to ``self.cwd`` outside a repo).
+        executor:
+            Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to
+            a subprocess runner; tests inject a fake for deterministic runs.
+
+        Returns
+        -------
+        PreflightReport
+            One step result per executed step, plus an aggregate ``ok``.
+        """
+        from oh_no_my_claudecode.preflight import run_preflight
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return run_preflight(repo_root, steps=steps, executor=executor)
 
     # ------------------------------------------------------------------
     # MCP Trust Gateway

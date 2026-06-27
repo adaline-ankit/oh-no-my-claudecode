@@ -45,6 +45,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc mine", ["mine"]),
     ("onmc doctor", ["doctor"]),
     ("onmc audit", ["audit"]),
+    ("onmc preflight", ["preflight"]),
     ("onmc llm", ["llm"]),
     ("onmc llm status", ["llm", "status"]),
     ("onmc llm configure", ["llm", "configure"]),

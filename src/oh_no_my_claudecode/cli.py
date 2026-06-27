@@ -64,6 +64,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_playbook_detail,
     render_playbook_generate_summary,
     render_playbook_list,
+    render_preflight_report,
     render_pull_all_summary,
     render_reuse_hits,
     render_review_output,
@@ -2456,6 +2457,70 @@ def audit_command(
 
     threshold: AuditSeverity = fail_on
     if report.findings_at_or_above(threshold):
+        raise typer.Exit(code=1)
+
+
+@app.command("preflight")
+def preflight_command(
+    only: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--only",
+            help=(
+                "Run only these steps (repeatable).  One or more of: "
+                "ruff, mypy, cliref, pytest.  Default: run all, in CI order."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the PreflightReport as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Run the exact CI quality gate locally, in the same order CI runs it.
+
+    Mirrors ``.github/workflows/ci.yml`` step-for-step:
+
+    1. ``ruff check .``
+    2. ``mypy --strict src/oh_no_my_claudecode``
+    3. ``generate-cli-reference.py --check``
+    4. ``pytest tests/``
+
+    Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only mypy``.
+
+    Exit codes:
+
+    - 0 — every step that ran passed (matches the CI gate)
+    - 1 — one or more steps failed, or no valid step was selected
+    - 2 — usage error
+    """
+    from oh_no_my_claudecode.preflight.runner import STEP_IDS
+
+    steps: list[str] | None = None
+    if only:
+        invalid = [s for s in only if s not in STEP_IDS]
+        if invalid:
+            msg = (
+                f"--only must be one of: {', '.join(STEP_IDS)} "
+                f"(got: {', '.join(invalid)})"
+            )
+            raise typer.Exit(code=_fatal(msg))
+        steps = only
+
+    report = _service().preflight(steps=steps)
+
+    if as_json:
+        import dataclasses
+
+        payload = {
+            "ok": report.ok,
+            "steps": [dataclasses.asdict(step) for step in report.steps],
+        }
+        sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    else:
+        render_preflight_report(report)
+
+    if not report.ok:
         raise typer.Exit(code=1)
 
 
