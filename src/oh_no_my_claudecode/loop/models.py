@@ -82,6 +82,12 @@ class AgentRunResult:
     tokens: int | None = None
     cost_usd: float | None = None
     """Optional USD cost reported by the agent adapter (e.g. from Claude JSON total_cost_usd)."""
+    error: str | None = None
+    """Set when the agent invocation itself failed (auth/API/OS error) rather than
+    producing real work.  An iteration with a non-None ``error`` can NEVER be
+    counted as a win — the loop forces a loss and stops with
+    ``stop_reason='agent-error'`` so an authentication/API failure can never be
+    silently reported as ``verified``."""
 
 
 @dataclass

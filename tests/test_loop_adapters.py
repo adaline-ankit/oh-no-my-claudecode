@@ -17,6 +17,7 @@ from oh_no_my_claudecode.loop.adapters import (
     CommandRunner,
     CompletedProc,
     OpenCodeCliAdapter,
+    _detect_claude_error,
     _parse_claude_json,
     _parse_opencode_json,
     make_agent_runner,
@@ -873,3 +874,81 @@ def test_cli_autopilot_accepts_opencode_agent(
     # autopilot --dry-run exits 1 (not-verified) — that is expected and correct.
     # We only verify the option was not rejected as an unknown agent.
     assert "Unknown agent" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# Agent-error detection (auth/API failures must NOT look like success)
+# ---------------------------------------------------------------------------
+
+# The exact envelope a real `claude -p --output-format json` returns on a 401.
+_CLAUDE_401 = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": True,
+        "api_error_status": 401,
+        "result": "Failed to authenticate. API Error: 401 Invalid authentication credentials",
+        "total_cost_usd": 0,
+        "usage": {"input_tokens": 0, "output_tokens": 0},
+    }
+)
+
+
+def test_detect_claude_error_401_is_error_flag() -> None:
+    """is_error=true → a non-None error carrying the message."""
+    err = _detect_claude_error(_CLAUDE_401)
+    assert err is not None
+    assert "401" in err
+
+
+def test_detect_claude_error_api_status_only() -> None:
+    """A truthy api_error_status alone is enough to flag the failure."""
+    raw = json.dumps({"type": "result", "api_error_status": 529, "result": "Overloaded"})
+    assert _detect_claude_error(raw) == "Overloaded"
+
+
+def test_detect_claude_error_healthy_output_is_none() -> None:
+    """Normal successful output must NOT be flagged as an error."""
+    raw = json.dumps({"result": "Done.", "usage": {"input_tokens": 5, "output_tokens": 3}})
+    assert _detect_claude_error(raw) is None
+
+
+def test_detect_claude_error_non_json_is_none() -> None:
+    """Plain stdout (no JSON envelope) is not treated as an error here."""
+    assert _detect_claude_error("just some text") is None
+    assert _detect_claude_error("") is None
+
+
+def test_claude_adapter_surfaces_api_error(tmp_path: Path) -> None:
+    """ClaudeCliAdapter must set .error (and drop tokens/cost) on a 401."""
+    adapter = ClaudeCliAdapter(
+        tmp_path,
+        command_runner=_simple_claude_runner(_CLAUDE_401),
+    )
+    res: AgentRunResult = adapter("do the thing", escalation_level=0)
+    assert res.error is not None
+    assert "401" in res.error
+    assert res.tokens is None
+    assert res.cost_usd is None
+    # The error text is also visible in output so a human reading the receipt sees it.
+    assert "401" in res.output
+
+
+def test_claude_adapter_success_has_no_error(tmp_path: Path) -> None:
+    """A healthy claude response leaves .error None (regression guard)."""
+    raw = json.dumps({"result": "Fixed it.", "usage": {"input_tokens": 10, "output_tokens": 4}})
+    adapter = ClaudeCliAdapter(tmp_path, command_runner=_simple_claude_runner(raw))
+    res = adapter("do the thing", escalation_level=0)
+    assert res.error is None
+    assert res.output == "Fixed it."
+
+
+def test_codex_adapter_nonzero_with_no_stdout_sets_error(tmp_path: Path) -> None:
+    """Codex OS-level failure (nonzero exit, empty stdout) sets .error."""
+    runner = _make_runner(
+        {"codex": CompletedProc(returncode=1, stdout="", stderr="boom")},
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+    assert res.error is not None
+    assert "boom" in res.error

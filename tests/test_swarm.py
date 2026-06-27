@@ -591,3 +591,75 @@ class TestSwarmCLI:
         result = _cli_runner().invoke(app, ["swarm", "run", "--concurrency", "2"])
         assert result.exit_code != 0
         assert "no such option" not in _strip_ansi(result.output).lower()
+
+
+class TestSwarmHonestStatus:
+    """A unit is 'done' only when its loop actually converged."""
+
+    def test_nonconverging_unit_is_failed_not_done(self, tmp_path: Path) -> None:
+        """A unit whose loop never converges must report status='failed'."""
+        storage = _storage(tmp_path)
+        units = _make_units(2)
+        cfg = _make_config(concurrency=2)
+        # Agent runs fine, but verify NEVER passes → loop hits max-iterations,
+        # converged=False. Pre-fix this was silently reported as 'done'.
+        af, vf = _fake_runner_factory(verify_fn=_fake_verify(passes=False))
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            cfg,
+            runner_factory=af,
+            verify_factory=vf,
+            executor=ThreadPoolExecutor(max_workers=2),
+            now=_FIXED_NOW,
+        )
+
+        assert result.units_done == 0
+        assert result.units_failed == 2
+        for ur in result.unit_results:
+            assert ur.status == "failed"
+            assert ur.error is not None
+
+    def test_agent_error_unit_is_failed(self, tmp_path: Path) -> None:
+        """A unit whose agent returns an error is failed with agent-error."""
+        storage = _storage(tmp_path)
+        units = _make_units(1)
+        cfg = _make_config(concurrency=1)
+
+        def _err_agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+            del prompt, escalation_level
+            return AgentRunResult(
+                output="401 auth error",
+                prediction="",
+                files_touched=[],
+                tokens=None,
+                error="401 auth error",
+            )
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit, repo_root
+            return _err_agent
+
+        def _vf(unit: SwarmUnit) -> Callable[..., VerifyOutcome]:
+            del unit
+            return _fake_verify(passes=True)  # would falsely pass pre-fix
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            cfg,
+            runner_factory=_af,
+            verify_factory=_vf,
+            executor=ThreadPoolExecutor(max_workers=1),
+            now=_FIXED_NOW,
+        )
+
+        assert result.units_done == 0
+        assert result.units_failed == 1
+        ur = result.unit_results[0]
+        assert ur.status == "failed"
+        assert ur.loop_result is not None
+        assert ur.loop_result.stop_reason == "agent-error"

@@ -470,8 +470,16 @@ def run_swarm(
             ):
                 _cost_cap_reached[0] = True
 
-        # Determine status.
-        status = "aborted" if result.stop_reason == "aborted" else "done"
+        # Determine status.  A unit is "done" ONLY when its loop actually
+        # converged (verified).  Any other terminal stop — agent-error,
+        # max-iterations, cost, circuit-breaker — is a "failed" unit, never a
+        # silent "done".  Abort stays distinct.
+        if result.stop_reason == "aborted":
+            status = "aborted"
+        elif result.converged:
+            status = "done"
+        else:
+            status = "failed"
 
         ur = SwarmUnitResult(
             unit_id=unit.id,
@@ -479,6 +487,7 @@ def run_swarm(
             loop_result=result,
             receipt_path=receipt_path,
             cost_usd=unit_cost,
+            error=(f"loop stopped: {result.stop_reason}" if status == "failed" else None),
         )
         _update_manifest(repo_root, swarm_id, ur, manifest_lock)
         return ur
