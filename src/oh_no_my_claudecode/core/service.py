@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.importers.base import ImportResult
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
+    from oh_no_my_claudecode.ledger.accounting import LedgerSummary
     from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
@@ -2331,6 +2332,41 @@ class OnmcService:
         receipts_dir = repo_root / ".agent-memory" / "receipts"
         report: _EvolutionReport = compile_evolution(receipts_dir)
         return repo_root, report
+
+    def ledger_summary(self, *, scope: str = "project") -> tuple[Path, LedgerSummary]:
+        """Compile an agent-work accounting summary from run receipts.
+
+        Reads ``RunReceipt`` JSON files written by ``onmc loop`` / ``onmc
+        swarm`` from ``.agent-memory/receipts/`` and aggregates cost, wall-time,
+        success-rate, and per-model / per-agent breakdowns.
+
+        Entirely offline — no LLM calls, no network access.  Honest: receipts
+        with no ``cost_usd`` are excluded from the cost total (never fabricated)
+        and surfaced via the summary's ``cost_unknown_count`` / ``note``.
+
+        Parameters
+        ----------
+        scope:
+            ``"today"`` filters to receipts dated today (UTC); any other value
+            ("project") includes all receipts.
+
+        Returns
+        -------
+        tuple[Path, LedgerSummary]
+            ``(repo_root, summary)``
+        """
+        from oh_no_my_claudecode.ledger.accounting import (
+            LedgerSummary as _LedgerSummary,
+        )
+        from oh_no_my_claudecode.ledger.accounting import (
+            load_receipts,
+            summarize_receipts,
+        )
+
+        repo_root = discover_repo_root(self.cwd)
+        receipts = load_receipts(repo_root, scope=scope)
+        summary: _LedgerSummary = summarize_receipts(receipts, scope=scope)
+        return repo_root, summary
 
     # ------------------------------------------------------------------
     # Trace Observatory

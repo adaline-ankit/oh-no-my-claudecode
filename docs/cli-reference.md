@@ -112,6 +112,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ conventions     Capture and inherit the repo's coding conventions            │
 │                 (.onmc/conventions.md).                                      │
 │ claim           Coordinate file/path leases for parallel agents.             │
+│ ledger          Agent-work accounting (cost / wall-time / success-rate /     │
+│                 ROI) over the run receipts that onmc loop and swarm write.   │
+│                 Honest: cost is n/a when a receipt did not report it — never │
+│                 fabricated.                                                  │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -3109,5 +3113,75 @@ Usage: onmc claim check [OPTIONS] PATHS...
 │ --owner        TEXT  Allow claims already held by this owner.                │
 │ --json               Emit machine-readable JSON to stdout.                   │
 │ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger`
+
+```text
+Usage: onmc ledger [OPTIONS] COMMAND [ARGS]...
+
+ Agent-work accounting (cost / wall-time / success-rate / ROI) over the run
+ receipts that onmc loop and swarm write. Honest: cost is n/a when a receipt
+ did not report it — never fabricated.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ today    Account today's agent work: cost, wall-time, success-rate,          │
+│          breakdowns.                                                         │
+│ project  Account all agent work in this project across every run receipt.    │
+│ roi      Show an honestly-labelled ROI *estimate* (est) over all receipts.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger today`
+
+```text
+Usage: onmc ledger today [OPTIONS]
+
+ Account today's agent work: cost, wall-time, success-rate, breakdowns.
+
+ Reads run receipts from ``.agent-memory/receipts/`` dated today (UTC).
+ Cost is shown as ``n/a`` when no receipt reported it — never fabricated.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger project`
+
+```text
+Usage: onmc ledger project [OPTIONS]
+
+ Account all agent work in this project across every run receipt.
+
+ Aggregates cost, wall-time, success-rate, and per-model / per-agent
+ breakdowns from every ``run-*.json`` receipt.  Honest about missing cost
+ data via the summary note.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger roi`
+
+```text
+Usage: onmc ledger roi [OPTIONS]
+
+ Show an honestly-labelled ROI *estimate* (est) over all receipts.
+
+ Compares real agent wall-clock time against a transparent assumption of
+ human minutes per run.  The result is explicitly marked ``est`` and carries
+ its assumption — it is an estimate, not a measurement.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
