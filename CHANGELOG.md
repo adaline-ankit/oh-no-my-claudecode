@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.55.0] — 2026-06-24
+
+### Added
+
+- **Command auto-discovery registry** — the keystone for collision-free parallel feature development. New features self-register their CLI via `src/oh_no_my_claudecode/<feat>/commands.py` exposing `register(app)`; `command_registry.register_feature_commands(app)` discovers and wires them automatically. A feature now touches **zero shared hub files** (cli.py / core/service.py / rendering/console.py / generate-cli-reference.py), so parallel agents can each own a feature and open conflict-free PRs. Purely additive — the existing ~70 registrations are untouched. CONTRIBUTING.md documents the convention.
+
 ## [0.54.0] — 2026-06-24
 
 ### Added
