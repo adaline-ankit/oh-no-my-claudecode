@@ -86,6 +86,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_user_memory_list,
     render_user_memory_removed,
     render_user_profile,
+    render_verify_report,
     render_why_report,
 )
 from oh_no_my_claudecode.setup import run_setup_wizard
@@ -2519,6 +2520,64 @@ def preflight_command(
         sys.stdout.write(json.dumps(payload, indent=2) + "\n")
     else:
         render_preflight_report(report)
+
+    if not report.ok:
+        raise typer.Exit(code=1)
+
+
+@app.command("verify-diff")
+def verify_diff_command(
+    base: Annotated[
+        str,
+        typer.Option("--base", help="Git ref to diff against (default: main)."),
+    ] = "main",
+    expect_symbol: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--expect-symbol",
+            help="Symbol that must appear in added lines.  Repeatable.",
+        ),
+    ] = None,
+    expect_file: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--expect-file",
+            help="Repo-relative path that must receive added lines.  Repeatable.",
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the full VerifyReport as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Adversarially verify the working diff against a base ref.
+
+    Passes ONLY when the change is real (non-empty), introduces every expected
+    symbol/file, and is lawful (no banned or secret patterns in added lines).
+    Designed to close the empty-diff false-converge: a passing test suite over
+    an unchanged tree must NOT count as success.
+
+    Exit codes:
+
+    - 0 — every check passed
+    - 1 — one or more checks failed
+    """
+    report = _service().verify_diff(
+        base=base,
+        expect_symbols=tuple(expect_symbol or ()),
+        expect_files=tuple(expect_file or ()),
+    )
+
+    if as_json:
+        import dataclasses
+
+        payload = {
+            "ok": report.ok,
+            "findings": [dataclasses.asdict(f) for f in report.findings],
+        }
+        sys.stdout.write(json.dumps(payload, indent=2, default=str) + "\n")
+    else:
+        render_verify_report(report)
 
     if not report.ok:
         raise typer.Exit(code=1)

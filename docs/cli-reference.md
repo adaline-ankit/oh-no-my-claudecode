@@ -69,6 +69,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 scored report.                                               │
 │ preflight       Run the exact CI quality gate locally, in the same order CI  │
 │                 runs it.                                                     │
+│ verify-diff     Adversarially verify the working diff against a base ref.    │
 │ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
 │ bench           Measure whether onmc memory actually reduces wasted work.    │
 │ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
@@ -783,6 +784,35 @@ Usage: onmc preflight [OPTIONS]
 │                     order.                                                   │
 │ --json              Emit the PreflightReport as JSON to stdout.              │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc verify-diff`
+
+```text
+Usage: onmc verify-diff [OPTIONS]
+
+ Adversarially verify the working diff against a base ref.
+
+ Passes ONLY when the change is real (non-empty), introduces every expected
+ symbol/file, and is lawful (no banned or secret patterns in added lines).
+ Designed to close the empty-diff false-converge: a passing test suite over
+ an unchanged tree must NOT count as success.
+
+ Exit codes:
+
+ - 0 — every check passed
+ - 1 — one or more checks failed
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --base                 TEXT  Git ref to diff against (default: main).        │
+│                              [default: main]                                 │
+│ --expect-symbol        TEXT  Symbol that must appear in added lines.         │
+│                              Repeatable.                                     │
+│ --expect-file          TEXT  Repo-relative path that must receive added      │
+│                              lines.  Repeatable.                             │
+│ --json                       Emit the full VerifyReport as JSON to stdout.   │
+│ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
