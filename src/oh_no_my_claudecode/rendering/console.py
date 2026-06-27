@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.trace.models import TraceReport
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
 
 from oh_no_my_claudecode.ask.compiler import AskResult
 from oh_no_my_claudecode.blame.compiler import BlameResult
@@ -2360,6 +2361,39 @@ def render_audit_report(report: AuditReport) -> None:
             finding.title,
             shorten(finding.fix, max_length=120),
         )
+    console.print(table)
+
+
+def render_verify_report(report: VerifyReport) -> None:
+    """Render an ``onmc verify-diff`` adversarial gate result.
+
+    Shows a pass/fail banner followed by a per-check table.  The banner makes
+    the empty-diff false-converge impossible to miss.
+    """
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
+
+    if not isinstance(report, VerifyReport):  # pragma: no cover
+        return
+
+    status = "[green]PASS[/green]" if report.ok else "[bold red]FAIL[/bold red]"
+    passed = sum(1 for f in report.findings if f.ok)
+    total = len(report.findings)
+    border = "green" if report.ok else "red"
+    console.print(
+        Panel(
+            f"  Result: {status}   ({passed}/{total} checks passed)",
+            title="[bold]onmc verify-diff — Adversarial Diff Gate[/bold]",
+            border_style=border,
+        )
+    )
+
+    table = Table(show_lines=False, expand=True)
+    table.add_column("Check", width=20, no_wrap=True)
+    table.add_column("Status", width=8, no_wrap=True)
+    table.add_column("Detail", min_width=40, no_wrap=False)
+    for finding in report.findings:
+        mark = "[green]ok[/green]" if finding.ok else "[bold red]FAIL[/bold red]"
+        table.add_row(f"[dim]{finding.rule}[/dim]", mark, finding.detail)
     console.print(table)
 
 

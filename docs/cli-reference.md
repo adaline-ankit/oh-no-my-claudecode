@@ -67,6 +67,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 and integrations.                                            │
 │ audit           Scan agent configuration for security risks and emit a       │
 │                 scored report.                                               │
+│ verify-diff     Adversarially verify the working diff against a base ref.    │
 │ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
 │ bench           Measure whether onmc memory actually reduces wasted work.    │
 │ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
@@ -418,8 +419,8 @@ Usage: onmc recall [OPTIONS] [QUERY]
    cat error.log | onmc recall
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [query]      TEXT  Error text or stacktrace to search for. Omit to read    │
-│                      from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).   │
+│   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
+│                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
@@ -597,9 +598,9 @@ Usage: onmc pull [OPTIONS] [SOURCE]
  config.yaml.  One failing source never aborts the rest.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [source]      TEXT  Local path to another repo (or its .agent-memory/      │
-│                       dir), or a remote git URL (https://, git@, ssh://).    │
-│                       Omit when using --all.                                 │
+│   source      [SOURCE]  Local path to another repo (or its .agent-memory/    │
+│                         dir), or a remote git URL (https://, git@, ssh://).  │
+│                         Omit when using --all.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all                  Pull from every source listed in federation.sources   │
@@ -738,7 +739,7 @@ Usage: onmc audit [OPTIONS] [PATH]
  a stricter one.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Repo root to scan.  Defaults to the current directory.   │
+│   path      [PATH]  Repo root to scan.  Defaults to the current directory.   │
 │                     The directory does not need to be an initialised ONMC    │
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -749,6 +750,35 @@ Usage: onmc audit [OPTIONS] [PATH]
 │                        medium, low, info.  Default: high.                    │
 │                        [default: high]                                       │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc verify-diff`
+
+```text
+Usage: onmc verify-diff [OPTIONS]
+
+ Adversarially verify the working diff against a base ref.
+
+ Passes ONLY when the change is real (non-empty), introduces every expected
+ symbol/file, and is lawful (no banned or secret patterns in added lines).
+ Designed to close the empty-diff false-converge: a passing test suite over
+ an unchanged tree must NOT count as success.
+
+ Exit codes:
+
+ - 0 — every check passed
+ - 1 — one or more checks failed
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --base                 TEXT  Git ref to diff against (default: main).        │
+│                              [default: main]                                 │
+│ --expect-symbol        TEXT  Symbol that must appear in added lines.         │
+│                              Repeatable.                                     │
+│ --expect-file          TEXT  Repo-relative path that must receive added      │
+│                              lines.  Repeatable.                             │
+│ --json                       Emit the full VerifyReport as JSON to stdout.   │
+│ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1478,7 +1508,8 @@ Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
  onmc skill promote --auto --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [playbook_id]      TEXT  Playbook ID (or prefix) to promote to a skill.    │
+│   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
+│                                   skill.                                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --auto              Auto-detect recurring patterns and promote all.          │
@@ -2315,7 +2346,7 @@ Usage: onmc gh-aw init [OPTIONS] [PATH]
  --force is passed.  Use --dry-run to preview without writing anything.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Target repo root. Defaults to the current directory (or  │
+│   path      [PATH]  Target repo root. Defaults to the current directory (or  │
 │                     nearest git root). The four workflows are written to     │
 │                     PATH/.github/workflows/onmc-*.yml.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -2373,7 +2404,7 @@ Usage: onmc mcp policy init [OPTIONS] [PATH]
  Re-running is safe — the file is not overwritten unless --force is passed.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [path]      PATH  Repo root.  Defaults to current directory.               │
+│   path      [PATH]  Repo root.  Defaults to current directory.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
@@ -2404,9 +2435,10 @@ Usage: onmc mcp check [OPTIONS] [CALLS_FILE]
      cat calls.jsonl | onmc mcp check - --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [calls_file]      PATH  Path to a JSONL file of recorded tool calls.  Each │
-│                           line: {"server": "...", "tool": "...", "args":     │
-│                           {...}}.  Omit or pass '-' to read from stdin.      │
+│   calls_file      [CALLS_FILE]  Path to a JSONL file of recorded tool calls. │
+│                                 Each line: {"server": "...", "tool": "...",  │
+│                                 "args": {...}}.  Omit or pass '-' to read    │
+│                                 from stdin.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                      Emit classifications as JSON to stdout.          │
@@ -2462,14 +2494,16 @@ Usage: onmc import [OPTIONS] SOURCE [PATH]
  onmc import hermes --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      TEXT  Source to import from. Use 'omc' for oh-my-claudecode │
-│                        skills, 'hermes' for Nous hermes-agent context files, │
-│                        or a path to a .md file / directory.                  │
-│                        [required]                                            │
-│      [path]      PATH  Optional path override. For 'omc': path to            │
-│                        .omc/skills dir. For 'hermes': path to MEMORY.md /    │
-│                        USER.md / containing directory. For generic markdown: │
-│                        the .md file or directory (use as 'source' instead).  │
+│ *    source      TEXT    Source to import from. Use 'omc' for                │
+│                          oh-my-claudecode skills, 'hermes' for Nous          │
+│                          hermes-agent context files, or a path to a .md file │
+│                          / directory.                                        │
+│                          [required]                                          │
+│      path        [PATH]  Optional path override. For 'omc': path to          │
+│                          .omc/skills dir. For 'hermes': path to MEMORY.md /  │
+│                          USER.md / containing directory. For generic         │
+│                          markdown: the .md file or directory (use as         │
+│                          'source' instead).                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --dry-run              Parse and report without writing anything.            │
@@ -2575,8 +2609,8 @@ Usage: onmc trace report [OPTIONS] [SESSION_ID]
  Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [session_id]      TEXT  Session ID to report on.  Defaults to the current  │
-│                           active session.                                    │
+│   session_id      [SESSION_ID]  Session ID to report on.  Defaults to the    │
+│                                 current active session.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json              Print machine-readable JSON to stdout.                   │
@@ -2861,7 +2895,7 @@ Usage: onmc swarm status [OPTIONS] [SWARM_ID]
  Show status of a swarm or all swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [swarm_id]      TEXT  Swarm ID to inspect.  Omit to list all swarms.       │
+│   swarm_id      [SWARM_ID]  Swarm ID to inspect.  Omit to list all swarms.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit status as JSON.                                         │
@@ -2900,7 +2934,7 @@ Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
  onmc swarm abort --all
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [swarm_id]      TEXT  Swarm ID to abort.  Omit when using --all.           │
+│   swarm_id      [SWARM_ID]  Swarm ID to abort.  Omit when using --all.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
@@ -2985,8 +3019,8 @@ Usage: onmc claim acquire [OPTIONS] OWNER PATHS...
  Acquire file/path leases for an owner.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    owner         TEXT  Agent or process claiming the paths. [required]     │
-│ *    paths...      TEXT  One or more file paths to claim. [required]         │
+│ *    owner      TEXT      Agent or process claiming the paths. [required]    │
+│ *    paths      PATHS...  One or more file paths to claim. [required]        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --ttl-seconds        INTEGER RANGE [x>=1]  Lease duration in seconds.        │
@@ -3035,7 +3069,7 @@ Usage: onmc claim check [OPTIONS] PATHS...
  Check whether paths are free to claim.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths...      TEXT  One or more file paths to check. [required]         │
+│ *    paths      PATHS...  One or more file paths to check. [required]        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --owner        TEXT  Allow claims already held by this owner.                │

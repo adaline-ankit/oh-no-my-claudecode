@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
     from oh_no_my_claudecode.stats.health import MemoryHealth
     from oh_no_my_claudecode.trace.models import TraceReport
+    from oh_no_my_claudecode.verifydiff.checker import VerifyReport
 
 from oh_no_my_claudecode.blame.compiler import BlameResult, blame_result_to_markdown, compile_blame
 from oh_no_my_claudecode.brief.compiler import compile_brief, score_memories
@@ -3314,6 +3315,52 @@ class OnmcService:
                 repo_root = self.cwd
         result: _AuditReport = run_audit(repo_root)
         return result
+
+    def verify_diff(
+        self,
+        *,
+        base: str = "main",
+        expect_symbols: tuple[str, ...] = (),
+        expect_files: tuple[str, ...] = (),
+        repo_root: Path | None = None,
+    ) -> VerifyReport:
+        """Adversarially verify the working diff against *base*.
+
+        Shells ``git diff <base>...HEAD`` for the repo and runs the pure,
+        deterministic :func:`~oh_no_my_claudecode.verifydiff.checker.verify_diff`
+        over the result.  No LLM calls.  Passes only when the change is real
+        (non-empty), introduces every expected symbol/file, and is lawful (no
+        banned/secret patterns in added lines).
+
+        Parameters
+        ----------
+        base:
+            Git ref to diff against (default ``main``).
+        expect_symbols:
+            Symbols that must each appear in at least one added line.
+        expect_files:
+            Repo-relative paths that must each receive added lines.
+        repo_root:
+            Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+
+        Returns
+        -------
+        VerifyReport
+            ``ok`` is ``True`` only when every check passed.
+        """
+        from oh_no_my_claudecode.verifydiff.checker import collect_diff, verify_diff
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except FileNotFoundError:
+                repo_root = self.cwd
+        diff_text = collect_diff(repo_root, base)
+        return verify_diff(
+            diff_text=diff_text,
+            expect_symbols=expect_symbols,
+            expect_files=expect_files,
+        )
 
     # ------------------------------------------------------------------
     # MCP Trust Gateway
