@@ -247,6 +247,7 @@ def run_loop(
     isolation_provider: IsolationProvider | None = None,
     checkpoint_store: CheckpointStore | None = None,
     resume: bool = False,
+    should_continue: Callable[[], bool] | None = None,
 ) -> LoopResult:
     """Run a memory-grounded loop until convergence, budget, or max iterations.
 
@@ -296,13 +297,19 @@ def run_loop(
         restore prior state (iterations, counters, recorded memory ids) and
         continue from where the previous run left off.  When ``False`` (default),
         any existing checkpoint is ignored and the loop starts fresh.
+    should_continue:
+        Optional callable that returns ``False`` to request a graceful abort.
+        Checked at the top of every iteration.  When it returns ``False``, the
+        loop stops immediately with ``stop_reason="aborted"`` without running
+        the agent or verify for that iteration.  ``None`` (default) means no
+        external abort signal — existing behaviour is unchanged.
 
     Returns
     -------
     LoopResult
         stop_reason is one of:
         'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
-        'wall-time' | 'duplicate-action' | 'repeated-error'.
+        'wall-time' | 'duplicate-action' | 'repeated-error' | 'aborted'.
     """
     import logging as _logging
 
@@ -455,6 +462,10 @@ def run_loop(
             if elapsed >= config.max_wall_seconds:
                 return _make_result(False, "wall-time")
 
+        # External abort signal check — checked before spending any tokens.
+        if should_continue is not None and not should_continue():
+            return _make_result(False, "aborted")
+
         # Build the memory-grounded prompt.
         brief = _build_brief(storage, spec.goal, last_loss, escalation_level)
         prompt = (
@@ -564,5 +575,7 @@ __all__ = [
     "_verify_output_head",
     "run_loop",
 ]
+# 'should_continue' is a new keyword-only parameter added to run_loop (default None).
+# Existing callers are unaffected — passing None is identical to omitting it.
 
 _ = utc_now  # referenced above; suppress unused-import

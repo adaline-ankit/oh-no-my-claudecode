@@ -132,6 +132,14 @@ mcp_app = typer.Typer(
     help="MCP Trust Gateway — classify tool calls against a policy.",
     no_args_is_help=True,
 )
+swarm_app = typer.Typer(
+    help=(
+        "Parallel accountable agent loops — a bounded pool of run_loop workers. "
+        "Honest: 'many tasks' = a queue drained by min(cpu-1, 8) workers, not "
+        "unlimited simultaneous agents."
+    ),
+    no_args_is_help=True,
+)
 app.add_typer(memory_app, name="memory")
 app.add_typer(spec_app, name="spec")
 app.add_typer(task_app, name="task")
@@ -146,6 +154,7 @@ app.add_typer(profile_app, name="profile")
 app.add_typer(notify_app, name="notify")
 app.add_typer(gh_aw_app, name="gh-aw")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(swarm_app, name="swarm")
 
 
 @app.command("tui")
@@ -4963,3 +4972,374 @@ def replay_run_command(
         render_replay_report(None, comparison=result)
     else:
         render_replay_report(result)
+
+
+# ---------------------------------------------------------------------------
+# onmc swarm — parallel accountable agent loops
+# ---------------------------------------------------------------------------
+
+
+@swarm_app.command("run")
+def swarm_run_command(
+    task: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--task",
+            help=(
+                "Goal text for one swarm unit.  Repeat for multiple tasks.  "
+                "Mutually exclusive with --file."
+            ),
+        ),
+    ] = None,
+    file: Annotated[
+        Path | None,
+        typer.Option(
+            "--file",
+            help=(
+                "Path to a text file where each non-empty line is one task goal.  "
+                "Mutually exclusive with --task."
+            ),
+        ),
+    ] = None,
+    agent: Annotated[
+        str,
+        typer.Option("--agent", help="Agent CLI: claude (default), codex, or opencode."),
+    ] = "claude",
+    concurrency: Annotated[
+        int | None,
+        typer.Option(
+            "--concurrency",
+            min=1,
+            help=(
+                "Max parallel workers.  Default min(cpu_count-1, 8).  "
+                "HONEST: this is a bounded pool — not unlimited simultaneous agents."
+            ),
+        ),
+    ] = None,
+    max_cost_usd: Annotated[
+        float | None,
+        typer.Option("--max-cost-usd", min=0.0, help="Swarm-level total cost ceiling in USD."),
+    ] = None,
+    per_unit_max_iterations: Annotated[
+        int | None,
+        typer.Option("--per-unit-max-iterations", min=1, help="Per-unit max loop iterations."),
+    ] = None,
+    verify: Annotated[
+        str | None,
+        typer.Option("--verify", help="Verify command applied to all units (default: pytest)."),
+    ] = None,
+    isolate: Annotated[
+        bool,
+        typer.Option(
+            "--isolate/--no-isolate",
+            help="Run each unit in an isolated git worktree (default: True).",
+        ),
+    ] = True,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit full SwarmResult as JSON to stdout."),
+    ] = False,
+) -> None:
+    """Run a parallel swarm of accountable agent loops.
+
+    Each task is one run_loop unit with its own receipt.  Tasks are queued and
+    drained by a bounded worker pool (default: min(cpu_count-1, 8) workers).
+
+    HONEST CONCURRENCY: --concurrency N means at most N loops run at the same
+    time, NOT N simultaneous agent processes per loop iteration.  API rate
+    limits and RAM are the real bottleneck for large N.
+
+    \b
+    Examples
+    --------
+    onmc swarm run --task "fix import A" --task "fix import B" --agent claude
+    onmc swarm run --file tasks.txt --concurrency 4 --max-cost-usd 5.00
+    onmc swarm run --task "lint check" --agent codex --no-isolate --json
+    """
+    from oh_no_my_claudecode.swarm.models import SwarmConfig, SwarmUnit
+    from oh_no_my_claudecode.swarm.orchestrator import run_swarm
+
+    # Resolve task list.
+    tasks: list[str] = []
+    if task is not None and file is not None:
+        raise typer.Exit(code=_fatal("Provide either --task or --file, not both."))
+    if file is not None:
+        if not file.exists():
+            raise typer.Exit(code=_fatal(f"File not found: {file}"))
+        tasks = [ln.strip() for ln in file.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    elif task is not None:
+        tasks = list(task)
+    else:
+        raise typer.Exit(code=_fatal("Provide at least one --task or a --file."))
+
+    if not tasks:
+        raise typer.Exit(code=_fatal("Task list is empty."))
+
+    if agent not in {"claude", "codex", "opencode"}:
+        raise typer.Exit(
+            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
+        )
+
+    from oh_no_my_claudecode.swarm.models import _default_concurrency
+
+    cfg = SwarmConfig(
+        concurrency=concurrency if concurrency is not None else _default_concurrency(),
+        agent=agent,
+        max_iterations=per_unit_max_iterations or 10,
+        max_cost_usd=None,  # per-unit cost cap (not set via CLI here)
+        swarm_max_cost_usd=max_cost_usd,
+        isolate=isolate,
+    )
+
+    units = [
+        SwarmUnit(
+            id=f"unit-{i:04d}",
+            goal=g,
+            verify_command=verify,
+        )
+        for i, g in enumerate(tasks)
+    ]
+
+    try:
+        repo_root, _, storage = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    console.print(
+        f"[bold]onmc swarm run[/bold] — {len(units)} task(s), "
+        f"concurrency={cfg.concurrency}, agent={cfg.agent}"
+    )
+    console.print(
+        "[dim]Honest: tasks are queued; at most "
+        f"{cfg.concurrency} run simultaneously.[/dim]"
+    )
+
+    result = run_swarm(storage, repo_root, units, cfg)
+
+    if json_output:
+        # Serialize SwarmResult to JSON (manually, since LoopResult isn't
+        # dataclass-serializable cleanly).
+        import sys as _sys
+
+        from oh_no_my_claudecode.swarm.models import SwarmUnitResult
+
+        def _unit_to_dict(ur: SwarmUnitResult) -> dict[str, object]:
+            return {
+                "unit_id": ur.unit_id,
+                "status": ur.status,
+                "cost_usd": ur.cost_usd,
+                "receipt_path": str(ur.receipt_path) if ur.receipt_path else None,
+                "error": ur.error,
+                "loop_result": (
+                    {
+                        "converged": ur.loop_result.converged,
+                        "stop_reason": ur.loop_result.stop_reason,
+                        "total_tokens": ur.loop_result.total_tokens,
+                        "iterations": len(ur.loop_result.iterations),
+                    }
+                    if ur.loop_result
+                    else None
+                ),
+            }
+
+        payload = {
+            "swarm_id": result.swarm_id,
+            "stop_reason": result.stop_reason,
+            "total_cost_usd": result.total_cost_usd,
+            "total_tokens": result.total_tokens,
+            "units_done": result.units_done,
+            "units_failed": result.units_failed,
+            "units_aborted": result.units_aborted,
+            "unit_results": [_unit_to_dict(ur) for ur in result.unit_results],
+        }
+        _sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        raise typer.Exit(code=0 if result.units_failed == 0 else 1)
+
+    # Render summary table.
+    from rich.table import Table
+
+    table = Table(title=f"Swarm {result.swarm_id[:8]} — {result.stop_reason}")
+    table.add_column("Unit", style="dim")
+    table.add_column("Status")
+    table.add_column("Cost USD")
+    table.add_column("Receipt")
+
+    for ur in result.unit_results:
+        status_style = {
+            "done": "[green]done[/green]",
+            "failed": "[red]failed[/red]",
+            "aborted": "[yellow]aborted[/yellow]",
+        }.get(ur.status, ur.status)
+        receipt_short = (
+            ur.receipt_path.name[:24] if ur.receipt_path else "[dim]—[/dim]"
+        )
+        table.add_row(
+            ur.unit_id,
+            status_style,
+            f"${ur.cost_usd:.4f}",
+            receipt_short,
+        )
+    console.print(table)
+    console.print(
+        f"[bold]Totals:[/bold] done={result.units_done}  "
+        f"failed={result.units_failed}  aborted={result.units_aborted}  "
+        f"cost=${result.total_cost_usd:.4f}"
+    )
+
+    raise typer.Exit(code=0 if result.units_failed == 0 else 1)
+
+
+@swarm_app.command("status")
+def swarm_status_command(
+    swarm_id: Annotated[
+        str | None,
+        typer.Argument(help="Swarm ID to inspect.  Omit to list all swarms."),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit status as JSON."),
+    ] = False,
+) -> None:
+    """Show status of a swarm or all swarms."""
+    import sys as _sys
+
+    from oh_no_my_claudecode.swarm.orchestrator import swarm_state
+
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    state = swarm_state(repo_root, swarm_id)
+
+    if json_output:
+        _sys.stdout.write(json.dumps(state, indent=2) + "\n")
+        return
+
+    if not state:
+        console.print("[dim]No swarm state found.[/dim]")
+        return
+
+    if swarm_id is not None:
+        # Single swarm.
+        console.print(f"[bold]Swarm:[/bold] {swarm_id}")
+        console.print(f"  agent: {state.get('agent', '?')}")
+        console.print(f"  stop_reason: {state.get('stop_reason', 'running')}")
+        units = state.get("units", {})
+        for uid, udata in units.items():
+            console.print(f"  {uid}: {udata.get('status', '?')}")
+    else:
+        # All swarms.
+        for sid, sdata in state.items():
+            units = sdata.get("units", {})
+            done = sum(1 for u in units.values() if u.get("status") == "done")
+            console.print(
+                f"[bold]{sid[:12]}[/bold]  agent={sdata.get('agent', '?')}  "
+                f"done={done}/{len(units)}  "
+                f"stop={sdata.get('stop_reason', 'running')}"
+            )
+
+
+@swarm_app.command("list")
+def swarm_list_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Emit list as JSON."),
+    ] = False,
+) -> None:
+    """List all known swarm runs."""
+    import sys as _sys
+
+    from oh_no_my_claudecode.swarm.orchestrator import swarm_state
+
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    state = swarm_state(repo_root, None)
+
+    if json_output:
+        summary = {
+            sid: {
+                "agent": sdata.get("agent"),
+                "started_at": sdata.get("started_at"),
+                "stop_reason": sdata.get("stop_reason"),
+                "units": len(sdata.get("units", {})),
+            }
+            for sid, sdata in state.items()
+        }
+        _sys.stdout.write(json.dumps(summary, indent=2) + "\n")
+        return
+
+    if not state:
+        console.print("[dim]No swarm runs found in .onmc/swarm/[/dim]")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="onmc swarm runs")
+    table.add_column("ID (truncated)")
+    table.add_column("Agent")
+    table.add_column("Units")
+    table.add_column("Stop reason")
+    table.add_column("Started at")
+
+    for sid, sdata in state.items():
+        table.add_row(
+            sid[:12],
+            sdata.get("agent", "?"),
+            str(len(sdata.get("units", {}))),
+            sdata.get("stop_reason", "running"),
+            (sdata.get("started_at") or "")[:19],
+        )
+    console.print(table)
+
+
+@swarm_app.command("abort")
+def swarm_abort_command(
+    swarm_id: Annotated[
+        str | None,
+        typer.Argument(
+            help="Swarm ID to abort.  Omit when using --all."
+        ),
+    ] = None,
+    all_swarms: Annotated[
+        bool,
+        typer.Option("--all", help="Abort ALL running swarms by writing a global ABORT file."),
+    ] = False,
+) -> None:
+    """Request graceful abort of a swarm or all swarms.
+
+    Writes an ABORT sentinel file.  Running units finish their current
+    iteration then stop; queued units never start.  This is graceful —
+    in-progress agent subprocesses are not forcibly killed.
+
+    \b
+    Examples
+    --------
+    onmc swarm abort abc123ef
+    onmc swarm abort --all
+    """
+    from oh_no_my_claudecode.swarm.orchestrator import request_abort
+
+    try:
+        repo_root, _, _ = _service()._load_context()  # noqa: SLF001
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if all_swarms and swarm_id is not None:
+        raise typer.Exit(code=_fatal("Provide a SWARM_ID or --all, not both."))
+
+    if not all_swarms and swarm_id is None:
+        raise typer.Exit(code=_fatal("Provide a SWARM_ID or use --all."))
+
+    if all_swarms:
+        request_abort(repo_root, swarm_id=None)
+        console.print("[yellow]Global ABORT written — all running swarms will stop.[/yellow]")
+    else:
+        request_abort(repo_root, swarm_id=swarm_id)
+        console.print(f"[yellow]ABORT written for swarm {swarm_id}.[/yellow]")
+    console.print(
+        "[dim]Running units finish their current iteration then stop gracefully.[/dim]"
+    )

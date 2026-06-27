@@ -103,6 +103,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ notify          Inspect and test the context firewall notification sink.     │
 │ gh-aw           Scaffold memory-aware GitHub Actions agentic workflows.      │
 │ mcp             MCP Trust Gateway — classify tool calls against a policy.    │
+│ swarm           Parallel accountable agent loops — a bounded pool of         │
+│                 run_loop workers. Honest: 'many tasks' = a queue drained by  │
+│                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
 │                 token-ROI report.                                            │
 │ eval            Measure and gate memory recall quality (offline,             │
@@ -2652,5 +2655,148 @@ Usage: onmc replay run [OPTIONS] SESSION_ID_OR_PATH
 │                           when --compare is used.                            │
 │ --json                    Emit machine-readable JSON to stdout.              │
 │ --help                    Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarm`
+
+```text
+Usage: onmc swarm [OPTIONS] COMMAND [ARGS]...
+
+ Parallel accountable agent loops — a bounded pool of run_loop workers. Honest:
+ 'many tasks' = a queue drained by min(cpu-1, 8) workers, not unlimited
+ simultaneous agents.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ run     Run a parallel swarm of accountable agent loops.                     │
+│ status  Show status of a swarm or all swarms.                                │
+│ list    List all known swarm runs.                                           │
+│ abort   Request graceful abort of a swarm or all swarms.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarm run`
+
+```text
+Usage: onmc swarm run [OPTIONS]
+
+ Run a parallel swarm of accountable agent loops.
+
+ Each task is one run_loop unit with its own receipt.  Tasks are queued and
+ drained by a bounded worker pool (default: min(cpu_count-1, 8) workers).
+
+ HONEST CONCURRENCY: --concurrency N means at most N loops run at the same
+ time, NOT N simultaneous agent processes per loop iteration.  API rate
+ limits and RAM are the real bottleneck for large N.
+
+
+ Examples
+ --------
+ onmc swarm run --task "fix import A" --task "fix import B" --agent claude
+ onmc swarm run --file tasks.txt --concurrency 4 --max-cost-usd 5.00
+ onmc swarm run --task "lint check" --agent codex --no-isolate --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --task                                TEXT                Goal text for one  │
+│                                                           swarm unit.        │
+│                                                           Repeat for         │
+│                                                           multiple tasks.    │
+│                                                           Mutually exclusive │
+│                                                           with --file.       │
+│ --file                                PATH                Path to a text     │
+│                                                           file where each    │
+│                                                           non-empty line is  │
+│                                                           one task goal.     │
+│                                                           Mutually exclusive │
+│                                                           with --task.       │
+│ --agent                               TEXT                Agent CLI: claude  │
+│                                                           (default), codex,  │
+│                                                           or opencode.       │
+│                                                           [default: claude]  │
+│ --concurrency                         INTEGER RANGE       Max parallel       │
+│                                       [x>=1]              workers.  Default  │
+│                                                           min(cpu_count-1,   │
+│                                                           8).  HONEST: this  │
+│                                                           is a bounded pool  │
+│                                                           — not unlimited    │
+│                                                           simultaneous       │
+│                                                           agents.            │
+│ --max-cost-usd                        FLOAT RANGE         Swarm-level total  │
+│                                       [x>=0.0]            cost ceiling in    │
+│                                                           USD.               │
+│ --per-unit-max-it…                    INTEGER RANGE       Per-unit max loop  │
+│                                       [x>=1]              iterations.        │
+│ --verify                              TEXT                Verify command     │
+│                                                           applied to all     │
+│                                                           units (default:    │
+│                                                           pytest).           │
+│ --isolate             --no-isolate                        Run each unit in   │
+│                                                           an isolated git    │
+│                                                           worktree (default: │
+│                                                           True).             │
+│                                                           [default: isolate] │
+│ --json                                                    Emit full          │
+│                                                           SwarmResult as     │
+│                                                           JSON to stdout.    │
+│ --help                                                    Show this message  │
+│                                                           and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarm status`
+
+```text
+Usage: onmc swarm status [OPTIONS] [SWARM_ID]
+
+ Show status of a swarm or all swarms.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   swarm_id      [SWARM_ID]  Swarm ID to inspect.  Omit to list all swarms.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit status as JSON.                                         │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarm list`
+
+```text
+Usage: onmc swarm list [OPTIONS]
+
+ List all known swarm runs.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit list as JSON.                                           │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarm abort`
+
+```text
+Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
+
+ Request graceful abort of a swarm or all swarms.
+
+ Writes an ABORT sentinel file.  Running units finish their current
+ iteration then stop; queued units never start.  This is graceful —
+ in-progress agent subprocesses are not forcibly killed.
+
+
+ Examples
+ --------
+ onmc swarm abort abc123ef
+ onmc swarm abort --all
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   swarm_id      [SWARM_ID]  Swarm ID to abort.  Omit when using --all.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --all           Abort ALL running swarms by writing a global ABORT file.     │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

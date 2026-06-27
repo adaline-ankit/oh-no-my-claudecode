@@ -129,6 +129,11 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc eval compare", ["eval", "compare"]),
     ("onmc replay", ["replay"]),
     ("onmc replay run", ["replay", "run"]),
+    ("onmc swarm", ["swarm"]),
+    ("onmc swarm run", ["swarm", "run"]),
+    ("onmc swarm status", ["swarm", "status"]),
+    ("onmc swarm list", ["swarm", "list"]),
+    ("onmc swarm abort", ["swarm", "abort"]),
 ]
 
 
