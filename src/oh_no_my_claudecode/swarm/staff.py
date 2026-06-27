@@ -72,6 +72,7 @@ def verify_unit(
     unit_id: str = "",
     preflight_executor: Executor | None = None,
     diff_text: str | None = None,
+    provision: bool = True,
 ) -> UnitVerification:
     """Run the honest quality gate for one swarm unit in its OWN worktree.
 
@@ -104,6 +105,12 @@ def verify_unit(
         Injectable unified diff.  When ``None`` the diff is collected live via
         :func:`collect_diff(worktree, base)`.  Tests inject the text directly so
         no git is touched.
+    provision:
+        Default ``True``: the preflight gate runs each tool via
+        ``uv run --with <tool>`` so a FRESH worktree (no dev deps installed)
+        resolves ruff/mypy/pytest on demand and pins ``typer<1.0`` for the
+        cli-reference step — without this the gate FALSE-FAILS in clean
+        worktrees.  Pass ``False`` for an already-provisioned env.
 
     Returns
     -------
@@ -112,7 +119,9 @@ def verify_unit(
         empty diff (a unit that did not really build anything) makes ``diff_ok``
         — and therefore ``ok`` — ``False``, regardless of preflight.
     """
-    preflight = run_preflight(worktree, executor=preflight_executor)
+    preflight = run_preflight(
+        worktree, executor=preflight_executor, provision=provision
+    )
     preflight_ok = preflight.ok
 
     diff = diff_text if diff_text is not None else collect_diff(worktree, base)
