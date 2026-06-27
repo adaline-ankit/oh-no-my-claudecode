@@ -147,6 +147,10 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc claim release", ["claim", "release"]),
     ("onmc claim status", ["claim", "status"]),
     ("onmc claim check", ["claim", "check"]),
+    ("onmc ledger", ["ledger"]),
+    ("onmc ledger today", ["ledger", "today"]),
+    ("onmc ledger project", ["ledger", "project"]),
+    ("onmc ledger roi", ["ledger", "roi"]),
 ]
 
 

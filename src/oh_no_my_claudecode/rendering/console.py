@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -2884,6 +2884,103 @@ def render_evolution_card(report: object) -> None:
     console.print()
     for line in footer_parts:
         console.print(line)
+
+
+def render_ledger_summary(summary: object) -> None:
+    """Render the agent-work ledger card (cost / wall-time / success-rate).
+
+    Shows a Rich Panel headline (runs, cost, success rate, wall-time) plus a
+    per-model and per-agent breakdown table.  Cost is rendered as ``n/a`` when
+    no receipt reported a cost — it is never fabricated.  ``--json`` is handled
+    by the caller.
+    """
+    from oh_no_my_claudecode.ledger.accounting import LedgerSummary
+
+    if not isinstance(summary, LedgerSummary):
+        console.print("[yellow]No ledger summary to display.[/yellow]")
+        return
+
+    if summary.run_count == 0:
+        console.print(
+            Panel(
+                "\n"
+                f"  No run receipts for scope [bold]{summary.scope}[/bold].\n"
+                "  [dim]Run [bold]onmc loop[/bold] or [bold]onmc swarm[/bold] "
+                "to generate receipts.[/dim]\n",
+                title="[bold cyan]onmc ledger — nothing to account yet[/bold cyan]",
+                border_style="cyan",
+            )
+        )
+        return
+
+    sr_pct = round(summary.success_rate * 100)
+    sr_color = "green" if sr_pct >= 70 else ("yellow" if sr_pct >= 40 else "red")  # noqa: PLR2004
+    wall_min = summary.total_wall_seconds / 60.0
+
+    headline = (
+        f"  Runs: [bold]{summary.run_count}[/bold]"
+        f"  ·  Cost: [bold]{summary.cost_label}[/bold]"
+        f"  ·  Success: [{sr_color}]{sr_pct}%[/{sr_color}] "
+        f"[dim]({summary.success_count}/{summary.run_count})[/dim]"
+        f"  ·  Wall: [bold]{wall_min:.1f} min[/bold]"
+    )
+    body_lines = ["", headline, ""]
+    if summary.note:
+        body_lines.append(f"  [dim]{summary.note}[/dim]")
+        body_lines.append("")
+
+    console.print(
+        Panel(
+            "\n".join(body_lines),
+            title=f"[bold cyan]onmc ledger — {summary.scope}[/bold cyan]",
+            border_style="cyan",
+        )
+    )
+
+    _render_ledger_breakdown("By model", summary.by_model)
+    _render_ledger_breakdown("By agent", summary.by_agent)
+
+    console.print()
+    console.print(
+        "[dim]All numbers from real run receipts. "
+        "Receipts without cost_usd are excluded from the cost total.[/dim]"
+    )
+
+
+def _render_ledger_breakdown(title: str, table_data: dict[str, dict[str, Any]]) -> None:
+    """Render one ledger breakdown table (by model or by agent)."""
+    if not table_data:
+        return
+    tbl = Table(
+        title=title,
+        title_justify="left",
+        show_header=True,
+        box=None,
+        padding=(0, 1),
+    )
+    tbl.add_column("Key", min_width=12, max_width=30)
+    tbl.add_column("Runs", justify="right", width=5)
+    tbl.add_column("Cost", justify="right", width=10)
+    tbl.add_column("Wall (min)", justify="right", width=11)
+    tbl.add_column("Success", justify="right", width=9)
+
+    for key in sorted(table_data):
+        bucket = table_data[key]
+        runs = int(bucket.get("runs", 0))
+        unknown = int(bucket.get("cost_unknown_count", 0))
+        cost_v = float(bucket.get("cost_usd", 0.0))
+        cost_str = "[dim]n/a[/dim]" if unknown == runs else f"${cost_v:.4f}"
+        wall_v = float(bucket.get("wall_seconds", 0.0)) / 60.0
+        success = int(bucket.get("success_count", 0))
+        tbl.add_row(
+            key,
+            str(runs),
+            cost_str,
+            f"{wall_v:.1f}",
+            f"{success}/{runs}",
+        )
+    console.print()
+    console.print(tbl)
 
 
 def render_codegraph_build(cache_path: Path, graph: CodeGraph) -> None:
