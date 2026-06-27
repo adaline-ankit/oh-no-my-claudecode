@@ -162,6 +162,7 @@ COMMANDS: list[tuple[str, list[str]]] = [
     ("onmc inbox list", ["inbox", "list"]),
     ("onmc inbox rank", ["inbox", "rank"]),
     ("onmc inbox run", ["inbox", "run"]),
+    ("onmc pack", ["pack"]),
 ]
 
 

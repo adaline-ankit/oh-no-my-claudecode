@@ -23,8 +23,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ pack            Generate a tiny deterministic context pack for spawned       │
-│                 agents.                                                      │
+│ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
+│                 files.                                                       │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -3340,5 +3340,29 @@ Usage: onmc inbox run [OPTIONS]
 │                                     [default: 3]                             │
 │ --json                              Emit the plan as JSON.                   │
 │ --help                              Show this message and exit.              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc pack`
+
+```text
+Usage: onmc pack [OPTIONS] GOAL
+
+ Build a per-task context pack: dead-ends, decisions, reuse, files.
+
+ Composes recorded dead-ends + decisions with a tiny code-graph slice and
+ reuse hints into a terse, deterministic, offline markdown brief for a
+ spawned agent.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal or task description for the spawned agent.         │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget        INTEGER RANGE [x>=400]  Maximum markdown characters.         │
+│                                         [default: 12000]                     │
+│ --json                                  Emit the pack as JSON instead of     │
+│                                         markdown.                            │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
