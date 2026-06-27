@@ -23,8 +23,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
-│                 files.                                                       │
 │ why             Explain why a file looks the way it does, from memory + git  │
 │                 history.                                                     │
 │ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
@@ -92,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
+│                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
 │ memory          Inspect stored memory.                                       │
