@@ -19,10 +19,12 @@ if TYPE_CHECKING:
     )
     from oh_no_my_claudecode.conventions import Conventions
     from oh_no_my_claudecode.federation.pull import PullResult
+    from oh_no_my_claudecode.fleet import FleetDoctorReport, FleetStatus
     from oh_no_my_claudecode.loop.models import LoopResult
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as _McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as _McpToolCall
     from oh_no_my_claudecode.nomistakes.models import NoMistakesResult
+    from oh_no_my_claudecode.pack import ContextPack
     from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.release import ReleaseDraft
@@ -3101,6 +3103,59 @@ def render_codegraph_context(result: ContextSelection) -> None:
     table.add_column("File", no_wrap=False)
     for index, file in enumerate(result.files, start=1):
         table.add_row(str(index), file)
+    console.print(table)
+
+
+def render_context_pack(pack: ContextPack) -> None:
+    """Render a context pack as markdown."""
+    console.print(Markdown(pack.markdown))
+    if pack.truncated:
+        console.print(f"[yellow]Truncated to {pack.budget_chars} chars.[/yellow]")
+
+
+def render_fleet_status(status: FleetStatus) -> None:
+    """Render aggregate fleet state."""
+    table = Table(title="onmc fleet")
+    table.add_column("Swarm")
+    table.add_column("Agent")
+    table.add_column("Units")
+    table.add_column("Stop")
+    table.add_column("Started")
+    for swarm in status.swarms:
+        counts = swarm.counts
+        table.add_row(
+            swarm.swarm_id[:12],
+            swarm.agent,
+            (
+                f"{counts.done} done / {counts.failed} failed / "
+                f"{counts.aborted} aborted / {counts.active} active"
+            ),
+            swarm.stop_reason,
+            swarm.started_at[:19],
+        )
+    if status.swarms:
+        console.print(table)
+    else:
+        console.print("[dim]No swarm manifests found.[/dim]")
+    ledger = status.ledger
+    if ledger is not None:
+        console.print(
+            f"[dim]claims={status.active_claims} receipts={status.receipt_count} "
+            f"success={ledger.success_count}/{ledger.run_count} cost={ledger.cost_label}[/dim]"
+        )
+
+
+def render_fleet_doctor(report: FleetDoctorReport) -> None:
+    """Render fleet doctor issues."""
+    if report.ok:
+        console.print("[green]fleet ok[/green]")
+        return
+    table = Table(title="fleet doctor")
+    table.add_column("Severity")
+    table.add_column("Issue")
+    table.add_column("Detail")
+    for issue in report.issues:
+        table.add_row(issue.severity, issue.title, issue.detail)
     console.print(table)
 
 
