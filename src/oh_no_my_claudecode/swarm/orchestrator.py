@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import json
 import secrets
+import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -57,9 +58,9 @@ from oh_no_my_claudecode.swarm.models import (
 #: Signature: (unit: SwarmUnit, repo_root: Path) -> AgentRunner
 AgentRunnerFactory = Callable[[SwarmUnit, Path], AgentRunner]
 
-#: Factory that produces a VerifyRunner for a given unit.
-#: Signature: (unit: SwarmUnit) -> VerifyRunner
-VerifyRunnerFactory = Callable[[SwarmUnit], VerifyRunner]
+#: Factory that produces a VerifyRunner for a given unit/repo_root.
+#: Signature: (unit: SwarmUnit, repo_root: Path) -> VerifyRunner
+VerifyRunnerFactory = Callable[[SwarmUnit, Path], VerifyRunner]
 
 
 # ---------------------------------------------------------------------------
@@ -254,15 +255,34 @@ def _default_agent_runner_factory(
     return make_agent_runner("claude", repo_root)
 
 
-def _default_verify_runner_factory(unit: SwarmUnit) -> VerifyRunner:
-    """Build a verify runner from the unit's verify_command."""
-    from oh_no_my_claudecode.loop.engine import _default_verify_runner
+def _run_verify_command(command: str, repo_root: Path) -> VerifyOutcome:
+    """Run a verify command in a specific repo/worktree root."""
+    try:
+        result = subprocess.run(  # noqa: S602, S603
+            command,
+            shell=True,
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        return VerifyOutcome(
+            passed=result.returncode == 0,
+            output=(result.stdout + result.stderr)[:2000],
+        )
+    except subprocess.TimeoutExpired:
+        return VerifyOutcome(passed=False, output="[verify timed out]")
+    except Exception as exc:  # noqa: BLE001
+        return VerifyOutcome(passed=False, output=f"[verify error: {exc}]")
 
+
+def _default_verify_runner_factory(unit: SwarmUnit, repo_root: Path) -> VerifyRunner:
+    """Build a verify runner from the unit's verify_command."""
     verify_cmd = unit.verify_command or "true"
 
     def _runner(command: str) -> VerifyOutcome:
         # Use the unit's verify_command, ignoring the one from LoopConfig.
-        return _default_verify_runner(verify_cmd)
+        return _run_verify_command(verify_cmd, repo_root)
 
     return _runner
 
@@ -308,7 +328,8 @@ def run_swarm(
         builds a real adapter from ``config.agent``.  Tests inject a fake.
     verify_factory:
         Injectable factory ``(unit) -> VerifyRunner``.  When ``None``, uses
-        ``unit.verify_command`` with the default subprocess runner.
+        ``unit.verify_command`` with the default subprocess runner in the
+        unit's active repo/worktree root.
         Tests inject a fake.
     executor:
         Injectable ``ThreadPoolExecutor``.  When ``None``, creates one with
@@ -323,7 +344,7 @@ def run_swarm(
         Aggregated result with per-unit SwarmUnitResult entries.
     """
     from oh_no_my_claudecode.loop.adapters import make_agent_runner
-    from oh_no_my_claudecode.loop.engine import _default_verify_runner, run_loop
+    from oh_no_my_claudecode.loop.engine import run_loop
     from oh_no_my_claudecode.loop.models import LoopConfig, LoopSpec
 
     swarm_id = secrets.token_hex(8)
@@ -344,11 +365,11 @@ def run_swarm(
 
     resolved_runner_factory: AgentRunnerFactory = runner_factory or _real_runner_factory
 
-    def _real_verify_factory(unit: SwarmUnit) -> VerifyRunner:
+    def _real_verify_factory(unit: SwarmUnit, rr: Path) -> VerifyRunner:
         cmd = unit.verify_command or "true"
 
         def _vr(command: str) -> VerifyOutcome:
-            return _default_verify_runner(cmd)
+            return _run_verify_command(cmd, rr)
 
         return _vr
 
@@ -382,22 +403,25 @@ def run_swarm(
         def _should_continue() -> bool:
             return not _is_abort_requested(abort_path, global_abort_path)
 
-        # Build per-unit worktree isolation provider.
+        # Build per-unit worktree isolation before creating agent/verify
+        # runners. Adapters capture their cwd at construction time, so binding
+        # them before isolation would leak edits and verification into the
+        # caller's main worktree.
         isolation_provider = None
+        worktree_path: Path | None = None
+        unit_root = repo_root
         if config.isolate:
             from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
 
             isolation_provider = WorktreeIsolationProvider(
                 branch_prefix=f"onmc-swarm-{swarm_id[:6]}"
             )
+            worktree_path = isolation_provider.setup(repo_root)
+            if worktree_path is not None:
+                unit_root = worktree_path
 
-        # Use repo_root as the effective root for this unit's agent.
-        # WorktreeIsolationProvider.setup() creates a linked worktree; the
-        # engine sets _effective_repo_root to the worktree path internally.
-        effective_root = repo_root
-
-        agent_runner = resolved_runner_factory(unit, effective_root)
-        verify_runner = resolved_verify_factory(unit)
+        agent_runner = resolved_runner_factory(unit, unit_root)
+        verify_runner = resolved_verify_factory(unit, unit_root)
 
         loop_spec = LoopSpec(goal=unit.goal)
         loop_config = LoopConfig(
@@ -406,7 +430,7 @@ def run_swarm(
             verify_command=unit.verify_command or "true",
             max_cost_usd=config.max_cost_usd,
             max_wall_seconds=config.max_wall_seconds,
-            isolate=config.isolate,
+            isolate=False,
             duplicate_action_limit=3,
             repeated_error_limit=3,
         )
@@ -415,16 +439,18 @@ def run_swarm(
         try:
             result: LoopResult = run_loop(
                 storage,
-                repo_root,
+                unit_root,
                 loop_spec,
                 loop_config,
                 agent_runner=agent_runner,
                 verify_runner=verify_runner,
-                isolation_provider=isolation_provider,
+                isolation_provider=None,
                 now=started_at_dt,
                 should_continue=_should_continue,
             )
         except Exception as exc:  # noqa: BLE001
+            if isolation_provider is not None and worktree_path is not None:
+                isolation_provider.teardown(worktree_path, keep=False)
             ur = SwarmUnitResult(
                 unit_id=unit.id,
                 status="failed",
@@ -447,7 +473,7 @@ def run_swarm(
                 result,
                 loop_spec,
                 loop_config,
-                repo_root=str(repo_root),
+                repo_root=str(unit_root),
                 agent=config.agent,
                 model=None,
                 wall_seconds=wall_seconds,
@@ -456,6 +482,9 @@ def run_swarm(
             )
             with contextlib.suppress(Exception):
                 receipt_path = write_receipt(repo_root, receipt)
+
+        if isolation_provider is not None and worktree_path is not None:
+            isolation_provider.teardown(worktree_path, keep=result.converged)
 
         unit_cost = result.total_cost_usd or 0.0
         unit_tokens = result.total_tokens
