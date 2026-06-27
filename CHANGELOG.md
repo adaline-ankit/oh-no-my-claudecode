@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-06-24
+
+### Fixed
+
+- **Duplicate command-name guard** — `command_registry` detects + fails loudly on duplicate `onmc <name>` registrations (silent shadowing is gone); `detect_duplicate_commands(app)` is a CI guard.
+- **cli-reference auto-discovery** — `generate-cli-reference.py` introspects the Typer app instead of a hardcoded COMMANDS list, so new features never edit it — removing the last shared hub for collision-free parallel PRs (also recovered 19 stale-missing commands).
+- **preflight toolchain robustness** — `onmc preflight --provision` runs tools via `uv run --with` + pins typer for the cli-reference step, giving true results in fresh worktrees; `onmc swarm verify`/`--auto-verify` provision by default, unblocking the staff-engineer gate.
+
 ## [0.58.0] — 2026-06-24
 
 ### Added
