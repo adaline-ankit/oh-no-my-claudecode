@@ -3427,6 +3427,7 @@ class OnmcService:
         steps: Sequence[str] | None = None,
         repo_root: Path | None = None,
         executor: PreflightExecutor | None = None,
+        provision: bool = False,
     ) -> PreflightReport:
         """Run the exact CI quality gate locally and return the report.
 
@@ -3445,6 +3446,11 @@ class OnmcService:
         executor:
             Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to
             a subprocess runner; tests inject a fake for deterministic runs.
+        provision:
+            When ``True`` each tool runs via ``uv run --with <tool>`` so a
+            fresh worktree resolves the toolchain on demand (and the
+            cli-reference step pins ``typer<1.0`` to match CI).  Passed through
+            to :func:`run_preflight`.
 
         Returns
         -------
@@ -3458,7 +3464,9 @@ class OnmcService:
                 repo_root = discover_repo_root(self.cwd)
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
-        return run_preflight(repo_root, steps=steps, executor=executor)
+        return run_preflight(
+            repo_root, steps=steps, executor=executor, provision=provision
+        )
 
     def fleet_status(self, *, swarm_id: str | None = None) -> FleetStatus:
         """Summarise local swarm/claim/receipt state."""

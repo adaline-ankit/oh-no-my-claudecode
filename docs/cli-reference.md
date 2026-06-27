@@ -2545,11 +2545,15 @@ Usage: onmc preflight [OPTIONS]
  - 2 — usage error
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --only        TEXT  Run only these steps (repeatable).  One or more of:      │
-│                     ruff, mypy, cliref, pytest.  Default: run all, in CI     │
-│                     order.                                                   │
-│ --json              Emit the PreflightReport as JSON to stdout.              │
-│ --help              Show this message and exit.                              │
+│ --only             TEXT  Run only these steps (repeatable).  One or more of: │
+│                          ruff, mypy, cliref, pytest.  Default: run all, in   │
+│                          CI order.                                           │
+│ --json                   Emit the PreflightReport as JSON to stdout.         │
+│ --provision              Run each tool via `uv run --with <tool>` so a fresh │
+│                          worktree (no dev deps installed) resolves           │
+│                          ruff/mypy/pytest on demand, and pin typer<1.0 for   │
+│                          the cli-reference step to match CI.                 │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

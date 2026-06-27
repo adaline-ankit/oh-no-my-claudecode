@@ -2497,6 +2497,17 @@ def preflight_command(
         bool,
         typer.Option("--json", help="Emit the PreflightReport as JSON to stdout."),
     ] = False,
+    provision: Annotated[
+        bool,
+        typer.Option(
+            "--provision",
+            help=(
+                "Run each tool via `uv run --with <tool>` so a fresh worktree "
+                "(no dev deps installed) resolves ruff/mypy/pytest on demand, "
+                "and pin typer<1.0 for the cli-reference step to match CI."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run the exact CI quality gate locally, in the same order CI runs it.
 
@@ -2528,7 +2539,7 @@ def preflight_command(
             raise typer.Exit(code=_fatal(msg))
         steps = only
 
-    report = _service().preflight(steps=steps)
+    report = _service().preflight(steps=steps, provision=provision)
 
     if as_json:
         import dataclasses
