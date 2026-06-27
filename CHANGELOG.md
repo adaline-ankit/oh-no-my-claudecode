@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-06-24
+
+### Added
+
+- **`onmc pack`** — per-task context pack (dead-ends + decisions + reuse hints + tiny codegraph context) for grounding spawned agents.
+- **`onmc contract init`** — spec-as-contract: emits a failing pytest skeleton + stub from a spec (enforced TDD).
+- **`onmc proptest init`** — property/invariant test generator (fixed-seed, stdlib, no new deps).
+- **`onmc inbox`** — ranked work queue from manual adds + TODO/FIXME + coverage gaps + memory.
+
+All four built in parallel by an onmc swarm (each unit self-registered via command auto-discovery, zero hub-code edits, each its own PR), then integrated.
+
+### Removed
+
+- Legacy hub-wired `pack` command (superseded by the auto-discovery `onmc pack`; resolves a silent duplicate-command shadow).
+
 ## [0.57.0] — 2026-06-24
 
 ### Added
