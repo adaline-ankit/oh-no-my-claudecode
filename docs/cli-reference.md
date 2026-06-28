@@ -90,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ mission         Assemble a grounded mission plan: dead-ends, files, route,   │
+│                 next command.                                                │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -2231,6 +2233,30 @@ Usage: onmc mine [OPTIONS]
 │ --no-llm               Skip LLM extraction and only inspect transcript       │
 │                        availability.                                         │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission`
+
+```text
+Usage: onmc mission [OPTIONS] GOAL
+
+ Assemble a grounded mission plan: dead-ends, files, route, next command.
+
+ One call composes onmc's shipped primitives — recall + guard (decisions
+ and dead-ends), pack + codegraph (a tiny relevant file set), and route
+ (recommended agent/model/strategy) — into a single MISSION PLAN plus the
+ exact ``onmc swarm plan ...`` command to run next. Deterministic and
+ offline; it PLANS the mission, it does not spawn agents.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  The mission goal / task description. [required]         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget        INTEGER RANGE [x>=400]  Context grounding budget (chars).    │
+│                                         [default: 12000]                     │
+│ --json                                  Emit the mission plan as JSON.       │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
