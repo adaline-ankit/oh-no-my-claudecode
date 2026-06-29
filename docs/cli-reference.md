@@ -94,6 +94,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
+│ roast           Roast this repo's agent-readiness — a blunt 0-100 score +    │
+│                 findings.                                                    │
 │ route           Deterministically route a task to an                         │
 │                 agent/model/strategy/gate.                                   │
 │ memory          Inspect stored memory.                                       │
@@ -2879,6 +2881,23 @@ Usage: onmc review [OPTIONS]
 │    --no-llm                  Use heuristic fallback instead of the           │
 │                              configured LLM.                                 │
 │    --help                    Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc roast`
+
+```text
+Usage: onmc roast [OPTIONS]
+
+ Roast this repo's agent-readiness — a blunt 0-100 score + findings.
+
+ Deterministic and offline: composes hotspot memory coverage, the
+ agent-config audit grade, brain size, and conventions presence into a
+ single shareable score. Same repo always yields the same roast.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the roast report as JSON.                               │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
