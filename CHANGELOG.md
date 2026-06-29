@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-06-24
+
+### Added
+
+- **`onmc wrap` / `onmc unwrap`** — make onmc the default layer for Claude Code. `onmc wrap --strict` installs a PreToolUse Task-intercept (raw native agent spawns are denied + redirected to `onmc swarm`) and a UserPromptSubmit prompt-router (every prompt gets an onmc routing verdict via `route` + `guard`), plus a CLAUDE.md policy stanza. Self-exempting (onmc's own swarm fan-out is allowed via a fresh `.onmc/swarm/<id>/ACTIVE` marker or `ONMC_ALLOW_TASK=1`), `--soft` nudges instead of denying, hooks always exit 0 (never brick the CLI), and `onmc unwrap` perfectly reverses (restores settings.json + CLAUDE.md from backup).
+
 ## [0.60.0] — 2026-06-24
 
 ### Added
