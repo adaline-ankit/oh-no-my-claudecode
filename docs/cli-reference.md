@@ -90,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ mission         Run the engineering pipeline end-to-end into one mission     │
+│                 plan.                                                        │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -2233,6 +2235,38 @@ Usage: onmc mine [OPTIONS]
 │ --no-llm               Skip LLM extraction and only inspect transcript       │
 │                        availability.                                         │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission`
+
+```text
+Usage: onmc mission [OPTIONS] GOAL
+
+ Run the engineering pipeline end-to-end into one mission plan.
+
+ Composes recorded dead-ends (guard) + a deterministic context pack +
+ the code-graph blast radius + the swarm units the mission would run.
+ Plan mode (the default) is offline and deterministic and spawns no
+ agents; ``--execute`` additionally allocates the swarm manifest.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  The mission goal — what you want done. [required]       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --execute                                    Hand the plan to the swarm      │
+│                                              (materialise its manifest).     │
+│                                              Default is plan mode: a safe,   │
+│                                              offline dry-run that spawns     │
+│                                              nothing.                        │
+│ --concurrency        INTEGER RANGE [x>=1]    Advisory swarm fan-out width.   │
+│                                              [default: 4]                    │
+│ --budget             INTEGER RANGE [x>=400]  Context-pack markdown character │
+│                                              budget.                         │
+│                                              [default: 12000]                │
+│ --json                                       Emit the mission plan as JSON   │
+│                                              instead of markdown.            │
+│ --help                                       Show this message and exit.     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
