@@ -27,6 +27,7 @@ SHA, hash chain, reproducibility envelope, honest ``verified`` flag).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import secrets
 from collections.abc import Callable
@@ -119,6 +120,14 @@ def plan_inline_swarm(
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+
+    # Self-exemption marker: while this swarm is fanning out subagents, the
+    # ``onmc wrap`` Task intercept must let those native spawns through (onmc is
+    # the spawner). The marker records ``started_at`` so the intercept can age
+    # it out (see ``wrap.logic.swarm_active``). Best-effort: a write failure
+    # must never break swarm planning.
+    with contextlib.suppress(OSError):
+        (_swarm_dir(repo_root, sid) / "ACTIVE").write_text(started_at, encoding="utf-8")
 
     return {
         "swarm_id": sid,

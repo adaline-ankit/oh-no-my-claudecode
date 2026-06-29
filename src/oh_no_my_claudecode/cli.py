@@ -2217,6 +2217,78 @@ def hooks_pre_tool_use_command() -> None:
         pass
 
 
+@hooks_app.command("task-intercept")
+def hooks_task_intercept_command() -> None:
+    """Intercept native ``Task`` agent-spawning and redirect it to ``onmc swarm``.
+
+    Installed by ``onmc wrap`` on the ``PreToolUse`` hook (matcher ``"Task"``).
+    Reads the hook payload from stdin and emits either a ``deny`` decision
+    (strict) redirecting the model to ``onmc swarm plan``, an
+    ``additionalContext`` nudge (soft), or nothing (non-Task tool, or
+    self-exemption when ``ONMC_ALLOW_TASK`` is set or an onmc swarm is active).
+
+    Design invariants (identical to every onmc hook):
+    - Always exits 0 — a wrapper that bricks Claude Code is unacceptable.
+    - Any exception is swallowed; stdout stays clean (empty = allow) on error.
+    """
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import compile_task_intercept, read_wrap_strict
+
+        payload = _read_hook_payload()
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        strict = read_wrap_strict(repo_root)
+        output = compile_task_intercept(payload, repo_root, strict=strict)
+        if output:
+            sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@hooks_app.command("prompt-router")
+def hooks_prompt_router_command() -> None:
+    """Route the user prompt through onmc and inject a "prefer onmc paths" nudge.
+
+    Installed by ``onmc wrap`` on the ``UserPromptSubmit`` hook. Reads the
+    prompt from the stdin payload, routes it via the deterministic router +
+    dead-end guard, and writes a terse ``additionalContext`` JSON payload.
+    Stdout is always pure JSON or empty. Always exits 0; never raises.
+    """
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import compile_prompt_policy, read_wrap_strict
+
+        payload = _read_hook_payload()
+        raw_prompt = payload.get("prompt", "")
+        prompt = raw_prompt if isinstance(raw_prompt, str) else ""
+        if not prompt.strip():
+            return
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        strict = read_wrap_strict(repo_root)
+        # Storage is optional — the policy degrades to routing-only when memory
+        # is unavailable (e.g. onmc not initialised in this repo).
+        storage = None
+        try:
+            _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            storage = None
+        output = compile_prompt_policy(prompt, storage, strict=strict)
+        if output:
+            sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
 @app.command("consolidate")
 def consolidate_command(
     dry_run: Annotated[
