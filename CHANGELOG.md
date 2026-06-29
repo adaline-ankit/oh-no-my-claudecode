@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.60.0] — 2026-06-24
+
+### Added
+
+- **`onmc mission "<goal>"`** — the keystone: one command that composes the shipped pipeline (recall → pack → codegraph blast-radius → guard dead-ends → swarm plan) into a single mission plan + receipt. Plan-mode default (deterministic, offline, no agents); `--execute` hands off to the swarm. `--json`.
+- **`onmc roast`** — viral repo agent-readiness score (0-100) blending hotspot memory coverage + audit grade + brain size + conventions, with blunt findings + an actionable next step. `--json`.
+- **`onmc fix-ci <pr>`** — CI-fix autopilot: parses a failed PR's CI log → recalls related dead-ends → maps the error to likely-fix files (codegraph) → emits a fix plan. Plan-only; log injectable (offline). `--log`, `--json`.
+
+All three built **in parallel by an onmc swarm** (one unit each, each self-registered via command auto-discovery with zero hub edits, each its own PR), then merged.
+
 ## [0.59.0] — 2026-06-24
 
 ### Fixed
