@@ -90,6 +90,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
@@ -1182,6 +1183,29 @@ Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --note        TEXT  Optional note appended to the memory details.            │
 │ --json              Emit the updated memory as JSON instead of a rich panel. │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc fix-ci`
+
+```text
+Usage: onmc fix-ci [OPTIONS] PR
+
+ Read a failed PR's CI log and emit a deterministic fix plan.
+
+ Plan-only by default: this command never spawns an agent or runs a
+ swarm. Use ``--log <file>`` to plan offline from a captured log; without
+ it the log is fetched via ``gh run view --log-failed``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      TEXT  PR number or URL whose failed CI to plan a fix for.       │
+│                    [required]                                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --log         PATH  Read the CI log from this file instead of fetching via   │
+│                     gh (offline).                                            │
+│ --json              Emit the fix plan as JSON.                               │
 │ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
