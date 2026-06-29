@@ -101,6 +101,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 findings.                                                    │
 │ route           Deterministically route a task to an                         │
 │                 agent/model/strategy/gate.                                   │
+│ wrap            Make onmc the default layer for Claude Code in this repo.    │
+│ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
+│                 wrap``.                                                      │
 │ memory          Inspect stored memory.                                       │
 │ spec            Inspect and validate the Agent Memory open spec.             │
 │ task            Manage task lifecycle state.                                 │
@@ -1326,21 +1329,25 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ install        Install project-scoped Claude Code hooks into                 │
-│                .claude/settings.json.                                        │
-│ uninstall      Remove ONMC entries from project Claude Code settings and     │
-│                .mcp.json.                                                    │
-│ status         Show current Claude hook installation and snapshot status.    │
-│ pre-compact    Capture a compaction snapshot before Claude Code compacts     │
-│                context.                                                      │
-│ session-start  Inject context at session start: boot digest on startup,      │
-│                continuation brief after compaction.                          │
-│ prompt-recall  Inject the most relevant repo memories for the current user   │
-│                prompt.                                                       │
-│ session-end    Run memory consolidation and heuristic auto-capture on        │
-│                SessionEnd.                                                   │
-│ pre-tool-use   Inject file-level danger warnings before the agent edits a    │
-│                file.                                                         │
+│ install         Install project-scoped Claude Code hooks into                │
+│                 .claude/settings.json.                                       │
+│ uninstall       Remove ONMC entries from project Claude Code settings and    │
+│                 .mcp.json.                                                   │
+│ status          Show current Claude hook installation and snapshot status.   │
+│ pre-compact     Capture a compaction snapshot before Claude Code compacts    │
+│                 context.                                                     │
+│ session-start   Inject context at session start: boot digest on startup,     │
+│                 continuation brief after compaction.                         │
+│ prompt-recall   Inject the most relevant repo memories for the current user  │
+│                 prompt.                                                      │
+│ session-end     Run memory consolidation and heuristic auto-capture on       │
+│                 SessionEnd.                                                  │
+│ pre-tool-use    Inject file-level danger warnings before the agent edits a   │
+│                 file.                                                        │
+│ task-intercept  Intercept native ``Task`` agent-spawning and redirect it to  │
+│                 ``onmc swarm``.                                              │
+│ prompt-router   Route the user prompt through onmc and inject a "prefer onmc │
+│                 paths" nudge.                                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1424,6 +1431,23 @@ Usage: onmc hooks prompt-recall [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc hooks prompt-router`
+
+```text
+Usage: onmc hooks prompt-router [OPTIONS]
+
+ Route the user prompt through onmc and inject a "prefer onmc paths" nudge.
+
+ Installed by ``onmc wrap`` on the ``UserPromptSubmit`` hook. Reads the
+ prompt from the stdin payload, routes it via the deterministic router +
+ dead-end guard, and writes a terse ``additionalContext`` JSON payload.
+ Stdout is always pure JSON or empty. Always exits 0; never raises.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc hooks session-end`
 
 ```text
@@ -1465,6 +1489,28 @@ Usage: onmc hooks session-start [OPTIONS]
 Usage: onmc hooks status [OPTIONS]
 
  Show current Claude hook installation and snapshot status.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks task-intercept`
+
+```text
+Usage: onmc hooks task-intercept [OPTIONS]
+
+ Intercept native ``Task`` agent-spawning and redirect it to ``onmc swarm``.
+
+ Installed by ``onmc wrap`` on the ``PreToolUse`` hook (matcher ``"Task"``).
+ Reads the hook payload from stdin and emits either a ``deny`` decision
+ (strict) redirecting the model to ``onmc swarm plan``, an
+ ``additionalContext`` nudge (soft), or nothing (non-Task tool, or
+ self-exemption when ``ONMC_ALLOW_TASK`` is set or an onmc swarm is active).
+
+ Design invariants (identical to every onmc hook):
+ - Always exits 0 — a wrapper that bricks Claude Code is unacceptable.
+ - Any exception is swallowed; stdout stays clean (empty = allow) on error.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -3834,6 +3880,25 @@ Usage: onmc ui [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc unwrap`
+
+```text
+Usage: onmc unwrap [OPTIONS]
+
+ Remove the onmc wrap layer — the perfect inverse of ``onmc wrap``.
+
+ Strips exactly the two wrap hooks, the wrap-state file, and the
+ CLAUDE.md policy stanza. Every other hook and all CLAUDE.md content is
+ left untouched. The settings.json backup is kept as a safety artifact.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --global    --project      Remove from the user-level                        │
+│                            ~/.claude/settings.json (default: project).       │
+│                            [default: project]                                │
+│ --help                     Show this message and exit.                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc user`
 
 ```text
@@ -3982,5 +4047,29 @@ Usage: onmc wiki [OPTIONS]
 │                                      Obsidian vault.                         │
 │                                      [default: markdown]                     │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wrap`
+
+```text
+Usage: onmc wrap [OPTIONS]
+
+ Make onmc the default layer for Claude Code in this repo.
+
+ Installs a Task intercept (PreToolUse matcher ``Task``) that redirects
+ native agent-spawning to ``onmc swarm``, plus a prompt router
+ (UserPromptSubmit) that nudges toward onmc paths. Backs up
+ settings.json before editing. Reverse with ``onmc unwrap``.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --strict    --soft         strict: deny native Task spawns and redirect to   │
+│                            `onmc swarm`. soft: allow them with a nudge.      │
+│                            Default: strict.                                  │
+│                            [default: strict]                                 │
+│ --global    --project      Install into the user-level                       │
+│                            ~/.claude/settings.json (default: project).       │
+│                            [default: project]                                │
+│ --help                     Show this message and exit.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

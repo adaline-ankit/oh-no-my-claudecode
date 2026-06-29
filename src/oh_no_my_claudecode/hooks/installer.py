@@ -11,10 +11,23 @@ SESSION_END_COMMAND = "onmc hooks session-end"
 PROMPT_RECALL_COMMAND = "onmc hooks prompt-recall"
 PRE_TOOL_USE_COMMAND = "onmc hooks pre-tool-use"
 LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
+# ``onmc wrap`` layer — make onmc the default layer for Claude Code.
+TASK_INTERCEPT_COMMAND = "onmc hooks task-intercept"
+PROMPT_ROUTER_COMMAND = "onmc hooks prompt-router"
 MCP_SERVER_NAME = "onmc"
 
 # Matcher for PreToolUse: fires on file-editing tools only.
 _PRE_TOOL_USE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
+# Matcher for the ``onmc wrap`` Task intercept: the native agent-spawning tool.
+_TASK_INTERCEPT_MATCHER = "Task"
+
+# Commands ``onmc wrap`` installs (and ``onmc unwrap`` removes, exactly).
+_WRAP_COMMANDS = frozenset(
+    {
+        TASK_INTERCEPT_COMMAND,
+        PROMPT_ROUTER_COMMAND,
+    }
+)
 
 _ONMC_COMMANDS = frozenset(
     {
@@ -24,6 +37,8 @@ _ONMC_COMMANDS = frozenset(
         PROMPT_RECALL_COMMAND,
         PRE_TOOL_USE_COMMAND,
         LEGACY_POST_COMPACT_COMMAND,
+        TASK_INTERCEPT_COMMAND,
+        PROMPT_ROUTER_COMMAND,
     }
 )
 # "PostCompact" is not a real Claude Code event; earlier onmc versions registered it.
@@ -189,6 +204,109 @@ def uninstall_claude_hooks(
     return _clean_legacy_global_settings(global_settings_path or user_settings_path())
 
 
+def install_wrap_hooks(
+    *,
+    repo_root: Path,
+    strict: bool,
+    settings_path: Path | None = None,
+    backup_path: Path | None = None,
+) -> HookInstallResult:
+    """Install the ``onmc wrap`` layer hooks into ``settings.json``.
+
+    Merges two command hooks (idempotently) alongside any existing hooks:
+
+    - ``PreToolUse`` (matcher ``"Task"``) → ``onmc hooks task-intercept`` —
+      intercepts native agent-spawning and redirects it to ``onmc swarm``.
+    - ``UserPromptSubmit`` (matcher ``""``) → ``onmc hooks prompt-router`` —
+      routes each prompt and injects a "prefer onmc paths" nudge.
+
+    A pristine backup of the pre-wrap settings is written exactly once (never
+    overwriting an earlier onmc backup). ``strict`` is conveyed to the running
+    hooks via the wrap-state file (see :func:`write_wrap_state`), not the
+    settings.json command text, so the installed commands are mode-agnostic and
+    ``unwrap`` can remove them verbatim.
+
+    Does NOT touch the base onmc hooks or the MCP registration — wrap is a
+    strictly additive layer on top of (or independent of) ``onmc hooks
+    install``.
+    """
+    settings_path = settings_path or project_settings_path(repo_root)
+    backup_path = backup_path or project_settings_backup_path(repo_root)
+    settings = _load_json(settings_path)
+    backup_created = False
+    if not backup_path.exists():
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_path.write_text(
+            json.dumps(settings, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        backup_created = True
+    hooks = settings.get("hooks")
+    if not isinstance(hooks, dict):
+        hooks = {}
+        settings["hooks"] = hooks
+    _merge_command_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_TASK_INTERCEPT_MATCHER,
+        command=TASK_INTERCEPT_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="UserPromptSubmit",
+        matcher="",
+        command=PROMPT_ROUTER_COMMAND,
+    )
+    _write_json(settings_path, settings)
+    return HookInstallResult(
+        settings_path=settings_path,
+        backup_path=backup_path,
+        mcp_path=mcp_config_path(repo_root),
+        backup_created=backup_created,
+        mcp_registered=False,
+        legacy_global_cleaned=False,
+    )
+
+
+def uninstall_wrap_hooks(
+    *,
+    repo_root: Path,
+    settings_path: Path | None = None,
+) -> bool:
+    """Remove exactly the ``onmc wrap`` hooks — the perfect inverse of install.
+
+    Strips only ``onmc hooks task-intercept`` and ``onmc hooks prompt-router``
+    from ``settings.json``, leaving every other hook (including the base onmc
+    hooks installed by ``onmc hooks install``) untouched. Returns whether
+    anything was removed.
+    """
+    settings_path = settings_path or project_settings_path(repo_root)
+    if not settings_path.exists():
+        return False
+    settings = _load_json(settings_path)
+    if not _strip_commands(settings, _WRAP_COMMANDS):
+        return False
+    _write_json(settings_path, settings)
+    return True
+
+
+def wrap_hooks_installed(*, settings_path: Path) -> bool:
+    """Return whether both ``onmc wrap`` hooks are present in settings.json."""
+    settings = _load_json(settings_path)
+    hooks = settings.get("hooks", {})
+    return _has_command_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_TASK_INTERCEPT_MATCHER,
+        command=TASK_INTERCEPT_COMMAND,
+    ) and _has_command_hook(
+        hooks,
+        event_name="UserPromptSubmit",
+        matcher="",
+        command=PROMPT_ROUTER_COMMAND,
+    )
+
+
 def hooks_installed(*, settings_path: Path) -> bool:
     """Return whether the project-scoped onmc hooks are present in settings.json."""
     settings = _load_json(settings_path)
@@ -315,23 +433,42 @@ def _clean_legacy_global_settings(settings_path: Path) -> bool:
 
 def _strip_onmc_entries(settings: dict[str, Any]) -> bool:
     """Remove every onmc hook command and the onmc MCP key from a settings dict."""
+    changed = _strip_commands(settings, _ONMC_COMMANDS, strip_mcp=True)
+    return changed
+
+
+def _strip_commands(
+    settings: dict[str, Any],
+    commands: frozenset[str],
+    *,
+    strip_mcp: bool = False,
+) -> bool:
+    """Remove every hook whose command is in *commands* from a settings dict.
+
+    When *strip_mcp* is set, also remove the onmc MCP server key. Empty event
+    lists and an empty ``hooks`` map are pruned so removal is a clean inverse of
+    insertion. Returns whether anything changed.
+    """
     changed = False
     hooks = settings.get("hooks")
     if isinstance(hooks, dict):
         for event_name in _HOOK_EVENTS:
-            changed = _remove_onmc_commands(hooks, event_name) or changed
+            changed = _remove_commands(hooks, event_name, commands) or changed
         if changed and not hooks:
             settings.pop("hooks", None)
-    servers = settings.get("mcpServers")
-    if isinstance(servers, dict) and MCP_SERVER_NAME in servers:
-        servers.pop(MCP_SERVER_NAME)
-        changed = True
-        if not servers:
-            settings.pop("mcpServers", None)
+    if strip_mcp:
+        servers = settings.get("mcpServers")
+        if isinstance(servers, dict) and MCP_SERVER_NAME in servers:
+            servers.pop(MCP_SERVER_NAME)
+            changed = True
+            if not servers:
+                settings.pop("mcpServers", None)
     return changed
 
 
-def _remove_onmc_commands(hooks: dict[str, Any], event_name: str) -> bool:
+def _remove_commands(
+    hooks: dict[str, Any], event_name: str, commands: frozenset[str]
+) -> bool:
     entries = hooks.get(event_name)
     if not isinstance(entries, list):
         return False
@@ -345,12 +482,12 @@ def _remove_onmc_commands(hooks: dict[str, Any], event_name: str) -> bool:
         if not isinstance(hook_items, list):
             remaining_entries.append(entry)
             continue
-        onmc_items = _onmc_hook_items(hook_items)
-        if not onmc_items:
+        target_items = _matching_hook_items(hook_items, commands)
+        if not target_items:
             remaining_entries.append(entry)
             continue
         changed = True
-        filtered = [item for item in hook_items if item not in onmc_items]
+        filtered = [item for item in hook_items if item not in target_items]
         if filtered:
             entry["hooks"] = filtered
             remaining_entries.append(entry)
@@ -364,6 +501,10 @@ def _remove_onmc_commands(hooks: dict[str, Any], event_name: str) -> bool:
 
 
 def _onmc_hook_items(hook_items: object) -> list[Any]:
+    return _matching_hook_items(hook_items, _ONMC_COMMANDS)
+
+
+def _matching_hook_items(hook_items: object, commands: frozenset[str]) -> list[Any]:
     if not isinstance(hook_items, list):
         return []
     return [
@@ -371,7 +512,7 @@ def _onmc_hook_items(hook_items: object) -> list[Any]:
         for item in hook_items
         if isinstance(item, dict)
         and item.get("type") == "command"
-        and item.get("command") in _ONMC_COMMANDS
+        and item.get("command") in commands
     ]
 
 
