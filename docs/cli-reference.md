@@ -91,10 +91,14 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
+│ mission         Run the engineering pipeline end-to-end into one mission     │
+│                 plan.                                                        │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
+│ roast           Roast this repo's agent-readiness — a blunt 0-100 score +    │
+│                 findings.                                                    │
 │ route           Deterministically route a task to an                         │
 │                 agent/model/strategy/gate.                                   │
 │ memory          Inspect stored memory.                                       │
@@ -2258,6 +2262,38 @@ Usage: onmc mine [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc mission`
+
+```text
+Usage: onmc mission [OPTIONS] GOAL
+
+ Run the engineering pipeline end-to-end into one mission plan.
+
+ Composes recorded dead-ends (guard) + a deterministic context pack +
+ the code-graph blast radius + the swarm units the mission would run.
+ Plan mode (the default) is offline and deterministic and spawns no
+ agents; ``--execute`` additionally allocates the swarm manifest.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  The mission goal — what you want done. [required]       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --execute                                    Hand the plan to the swarm      │
+│                                              (materialise its manifest).     │
+│                                              Default is plan mode: a safe,   │
+│                                              offline dry-run that spawns     │
+│                                              nothing.                        │
+│ --concurrency        INTEGER RANGE [x>=1]    Advisory swarm fan-out width.   │
+│                                              [default: 4]                    │
+│ --budget             INTEGER RANGE [x>=400]  Context-pack markdown character │
+│                                              budget.                         │
+│                                              [default: 12000]                │
+│ --json                                       Emit the mission plan as JSON   │
+│                                              instead of markdown.            │
+│ --help                                       Show this message and exit.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc nomistakes`
 
 ```text
@@ -2903,6 +2939,23 @@ Usage: onmc review [OPTIONS]
 │    --no-llm                  Use heuristic fallback instead of the           │
 │                              configured LLM.                                 │
 │    --help                    Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc roast`
+
+```text
+Usage: onmc roast [OPTIONS]
+
+ Roast this repo's agent-readiness — a blunt 0-100 score + findings.
+
+ Deterministic and offline: composes hotspot memory coverage, the
+ agent-config audit grade, brain size, and conventions presence into a
+ single shareable score. Same repo always yields the same roast.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the roast report as JSON.                               │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
