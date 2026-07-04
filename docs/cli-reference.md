@@ -460,6 +460,14 @@ Usage: onmc audit [OPTIONS] [PATH]
 │                                      silently ignored — no pip dependency is │
 │                                      added.  Default: off.                   │
 │                                      [default: no-gitleaks]                  │
+│ --osv         --no-osv               Also run osv-scanner                    │
+│                                      dependency-vulnerability scanning and   │
+│                                      fold detected CVEs into the report.     │
+│                                      Requires the 'osv-scanner' binary on    │
+│                                      PATH.  When the binary is absent this   │
+│                                      flag is silently ignored — no pip       │
+│                                      dependency is added.  Default: off.     │
+│                                      [default: no-osv]                       │
 │ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

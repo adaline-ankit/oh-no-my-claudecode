@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.audit.gitleaks import GitleaksRunner
+    from oh_no_my_claudecode.audit.osv import OsvRunner
     from oh_no_my_claudecode.audit.semgrep import SemgrepRunner
 
 AuditSeverity = Literal["critical", "high", "medium", "low", "info"]
@@ -122,6 +123,7 @@ def run_audit(
     *,
     semgrep_runner: SemgrepRunner | None = None,
     gitleaks_runner: GitleaksRunner | None = None,
+    osv_runner: OsvRunner | None = None,
 ) -> AuditReport:
     """Scan *repo_root* for agent-configuration security risks.
 
@@ -151,6 +153,12 @@ def run_audit(
         only when :func:`~oh_no_my_claudecode.audit.gitleaks.gitleaks_available`
         returns ``True`` and the user opts in via ``--gitleaks``.  Tests inject
         a fake runner to stay offline.
+    osv_runner:
+        Optional injectable :data:`~oh_no_my_claudecode.audit.osv.OsvRunner`
+        callable.  When ``None``, osv-scanner is not invoked.  The real CLI wires
+        :func:`~oh_no_my_claudecode.audit.osv.make_osv_runner` here only when
+        :func:`~oh_no_my_claudecode.audit.osv.osv_available` returns ``True`` and
+        the user opts in via ``--osv``.  Tests inject a fake runner to stay offline.
 
     Returns
     -------
@@ -159,6 +167,7 @@ def run_audit(
         rendering and JSON serialisation.
     """
     from oh_no_my_claudecode.audit.gitleaks import run_gitleaks
+    from oh_no_my_claudecode.audit.osv import run_osv
     from oh_no_my_claudecode.audit.rules import ALL_RULES
     from oh_no_my_claudecode.audit.semgrep import run_semgrep
 
@@ -176,6 +185,10 @@ def run_audit(
     # Optional gitleaks pass — folded in when caller opts in and runner is wired.
     gitleaks_findings = run_gitleaks(repo_root, gitleaks_runner)
     all_findings.extend(gitleaks_findings)
+
+    # Optional osv-scanner pass — folded in when caller opts in and runner is wired.
+    osv_findings = run_osv(repo_root, osv_runner)
+    all_findings.extend(osv_findings)
 
     # Collect scanned files from the findings themselves (each rule reports
     # findings per file; the scanner aggregates them here).
