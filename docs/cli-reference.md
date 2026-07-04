@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
+│ missioncontrol  Live, read-only dashboard for an onmc swarm.                 │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -2337,6 +2338,28 @@ Usage: onmc mission [OPTIONS] GOAL
 │ --json                                       Emit the mission plan as JSON   │
 │                                              instead of markdown.            │
 │ --help                                       Show this message and exit.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc missioncontrol`
+
+```text
+Usage: onmc missioncontrol [OPTIONS] [SWARM_ID]
+
+ Live, read-only dashboard for an onmc swarm.
+
+ Reads the swarm manifest + tamper-evident receipts and shows each unit's
+ state (pending/queued/running/done/failed/aborted), whether a receipt
+ exists, its verified flag and diff_sha, plus the abort-sentinel state.
+ Never mutates swarm state.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Swarm id to inspect. Omit with --all to list swarms. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --all           List all swarms under .onmc/swarm and exit.                  │
+│ --json          Emit machine-readable JSON instead of a table.               │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
