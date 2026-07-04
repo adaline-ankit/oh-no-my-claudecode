@@ -274,6 +274,70 @@ def test_mission_cli_markdown_plan_mode(
     assert "PLAN (dry-run, no agents)" in result.stdout
 
 
+# ---------------------------------------------------------------------------
+# Deliverable-based decomposition (greenfield) vs per-file (change-work)
+# ---------------------------------------------------------------------------
+
+
+def _no_dupe_goals(units: list[str]) -> None:
+    """No two swarm unit goal strings may be byte-identical."""
+    assert len(units) == len(set(units)), f"duplicate unit goals: {units}"
+
+
+def test_plan_mission_greenfield_decomposes_by_deliverable(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+
+    goal = (
+        "Build new modules: (1) add a rate limiter under src/limiter/ "
+        "(2) create a metrics exporter under src/metrics/"
+    )
+    plan = plan_mission(storage, sample_repo, goal)
+
+    # exactly two DISTINCT deliverable units (no verify unit — greenfield path
+    # derives purely from the named deliverables)
+    deliverable_units = [u for u in plan.swarm_units if "deliverable:" in u]
+    assert len(deliverable_units) == 2, plan.swarm_units
+    assert any("rate limiter" in u for u in deliverable_units)
+    assert any("metrics exporter" in u for u in deliverable_units)
+    # NO two units share an identical goal string (the degenerate case we fixed)
+    _no_dupe_goals(plan.swarm_units)
+
+
+def test_plan_mission_greenfield_and_split_no_dupes(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+
+    # " and " split path, two distinct deliverables, none of which exist in repo
+    goal = "Add a new module src/alpha/ and build a new module src/beta/"
+    plan = plan_mission(storage, sample_repo, goal)
+
+    deliverable_units = [u for u in plan.swarm_units if "deliverable:" in u]
+    assert len(deliverable_units) == 2, plan.swarm_units
+    _no_dupe_goals(plan.swarm_units)
+
+
+def test_plan_mission_change_work_scopes_per_file_and_dedupes(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+
+    # a change-work goal against real, existing files (the cache module lives here)
+    plan = plan_mission(storage, sample_repo, "fix cache invalidation bug")
+
+    # per-file scoping is preserved (no deliverable units)
+    assert any("focus on" in u for u in plan.swarm_units)
+    assert not any("deliverable:" in u for u in plan.swarm_units)
+    # capped and deduped — no runaway fan-out, no byte-identical goals
+    assert len(plan.swarm_units) <= 13  # _SWARM_UNIT_LIMIT (12) + 1 verify unit
+    _no_dupe_goals(plan.swarm_units)
+
+
 def test_mission_cli_execute_flag(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(sample_repo)
     _storage(sample_repo)

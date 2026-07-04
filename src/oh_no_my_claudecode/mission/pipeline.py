@@ -31,6 +31,7 @@ plan.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,30 @@ _DEAD_END_LIMIT = 5
 
 # How many files of blast radius (dependents) to carry into the plan.
 _BLAST_RADIUS_LIMIT = 12
+
+# Cap on the number of swarm units we ever emit — a hard ceiling against runaway
+# fan-out on a wide context pack or a goal that names dozens of clauses.
+_SWARM_UNIT_LIMIT = 12
+
+# Case-insensitive signals that a goal describes greenfield work (building things
+# that do not exist yet) rather than modifying existing files.  Matched as whole
+# words / phrase prefixes so "created" doesn't false-match "fix the cache".
+_GREENFIELD_MARKERS: tuple[str, ...] = (
+    "new module",
+    "new file",
+    "new package",
+    "new command",
+    "new service",
+    "add ",
+    "build ",
+    "create ",
+    "scaffold ",
+    "implement ",
+    "introduce ",
+)
+
+# A path-ish token in the goal, e.g. ``src/foo/bar.py`` or ``src/.../<name>/``.
+_PATH_TOKEN = re.compile(r"[\w./-]*[\w-]/[\w./-]+")
 
 # Default fan-out width for the swarm the mission would run.
 DEFAULT_CONCURRENCY = 4
@@ -178,22 +203,115 @@ def _collect_blast_radius(repo_root: Path, context_files: list[str]) -> list[str
     return ordered[:_BLAST_RADIUS_LIMIT]
 
 
-def _derive_swarm_units(goal: str, pack: ContextPack, blast_radius: list[str]) -> list[str]:
+def _named_paths(goal: str) -> list[str]:
+    """Path-ish tokens the goal explicitly names (e.g. ``src/foo/bar.py``)."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for match in _PATH_TOKEN.finditer(goal):
+        token = match.group(0).strip("/")
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
+    return out
+
+
+def _is_greenfield(goal: str, repo_root: Path | None, pack: ContextPack) -> bool:
+    """Heuristic: is this goal building NEW things rather than editing existing?
+
+    Greenfield when the goal text carries a build/create marker, OR it names paths
+    that do not yet exist under the repo.  If the pack already resolved real
+    context files that the goal points at, we treat it as change-work — there is
+    something concrete to modify.
+    """
+    lowered = goal.lower()
+    marker_hit = any(marker in lowered for marker in _GREENFIELD_MARKERS)
+
+    named = _named_paths(goal)
+    if named and repo_root is not None:
+        missing = [p for p in named if not (repo_root / p).exists()]
+        if missing:
+            return True
+
+    # A build/create verb with no resolved context files to edit → greenfield.
+    if marker_hit and not pack.context_files:
+        return True
+    return marker_hit and bool(named)
+
+
+def _split_deliverables(goal: str) -> list[str]:
+    """Parse the distinct deliverables named in a greenfield goal.
+
+    Tries, in order: explicit numbered clauses ``(1) ... (2) ...``; then newline
+    splits; then ``" and "`` splits.  Returns the cleaned, de-duplicated clauses
+    in stable first-seen order.  Empty when nothing splits out.
+    """
+    numbered = re.findall(r"\(\s*\d+\s*\)\s*(.*?)(?=\(\s*\d+\s*\)|$)", goal, flags=re.DOTALL)
+    if len(numbered) >= 2:
+        clauses = numbered
+    else:
+        by_line = [line for line in goal.splitlines() if line.strip()]
+        clauses = by_line if len(by_line) >= 2 else re.split(r"\s+and\s+|\s*[,;]\s*", goal)
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in clauses:
+        clause = raw.strip().strip("-•*").strip()
+        clause = re.sub(r"^\(\s*\d+\s*\)\s*", "", clause).strip()
+        if len(clause) < 3:
+            continue
+        key = clause.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(clause)
+    return out
+
+
+def _dedupe(units: list[str]) -> list[str]:
+    """Drop later units whose goal string exactly matches an earlier one."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for unit in units:
+        if unit not in seen:
+            seen.add(unit)
+            out.append(unit)
+    return out
+
+
+def _derive_swarm_units(
+    goal: str,
+    pack: ContextPack,
+    blast_radius: list[str],
+    repo_root: Path | None = None,
+) -> list[str]:
     """Derive the swarm unit goals the mission would run.
 
-    Deterministic and offline: one focused unit per context file (scoped to that
-    file under the parent goal), plus one final verification unit that covers the
-    blast radius.  When the pack found no context files we fall back to a single
-    unit carrying the raw goal — the mission always has at least one unit to run.
+    Deterministic and offline.  Two regimes:
+
+    - **Greenfield** (building new modules that don't exist yet): decompose by the
+      DISTINCT deliverables named in the goal — one focused sub-goal per
+      deliverable.  This avoids the degenerate case where a generic context pack
+      yields N near-identical units all carrying the same goal.
+    - **Change-work** (modifying real existing files): one focused unit per
+      context file, deduped and capped, plus a final blast-radius verify unit.
+
+    In both regimes we NEVER emit two units with an identical goal string, and we
+    always fall back to a single unit carrying the raw goal when nothing else can
+    be derived — the mission always has at least one unit to run.
     """
-    units: list[str] = []
-    for path in pack.context_files:
-        units.append(f"{goal} — focus on `{path}`")
-    if blast_radius:
-        files = ", ".join(f"`{p}`" for p in blast_radius[:5])
-        units.append(f"Verify the change against its blast radius: {files}")
+    units: list[str]
+    if _is_greenfield(goal, repo_root, pack):
+        deliverables = _split_deliverables(goal)
+        units = [f"{goal} — deliverable: {clause}" for clause in deliverables]
+    else:
+        units = [f"{goal} — focus on `{path}`" for path in pack.context_files]
+        units = _dedupe(units)[:_SWARM_UNIT_LIMIT]
+        if blast_radius:
+            files = ", ".join(f"`{p}`" for p in blast_radius[:5])
+            units.append(f"Verify the change against its blast radius: {files}")
+
+    units = _dedupe(units)
     if not units:
-        units.append(goal)
+        units = [goal]
     return units
 
 
@@ -242,7 +360,7 @@ def plan_mission(
     pack = build_pack(storage, repo_root, clean_goal, budget=budget)
     dead_ends = _collect_dead_ends(storage, clean_goal)
     blast_radius = _collect_blast_radius(repo_root, pack.context_files)
-    swarm_units = _derive_swarm_units(clean_goal, pack, blast_radius)
+    swarm_units = _derive_swarm_units(clean_goal, pack, blast_radius, repo_root)
     steps = _build_steps(execute=False)
 
     return MissionPlan(
