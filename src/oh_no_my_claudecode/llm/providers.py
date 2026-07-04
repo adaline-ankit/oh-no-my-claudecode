@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 import urllib.error
@@ -147,6 +148,75 @@ class OpenAIProvider(BaseLLMProvider):
         raise LLMProviderError(msg)
 
 
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_HOST_ENV_VAR = "ONMC_OLLAMA_HOST"
+
+
+def ollama_host() -> str:
+    """Return the configured Ollama base URL, defaulting to the local server."""
+    return os.environ.get(OLLAMA_HOST_ENV_VAR, DEFAULT_OLLAMA_HOST).rstrip("/")
+
+
+class OllamaProvider(BaseLLMProvider):
+    """Optional local, free, offline LLM provider backed by an Ollama server.
+
+    Talks to a local Ollama HTTP server (default ``http://localhost:11434``) over
+    stdlib ``urllib`` — no extra dependency. When the server is not running or
+    reachable, requests fail gracefully with a clear :class:`LLMProviderError`
+    rather than crashing the process. Existing providers are unaffected.
+    """
+
+    def __init__(self, settings: LLMSettings, *, host: str | None = None) -> None:
+        super().__init__(settings)
+        self.host = (host or ollama_host()).rstrip("/")
+
+    @property
+    def api_url(self) -> str:
+        return f"{self.host}/api/generate"
+
+    def generate(self, request: LLMGenerationRequest) -> LLMGenerationResponse:
+        model = self._require_model()
+        options: dict[str, Any] = {
+            "temperature": (
+                request.temperature
+                if request.temperature is not None
+                else self.settings.temperature
+            ),
+            "num_predict": request.max_tokens or self.settings.max_tokens,
+        }
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": request.prompt,
+            "stream": False,
+            "options": options,
+        }
+        if request.system_prompt:
+            payload["system"] = request.system_prompt
+        raw = _post_json(
+            self.api_url,
+            payload,
+            headers={},
+            provider=LLMProviderType.OLLAMA,
+            model=model,
+        )
+        text = raw.get("response")
+        if not isinstance(text, str) or not text.strip():
+            msg = "Ollama response did not contain text content."
+            raise LLMProviderError(msg)
+        return LLMGenerationResponse(
+            provider=LLMProviderType.OLLAMA,
+            model=model,
+            text=text.strip(),
+            raw=raw,
+        )
+
+    def _require_model(self) -> str:
+        if self.settings.model:
+            return self.settings.model
+        msg = "Ollama provider requires a configured model."
+        raise LLMProviderError(msg)
+
+
 class MockProvider(BaseLLMProvider):
     def __init__(self, settings: LLMSettings, *, response_text: str = "mock response") -> None:
         super().__init__(settings)
@@ -274,6 +344,8 @@ def validate_provider_api_key(
     """Validate provider credentials with a lightweight API request."""
     if provider == LLMProviderType.MOCK:
         return True, "Mock provider does not require validation."
+    if provider == LLMProviderType.OLLAMA:
+        return _validate_ollama_server()
     url: str
     headers: dict[str, str]
     if provider == LLMProviderType.ANTHROPIC:
@@ -310,6 +382,27 @@ def validate_provider_api_key(
             return False, "validation request timed out"
         return False, reason
     return True, "valid"
+
+
+def _validate_ollama_server() -> tuple[bool, str]:
+    """Check that a local Ollama server is reachable — never raises, degrades gracefully."""
+    url = f"{ollama_host()}/api/tags"
+    request = urllib.request.Request(url, method="GET")  # noqa: S310 - local Ollama host.
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - local Ollama host, keyless.
+            request,
+            timeout=llm_call_timeout_seconds(),
+        ) as response:
+            response.read()
+    except TimeoutError:
+        return False, "Ollama server request timed out"
+    except urllib.error.HTTPError as exc:
+        return False, f"Ollama server returned HTTP {exc.code}"
+    except urllib.error.URLError as exc:
+        return False, f"Ollama server unavailable: {exc.reason}"
+    except OSError as exc:
+        return False, f"Ollama server unavailable: {exc}"
+    return True, "Ollama server reachable"
 
 
 def _provider_http_error_message(
