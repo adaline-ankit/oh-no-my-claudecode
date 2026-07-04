@@ -328,6 +328,73 @@ function renderPerformance() {
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
 }
 
+// ── Command palette (⌘K) ────────────────────────────────────────────────
+const cmdk = { open: false, items: [], filtered: [], index: 0 };
+
+function commandItems() {
+  const items = SHORTCUT_VIEWS.map((v, i) => ({
+    kind: "View",
+    label: `Go to ${v.charAt(0).toUpperCase()}${v.slice(1)}`,
+    sub: `press ${i + 1}`,
+    run: () => switchView(v),
+  }));
+  const swarms = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  swarms.forEach((s) => items.push({
+    kind: "Swarm",
+    label: s.label || s.swarm_id,
+    sub: `${s.live ? "live · " : ""}${String(s.swarm_id).slice(0, 8)}`,
+    run: () => { switchView("swarms"); state.swarmSearch = String(s.swarm_id).slice(0, 8); const el = byId("swarm-search"); if (el) el.value = state.swarmSearch; renderSwarms(); },
+  }));
+  const memories = (state.data && state.data.memories) || [];
+  memories.slice(0, 60).forEach((m) => items.push({
+    kind: "Memory",
+    label: m.title,
+    sub: formatKind(m.kind),
+    run: () => { switchView("memory"); state.search = m.title; byId("memory-search").value = m.title; renderMemories(); },
+  }));
+  return items;
+}
+
+function renderCmdk() {
+  const list = byId("cmdk-results");
+  list.innerHTML = cmdk.filtered.slice(0, 40).map((it, i) => `
+    <li class="cmdk-item ${i === cmdk.index ? "is-active" : ""}" role="option" aria-selected="${i === cmdk.index}" data-cmdk-index="${i}">
+      <span class="cmdk-kind">${escapeHtml(it.kind)}</span>
+      <span class="cmdk-label">${escapeHtml(truncate(it.label || "", 64))}</span>
+      <span class="cmdk-sub">${escapeHtml(it.sub || "")}</span>
+    </li>`).join("") || '<li class="cmdk-empty">No matches</li>';
+}
+
+function filterCmdk(query) {
+  const q = query.trim().toLowerCase();
+  cmdk.filtered = !q ? cmdk.items : cmdk.items.filter((it) => `${it.label} ${it.sub} ${it.kind}`.toLowerCase().includes(q));
+  cmdk.index = 0;
+  renderCmdk();
+}
+
+function openCmdk() {
+  cmdk.open = true;
+  cmdk.items = commandItems();
+  byId("cmdk-backdrop").hidden = false;
+  byId("cmdk").hidden = false;
+  const input = byId("cmdk-input");
+  input.value = "";
+  filterCmdk("");
+  input.focus();
+}
+
+function closeCmdk() {
+  cmdk.open = false;
+  byId("cmdk-backdrop").hidden = true;
+  byId("cmdk").hidden = true;
+}
+
+function runCmdk(index) {
+  const item = cmdk.filtered[index];
+  closeCmdk();
+  if (item) item.run();
+}
+
 function renderHomeLive() {
   const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
   const s = sw.summary || {};
@@ -660,7 +727,27 @@ applyTheme(document.body.classList.contains("theme-dark") ? "dark" : "light");
 
 // Keyboard shortcuts: 1-9 jump to a view, "/" focuses the current search, "t" theme.
 const SHORTCUT_VIEWS = ["overview", "swarms", "performance", "scorecard", "timeline", "memory", "tasks", "codegraph", "health", "mission"];
+
+// Command palette input handling (arrows/enter/esc) + open shortcut.
+byId("cmdk-input").addEventListener("input", (event) => filterCmdk(event.target.value));
+byId("cmdk-input").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") { event.preventDefault(); cmdk.index = Math.min(cmdk.index + 1, cmdk.filtered.length - 1); renderCmdk(); }
+  else if (event.key === "ArrowUp") { event.preventDefault(); cmdk.index = Math.max(cmdk.index - 1, 0); renderCmdk(); }
+  else if (event.key === "Enter") { event.preventDefault(); runCmdk(cmdk.index); }
+  else if (event.key === "Escape") { event.preventDefault(); closeCmdk(); }
+});
+byId("cmdk-results").addEventListener("click", (event) => {
+  const li = event.target.closest("[data-cmdk-index]");
+  if (li) runCmdk(Number(li.dataset.cmdkIndex));
+});
+byId("cmdk-backdrop").addEventListener("click", closeCmdk);
+
 document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && (event.key === "k" || event.key === "K")) {
+    event.preventDefault();
+    cmdk.open ? closeCmdk() : openCmdk();
+    return;
+  }
   const typing = /^(input|textarea|select)$/i.test(event.target.tagName);
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (typing) { if (event.key === "Escape") event.target.blur(); return; }

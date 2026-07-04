@@ -278,6 +278,11 @@
         </div>
       </main>
     </div>
+    <div id="cmdk-backdrop" class="cmdk-backdrop" hidden></div>
+    <div id="cmdk" class="cmdk" role="dialog" aria-modal="true" aria-label="Command palette" hidden>
+      <div class="cmdk-field"><span class="cmdk-icon" aria-hidden="true">⌕</span><input id="cmdk-input" class="cmdk-input" type="text" placeholder="Jump to a view, swarm, or memory…" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="cmdk-results"></div>
+      <ul id="cmdk-results" class="cmdk-results" role="listbox"></ul>
+    </div>
     <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
     <aside id="unit-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
       <header class="drawer-head">
