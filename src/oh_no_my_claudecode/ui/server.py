@@ -15,7 +15,11 @@ from urllib.parse import urlsplit
 
 from oh_no_my_claudecode.core.repo import path_bucket
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.missioncontrol import build_dashboard, list_swarm_ids
 from oh_no_my_claudecode.models import FileStat, RepoFileRecord, TaskStatus
+
+# Unit lifecycle states that mean "an agent is working right now".
+_LIVE_UNIT_STATES = frozenset({"pending", "queued", "running"})
 
 STATIC_ROOT = files("oh_no_my_claudecode.ui").joinpath("static")
 
@@ -72,6 +76,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         },
         "report": service.agent_readiness_report(),
         "loops": _loops_payload(service),
+        "swarms": _swarms_payload(Path(status["repo_root"])),
     }
 
 
@@ -237,6 +242,84 @@ def _loops_payload(service: OnmcService) -> dict[str, Any]:
         return {"evolution": evolution_dict, "recent_runs": recent_runs}
     except Exception:  # noqa: BLE001
         return _empty
+
+
+def _swarms_payload(repo_root: Path) -> dict[str, Any]:
+    """Live view of every onmc swarm: units, states, verified flags, cost.
+
+    Reads ``.onmc/swarm/<id>/manifest.json`` + receipts via the missioncontrol
+    reader — the same source ``onmc missioncontrol`` uses. A swarm is *live*
+    when its ABORT-less ACTIVE sentinel is present or any unit is still
+    pending/queued/running (an agent working right now). Any failure returns a
+    safe empty default so the dashboard never 500s.
+    """
+    empty: dict[str, Any] = {
+        "summary": {
+            "swarms": 0,
+            "live": 0,
+            "running_units": 0,
+            "verified_units": 0,
+            "total_units": 0,
+            "total_cost_usd": 0.0,
+        },
+        "swarms": [],
+    }
+    try:
+        state_dir = repo_root / ".onmc" / "swarm"
+        if not state_dir.is_dir():
+            return empty
+
+        swarms: list[dict[str, Any]] = []
+        live = running_units = verified_units = total_units = 0
+        total_cost = 0.0
+        for swarm_id in list_swarm_ids(state_dir):
+            model = build_dashboard(state_dir, swarm_id)
+            if not model.exists:
+                continue
+            row = model.to_dict()
+            unit_running = sum(1 for u in model.units if u.state in _LIVE_UNIT_STATES)
+            # Live = an agent still has work in flight. The ACTIVE sentinel alone
+            # is unreliable (it persists after a swarm finishes), so liveness is
+            # driven by unit state; we surface aborted separately.
+            is_live = unit_running > 0 and not row.get("aborted", False)
+            row["live"] = is_live
+            row["running_units"] = unit_running
+            row["cost_usd"] = round(sum(u.cost_usd for u in model.units), 4)
+            # A one-line label: the shared parent goal of the swarm's units.
+            row["label"] = _swarm_label([u.goal for u in model.units])
+            swarms.append(row)
+
+            total_units += model.total
+            verified_units += model.verified_count
+            running_units += unit_running
+            total_cost += row["cost_usd"]
+            if is_live:
+                live += 1
+
+        # Most-recent (or live) first: live swarms on top, then by started_at desc.
+        swarms.sort(key=lambda s: (s.get("live", False), s.get("started_at") or ""), reverse=True)
+        return {
+            "summary": {
+                "swarms": len(swarms),
+                "live": live,
+                "running_units": running_units,
+                "verified_units": verified_units,
+                "total_units": total_units,
+                "total_cost_usd": round(total_cost, 4),
+            },
+            "swarms": swarms,
+        }
+    except Exception:  # noqa: BLE001
+        return empty
+
+
+def _swarm_label(goals: list[str]) -> str:
+    """Best-effort one-line label for a swarm from its unit goals."""
+    for goal in goals:
+        text = str(goal or "").strip()
+        if text:
+            return text[:80]
+    return "swarm"
 
 
 def _memory_kind_counts(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
