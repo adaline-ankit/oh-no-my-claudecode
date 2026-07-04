@@ -114,6 +114,20 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_scorecard_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """scorecard surfaces the readiness/trust card + shareable markdown."""
+    service = _ready_service(sample_repo, monkeypatch)
+    sc = build_dashboard_payload(service)["scorecard"]
+    assert "readiness" in sc
+    assert "notes" in sc
+    assert "markdown" in sc
+    # readiness is an int (0-100) or None; never crashes on a fresh repo.
+    assert sc["readiness"] is None or isinstance(sc["readiness"], int)
+
+
 def test_dashboard_payload_includes_performance_section(
     sample_repo: Path,
     monkeypatch: object,

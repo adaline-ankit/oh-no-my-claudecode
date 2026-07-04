@@ -43,6 +43,7 @@ function hydrateDashboard() {
   renderOverview();
   renderSwarms();
   renderPerformance();
+  renderScorecard();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -314,6 +315,29 @@ function renderPerformance() {
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
 }
 
+function renderScorecard() {
+  const sc = (state.data && state.data.scorecard) || {};
+  const readiness = sc.readiness;
+  const num = byId("score-num");
+  const ring = byId("score-ring");
+  num.textContent = readiness == null ? "–" : String(readiness);
+  const pct = readiness == null ? 0 : Math.max(0, Math.min(100, readiness));
+  const col = readiness == null ? "#c3ccc7" : readiness >= 80 ? "#237a50" : readiness >= 60 ? "#a65e18" : "#a23d3d";
+  ring.style.background = `conic-gradient(${col} ${pct * 3.6}deg, #e8ecea 0deg)`;
+  const trust = sc.top_agent_trust != null ? `trust ${Math.round(sc.top_agent_trust * 100)}%` : "no attestations yet";
+  const tiles = [
+    ["Top agent", sc.top_agent || "n/a", trust],
+    ["Best model", sc.best_model || "n/a", "by verified rate"],
+    ["Memory graph", sc.memory_entities != null ? `${formatNumber(sc.memory_entities)}` : "n/a", sc.memory_edges != null ? `${formatNumber(sc.memory_edges)} edges` : "entities"],
+  ];
+  byId("scorecard-tiles").innerHTML = tiles.map(([l, v, d]) => `
+    <div class="metric"><span class="metric-label">${escapeHtml(l)}</span><strong class="metric-value">${escapeHtml(String(v))}</strong><span class="metric-detail">${escapeHtml(d)}</span></div>
+  `).join("");
+  const notes = sc.notes || [];
+  byId("scorecard-notes-panel").hidden = notes.length === 0;
+  byId("scorecard-notes").innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+}
+
 function renderMemoryFilters() {
   const select = byId("memory-kind-filter");
   select.innerHTML = '<option value="">All kinds</option>' + state.data.memory_kinds.map((item) => `<option value="${escapeHtml(item.kind)}">${escapeHtml(formatKind(item.kind))} (${item.count})</option>`).join("");
@@ -549,6 +573,7 @@ byId("retry-button").addEventListener("click", renderDashboard);
 byId("memory-search").addEventListener("input", (event) => { state.search = event.target.value; renderMemories(); });
 byId("memory-kind-filter").addEventListener("change", (event) => { state.kind = event.target.value; renderMemories(); });
 byId("copy-report").addEventListener("click", async () => { try { await navigator.clipboard.writeText(state.data.report); showToast("Report copied"); } catch { showToast("Copy unavailable"); } });
+byId("copy-scorecard").addEventListener("click", async () => { try { await navigator.clipboard.writeText((state.data.scorecard || {}).markdown || ""); showToast("Scorecard copied"); } catch { showToast("Copy unavailable"); } });
 window.addEventListener("resize", () => { if (state.view === "codegraph") requestAnimationFrame(drawCodegraph); });
 
 // Swarm drilldown, filters, and live-refresh controls.
