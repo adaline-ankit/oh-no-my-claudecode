@@ -99,6 +99,7 @@ from oh_no_my_claudecode.setup import run_setup_wizard
 from oh_no_my_claudecode.ui import export_dashboard_snapshot, serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
+from oh_no_my_claudecode.wiki.foam import build_foam_vault
 from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 
 app = typer.Typer(
@@ -2552,6 +2553,18 @@ def audit_command(
             ),
         ),
     ] = False,
+    use_gitleaks: Annotated[
+        bool,
+        typer.Option(
+            "--gitleaks/--no-gitleaks",
+            help=(
+                "Also run gitleaks secret scanning and fold detected secrets into "
+                "the report.  Requires the 'gitleaks' binary on PATH.  When the "
+                "binary is absent this flag is silently ignored — no pip dependency "
+                "is added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2577,7 +2590,7 @@ def audit_command(
 
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep)
+    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks)
 
     if as_json:
         import dataclasses
@@ -2868,6 +2881,83 @@ def wiki_logseq_command(
             display = page
         console.print(f"  {display}")
     console.print(f"\n[bold]Open in Logseq:[/bold] {out_dir}")
+
+
+@wiki_app.command("foam")
+def wiki_foam_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write Foam notes into."
+                " Defaults to .onmc/foam/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a Foam-compatible markdown knowledge graph.
+
+    Writes one markdown note per memory into a ``notes/`` subdirectory and an
+    ``index.md`` entry point, using YAML frontmatter and ``[[wikilinks]]`` for
+    memory edges.  No new dependency — pure stdlib string generation.
+
+    Foam is a VS Code extension that reads a flat directory of markdown notes
+    and renders an interactive knowledge graph.  The output directory defaults
+    to ``.onmc/foam/`` and can be opened directly in VS Code with the Foam
+    extension installed.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "foam")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_foam_vault(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "foam",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No Foam notes generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]Foam vault generated:[/green] {len(written)} note(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    console.print(f"\n[bold]Open in VS Code (Foam):[/bold] {out_dir}")
 
 
 @memory_app.command("list")

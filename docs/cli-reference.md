@@ -327,21 +327,28 @@ Usage: onmc audit [OPTIONS] [PATH]
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                             Emit the full AuditReport as JSON to      │
-│                                    stdout.                                   │
-│ --fail-on                    TEXT  Exit non-zero when at least one finding   │
-│                                    at this severity or higher exists.  One   │
-│                                    of: critical, high, medium, low, info.    │
-│                                    Default: high.                            │
-│                                    [default: high]                           │
-│ --semgrep    --no-semgrep          Also run semgrep static analysis and fold │
-│                                    its findings into the report.  Requires   │
-│                                    the 'semgrep' binary on PATH.  When the   │
-│                                    binary is absent this flag is silently    │
-│                                    ignored — no pip dependency is added.     │
-│                                    Default: off.                             │
-│                                    [default: no-semgrep]                     │
-│ --help                             Show this message and exit.               │
+│ --json                               Emit the full AuditReport as JSON to    │
+│                                      stdout.                                 │
+│ --fail-on                      TEXT  Exit non-zero when at least one finding │
+│                                      at this severity or higher exists.  One │
+│                                      of: critical, high, medium, low, info.  │
+│                                      Default: high.                          │
+│                                      [default: high]                         │
+│ --semgrep     --no-semgrep           Also run semgrep static analysis and    │
+│                                      fold its findings into the report.      │
+│                                      Requires the 'semgrep' binary on PATH.  │
+│                                      When the binary is absent this flag is  │
+│                                      silently ignored — no pip dependency is │
+│                                      added.  Default: off.                   │
+│                                      [default: no-semgrep]                   │
+│ --gitleaks    --no-gitleaks          Also run gitleaks secret scanning and   │
+│                                      fold detected secrets into the report.  │
+│                                      Requires the 'gitleaks' binary on PATH. │
+│                                      When the binary is absent this flag is  │
+│                                      silently ignored — no pip dependency is │
+│                                      added.  Default: off.                   │
+│                                      [default: no-gitleaks]                  │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4248,6 +4255,31 @@ Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ logseq  Export memory as a Logseq-compatible knowledge graph.                │
+│ foam    Export memory as a Foam-compatible markdown knowledge graph.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki foam`
+
+```text
+Usage: onmc wiki foam [OPTIONS]
+
+ Export memory as a Foam-compatible markdown knowledge graph.
+
+ Writes one markdown note per memory into a ``notes/`` subdirectory and an
+ ``index.md`` entry point, using YAML frontmatter and ``[]`` for
+ memory edges.  No new dependency — pure stdlib string generation.
+
+ Foam is a VS Code extension that reads a flat directory of markdown notes
+ and renders an interactive knowledge graph.  The output directory defaults
+ to ``.onmc/foam/`` and can be opened directly in VS Code with the Foam
+ extension installed.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Directory to write Foam notes into. Defaults to          │
+│                     .onmc/foam/ (gitignored).                                │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
