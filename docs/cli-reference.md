@@ -107,6 +107,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 findings.                                                    │
 │ route           Deterministically route a task to an                         │
 │                 agent/model/strategy/gate.                                   │
+│ sbom            Generate a CycloneDX 1.5 SBOM of this project's              │
+│                 dependencies.                                                │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
 │                 wrap``.                                                      │
@@ -3369,6 +3371,36 @@ Usage: onmc savings [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc sbom`
+
+```text
+Usage: onmc sbom [OPTIONS]
+
+ Generate a CycloneDX 1.5 SBOM of this project's dependencies.
+
+ Reads ``uv.lock`` (preferred, fully pinned) or falls back to
+ ``pyproject.toml`` when no lockfile is present.  Output is
+ deterministic: components are sorted alphabetically by name.
+
+ Pure stdlib — no network calls, no new dependencies.
+
+ Examples:
+
+     onmc sbom                       # print to stdout
+
+     onmc sbom --out sbom.json       # write to file
+
+     onmc sbom --json                # onmc envelope (pipeline-friendly)
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         FILE  Write the SBOM to FILE instead of stdout.                │
+│ --json              Wrap the CycloneDX document in an onmc JSON envelope     │
+│                     {"kind": "sbom", "sbom": {...}} for pipeline             │
+│                     composition.                                             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
