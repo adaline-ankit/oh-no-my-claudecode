@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.67.0] — 2026-07-04
+
+### Added
+
+- **Optional fastembed local ONNX embedder** — a real semantic embedder (CPU ONNX, no API key) available via the `fastembed` extra; opt in with `ONMC_EMBEDDER=fastembed`. Import-guarded, and silently falls back to the default zero-dep hash embedder when the extra is absent or not selected (no change to the default install). Closes the "hash embedder is weak" gap `onmc roast` flags.
+- **SARIF 2.1.0 output for `onmc audit`** — `onmc audit --format sarif` emits findings as a valid SARIF 2.1.0 document (uploadable to GitHub code-scanning, viewable in the VS Code SARIF viewer), including any semgrep/gitleaks findings. Pure stdlib; the default Rich scorecard and `--json` output are unchanged.
+- **`onmc sbom` — CycloneDX 1.5 SBOM** — generates a software bill of materials from `uv.lock` (falling back to `pyproject.toml`) with normalized purls and deterministic ordering. Pure stdlib (`tomllib`), no new dependency, `--out`/`--json`. New module via command auto-discovery.
+
+All three are optional, import-guarded / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#197, #198, #200).
+
 ## [0.66.0] — 2026-07-04
 
 ### Added
