@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.68.0] — 2026-07-04
+
+### Added
+
+- **`onmc twin` — repo digital-twin change rehearsal** — before an agent edits code, rehearse the change offline: predict the blast radius (dependents via `codegraph`), surface the covering tests to run, and flag high-risk hub files — analysis only, never runs or edits code. `twin plan <paths…>` and `twin rehearse <paths…>`, `--json`. The RL-style "rehearse before you touch prod" frontier, grounded in the structural code graph.
+- **`onmc attest` — verifiable proof-of-work trust layer** — turns an onmc receipt into a signed, portable, ERC-8004-shaped attestation (HMAC-SHA256, constant-time verify) plus an agent reputation summary (verified-rate, distinct goals, track record). Stdlib-only, off-chain, unsigned-digest fallback when no secret. `attest sign/verify/reputation`, `--json`. Completes the receipts→trust story with `badge` (display) and `flywheel` (learn) — the agent-economy white space. (Code shipped in v0.67.0; documented here.)
+
+Both built via the `onmc mission`→swarm dogfood loop, each its own verified PR (#203, #201) — onmc building onmc.
+
 ## [0.67.0] — 2026-07-04
 
 ### Added
