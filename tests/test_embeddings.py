@@ -479,3 +479,260 @@ def test_memory_content_hash_is_deterministic() -> None:
 
 def test_memory_content_hash_differs_on_different_text() -> None:
     assert _memory_content_hash("hello") != _memory_content_hash("world")
+
+
+# ---------------------------------------------------------------------------
+# fastembed optional backend — all tests are OFFLINE (no model download)
+# ---------------------------------------------------------------------------
+
+import oh_no_my_claudecode.embeddings.core as _core_module  # noqa: E402
+
+
+def test_fastembed_available_returns_false_when_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When fastembed is not installed, fastembed_available() must return False."""
+    # Simulate absent package by making the import fail.
+    import builtins
+    import importlib
+
+    real_import = builtins.__import__
+
+    def _no_fastembed(name: str, *args: object, **kwargs: object) -> object:
+        if name == "fastembed":
+            raise ImportError("fastembed not installed (simulated)")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _no_fastembed)
+    from oh_no_my_claudecode.embeddings.core import fastembed_available
+
+    assert fastembed_available() is False
+    importlib.invalidate_caches()
+
+
+def test_fastembed_selected_false_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fastembed must NOT be auto-selected even if installed — requires explicit opt-in."""
+    from oh_no_my_claudecode.embeddings.core import fastembed_selected
+
+    monkeypatch.delenv("ONMC_EMBEDDER", raising=False)
+    # Even if the package were available, the env var is absent → not selected.
+    # We patch fastembed_available to True to isolate the env-var check.
+    monkeypatch.setattr(_core_module, "fastembed_available", lambda: True)
+    assert fastembed_selected() is False
+
+
+def test_fastembed_selected_true_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fastembed_selected() returns True when ONMC_EMBEDDER=fastembed and package present."""
+    from oh_no_my_claudecode.embeddings.core import fastembed_selected
+
+    monkeypatch.setenv("ONMC_EMBEDDER", "fastembed")
+    monkeypatch.setattr(_core_module, "fastembed_available", lambda: True)
+    assert fastembed_selected() is True
+
+
+def test_fastembed_selected_false_when_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fastembed_selected() returns False when env is set but package not installed."""
+    from oh_no_my_claudecode.embeddings.core import fastembed_selected
+
+    monkeypatch.setenv("ONMC_EMBEDDER", "fastembed")
+    monkeypatch.setattr(_core_module, "fastembed_available", lambda: False)
+    assert fastembed_selected() is False
+
+
+def test_get_embedder_falls_back_to_hash_when_fastembed_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ONMC_EMBEDDER=fastembed but the extra is absent, get_embedder falls back to hash."""
+    from oh_no_my_claudecode.embeddings.core import HashNgramEmbedder, get_embedder
+
+    monkeypatch.setenv("ONMC_EMBEDDER", "fastembed")
+    # Patch fastembed_selected to True but _try_fastembed to return None (absent).
+    monkeypatch.setattr(_core_module, "fastembed_selected", lambda: True)
+    monkeypatch.setattr(_core_module, "_try_fastembed", lambda **_kw: None)
+    # Also disable sentence-transformers to ensure we hit hash-ngram.
+    monkeypatch.setattr(_core_module, "_try_sentence_transformers", lambda: None)
+    # Reset the cached singleton.
+    monkeypatch.setattr(_core_module, "_DEFAULT_EMBEDDER", None)
+
+    emb = get_embedder()
+    assert isinstance(emb, HashNgramEmbedder)
+
+
+def test_get_embedder_returns_fastembed_when_selected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ONMC_EMBEDDER=fastembed and the extra loads, get_embedder returns it.
+
+    The fastembed TextEmbedding model is MONKEYPATCHED — no download happens.
+    """
+    import math
+
+    from oh_no_my_claudecode.embeddings.core import get_embedder
+
+    # Build a minimal fake embedder that satisfies the _FastEmbedder protocol.
+    class _FakeTextEmbedding:
+        def __init__(self, **_kw: object) -> None:
+            self._dim = 384
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            dim = self._dim
+            # Return a fixed unit vector for any input — deterministic & offline.
+            raw = [1.0 / math.sqrt(dim)] * dim
+            return [raw for _ in texts]
+
+    # Patch the TextEmbedding import inside _try_fastembed by injecting a fake
+    # fastembed module into sys.modules.
+    import sys
+    import types
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextEmbedding = _FakeTextEmbedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    monkeypatch.setattr(_core_module, "fastembed_selected", lambda: True)
+    monkeypatch.setattr(_core_module, "_DEFAULT_EMBEDDER", None)
+
+    emb = get_embedder()
+    # Must NOT be HashNgramEmbedder.
+    assert not isinstance(emb, _core_module.HashNgramEmbedder)
+    assert "fastembed" in emb.embedder_id
+    assert emb.dim == 384
+
+
+def test_fastembed_embedder_produces_unit_norm_vector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vectors from the fastembed wrapper are L2-normalised (unit norm).
+
+    Uses a monkeypatched model — no network access.
+    """
+    import math
+    import sys
+    import types
+
+    dim = 384
+
+    class _FakeTextEmbedding:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            # Return a non-unit raw vector; the wrapper must normalise it.
+            return [[2.0] * dim for _ in texts]
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextEmbedding = _FakeTextEmbedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    real = _core_module._try_fastembed()
+    assert real is not None
+    vec = real.embed("some text to embed")
+    norm = math.sqrt(sum(v * v for v in vec))
+    assert abs(norm - 1.0) < 1e-5, f"Expected unit norm, got {norm}"
+
+
+def test_fastembed_embedder_zero_vector_for_empty_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty text returns the zero vector from the fastembed wrapper.
+
+    Uses a monkeypatched model — no network access.
+    """
+    import sys
+    import types
+
+    dim = 384
+
+    class _FakeTextEmbedding:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0] * dim for _ in texts]
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextEmbedding = _FakeTextEmbedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    real = _core_module._try_fastembed()
+    assert real is not None
+    vec = real.embed("")
+    assert all(v == 0.0 for v in vec)
+    assert len(vec) == dim
+
+
+def test_fastembed_embedder_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fastembed wrapper produces identical vectors for the same text.
+
+    Uses a monkeypatched model — no network access.
+    """
+    import sys
+    import types
+
+    dim = 384
+
+    class _FakeTextEmbedding:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            import hashlib
+
+            result = []
+            for t in texts:
+                seed = int(hashlib.sha256(t.encode()).hexdigest(), 16) % 1000
+                result.append([float(seed + i) for i in range(dim)])
+            return result
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextEmbedding = _FakeTextEmbedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    real = _core_module._try_fastembed()
+    assert real is not None
+    text = "determinism check for fastembed wrapper"
+    v1 = real.embed(text)
+    v2 = real.embed(text)
+    assert v1 == v2
+
+
+def test_fastembed_embedder_id_contains_model_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """embedder_id encodes the model name for cache invalidation.
+
+    Uses a monkeypatched model — no network access.
+    """
+    import sys
+    import types
+
+    class _FakeTextEmbedding:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextEmbedding = _FakeTextEmbedding  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    real = _core_module._try_fastembed(model_name="BAAI/bge-small-en-v1.5")
+    assert real is not None
+    assert "BAAI/bge-small-en-v1.5" in real.embedder_id
+
+
+def test_get_embedder_default_is_hash_when_no_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without any ONMC_EMBEDDER env var, get_embedder returns HashNgramEmbedder."""
+    from oh_no_my_claudecode.embeddings.core import HashNgramEmbedder, get_embedder
+
+    monkeypatch.delenv("ONMC_EMBEDDER", raising=False)
+    monkeypatch.setattr(_core_module, "_DEFAULT_EMBEDDER", None)
+    # Ensure neither real backend is tried.
+    monkeypatch.setattr(_core_module, "fastembed_selected", lambda: False)
+    monkeypatch.setattr(_core_module, "_try_sentence_transformers", lambda: None)
+
+    emb = get_embedder()
+    assert isinstance(emb, HashNgramEmbedder)
