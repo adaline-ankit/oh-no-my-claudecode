@@ -93,6 +93,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
+│ flywheel        Mine verified run trajectories to recommend winning          │
+│                 approaches.                                                  │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
 │ missioncontrol  Live, read-only dashboard for an onmc swarm.                 │
@@ -1287,6 +1289,26 @@ Usage: onmc fleet status [OPTIONS]
 │ --swarm-id        TEXT  Limit output to one swarm id.                        │
 │ --json                  Print machine-readable JSON to stdout.               │
 │ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc flywheel`
+
+```text
+Usage: onmc flywheel [OPTIONS]
+
+ Mine verified run trajectories to recommend winning approaches.
+
+ Reads the tamper-evident run receipts written by ``onmc loop`` /
+ ``onmc swarm``, aggregates them by model and goal keyword, and reports
+ which approaches produced *verified* results — plus ranked
+ recommendations. Deterministic and fully offline (no LLM call).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json               Emit the flywheel report as JSON.                       │
+│ --since        TEXT  Only include runs since this time (e.g. 7d, 48h, or ISO │
+│                      date).                                                  │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
