@@ -111,6 +111,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 dependencies.                                                │
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
+│ timeline        Tell this repo's evolution story from its brain.             │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
 │                 wrap``.                                                      │
@@ -4450,6 +4451,27 @@ Usage: onmc teach [OPTIONS]
 │    --no-llm                   Use heuristic fallback instead of the          │
 │                               configured LLM.                                │
 │    --help                     Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc timeline`
+
+```text
+Usage: onmc timeline [OPTIONS]
+
+ Tell this repo's evolution story from its brain.
+
+ Orders the durable memory (decisions, invariants, gotchas, dead-ends)
+ over time into a readable narrative grouped into periods. Deterministic
+ and offline. An empty brain prints a 'no history yet' note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --since           TEXT  Only include milestones on/after this point — an ISO │
+│                         date (2026-07-01) or a relative window (30d).        │
+│ --group           TEXT  Period granularity: 'day' or 'week'. [default: day]  │
+│ --json                  Emit the timeline as JSON.                           │
+│ --markdown              Emit the timeline as a markdown story.               │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
