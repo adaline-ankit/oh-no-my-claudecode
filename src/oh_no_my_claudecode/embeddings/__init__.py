@@ -33,6 +33,16 @@ ONNX model on CPU — no API key, no network at inference time.  The default
 model is ``BAAI/bge-small-en-v1.5`` (384-d, ~33 M parameters).  When the
 package is absent or unselected the hash-ngram embedder is used without error.
 
+Optional fastembed cross-encoder reranker
+-----------------------------------------
+When the optional ``fastembed`` extra is installed (``pip install
+oh-no-my-claudecode[fastembed]``) **and** the reranker is selected
+(``ONMC_RERANKER=fastembed``), :func:`rerank_with_embeddings` uses
+``fastembed.TextCrossEncoder`` as a cross-encoder re-scorer.  A cross-encoder
+scores (query, document) pairs jointly, providing sharper relevance signal than
+the default cosine-blend bi-encoder approach.  When the extra is absent or
+unselected the existing cosine-blend reranker is used without error.
+
 Optional sqlite-vec backend
 ---------------------------
 When the optional ``sqlite-vec`` extra is installed (``pip install
@@ -54,6 +64,10 @@ from oh_no_my_claudecode.embeddings.core import (
     fastembed_selected,
     get_embedder,
 )
+from oh_no_my_claudecode.embeddings.rerank import (
+    fastembed_reranker_available,
+    fastembed_reranker_selected,
+)
 from oh_no_my_claudecode.embeddings.vecstore import (
     SqliteVecStore,
     semantic_search,
@@ -67,6 +81,8 @@ __all__ = [
     "SqliteVecStore",
     "cosine_similarity",
     "fastembed_available",
+    "fastembed_reranker_available",
+    "fastembed_reranker_selected",
     "fastembed_selected",
     "get_embedder",
     "semantic_search",

@@ -3392,6 +3392,7 @@ class OnmcService:
         repo_root: Path | None = None,
         semgrep: bool = False,
         gitleaks: bool = False,
+        osv: bool = False,
     ) -> AuditReport:
         """Run the agent-configuration security scanner against the repo.
 
@@ -3419,6 +3420,13 @@ class OnmcService:
             when the binary is absent the flag is silently ignored — zero
             regression.  No pip dependency is added — gitleaks is an external
             tool.
+        osv:
+            Opt in to an additional osv-scanner dependency-vulnerability pass.
+            Only takes effect when the ``osv-scanner`` binary is on ``PATH``
+            (detected with :func:`~oh_no_my_claudecode.audit.osv.osv_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — osv-scanner is an external
+            tool.
 
         Returns
         -------
@@ -3428,6 +3436,10 @@ class OnmcService:
         from oh_no_my_claudecode.audit.gitleaks import (
             gitleaks_available,
             make_gitleaks_runner,
+        )
+        from oh_no_my_claudecode.audit.osv import (
+            make_osv_runner,
+            osv_available,
         )
         from oh_no_my_claudecode.audit.scanner import AuditReport as _AuditReport
         from oh_no_my_claudecode.audit.scanner import run_audit
@@ -3450,10 +3462,15 @@ class OnmcService:
         if gitleaks and gitleaks_available():
             gitleaks_runner = make_gitleaks_runner()
 
+        osv_runner = None
+        if osv and osv_available():
+            osv_runner = make_osv_runner()
+
         result: _AuditReport = run_audit(
             repo_root,
             semgrep_runner=semgrep_runner,
             gitleaks_runner=gitleaks_runner,
+            osv_runner=osv_runner,
         )
         return result
 
