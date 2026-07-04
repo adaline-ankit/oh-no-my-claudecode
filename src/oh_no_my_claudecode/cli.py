@@ -101,6 +101,7 @@ from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
 from oh_no_my_claudecode.wiki.foam import build_foam_vault
 from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
+from oh_no_my_claudecode.wiki.site import build_site
 
 app = typer.Typer(
     help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
@@ -3011,6 +3012,82 @@ def wiki_foam_command(
             display = page
         console.print(f"  {display}")
     console.print(f"\n[bold]Open in VS Code (Foam):[/bold] {out_dir}")
+
+
+@wiki_app.command("site")
+def wiki_site_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write the HTML site into."
+                " Defaults to .onmc/site/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a self-contained static HTML site.
+
+    Writes ``index.html`` listing all memories grouped by kind, plus one
+    ``<slug>.html`` detail page per memory with its full body and resolved
+    ``<a href>`` links for memory edges.  No external app, no JS framework,
+    no network required — open ``index.html`` directly in any browser.
+
+    The output directory defaults to ``.onmc/site/``.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "site")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_site(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "site",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No HTML pages generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]HTML site generated:[/green] {len(written)} page(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    index_path = out_dir / "index.html"
+    console.print(f"\n[bold]Open in browser:[/bold] {index_path}")
 
 
 @memory_app.command("list")
