@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.66.0] — 2026-07-04
+
+### Added
+
+- **`onmc orggraph` — institutional-memory knowledge graph** — turns onmc's provenanced memories into an entity/relationship graph: extracts entities (files, components, decisions, people) and typed edges (`decided-by`, `supersedes`, `depends-on`, `caused-by`, `relates-to`), each carrying lineage (the source memory ids it came from). `orggraph build` materializes it, `orggraph query <entity>` shows neighbors + provenance, `orggraph why <decision>` traces a decision's lineage. Pure/deterministic/offline, `--json` on each. Targets the frontier's #1 2026 agent bottleneck — institutional memory that compounds.
+- **`onmc flywheel` — self-improving trajectory analysis** — mines onmc's *verified* run receipts (the outcome-labeled trajectory data no other tool has) to compute which approaches win: per-model verified-rate, avg cost, avg wall-time, and a ranked recommendation ("for goals like X, prefer model Y — verified N/M at $Z"). Honest by construction: null cost is `n/a` never fabricated; below the sample floor it reports insufficient data. `--json`, `--since`.
+
+Both built in parallel by an onmc swarm (planned by `onmc mission`), each its own verified PR — onmc building onmc.
+
 ## [0.65.0] — 2026-07-04
 
 ### Added

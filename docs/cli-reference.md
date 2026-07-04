@@ -327,6 +327,13 @@ Usage: onmc audit [OPTIONS] [PATH]
  Use ``--fail-on critical`` for a lenient CI gate, ``--fail-on medium`` for
  a stricter one.
 
+ Output formats:
+
+ - ``text`` (default) — Rich-rendered scorecard in the terminal.
+ - ``json`` — Full AuditReport serialised as JSON (same as legacy ``--json``).
+ - ``sarif`` — SARIF 2.1.0 document for GitHub code-scanning, VS Code SARIF
+   viewer, and other SAST integrations.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │   [path]      PATH  Repo root to scan.  Defaults to the current directory.   │
 │                     The directory does not need to be an initialised ONMC    │
@@ -335,6 +342,14 @@ Usage: onmc audit [OPTIONS] [PATH]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                               Emit the full AuditReport as JSON to    │
 │                                      stdout.                                 │
+│ --format                       TEXT  Output format.  One of: text (default   │
+│                                      Rich scorecard), json (AuditReport      │
+│                                      JSON), sarif (SARIF 2.1.0 for GitHub    │
+│                                      code-scanning and VS Code SARIF         │
+│                                      viewer).  When --format is given it     │
+│                                      takes precedence over the legacy --json │
+│                                      flag.                                   │
+│                                      [default: text]                         │
 │ --fail-on                      TEXT  Exit non-zero when at least one finding │
 │                                      at this severity or higher exists.  One │
 │                                      of: critical, high, medium, low, info.  │
