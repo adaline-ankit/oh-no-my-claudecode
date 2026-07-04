@@ -1,6 +1,7 @@
 name: labeler
 
-# Auto-applies area labels to PRs based on changed paths (.github/labeler.yml).
+# Auto-applies area/* labels to PRs based on changed paths (.github/labeler.yml).
+# Priority, kind, size, and risk labels are owned by triage.yml.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
@@ -9,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: labeler-${{ github.ref }}
+  group: labeler-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:

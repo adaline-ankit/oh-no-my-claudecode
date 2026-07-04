@@ -2,13 +2,19 @@
 name: Feature request
 about: Suggest an improvement to ONMC
 title: "[Feature] "
-labels: enhancement
+labels: kind/feature, needs-triage
 assignees: ""
 ---
 
 ## Problem
 
 What workflow is hard today? Who runs into it?
+
+## Priority
+
+- `P1`: blocks a core ONMC workflow for many users
+- `P2`: important improvement, not release-blocking
+- `P3`: polish, discoverability, or backlog
 
 ## Proposed Change
 
