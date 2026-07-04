@@ -143,6 +143,20 @@ class DashboardModel:
         }
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    """Coerce *value* to float, tolerant of corrupt/unexpected manifest data.
+
+    Returns *default* on ``None`` or any non-numeric value so a bad ``cost_usd``
+    never breaks dashboard construction (all other fields are read defensively).
+    """
+    if value is None:
+        return default
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     """Best-effort JSON read; ``None`` on any missing/malformed file."""
     try:
@@ -191,7 +205,7 @@ def _unit_from_manifest(
         verified=raw.get("verified"),
         has_receipt=has_receipt,
         diff_sha=diff_sha,
-        cost_usd=float(raw.get("cost_usd", 0.0) or 0.0),
+        cost_usd=_safe_float(raw.get("cost_usd", 0.0)),
         error=raw.get("error"),
         receipt_path=receipt_path,
     )
@@ -292,8 +306,11 @@ def render_dashboard(model: DashboardModel, console: Console) -> None:
         return
 
     counts = model.state_counts
+    # Iterate the full count map (known states first, unknown states appended by
+    # state_counts) so any unexpected lifecycle value still surfaces in the
+    # summary rather than being silently dropped.
     summary = "  ".join(
-        f"[{_state_style(s)}]{s}[/]: {counts[s]}" for s in _KNOWN_STATES if counts[s]
+        f"[{_state_style(s)}]{s}[/]: {n}" for s, n in counts.items() if n
     ) or "[dim]no units[/dim]"
     abort_note = "  [magenta]● ABORT requested[/magenta]" if model.aborted else ""
 

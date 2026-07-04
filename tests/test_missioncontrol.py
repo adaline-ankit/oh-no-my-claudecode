@@ -231,3 +231,29 @@ def test_to_dict_is_json_serialisable(tmp_path: Path) -> None:
     assert json.loads(json.dumps(payload))["swarm_id"] == "jsonsw"
     assert payload["verified_count"] == 1
     assert payload["state_counts"]["done"] == 1
+
+
+def test_non_numeric_cost_usd_does_not_break_build(tmp_path: Path) -> None:
+    # A corrupt/future manifest with a non-numeric cost_usd must coerce to 0.0,
+    # not raise (Sourcery bug_risk).
+    base = _make_swarm(
+        tmp_path,
+        "badcost",
+        units={"unit-0000": {"goal": "g", "status": "done", "cost_usd": "oops"}},
+    )
+    model = build_dashboard(base, "badcost")
+    assert model.units[0].cost_usd == 0.0
+
+
+def test_summary_surfaces_unknown_states(tmp_path: Path) -> None:
+    # An unexpected lifecycle value must still appear in the rendered summary
+    # rather than being silently dropped (Sourcery suggestion).
+    base = _make_swarm(
+        tmp_path,
+        "weird",
+        units={"unit-0000": {"goal": "g", "status": "quarantined"}},
+    )
+    model = build_dashboard(base, "weird")
+    console, buf = _console()
+    render_dashboard(model, console)
+    assert "quarantined" in buf.getvalue()

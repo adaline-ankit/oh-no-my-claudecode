@@ -103,7 +103,10 @@ def register(app: typer.Typer) -> None:
         model = build_dashboard(base, swarm_id)
         if as_json:
             typer.echo(json.dumps(model.to_dict()))
-            return
-        render_dashboard(model, console)
+        else:
+            render_dashboard(model, console)
+        # A missing swarm is an error in BOTH modes: exit 1 so automation can
+        # rely on the exit code regardless of --json (the JSON still carries
+        # exists=false for callers that parse it).
         if not model.exists:
             raise typer.Exit(code=1)
