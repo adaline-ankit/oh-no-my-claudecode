@@ -607,6 +607,19 @@ body.theme-dark .drawer-error pre { color: var(--ink); }
 body.theme-dark .drawer-error pre { color: #e79b8e; }
 body.theme-dark .brand-mark { background: #d9f26a; color: #152018; }
 
+/* Overview live-agents home strip */
+.live-home-panel { margin-top: 16px; }
+.live-home-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.live-home-stats { display: flex; flex-wrap: wrap; gap: 20px; padding-bottom: 4px; }
+.live-home-stats span { color: var(--muted); font-size: 12px; }
+.live-home-stats span strong { color: var(--faint); font-size: 15px; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.live-home-stats span.on strong { color: var(--blue); }
+.live-home-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.live-home-row:hover { background: var(--surface-alt); border-color: #b6d2e1; }
+.live-home-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 13px; font-weight: 600; }
+.live-home-run { flex: none; color: var(--blue); font-size: 11px; font-variant-numeric: tabular-nums; }
+.live-home-empty { color: var(--muted); font-size: 12px; }
+
 /* Timeline view */
 .timeline-body { display: flex; flex-direction: column; gap: 20px; }
 .tl-period { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; }

@@ -52,6 +52,7 @@ function hydrateDashboard() {
   byId("repo-path").textContent = data.repo.root;
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
+  renderHomeLive();
   renderSwarms();
   renderPerformance();
   renderScorecard();
@@ -325,6 +326,25 @@ function renderPerformance() {
   byId("perf-recs").innerHTML = recs.length
     ? recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
+}
+
+function renderHomeLive() {
+  const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
+  const s = sw.summary || {};
+  const live = (sw.swarms || []).filter((x) => x.live).slice(0, 4);
+  const stats = `<div class="live-home-stats">
+    <span class="${(s.live || 0) ? "on" : ""}"><strong>${formatNumber(s.live || 0)}</strong> live</span>
+    <span class="${(s.running_units || 0) ? "on" : ""}"><strong>${formatNumber(s.running_units || 0)}</strong> running agents</span>
+    <span><strong>${formatNumber(s.swarms || 0)}</strong> swarms</span>
+    <span><strong>${formatNumber(s.verified_units || 0)}</strong> verified</span>
+  </div>`;
+  const rows = live.length
+    ? live.map((sc) => `<button class="live-home-row" data-go-view="swarms" type="button">
+        <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+        <span class="live-home-label">${escapeHtml(truncate(sc.label || "swarm", 72))}</span>
+        <span class="live-home-run">${formatNumber(sc.running_units || 0)} running</span></button>`).join("")
+    : '<div class="live-home-empty">No agents running right now — start one with <code>onmc swarm plan</code>.</div>';
+  byId("live-home-body").innerHTML = stats + rows;
 }
 
 function renderScorecard() {

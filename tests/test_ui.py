@@ -296,6 +296,26 @@ def test_swarm_units_enriched_with_receipt_detail(
     assert unit["receipt_hash"] == "abc123def456"
 
 
+def test_dashboard_html_contains_overview_live_home(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Overview surfaces a live-agents home strip that jumps to Swarms."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="live-home-panel"' in html
+    assert "renderHomeLive" in js
+
+
 def test_dashboard_html_contains_theme_toggle_and_shortcuts(
     sample_repo: Path,
     monkeypatch: object,
