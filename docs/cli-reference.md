@@ -160,6 +160,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
+│ twin            Rehearse a code change offline: predict blast radius,        │
+│                 surface covering tests, flag high-risk touches. Analysis     │
+│                 only — never runs or edits code.                             │
 │ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
 │                 server, no dep).                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -4220,6 +4223,69 @@ Usage: onmc tui [OPTIONS]
  Open the interactive terminal brain-browser for memory curation.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc twin`
+
+```text
+Usage: onmc twin [OPTIONS] COMMAND [ARGS]...
+
+ Rehearse a code change offline: predict blast radius, surface covering tests,
+ flag high-risk touches. Analysis only — never runs or edits code.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ plan      Predict the blast radius of touching PATHS — before you edit.      │
+│ rehearse  Rehearse touching PATHS with an explicit before-you-edit advisory. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc twin plan`
+
+```text
+Usage: onmc twin plan [OPTIONS] PATHS...
+
+ Predict the blast radius of touching PATHS — before you edit.
+
+ Offline analysis against the structural code graph: per file, shows how many
+ files depend on it, its risk level, and the tests that cover it, plus a
+ suggested test command.  Never runs or edits any code.  If the graph is
+ empty, run `onmc codegraph` first.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the rehearsal plan as JSON.                             │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc twin rehearse`
+
+```text
+Usage: onmc twin rehearse [OPTIONS] PATHS...
+
+ Rehearse touching PATHS with an explicit before-you-edit advisory.
+
+ Same blast-radius table as `twin plan`, plus a spelled-out summary: which
+ tests to run first, how many dependents to watch, and any HIGH-RISK hub
+ files.  Pure analysis — nothing is executed or edited.  If the graph is
+ empty, run `onmc codegraph` first.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the rehearsal plan as JSON.                             │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
