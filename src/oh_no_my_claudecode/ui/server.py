@@ -77,6 +77,8 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         "report": service.agent_readiness_report(),
         "loops": _loops_payload(service),
         "swarms": _swarms_payload(Path(status["repo_root"])),
+        "performance": _performance_payload(Path(status["repo_root"])),
+        "scorecard": _scorecard_payload(Path(status["repo_root"])),
     }
 
 
@@ -312,6 +314,51 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
             },
             "swarms": swarms,
         }
+    except Exception:  # noqa: BLE001
+        return empty
+
+
+def _scorecard_payload(repo_root: Path) -> dict[str, Any]:
+    """The shareable agent-readiness + trust scorecard (roast/registry/flywheel/orggraph).
+
+    Reuses ``scorecard.build_scorecard`` (each signal degrades to ``None`` with a
+    note). Returns the scorecard dict plus its shareable markdown. Never 500s.
+    """
+    try:
+        from oh_no_my_claudecode.scorecard import build_scorecard, render_markdown
+
+        card = build_scorecard(repo_root)
+        payload = card.to_dict()
+        payload["markdown"] = render_markdown(card)
+        return payload
+    except Exception:  # noqa: BLE001
+        return {"readiness": None, "notes": [], "markdown": ""}
+
+
+def _performance_payload(repo_root: Path) -> dict[str, Any]:
+    """How the agents perform: model win-rates (flywheel) + fleet cost (ledger).
+
+    Reuses the flywheel trajectory analysis and the ledger accounting over the
+    same run receipts. Any failure returns a safe empty default (never 500s).
+    """
+    empty: dict[str, Any] = {"flywheel": None, "ledger": None}
+    try:
+        from oh_no_my_claudecode.flywheel import load_trajectories, recommend, summarize
+        from oh_no_my_claudecode.ledger.accounting import load_receipts, summarize_receipts
+
+        report = summarize(load_trajectories(repo_root))
+        rate = round(report.verified_total / report.total, 4) if report.total else 0.0
+        flywheel = {
+            "total": report.total,
+            "verified_total": report.verified_total,
+            "verified_rate": rate,
+            "by_model": [dataclasses.asdict(m) for m in report.by_model],
+            "best": dataclasses.asdict(report.best) if report.best else None,
+            "recommendations": list(recommend(report)),
+        }
+        receipts = load_receipts(repo_root, scope="project")
+        ledger = dataclasses.asdict(summarize_receipts(receipts, scope="project"))
+        return {"flywheel": flywheel, "ledger": ledger}
     except Exception:  # noqa: BLE001
         return empty
 

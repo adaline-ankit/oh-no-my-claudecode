@@ -42,6 +42,8 @@ function hydrateDashboard() {
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
   renderSwarms();
+  renderPerformance();
+  renderScorecard();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -268,6 +270,72 @@ function renderLiveStatus() {
   el.classList.toggle("is-stale", stale || !state.autoRefresh);
   if (!state.autoRefresh) { text.textContent = "paused"; return; }
   text.textContent = ago === null ? "connecting…" : ago < 2 ? "updated now" : `updated ${ago}s ago`;
+}
+
+function renderPerformance() {
+  const perf = (state.data && state.data.performance) || {};
+  const fw = perf.flywheel;
+  const led = perf.ledger;
+  const hasData = !!(fw && fw.total > 0);
+  byId("perf-empty").hidden = hasData;
+  const rate = fw ? Math.round((fw.verified_rate || 0) * 100) : 0;
+  const successRate = led ? Math.round((led.success_rate || 0) * 100) : 0;
+  const cost = led ? Number(led.total_cost_usd || 0) : 0;
+  const costUnknown = led ? (led.cost_unknown_count || 0) : 0;
+  const metrics = [
+    ["Runs", fw ? String(fw.total) : "0", led ? `${successRate}% success` : ""],
+    ["Verified rate", `${rate}%`, fw ? `${fw.verified_total}/${fw.total} verified` : ""],
+    ["Fleet cost", costUnknown && !cost ? "n/a" : `$${cost.toFixed(2)}`, costUnknown ? `${costUnknown} cost unknown` : "recorded"],
+    ["Models", fw ? String(fw.by_model.length) : "0", fw && fw.best ? `best: ${fw.best.model}` : ""],
+  ];
+  byId("perf-metric-grid").innerHTML = metrics.map(([l, v, d]) => `
+    <div class="metric"><span class="metric-label">${escapeHtml(l)}</span><strong class="metric-value">${escapeHtml(v)}</strong><span class="metric-detail">${escapeHtml(d)}</span></div>
+  `).join("");
+
+  const chip = byId("perf-chip");
+  chip.className = `status-chip ${rate >= 70 ? "ready" : "needs-attention"}`;
+  chip.textContent = hasData ? `${rate}% verified` : "no data";
+
+  const models = fw ? fw.by_model : [];
+  byId("perf-model-count").textContent = `${models.length} model${models.length === 1 ? "" : "s"}`;
+  byId("perf-model-body").innerHTML = models.map((m) => {
+    const mrate = Math.round((m.verified_rate || 0) * 100);
+    return `<tr>
+      <td><code>${escapeHtml(m.model)}</code></td>
+      <td class="num">${formatNumber(m.runs)}</td>
+      <td><div class="rate-cell"><span class="rate-bar"><i style="width:${mrate}%"></i></span><span class="rate-num">${formatNumber(m.verified)}/${formatNumber(m.runs)}</span></div></td>
+      <td class="num">${m.avg_cost == null ? "n/a" : "$" + Number(m.avg_cost).toFixed(3)}</td>
+      <td class="num">${Number(m.avg_wall || 0).toFixed(0)}s</td>
+    </tr>`;
+  }).join("");
+
+  const recs = (fw && fw.recommendations) || [];
+  byId("perf-recs").innerHTML = recs.length
+    ? recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")
+    : '<li class="recs-muted">Not enough verified runs yet.</li>';
+}
+
+function renderScorecard() {
+  const sc = (state.data && state.data.scorecard) || {};
+  const readiness = sc.readiness;
+  const num = byId("score-num");
+  const ring = byId("score-ring");
+  num.textContent = readiness == null ? "–" : String(readiness);
+  const pct = readiness == null ? 0 : Math.max(0, Math.min(100, readiness));
+  const col = readiness == null ? "#c3ccc7" : readiness >= 80 ? "#237a50" : readiness >= 60 ? "#a65e18" : "#a23d3d";
+  ring.style.background = `conic-gradient(${col} ${pct * 3.6}deg, #e8ecea 0deg)`;
+  const trust = sc.top_agent_trust != null ? `trust ${Math.round(sc.top_agent_trust * 100)}%` : "no attestations yet";
+  const tiles = [
+    ["Top agent", sc.top_agent || "n/a", trust],
+    ["Best model", sc.best_model || "n/a", "by verified rate"],
+    ["Memory graph", sc.memory_entities != null ? `${formatNumber(sc.memory_entities)}` : "n/a", sc.memory_edges != null ? `${formatNumber(sc.memory_edges)} edges` : "entities"],
+  ];
+  byId("scorecard-tiles").innerHTML = tiles.map(([l, v, d]) => `
+    <div class="metric"><span class="metric-label">${escapeHtml(l)}</span><strong class="metric-value">${escapeHtml(String(v))}</strong><span class="metric-detail">${escapeHtml(d)}</span></div>
+  `).join("");
+  const notes = sc.notes || [];
+  byId("scorecard-notes-panel").hidden = notes.length === 0;
+  byId("scorecard-notes").innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
 }
 
 function renderMemoryFilters() {
@@ -505,6 +573,7 @@ byId("retry-button").addEventListener("click", renderDashboard);
 byId("memory-search").addEventListener("input", (event) => { state.search = event.target.value; renderMemories(); });
 byId("memory-kind-filter").addEventListener("change", (event) => { state.kind = event.target.value; renderMemories(); });
 byId("copy-report").addEventListener("click", async () => { try { await navigator.clipboard.writeText(state.data.report); showToast("Report copied"); } catch { showToast("Copy unavailable"); } });
+byId("copy-scorecard").addEventListener("click", async () => { try { await navigator.clipboard.writeText((state.data.scorecard || {}).markdown || ""); showToast("Scorecard copied"); } catch { showToast("Copy unavailable"); } });
 window.addEventListener("resize", () => { if (state.view === "codegraph") requestAnimationFrame(drawCodegraph); });
 
 // Swarm drilldown, filters, and live-refresh controls.

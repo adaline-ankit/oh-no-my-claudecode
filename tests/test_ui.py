@@ -114,6 +114,64 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_scorecard_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """scorecard surfaces the readiness/trust card + shareable markdown."""
+    service = _ready_service(sample_repo, monkeypatch)
+    sc = build_dashboard_payload(service)["scorecard"]
+    assert "readiness" in sc
+    assert "notes" in sc
+    assert "markdown" in sc
+    # readiness is an int (0-100) or None; never crashes on a fresh repo.
+    assert sc["readiness"] is None or isinstance(sc["readiness"], int)
+
+
+def test_dashboard_payload_includes_performance_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """performance surfaces flywheel model stats + ledger totals from receipts."""
+    service = _ready_service(sample_repo, monkeypatch)
+    receipts_dir = sample_repo / ".agent-memory" / "receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    for i, verified in enumerate([True, True, False]):
+        (receipts_dir / f"run-{i}.json").write_text(
+            json.dumps(
+                {
+                    "goal": "make tests green",
+                    "model": "opus",
+                    "verified": verified,
+                    "cost_usd": 0.5,
+                    "wall_seconds": 60.0,
+                    "tokens_used": 1000,
+                    "started_at": "2026-07-05T10:00:00",
+                    "ended_at": "2026-07-05T10:01:00",
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    perf = build_dashboard_payload(service)["performance"]
+
+    assert perf["flywheel"]["total"] == 3
+    assert perf["flywheel"]["verified_total"] == 2
+    assert perf["ledger"]["run_count"] == 3
+    assert any(m["model"] == "opus" for m in perf["flywheel"]["by_model"])
+
+
+def test_dashboard_payload_performance_exception_safe(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """performance is present and empty-safe when there are no receipts."""
+    service = _ready_service(sample_repo, monkeypatch)
+    perf = build_dashboard_payload(service)["performance"]
+    assert "flywheel" in perf
+    assert "ledger" in perf
+
+
 def test_dashboard_payload_includes_swarms_section_exception_safe(
     sample_repo: Path,
     monkeypatch: object,

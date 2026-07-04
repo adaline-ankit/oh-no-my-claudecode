@@ -23,6 +23,12 @@
             <span class="nav-icon" aria-hidden="true">⚡</span><span>Swarms</span>
             <span id="nav-live-dot" class="nav-live-dot" aria-hidden="true" hidden></span>
           </button>
+          <button class="nav-item" data-view="performance">
+            <span class="nav-icon" aria-hidden="true">▤</span><span>Performance</span>
+          </button>
+          <button class="nav-item" data-view="scorecard">
+            <span class="nav-icon" aria-hidden="true">◈</span><span>Scorecard</span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
           </button>
@@ -137,6 +143,38 @@
             </div>
             <div id="swarm-list" class="swarm-list"></div>
             <div id="swarm-empty" class="empty-state" hidden>No swarms match — run <code>onmc swarm plan</code> to launch a fleet of agents.</div>
+          </section>
+
+          <section id="view-performance" class="view" data-view-panel="performance" aria-labelledby="perf-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Model performance</span><h2 id="perf-title">Performance</h2></div>
+              <span id="perf-chip" class="status-chip"></span>
+            </div>
+            <div id="perf-metric-grid" class="metric-grid"></div>
+            <section class="panel perf-panel" aria-labelledby="perf-model-title">
+              <div class="panel-heading"><h3 id="perf-model-title">By model</h3><span id="perf-model-count"></span></div>
+              <div class="table-shell"><table><thead><tr><th>Model</th><th>Runs</th><th>Verified</th><th>Avg cost</th><th>Avg wall</th></tr></thead><tbody id="perf-model-body"></tbody></table></div>
+            </section>
+            <section class="panel recs-panel" aria-labelledby="perf-recs-title">
+              <div class="panel-heading"><h3 id="perf-recs-title">Recommendations</h3><span>from verified receipts</span></div>
+              <ul id="perf-recs" class="recs-list"></ul>
+            </section>
+            <div id="perf-empty" class="empty-state" hidden>No run receipts yet — performance appears once agents record verified runs.</div>
+          </section>
+
+          <section id="view-scorecard" class="view" data-view-panel="scorecard" aria-labelledby="scorecard-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Agent readiness + trust</span><h2 id="scorecard-title">Scorecard</h2></div>
+              <button id="copy-scorecard" class="button" type="button">Copy markdown</button>
+            </div>
+            <section class="panel scorecard-hero">
+              <div class="score-ring" id="score-ring"><div class="score-ring-inner"><strong id="score-num">–</strong><span class="score-denom">/100</span></div></div>
+              <div class="scorecard-tiles metric-grid" id="scorecard-tiles"></div>
+            </section>
+            <section class="panel" id="scorecard-notes-panel">
+              <div class="panel-heading"><h3>Notes</h3><span>unavailable signals</span></div>
+              <ul id="scorecard-notes" class="recs-list"></ul>
+            </section>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>
