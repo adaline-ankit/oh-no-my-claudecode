@@ -1803,21 +1803,21 @@ Usage: onmc llm configure [OPTIONS]
  Persist optional LLM provider settings to the local ONMC config.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --provider               [anthropic|openai|mock]  LLM provider to         │
-│                                                      configure.              │
-│                                                      [required]              │
-│ *  --model                  TEXT                     Default model name.     │
-│                                                      [required]              │
-│    --api-key-env-var        TEXT                     Environment variable to │
-│                                                      read the provider API   │
-│                                                      key from.               │
-│    --temperature            FLOAT RANGE              Default temperature.    │
-│                             [0.0<=x<=2.0]            [default: 0.0]          │
-│    --max-tokens             INTEGER RANGE [x>=1]     Default maximum output  │
-│                                                      tokens.                 │
-│                                                      [default: 1024]         │
-│    --help                                            Show this message and   │
-│                                                      exit.                   │
+│ *  --provider               [anthropic|openai|olla  LLM provider to          │
+│                             ma|mock]                configure.               │
+│                                                     [required]               │
+│ *  --model                  TEXT                    Default model name.      │
+│                                                     [required]               │
+│    --api-key-env-var        TEXT                    Environment variable to  │
+│                                                     read the provider API    │
+│                                                     key from.                │
+│    --temperature            FLOAT RANGE             Default temperature.     │
+│                             [0.0<=x<=2.0]           [default: 0.0]           │
+│    --max-tokens             INTEGER RANGE [x>=1]    Default maximum output   │
+│                                                     tokens.                  │
+│                                                     [default: 1024]          │
+│    --help                                           Show this message and    │
+│                                                     exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
