@@ -8,6 +8,7 @@ from oh_no_my_claudecode.audit.gitleaks import (
     make_gitleaks_runner,
     run_gitleaks,
 )
+from oh_no_my_claudecode.audit.sarif import findings_to_sarif
 from oh_no_my_claudecode.audit.scanner import AuditFinding, AuditReport, run_audit
 from oh_no_my_claudecode.audit.semgrep import (
     SemgrepRunner,
@@ -21,6 +22,7 @@ __all__ = [
     "AuditReport",
     "GitleaksRunner",
     "SemgrepRunner",
+    "findings_to_sarif",
     "gitleaks_available",
     "make_gitleaks_runner",
     "make_semgrep_runner",

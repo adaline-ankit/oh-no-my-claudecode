@@ -2531,6 +2531,18 @@ def audit_command(
         bool,
         typer.Option("--json", help="Emit the full AuditReport as JSON to stdout."),
     ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format.  One of: text (default Rich scorecard), json "
+                "(AuditReport JSON), sarif (SARIF 2.1.0 for GitHub code-scanning "
+                "and VS Code SARIF viewer).  When --format is given it takes "
+                "precedence over the legacy --json flag."
+            ),
+        ),
+    ] = "text",
     fail_on: Annotated[
         str,
         typer.Option(
@@ -2580,6 +2592,13 @@ def audit_command(
 
     Use ``--fail-on critical`` for a lenient CI gate, ``--fail-on medium`` for
     a stricter one.
+
+    Output formats:
+
+    - ``text`` (default) — Rich-rendered scorecard in the terminal.
+    - ``json`` — Full AuditReport serialised as JSON (same as legacy ``--json``).
+    - ``sarif`` — SARIF 2.1.0 document for GitHub code-scanning, VS Code SARIF
+      viewer, and other SAST integrations.
     """
     from oh_no_my_claudecode.audit.scanner import AuditSeverity
 
@@ -2588,11 +2607,21 @@ def audit_command(
         msg = f"--fail-on must be one of: {', '.join(valid_severities)}"
         raise typer.Exit(code=_fatal(msg))
 
+    valid_formats = ("text", "json", "sarif")
+    # --json is a legacy alias for --format json; --format takes precedence.
+    effective_format = output_format
+    if effective_format not in valid_formats:
+        msg = f"--format must be one of: {', '.join(valid_formats)}"
+        raise typer.Exit(code=_fatal(msg))
+    # Allow legacy --json flag to override default "text" when --format is not set.
+    if as_json and effective_format == "text":
+        effective_format = "json"
+
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
     report = _service().audit(repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks)
 
-    if as_json:
+    if effective_format == "json":
         import dataclasses
 
         def _to_dict(obj: object) -> object:
@@ -2606,6 +2635,16 @@ def audit_command(
             return obj
 
         sys.stdout.write(json.dumps(_to_dict(report), indent=2, default=str) + "\n")
+    elif effective_format == "sarif":
+        from oh_no_my_claudecode.audit.sarif import findings_to_sarif
+
+        try:
+            from oh_no_my_claudecode import __version__ as _pkg_version
+        except Exception:
+            _pkg_version = "unknown"
+
+        sarif_doc = findings_to_sarif(report.findings, tool_version=_pkg_version)
+        sys.stdout.write(json.dumps(sarif_doc, indent=2) + "\n")
     else:
         render_audit_report(report)
 
