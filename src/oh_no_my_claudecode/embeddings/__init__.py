@@ -8,9 +8,10 @@ Design
   out-of-the-box in CI with no extra installs; produces a 512-dimensional
   L2-normalised float vector.
 - ``get_embedder()`` — factory that returns the best available embedder:
-  first checks for a real model (``sentence-transformers`` or ``voyageai``),
-  then falls back to ``HashNgramEmbedder``.  Real models are **never required**
-  — their imports are guarded so the package stays dependency-free by default.
+  checks for ``fastembed`` (when ``ONMC_EMBEDDER=fastembed``), then
+  ``sentence-transformers`` if installed, then falls back to
+  ``HashNgramEmbedder``.  Real models are **never required** — their imports
+  are guarded so the package stays dependency-free by default.
 - ``cosine_similarity(a, b)`` — pure-Python cosine, used by the hybrid reranker.
 - Gating: embeddings reranking is enabled when ``ONMC_EMBEDDINGS=1`` is set
   **or** always (default) when using the zero-dep ``HashNgramEmbedder`` because
@@ -22,6 +23,15 @@ Vector cache
 Vectors are cached in the SQLite ``memory_vectors`` table (migration v6).
 Each row stores ``(memory_id, embedder_id, content_hash, vector_json,
 created_at)``.  Vectors are recomputed lazily when the content hash changes.
+
+Optional fastembed backend
+--------------------------
+When the optional ``fastembed`` extra is installed (``pip install
+oh-no-my-claudecode[fastembed]``) **and** selected (``ONMC_EMBEDDER=fastembed``),
+:func:`get_embedder` returns a :class:`~core._FastEmbedder` that runs a local
+ONNX model on CPU — no API key, no network at inference time.  The default
+model is ``BAAI/bge-small-en-v1.5`` (384-d, ~33 M parameters).  When the
+package is absent or unselected the hash-ngram embedder is used without error.
 
 Optional sqlite-vec backend
 ---------------------------
@@ -40,6 +50,8 @@ from oh_no_my_claudecode.embeddings.core import (
     Embedder,
     HashNgramEmbedder,
     cosine_similarity,
+    fastembed_available,
+    fastembed_selected,
     get_embedder,
 )
 from oh_no_my_claudecode.embeddings.vecstore import (
@@ -54,6 +66,8 @@ __all__ = [
     "HashNgramEmbedder",
     "SqliteVecStore",
     "cosine_similarity",
+    "fastembed_available",
+    "fastembed_selected",
     "get_embedder",
     "semantic_search",
     "sqlitevec_available",
