@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.74.0] — 2026-07-05
+
+### Added
+
+- **`onmc scorecard` — shareable agent-readiness + trust report** — one command that aggregates the whole suite into a single viral artifact: repo agent-readiness (roast), top-agent trust (registry ledger), best verified model (flywheel), and institutional-memory coverage (orggraph entity/edge counts). Each signal degrades gracefully to `n/a` with an honest note; never fabricates numbers. `--json` and `--markdown` (emits a shields badge block). The capstone that ties onmc's suite together.
+- **`onmc handoff` — portable task-context resume bundle** — packages everything a fresh agent or session needs to resume a task into one JSON bundle: goal + context pack + goal-ranked orggraph decisions + recorded dead-ends + recent run receipts. `handoff create <goal>` writes it; `handoff resume <file>` renders a briefing (dead-ends to avoid, decisions to respect, context, recent outcomes). Cross-session / cross-agent continuity. Each source degrades gracefully.
+
+Both built via the `onmc mission`→swarm dogfood loop, each its own verified PR (#215, #216) — onmc building onmc.
+
 ## [0.73.0] — 2026-07-05
 
 ### Fixed
