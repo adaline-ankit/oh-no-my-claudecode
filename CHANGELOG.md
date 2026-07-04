@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.64.0] — 2026-07-04
+
+### Added
+
+- **Optional semgrep static-analysis in `onmc audit`** — with `--semgrep` (default off) and the `semgrep` binary on PATH, audit runs semgrep and folds its findings into the audit report/score. Detected via `shutil.which` (no pip dep); the real runner is injectable so core audit stays pure/offline; audit is unchanged when the binary is absent or the flag is off.
+- **Optional ast-grep structural code-search in `onmc reuse`** — with `--ast-grep` (default off) and the `ast-grep`/`sg` binary on PATH, reuse-detection additionally surfaces structurally-similar code (AST-pattern matches) the text heuristic misses. `shutil.which` detection (no pip dep), injectable runner, unchanged when absent.
+- **`onmc wiki logseq [--out DIR] [--json]`** — exports the memory store as a Logseq-compatible knowledge graph: one page per memory with Logseq `key:: value` properties, block/bullet formatting, and `[[wikilinks]]` for every memory-edge kind. Pure stdlib, deterministic, no server. `onmc wiki` is now a group; the bare command is preserved.
+
+All three are optional, import-guarded integrations with graceful zero-dep fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#186–#188).
+
 ## [0.63.0] — 2026-07-04
 
 ### Added
