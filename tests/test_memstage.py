@@ -31,8 +31,6 @@ from typer.testing import CliRunner
 
 from oh_no_my_claudecode.memstage.commands import register
 from oh_no_my_claudecode.memstage.queue import (
-    AuditRecord,
-    StagedProposal,
     approve,
     diff,
     get,
