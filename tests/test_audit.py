@@ -618,3 +618,142 @@ def test_audit_report_findings_at_or_above() -> None:
     assert len(report.findings_at_or_above("medium")) == 3
     assert len(report.findings_at_or_above("low")) == 4
     assert len(report.findings_at_or_above("info")) == 5
+
+
+# ---------------------------------------------------------------------------
+# Semgrep integration tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_semgrep_runner_with_finding(path: Path) -> dict[str, Any]:
+    """Fake SemgrepRunner that returns one WARNING-level finding."""
+    return {
+        "results": [
+            {
+                "check_id": "python.lang.security.audit.subprocess-shell-true",
+                "path": str(path / "app.py"),
+                "start": {"line": 10},
+                "extra": {
+                    "severity": "WARNING",
+                    "message": "subprocess call with shell=True — prefer list form.",
+                },
+            }
+        ],
+        "errors": [],
+    }
+
+
+def _fake_semgrep_runner_empty(path: Path) -> dict[str, Any]:
+    """Fake SemgrepRunner that returns zero findings (clean result)."""
+    return {"results": [], "errors": []}
+
+
+def _fake_semgrep_runner_none(path: Path) -> None:  # type: ignore[return]
+    """Fake SemgrepRunner that simulates a semgrep execution error."""
+    return None  # type: ignore[return-value]
+
+
+def test_semgrep_findings_folded_into_report(tmp_path: Path) -> None:
+    """Injected semgrep runner findings are included in the AuditReport."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    repo = _repo(tmp_path)
+    repo.mkdir()
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_semgrep_runner_with_finding(p)
+
+    report = run_audit(repo, semgrep_runner=_runner)
+    semgrep_findings = [f for f in report.findings if f.rule_id.startswith("SEMGREP:")]
+    assert len(semgrep_findings) == 1, f"Expected 1 semgrep finding, got {semgrep_findings}"
+    finding = semgrep_findings[0]
+    assert finding.severity == "medium"  # WARNING → medium
+    assert "subprocess" in finding.detail.lower() or "subprocess" in finding.rule_id.lower()
+
+
+def test_semgrep_absent_runner_leaves_audit_unchanged(clean_repo: Path) -> None:
+    """When runner=None (no semgrep binary / opt-out) audit is completely unchanged."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report_no_semgrep = run_audit(clean_repo)
+    report_with_none_runner = run_audit(clean_repo, semgrep_runner=None)
+
+    assert report_no_semgrep.score == report_with_none_runner.score
+    assert report_no_semgrep.grade == report_with_none_runner.grade
+    assert report_no_semgrep.findings == report_with_none_runner.findings
+
+
+def test_semgrep_error_runner_produces_zero_findings(clean_repo: Path) -> None:
+    """A runner that returns None (execution error) adds zero findings."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report = run_audit(clean_repo, semgrep_runner=_fake_semgrep_runner_none)
+    semgrep_findings = [f for f in report.findings if f.rule_id.startswith("SEMGREP:")]
+    assert semgrep_findings == []
+
+
+def test_semgrep_findings_affect_score(clean_repo: Path) -> None:
+    """Semgrep findings deduct from the score (medium → -7 per finding)."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_semgrep_runner_with_finding(p)
+
+    report = run_audit(clean_repo, semgrep_runner=_runner)
+    # One medium finding deducts 7 → score = 93
+    assert report.score == 93
+    assert report.grade == "A"
+
+
+def test_semgrep_available_mirrors_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """semgrep_available() returns True/False based on shutil.which result."""
+    from oh_no_my_claudecode.audit.semgrep import semgrep_available
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/bin/semgrep")
+    assert semgrep_available() is True
+
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    assert semgrep_available() is False
+
+
+def test_semgrep_run_semgrep_deterministic(clean_repo: Path) -> None:
+    """run_semgrep with the same injected runner produces identical results each call."""
+    from oh_no_my_claudecode.audit.semgrep import run_semgrep
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_semgrep_runner_with_finding(p)
+
+    findings_a = run_semgrep(clean_repo, _runner)
+    findings_b = run_semgrep(clean_repo, _runner)
+
+    assert len(findings_a) == len(findings_b)
+    for a, b in zip(findings_a, findings_b, strict=True):
+        assert a.rule_id == b.rule_id
+        assert a.severity == b.severity
+        assert a.detail == b.detail
+
+
+def test_cli_audit_semgrep_flag_exits_zero_on_clean(
+    runner: CliRunner, clean_repo: Path
+) -> None:
+    """``onmc audit --no-semgrep`` on a clean repo exits 0 (flag accepted, no binary needed)."""
+    result = runner.invoke(app, ["audit", str(clean_repo), "--no-semgrep"])
+    assert result.exit_code == 0, (
+        f"Expected 0, got {result.exit_code}. Output: {result.stdout}"
+    )
+
+
+@pytest.mark.skipif(
+    __import__("shutil").which("semgrep") is None,
+    reason="semgrep binary not on PATH",
+)
+def test_semgrep_real_binary_smoke(tmp_path: Path) -> None:
+    """Smoke test: real semgrep binary runs without crashing on an empty dir."""
+    from oh_no_my_claudecode.audit.semgrep import make_semgrep_runner, run_semgrep
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runner_fn = make_semgrep_runner()
+    findings = run_semgrep(repo, runner_fn)
+    # We just assert it returns a list — content varies by semgrep version.
+    assert isinstance(findings, list)
