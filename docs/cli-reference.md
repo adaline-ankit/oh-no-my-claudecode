@@ -171,6 +171,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 + memory.                                                    │
 │ memguard        Memory-integrity firewall: scan memory entries for           │
 │                 adversarial content.                                         │
+│ memprovider     Manage and query external memory providers that augment      │
+│                 onmc's built-in store (mem0, supermemory, builtin).          │
+│                 Providers run alongside the built-in store — they never      │
+│                 replace it.                                                  │
 │ memstage        Write-approval staging queue: propose memory writes, review  │
 │                 diffs, then approve or reject — nothing lands in the store   │
 │                 without your sign-off.                                       │
@@ -2746,6 +2750,84 @@ Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memprovider`
+
+```text
+Usage: onmc memprovider [OPTIONS] COMMAND [ARGS]...
+
+ Manage and query external memory providers that augment onmc's built-in store
+ (mem0, supermemory, builtin). Providers run alongside the built-in store —
+ they never replace it.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ list    List all registered memory providers and their availability.         │
+│ search  Search across available memory providers and print attributed hits.  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memprovider list`
+
+```text
+Usage: onmc memprovider list [OPTIONS]
+
+ List all registered memory providers and their availability.
+
+ The ``builtin`` provider (backed by onmc's own SQLite store) is always
+ listed first and is always available.  Optional providers (mem0,
+ supermemory) report ``available: false`` when their dependency or API key
+ is absent.
+
+ Examples:
+
+     onmc memprovider list
+
+     onmc memprovider list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a JSON envelope instead of human-readable text.         │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memprovider search`
+
+```text
+Usage: onmc memprovider search [OPTIONS] QUERY
+
+ Search across available memory providers and print attributed hits.
+
+ Results from each available provider are merged and attributed via the
+ ``provider`` field.  Use ``--provider`` to restrict to a single backend.
+
+ Providers that are unavailable (missing dependency or API key) are silently
+ skipped unless named explicitly via ``--provider``.
+
+ Examples:
+
+     onmc memprovider search "cache invalidation"
+
+     onmc memprovider search "auth bug" --provider builtin --json
+
+     onmc memprovider search "ETF allocation" --provider mem0 --limit 5
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query      TEXT  Free-text search query. [required]                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --provider  -p      NAME                       Restrict search to this       │
+│                                                provider name (e.g.           │
+│                                                'builtin', 'mem0').           │
+│ --limit     -n      INTEGER RANGE [1<=x<=100]  Maximum hits per provider.    │
+│                                                [default: 10]                 │
+│ --json                                         Emit a JSON envelope instead  │
+│                                                of human-readable text.       │
+│ --help                                         Show this message and exit.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
