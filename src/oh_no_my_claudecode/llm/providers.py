@@ -237,6 +237,132 @@ class MockProvider(BaseLLMProvider):
         )
 
 
+LITELLM_UNAVAILABLE_MESSAGE = (
+    "The litellm package is not installed. Install the optional extra with "
+    "`pip install 'oh-no-my-claudecode[litellm]'` to use the unified LiteLLM provider."
+)
+
+
+def litellm_available() -> bool:
+    """Return whether the optional ``litellm`` dependency can be imported.
+
+    Guarded so the core package never hard-depends on litellm — when the extra
+    is absent this reports ``False`` and existing providers stay untouched.
+    """
+    try:
+        import litellm  # noqa: F401  - import probe only.
+    except ImportError:
+        return False
+    return True
+
+
+class LiteLLMProvider(BaseLLMProvider):
+    """Optional unified provider that routes to ANY model via LiteLLM.
+
+    One interface to OpenAI, Anthropic, Gemini, Groq, local servers, and every
+    other backend LiteLLM supports. The model string is passed through verbatim
+    (e.g. ``gpt-4o``, ``anthropic/claude-sonnet-4-5``, ``gemini/gemini-1.5-pro``,
+    ``groq/llama-3.1-70b-versatile``, ``ollama/llama3``).
+
+    ``litellm`` is an OPTIONAL extra. When it is not installed, construction and
+    generation fail gracefully with a clear :class:`LLMProviderError` instead of
+    crashing the process, and the built-in providers are unaffected. Credentials
+    are read by litellm from the standard provider environment variables.
+    """
+
+    def generate(self, request: LLMGenerationRequest) -> LLMGenerationResponse:
+        model = self._require_model()
+        completion = self._require_completion()
+        messages: list[dict[str, str]] = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.append({"role": "user", "content": request.prompt})
+        temperature = (
+            request.temperature
+            if request.temperature is not None
+            else self.settings.temperature
+        )
+        max_tokens = request.max_tokens or self.settings.max_tokens
+        try:
+            raw_response = completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=llm_call_timeout_seconds(),
+            )
+        except Exception as exc:  # noqa: BLE001 - litellm raises a broad family of errors.
+            msg = f"LiteLLM request failed: {exc}"
+            raise LLMProviderError(msg) from exc
+        text = _litellm_response_text(raw_response)
+        if not text:
+            msg = "LiteLLM response did not contain text content."
+            raise LLMProviderError(msg)
+        return LLMGenerationResponse(
+            provider=LLMProviderType.LITELLM,
+            model=model,
+            text=text,
+            raw=_litellm_response_raw(raw_response),
+        )
+
+    def _require_model(self) -> str:
+        if self.settings.model:
+            return self.settings.model
+        msg = "LiteLLM provider requires a configured model."
+        raise LLMProviderError(msg)
+
+    @staticmethod
+    def _require_completion() -> Any:
+        try:
+            import litellm
+        except ImportError as exc:
+            raise LLMProviderError(LITELLM_UNAVAILABLE_MESSAGE) from exc
+        return litellm.completion
+
+
+def _litellm_response_text(raw_response: Any) -> str:
+    """Extract assistant text from a litellm ModelResponse (or dict-like)."""
+    choices = _litellm_getattr(raw_response, "choices", [])
+    if not choices:
+        return ""
+    message = _litellm_getattr(choices[0], "message", None)
+    if message is None:
+        return ""
+    content = _litellm_getattr(message, "content", None)
+    if not isinstance(content, str):
+        return ""
+    return content.strip()
+
+
+def _litellm_response_raw(raw_response: Any) -> dict[str, Any]:
+    """Best-effort conversion of a litellm response to a plain dict for logging."""
+    for attr in ("model_dump", "dict"):
+        converter = getattr(raw_response, attr, None)
+        if callable(converter):
+            converted = _safe_call_dict(converter)
+            if converted is not None:
+                return converted
+    if isinstance(raw_response, dict):
+        return raw_response
+    return {}
+
+
+def _safe_call_dict(converter: Any) -> dict[str, Any] | None:
+    """Call a serializer and return its dict result, or None on any failure."""
+    try:
+        converted = converter()
+    except Exception:  # noqa: BLE001 - logging metadata only, never fatal.
+        return None
+    return converted if isinstance(converted, dict) else None
+
+
+def _litellm_getattr(obj: Any, name: str, default: Any) -> Any:
+    """Read an attribute or mapping key — litellm objects support both."""
+    if isinstance(obj, Mapping):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
 def _post_json(
     url: str,
     payload: dict[str, Any],
@@ -346,6 +472,8 @@ def validate_provider_api_key(
         return True, "Mock provider does not require validation."
     if provider == LLMProviderType.OLLAMA:
         return _validate_ollama_server()
+    if provider == LLMProviderType.LITELLM:
+        return _validate_litellm_available()
     url: str
     headers: dict[str, str]
     if provider == LLMProviderType.ANTHROPIC:
@@ -403,6 +531,13 @@ def _validate_ollama_server() -> tuple[bool, str]:
     except OSError as exc:
         return False, f"Ollama server unavailable: {exc}"
     return True, "Ollama server reachable"
+
+
+def _validate_litellm_available() -> tuple[bool, str]:
+    """Report whether the optional litellm extra is installed — never raises."""
+    if litellm_available():
+        return True, "litellm installed"
+    return False, "litellm not installed"
 
 
 def _provider_http_error_message(
