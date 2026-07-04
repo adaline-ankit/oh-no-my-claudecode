@@ -177,6 +177,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
+│ proxy           OpenAI-compatible local proxy for onmc's configured LLM      │
+│                 provider.                                                    │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
 │ twin            Rehearse a code change offline: predict blast radius,        │
@@ -3461,6 +3463,55 @@ Usage: onmc proptest init [OPTIONS] SPEC
 │ --force              Overwrite an existing test file.                        │
 │ --json               Emit a JSON result instead of human text.               │
 │ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc proxy`
+
+```text
+Usage: onmc proxy [OPTIONS] COMMAND [ARGS]...
+
+ OpenAI-compatible local proxy for onmc's configured LLM provider.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ serve  Start an OpenAI-compatible proxy backed by onmc's configured LLM      │
+│        provider.                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc proxy serve`
+
+```text
+Usage: onmc proxy serve [OPTIONS]
+
+ Start an OpenAI-compatible proxy backed by onmc's configured LLM provider.
+
+ The server exposes two endpoints:
+
+ \b
+ POST /v1/chat/completions   ← OpenAI ChatCompletions (non-streaming)
+ GET  /v1/models             ← Returns the configured model as a list entry
+
+ External tools (Codex, Aider, Cline, Continue, …) can be pointed at
+ ``http://<host>:<port>/v1`` and will use whatever LLM backend onmc is
+ configured with, without needing their own API keys for that backend.
+
+ Examples:
+
+     onmc proxy serve
+
+     onmc proxy serve --port 9000
+
+     onmc proxy serve --host 0.0.0.0 --port 8760
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --port        INTEGER  TCP port to listen on. [default: 8760]                │
+│ --host        TEXT     Bind address (use 0.0.0.0 to expose to the network).  │
+│                        [default: 127.0.0.1]                                  │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
