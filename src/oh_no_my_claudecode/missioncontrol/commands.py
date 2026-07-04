@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.missioncontrol.dashboard import (
@@ -43,7 +46,7 @@ def _swarm_base() -> Path:
     return repo_root / ".onmc" / "swarm"
 
 
-def _console():
+def _console() -> Console:
     """Return a shared Rich Console (import lazily so tests can inject their own)."""
     from rich.console import Console
 
