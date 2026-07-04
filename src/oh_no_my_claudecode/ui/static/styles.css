@@ -583,6 +583,50 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 @keyframes onmc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes onmc-spin { to { transform: rotate(360deg); } }
 
+/* Live status + auto-refresh toggle (topbar) */
+.live-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.live-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #2f9e63; animation: onmc-pulse 1.6s ease-in-out infinite; }
+.live-status.is-stale { color: var(--faint); }
+.live-status.is-stale .live-status-dot { background: #c2a33a; animation: none; }
+.refresh-toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; color: var(--muted); font-size: 11px; }
+.refresh-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.refresh-toggle-track { position: relative; width: 30px; height: 17px; border-radius: 999px; background: #cdd5d1; transition: background .15s; }
+.refresh-toggle-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.refresh-toggle input:checked + .refresh-toggle-track { background: var(--green); }
+.refresh-toggle input:checked + .refresh-toggle-track::after { transform: translateX(13px); }
+.refresh-toggle input:focus-visible + .refresh-toggle-track { outline: 3px solid #6fa3c0; outline-offset: 2px; }
+.refresh-toggle-label { font-weight: 650; }
+
+/* Segmented filter */
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface); }
+.seg-btn { height: 38px; padding: 0 14px; border: 0; background: transparent; color: var(--muted); font-size: 11px; font-weight: 650; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn.is-active { background: var(--surface-alt); color: var(--ink); }
+
+/* Clickable unit rows + extra columns */
+.unit-row { border-radius: 4px; cursor: pointer; }
+.unit-row:hover { background: var(--surface-alt); }
+.unit-tokens { flex: none; color: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.unit-chevron { flex: none; color: var(--faint); font-size: 15px; }
+
+/* Detail drawer */
+.drawer-backdrop { position: fixed; inset: 0; background: rgb(15 24 20 / 34%); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; z-index: 41; width: min(440px, 92vw); height: 100vh; background: var(--surface); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgb(15 24 20 / 12%); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .2s ease; }
+.drawer.is-open { transform: translateX(0); }
+.drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 18px 14px; border-bottom: 1px solid var(--line); }
+.drawer-head h3 { font: 600 16px ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 3px; }
+.drawer-body { padding: 16px 18px 28px; overflow-y: auto; }
+.drawer-goal { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.drawer-goal p { color: var(--ink); font-size: 13px; line-height: 1.5; }
+.drawer-goal .unit-state { align-self: flex-start; width: auto; padding: 2px 8px; border-radius: 999px; background: var(--surface-alt); }
+.drawer-grid { display: grid; grid-template-columns: 1fr; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.drawer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; border-bottom: 1px solid var(--line); }
+.drawer-row:last-child { border-bottom: 0; }
+.drawer-key { color: var(--muted); font-size: 11px; }
+.drawer-val { color: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+.drawer-error { margin-top: 14px; }
+.drawer-error pre { margin: 6px 0 0; padding: 11px 13px; background: var(--red-soft); border: 1px solid #e6bcb6; border-radius: var(--radius); color: #80311f; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 @media (max-width: 720px) {
   #swarm-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

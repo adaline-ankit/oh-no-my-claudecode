@@ -3,7 +3,7 @@
 const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
-const state = { data: null, view: "overview", search: "", kind: "" };
+const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmSearch: "", autoRefresh: true, lastUpdated: null };
 const palette = ["#237a50", "#356f91", "#a65e18", "#6b5b95", "#a23d3d", "#55766a"];
 
 const byId = (id) => document.getElementById(id);
@@ -26,6 +26,7 @@ async function renderDashboard() {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard request failed (${response.status})`);
     state.data = await response.json();
+    state.lastUpdated = Date.now();
     hydrateDashboard();
     setLoading(false);
   } catch (error) {
@@ -47,6 +48,7 @@ function hydrateDashboard() {
   renderCodegraphLists();
   renderHealth();
   renderMission();
+  renderLiveStatus();
   switchView(state.view);
   renderWelcome();
 }
@@ -142,15 +144,17 @@ function unitVerifiedGlyph(unit) {
   return '<span class="unit-glyph pending" title="not yet verified">•</span>';
 }
 
-function renderSwarmCard(sc) {
+function renderSwarmCard(sc, swarmIndex) {
   const counts = sc.state_counts || {};
   const pills = SWARM_STATE_ORDER.filter((st) => counts[st]).map((st) => swarmStatePill(st, counts[st])).join("");
-  const units = (sc.units || []).map((u) => `
-    <li class="unit-row state-${escapeHtml(u.state)}">
+  const units = (sc.units || []).map((u, unitIndex) => `
+    <li class="unit-row state-${escapeHtml(u.state)}" data-swarm-index="${swarmIndex}" data-unit-index="${unitIndex}" tabindex="0" role="button" aria-label="Open ${escapeHtml(u.unit_id || "unit")} details">
       ${unitVerifiedGlyph(u)}
       <span class="unit-state">${escapeHtml(u.state)}</span>
       <span class="unit-goal" title="${escapeHtml(u.goal)}">${escapeHtml(truncate(u.goal || "unit", 76))}</span>
+      ${Number(u.tokens) ? `<span class="unit-tokens">${formatNumber(u.tokens)} tok</span>` : ""}
       ${u.diff_sha ? `<code class="unit-sha" title="diff ${escapeHtml(u.diff_sha)}">${escapeHtml(String(u.diff_sha).slice(0, 8))}</code>` : ""}
+      <span class="unit-chevron" aria-hidden="true">›</span>
     </li>`).join("");
   const cost = Number(sc.cost_usd || 0);
   return `<article class="swarm-card ${sc.live ? "is-live" : ""}">
@@ -175,6 +179,16 @@ function renderSwarmCard(sc) {
   </article>`;
 }
 
+function visibleSwarms() {
+  const all = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  const q = state.swarmSearch.trim().toLowerCase();
+  return all.filter((sc) => {
+    if (state.swarmFilter === "live" && !sc.live) return false;
+    if (!q) return true;
+    return String(sc.label || "").toLowerCase().includes(q) || String(sc.swarm_id || "").toLowerCase().includes(q);
+  });
+}
+
 function renderSwarms() {
   const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
   const s = sw.summary || {};
@@ -195,9 +209,65 @@ function renderSwarms() {
   const dot = byId("nav-live-dot");
   if (dot) dot.hidden = !liveN;
 
-  const swarms = sw.swarms || [];
-  byId("swarm-empty").hidden = swarms.length > 0;
-  byId("swarm-list").innerHTML = swarms.map(renderSwarmCard).join("");
+  const shown = visibleSwarms();
+  byId("swarm-empty").hidden = shown.length > 0;
+  // Map filtered rows back to their index in the full list for drilldown lookup.
+  const all = sw.swarms || [];
+  byId("swarm-list").innerHTML = shown.map((sc) => renderSwarmCard(sc, all.indexOf(sc))).join("");
+}
+
+function openUnitDrawer(swarmIndex, unitIndex) {
+  const swarms = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  const sc = swarms[swarmIndex];
+  if (!sc) return;
+  const u = (sc.units || [])[unitIndex];
+  if (!u) return;
+  byId("drawer-eyebrow").textContent = `${sc.swarm_id.slice(0, 10)} · ${sc.agent || "agent"}`;
+  byId("drawer-title").textContent = u.unit_id || "unit";
+  const rows = [
+    ["State", u.state],
+    ["Verified", u.verified === true ? "yes" : u.verified === false ? "no" : "—"],
+    ["Cost", Number(u.cost_usd) ? `$${Number(u.cost_usd).toFixed(4)}` : "—"],
+    ["Tokens", Number(u.tokens) ? formatNumber(u.tokens) : "—"],
+    ["Iterations", Number(u.iterations) ? formatNumber(u.iterations) : "—"],
+    ["Wall time", Number(u.wall_seconds) ? `${Number(u.wall_seconds).toFixed(1)}s` : "—"],
+    ["Verifier exit", u.verifier_exit === null || u.verifier_exit === undefined ? "—" : String(u.verifier_exit)],
+    ["Diff SHA", u.diff_sha ? String(u.diff_sha).slice(0, 16) : "—"],
+    ["Tree SHA", u.git_tree_sha || "—"],
+    ["Receipt", u.receipt_hash || "—"],
+    ["Started", u.started_at ? formatDate(u.started_at) : "—"],
+    ["Ended", u.ended_at ? formatDate(u.ended_at) : "—"],
+  ];
+  const detail = rows.map(([k, v]) => `<div class="drawer-row"><span class="drawer-key">${escapeHtml(k)}</span><span class="drawer-val">${escapeHtml(String(v))}</span></div>`).join("");
+  const errBlock = u.error ? `<div class="drawer-error"><span class="drawer-key">Error</span><pre>${escapeHtml(u.error)}</pre></div>` : "";
+  byId("drawer-body").innerHTML = `
+    <div class="drawer-goal"><span class="unit-state state-${escapeHtml(u.state)}">${escapeHtml(u.state)}</span><p>${escapeHtml(u.goal || "")}</p></div>
+    <div class="drawer-grid">${detail}</div>
+    ${errBlock}`;
+  byId("drawer-backdrop").hidden = false;
+  byId("unit-drawer").hidden = false;
+  requestAnimationFrame(() => byId("unit-drawer").classList.add("is-open"));
+  byId("drawer-close").focus();
+}
+
+function closeDrawer() {
+  const drawer = byId("unit-drawer");
+  drawer.classList.remove("is-open");
+  byId("drawer-backdrop").hidden = true;
+  setTimeout(() => { drawer.hidden = true; }, 200);
+}
+
+function renderLiveStatus() {
+  const el = byId("live-status");
+  const text = byId("live-status-text");
+  if (!el || !text) return;
+  if (byId("onmc-dashboard-data")) { el.hidden = true; return; }
+  el.hidden = false;
+  const ago = state.lastUpdated ? Math.max(0, Math.round((Date.now() - state.lastUpdated) / 1000)) : null;
+  const stale = ago !== null && ago > 12;
+  el.classList.toggle("is-stale", stale || !state.autoRefresh);
+  if (!state.autoRefresh) { text.textContent = "paused"; return; }
+  text.textContent = ago === null ? "connecting…" : ago < 2 ? "updated now" : `updated ${ago}s ago`;
 }
 
 function renderMemoryFilters() {
@@ -437,16 +507,44 @@ byId("memory-kind-filter").addEventListener("change", (event) => { state.kind = 
 byId("copy-report").addEventListener("click", async () => { try { await navigator.clipboard.writeText(state.data.report); showToast("Report copied"); } catch { showToast("Copy unavailable"); } });
 window.addEventListener("resize", () => { if (state.view === "codegraph") requestAnimationFrame(drawCodegraph); });
 
+// Swarm drilldown, filters, and live-refresh controls.
+byId("swarm-list").addEventListener("click", (event) => {
+  const row = event.target.closest(".unit-row");
+  if (row) openUnitDrawer(Number(row.dataset.swarmIndex), Number(row.dataset.unitIndex));
+});
+byId("swarm-list").addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const row = event.target.closest(".unit-row");
+  if (row) { event.preventDefault(); openUnitDrawer(Number(row.dataset.swarmIndex), Number(row.dataset.unitIndex)); }
+});
+byId("drawer-close").addEventListener("click", closeDrawer);
+byId("drawer-backdrop").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !byId("unit-drawer").hidden) closeDrawer(); });
+byId("swarm-search").addEventListener("input", (event) => { state.swarmSearch = event.target.value; renderSwarms(); });
+document.querySelectorAll("[data-swarm-filter]").forEach((btn) => btn.addEventListener("click", () => {
+  state.swarmFilter = btn.dataset.swarmFilter;
+  document.querySelectorAll("[data-swarm-filter]").forEach((b) => b.classList.toggle("is-active", b === btn));
+  renderSwarms();
+}));
+byId("autorefresh-toggle").addEventListener("change", (event) => {
+  state.autoRefresh = event.target.checked;
+  renderLiveStatus();
+  if (state.autoRefresh) refreshSilently();
+});
+
 // Live auto-refresh: silently re-fetch and re-render so running swarms update
 // in place. Skipped for the static export (embedded data) and while the tab is
 // hidden. Keeps the last good data on a failed poll — never flashes an error.
 const LIVE_REFRESH_MS = 4000;
 async function refreshSilently() {
-  if (document.hidden || byId("onmc-dashboard-data") || byId("error-state").hidden === false) return;
+  if (!state.autoRefresh || document.hidden || byId("onmc-dashboard-data") || byId("error-state").hidden === false) return;
+  // Don't yank the ground out while the user is reading a unit drawer.
+  if (!byId("unit-drawer").hidden) return;
   try {
     const response = await fetch("/api/dashboard", { cache: "no-store" });
     if (!response.ok) return;
     state.data = await response.json();
+    state.lastUpdated = Date.now();
     hydrateDashboard();
   } catch { /* keep last good data until the next tick */ }
 }
@@ -454,4 +552,5 @@ async function refreshSilently() {
 renderDashboard();
 if (!byId("onmc-dashboard-data")) {
   setInterval(refreshSilently, LIVE_REFRESH_MS);
+  setInterval(renderLiveStatus, 1000);
 }

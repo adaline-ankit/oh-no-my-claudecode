@@ -174,6 +174,77 @@ def test_dashboard_payload_swarms_reads_manifest(
     assert row["verified_count"] == 1
 
 
+def test_swarm_units_enriched_with_receipt_detail(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Units carry compact receipt detail (tokens/wall/exit) for the drilldown."""
+    service = _ready_service(sample_repo, monkeypatch)
+    receipts_dir = sample_repo / ".agent-memory" / "receipts"
+    receipts_dir.mkdir(parents=True, exist_ok=True)
+    receipt_path = receipts_dir / "run-x.json"
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "verified": True,
+                "diff_sha": "d" * 40,
+                "tokens_used": 12345,
+                "wall_seconds": 42.5,
+                "iterations": 2,
+                "verifier_final_exit": 0,
+                "receipt_hash": "abc123def456",
+                "git_tree_sha": "tree9876",
+            }
+        ),
+        encoding="utf-8",
+    )
+    swarm_dir = sample_repo / ".onmc" / "swarm" / "sw1"
+    swarm_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "swarm_id": "sw1",
+        "units": {
+            "unit-0000": {
+                "goal": "build alpha",
+                "status": "done",
+                "verified": True,
+                "cost_usd": 0.5,
+                "receipt_path": str(receipt_path),
+            }
+        },
+    }
+    (swarm_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    swarms = build_dashboard_payload(service)["swarms"]
+    unit = swarms["swarms"][0]["units"][0]
+    assert unit["tokens"] == 12345
+    assert unit["wall_seconds"] == 42.5
+    assert unit["verifier_exit"] == 0
+    assert unit["receipt_hash"] == "abc123def456"
+
+
+def test_dashboard_html_contains_agent_drilldown_and_live_controls(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard ships the unit drawer, live toggle, and swarm filter."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="unit-drawer"' in html
+    assert 'id="autorefresh-toggle"' in html
+    assert 'data-swarm-filter="live"' in html
+    assert "openUnitDrawer" in js
+    assert "renderLiveStatus" in js
+
+
 def test_dashboard_html_contains_swarms_view(
     sample_repo: Path,
     monkeypatch: object,

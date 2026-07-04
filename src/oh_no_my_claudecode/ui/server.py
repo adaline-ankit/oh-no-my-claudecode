@@ -287,6 +287,9 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
             row["cost_usd"] = round(sum(u.cost_usd for u in model.units), 4)
             # A one-line label: the shared parent goal of the swarm's units.
             row["label"] = _swarm_label([u.goal for u in model.units])
+            # Enrich each unit with a compact receipt summary for the drilldown.
+            for unit in row.get("units", []):
+                unit.update(_unit_receipt_extra(state_dir, unit.get("receipt_path")))
             swarms.append(row)
 
             total_units += model.total
@@ -311,6 +314,37 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
         }
     except Exception:  # noqa: BLE001
         return empty
+
+
+def _unit_receipt_extra(state_dir: Path, receipt_path: str | None) -> dict[str, Any]:
+    """Compact receipt fields for the unit drilldown; ``{}`` when unreadable.
+
+    Resolves the manifest's ``receipt_path`` (absolute, or relative to the swarm
+    state dir) and pulls a few human-useful fields. Never raises.
+    """
+    if not receipt_path:
+        return {}
+    try:
+        candidate = Path(receipt_path)
+        if not candidate.is_absolute():
+            candidate = state_dir / receipt_path
+        if not candidate.is_file():
+            return {}
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        return {
+            "tokens": int(data.get("tokens_used", 0) or 0),
+            "wall_seconds": float(data.get("wall_seconds", 0) or 0),
+            "iterations": int(data.get("iterations", 0) or 0),
+            "verifier_exit": data.get("verifier_final_exit"),
+            "receipt_hash": str(data.get("receipt_hash") or "")[:16] or None,
+            "git_tree_sha": str(data.get("git_tree_sha") or "")[:12] or None,
+            "started_at": data.get("started_at"),
+            "ended_at": data.get("ended_at"),
+        }
+    except (OSError, json.JSONDecodeError, ValueError, TypeError):
+        return {}
 
 
 def _swarm_label(goals: list[str]) -> str:
