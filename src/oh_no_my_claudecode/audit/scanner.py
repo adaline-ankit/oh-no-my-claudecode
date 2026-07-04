@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
+    from oh_no_my_claudecode.audit.gitleaks import GitleaksRunner
     from oh_no_my_claudecode.audit.semgrep import SemgrepRunner
 
 AuditSeverity = Literal["critical", "high", "medium", "low", "info"]
@@ -120,14 +121,17 @@ def run_audit(
     repo_root: Path,
     *,
     semgrep_runner: SemgrepRunner | None = None,
+    gitleaks_runner: GitleaksRunner | None = None,
 ) -> AuditReport:
     """Scan *repo_root* for agent-configuration security risks.
 
     This is a pure, deterministic function.  It imports and runs every rule
     defined in :mod:`oh_no_my_claudecode.audit.rules`.  When *semgrep_runner*
     is supplied (and the ``semgrep`` binary is on ``PATH``), its findings are
-    folded into the report.  When ``None`` (the default), audit behaviour is
-    completely unchanged — zero regression.
+    folded into the report.  When *gitleaks_runner* is supplied (and the
+    ``gitleaks`` binary is on ``PATH``), detected secrets are folded in.
+    When either runner is ``None`` (the default), audit behaviour is completely
+    unchanged — zero regression.
 
     Parameters
     ----------
@@ -140,6 +144,13 @@ def run_audit(
         only when :func:`~oh_no_my_claudecode.audit.semgrep.semgrep_available`
         returns ``True`` and the user opts in via ``--semgrep``.  Tests inject
         a fake runner to stay offline.
+    gitleaks_runner:
+        Optional injectable :data:`~oh_no_my_claudecode.audit.gitleaks.GitleaksRunner`
+        callable.  When ``None``, gitleaks is not invoked.  The real CLI wires
+        :func:`~oh_no_my_claudecode.audit.gitleaks.make_gitleaks_runner` here
+        only when :func:`~oh_no_my_claudecode.audit.gitleaks.gitleaks_available`
+        returns ``True`` and the user opts in via ``--gitleaks``.  Tests inject
+        a fake runner to stay offline.
 
     Returns
     -------
@@ -147,6 +158,7 @@ def run_audit(
         Scored, graded, fully populated report.  Suitable for both human
         rendering and JSON serialisation.
     """
+    from oh_no_my_claudecode.audit.gitleaks import run_gitleaks
     from oh_no_my_claudecode.audit.rules import ALL_RULES
     from oh_no_my_claudecode.audit.semgrep import run_semgrep
 
@@ -160,6 +172,10 @@ def run_audit(
     # Optional semgrep pass — folded in when caller opts in and runner is wired.
     semgrep_findings = run_semgrep(repo_root, semgrep_runner)
     all_findings.extend(semgrep_findings)
+
+    # Optional gitleaks pass — folded in when caller opts in and runner is wired.
+    gitleaks_findings = run_gitleaks(repo_root, gitleaks_runner)
+    all_findings.extend(gitleaks_findings)
 
     # Collect scanned files from the findings themselves (each rule reports
     # findings per file; the scanner aggregates them here).

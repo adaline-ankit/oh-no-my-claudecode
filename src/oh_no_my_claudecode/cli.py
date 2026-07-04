@@ -2553,6 +2553,18 @@ def audit_command(
             ),
         ),
     ] = False,
+    use_gitleaks: Annotated[
+        bool,
+        typer.Option(
+            "--gitleaks/--no-gitleaks",
+            help=(
+                "Also run gitleaks secret scanning and fold detected secrets into "
+                "the report.  Requires the 'gitleaks' binary on PATH.  When the "
+                "binary is absent this flag is silently ignored — no pip dependency "
+                "is added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2578,7 +2590,7 @@ def audit_command(
 
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep)
+    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks)
 
     if as_json:
         import dataclasses
