@@ -40,6 +40,7 @@ function hydrateDashboard() {
   byId("repo-path").textContent = data.repo.root;
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
+  renderSwarms();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -126,6 +127,77 @@ function renderOverview() {
   byId("hot-files-overview").innerHTML = codegraph.files.slice(0, 4).map((file) => `
     <div class="hot-file"><span class="hot-file-path" title="${escapeHtml(file.path)}">${escapeHtml(file.path)}</span><div class="hot-file-meta"><span>churn ${file.churn}</span><span>${formatBytes(file.bytes)}</span></div></div>
   `).join("");
+}
+
+const SWARM_STATE_ORDER = ["running", "queued", "pending", "done", "failed", "aborted"];
+
+function swarmStatePill(stateName, count) {
+  return `<span class="swarm-pill state-${escapeHtml(stateName)}">${escapeHtml(stateName)} ${formatNumber(count)}</span>`;
+}
+
+function unitVerifiedGlyph(unit) {
+  if (unit.verified === true) return '<span class="unit-glyph ok" title="verified">✓</span>';
+  if (unit.state === "failed") return '<span class="unit-glyph bad" title="failed">✕</span>';
+  if (unit.state === "running") return '<span class="unit-glyph run" title="running">◐</span>';
+  return '<span class="unit-glyph pending" title="not yet verified">•</span>';
+}
+
+function renderSwarmCard(sc) {
+  const counts = sc.state_counts || {};
+  const pills = SWARM_STATE_ORDER.filter((st) => counts[st]).map((st) => swarmStatePill(st, counts[st])).join("");
+  const units = (sc.units || []).map((u) => `
+    <li class="unit-row state-${escapeHtml(u.state)}">
+      ${unitVerifiedGlyph(u)}
+      <span class="unit-state">${escapeHtml(u.state)}</span>
+      <span class="unit-goal" title="${escapeHtml(u.goal)}">${escapeHtml(truncate(u.goal || "unit", 76))}</span>
+      ${u.diff_sha ? `<code class="unit-sha" title="diff ${escapeHtml(u.diff_sha)}">${escapeHtml(String(u.diff_sha).slice(0, 8))}</code>` : ""}
+    </li>`).join("");
+  const cost = Number(sc.cost_usd || 0);
+  return `<article class="swarm-card ${sc.live ? "is-live" : ""}">
+    <header class="swarm-card-head">
+      <div class="swarm-title">
+        ${sc.live ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>' : ""}
+        <span class="swarm-label" title="${escapeHtml(sc.label || "")}">${escapeHtml(truncate(sc.label || "swarm", 66))}</span>
+      </div>
+      <div class="swarm-meta">
+        <code title="${escapeHtml(sc.swarm_id)}">${escapeHtml(String(sc.swarm_id).slice(0, 10))}</code>
+        <span>${escapeHtml(sc.agent || "agent")}</span>
+        ${sc.started_at ? `<span>${escapeHtml(formatDate(sc.started_at))}</span>` : ""}
+        ${sc.aborted ? '<span class="swarm-aborted">ABORTED</span>' : ""}
+      </div>
+    </header>
+    <div class="swarm-stats">
+      ${pills}
+      <span class="swarm-verified">${formatNumber(sc.verified_count || 0)}/${formatNumber(sc.total || 0)} verified</span>
+      ${cost ? `<span class="swarm-cost">$${cost.toFixed(2)}</span>` : ""}
+    </div>
+    <ul class="unit-list">${units}</ul>
+  </article>`;
+}
+
+function renderSwarms() {
+  const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
+  const s = sw.summary || {};
+  const liveN = s.live || 0;
+  const metrics = [
+    ["Live swarms", String(liveN), `${formatNumber(s.swarms || 0)} total`],
+    ["Running agents", String(s.running_units || 0), "in flight now"],
+    ["Verified units", String(s.verified_units || 0), `of ${formatNumber(s.total_units || 0)}`],
+    ["Fleet cost", `$${Number(s.total_cost_usd || 0).toFixed(2)}`, "recorded"],
+  ];
+  byId("swarm-metric-grid").innerHTML = metrics.map(([label, value, detail]) => `
+    <div class="metric ${label === "Running agents" && liveN ? "metric-live" : ""}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><span class="metric-detail">${escapeHtml(detail)}</span></div>
+  `).join("");
+
+  const chip = byId("swarms-live-chip");
+  chip.className = `status-chip ${liveN ? "live" : "ready"}`;
+  chip.textContent = liveN ? `${liveN} live` : "All idle";
+  const dot = byId("nav-live-dot");
+  if (dot) dot.hidden = !liveN;
+
+  const swarms = sw.swarms || [];
+  byId("swarm-empty").hidden = swarms.length > 0;
+  byId("swarm-list").innerHTML = swarms.map(renderSwarmCard).join("");
 }
 
 function renderMemoryFilters() {
@@ -365,4 +437,21 @@ byId("memory-kind-filter").addEventListener("change", (event) => { state.kind = 
 byId("copy-report").addEventListener("click", async () => { try { await navigator.clipboard.writeText(state.data.report); showToast("Report copied"); } catch { showToast("Copy unavailable"); } });
 window.addEventListener("resize", () => { if (state.view === "codegraph") requestAnimationFrame(drawCodegraph); });
 
+// Live auto-refresh: silently re-fetch and re-render so running swarms update
+// in place. Skipped for the static export (embedded data) and while the tab is
+// hidden. Keeps the last good data on a failed poll — never flashes an error.
+const LIVE_REFRESH_MS = 4000;
+async function refreshSilently() {
+  if (document.hidden || byId("onmc-dashboard-data") || byId("error-state").hidden === false) return;
+  try {
+    const response = await fetch("/api/dashboard", { cache: "no-store" });
+    if (!response.ok) return;
+    state.data = await response.json();
+    hydrateDashboard();
+  } catch { /* keep last good data until the next tick */ }
+}
+
 renderDashboard();
+if (!byId("onmc-dashboard-data")) {
+  setInterval(refreshSilently, LIVE_REFRESH_MS);
+}

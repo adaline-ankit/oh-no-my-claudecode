@@ -19,6 +19,10 @@
           <button class="nav-item is-active" data-view="overview" aria-current="page">
             <span class="nav-icon" aria-hidden="true">◫</span><span>Overview</span>
           </button>
+          <button class="nav-item" data-view="swarms">
+            <span class="nav-icon" aria-hidden="true">⚡</span><span>Swarms</span>
+            <span id="nav-live-dot" class="nav-live-dot" aria-hidden="true" hidden></span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
           </button>
@@ -110,6 +114,16 @@
               <div class="panel-heading"><h3 id="hot-files-title">Repository hotspots</h3><button class="text-button" data-go-view="codegraph" type="button">Open graph →</button></div>
               <div id="hot-files-overview" class="hot-file-grid"></div>
             </section>
+          </section>
+
+          <section id="view-swarms" class="view" data-view-panel="swarms" aria-labelledby="swarms-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Live agents</span><h2 id="swarms-title">Swarms</h2></div>
+              <span id="swarms-live-chip" class="status-chip"></span>
+            </div>
+            <div id="swarm-metric-grid" class="metric-grid"></div>
+            <div id="swarm-list" class="swarm-list"></div>
+            <div id="swarm-empty" class="empty-state" hidden>No swarms yet — run <code>onmc swarm plan</code> to launch a fleet of agents.</div>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>
