@@ -917,6 +917,207 @@ def test_gitleaks_real_binary_smoke(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# OSV-scanner integration tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_osv_runner_with_finding(path: Path) -> dict[str, Any]:
+    """Fake OsvRunner that returns one HIGH-severity CVE finding."""
+    return {
+        "results": [
+            {
+                "source": {"path": str(path / "uv.lock"), "type": "lockfile"},
+                "packages": [
+                    {
+                        "package": {
+                            "name": "requests",
+                            "version": "2.28.0",
+                            "ecosystem": "PyPI",
+                        },
+                        "vulnerabilities": [
+                            {
+                                "id": "GHSA-9wx4-h78v-vm56",
+                                "aliases": ["CVE-2023-32681"],
+                                "summary": "Requests forwards proxy-auth headers to destination.",
+                                "database_specific": {"severity": "HIGH"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def _fake_osv_runner_critical(path: Path) -> dict[str, Any]:
+    """Fake OsvRunner that returns one CRITICAL-severity CVE finding."""
+    return {
+        "results": [
+            {
+                "source": {"path": str(path / "uv.lock"), "type": "lockfile"},
+                "packages": [
+                    {
+                        "package": {
+                            "name": "pillow",
+                            "version": "9.0.0",
+                            "ecosystem": "PyPI",
+                        },
+                        "vulnerabilities": [
+                            {
+                                "id": "GHSA-56pw-mpj4-fxww",
+                                "aliases": ["CVE-2023-44271"],
+                                "summary": "Pillow uncontrolled resource consumption.",
+                                "database_specific": {"severity": "CRITICAL"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+
+def _fake_osv_runner_empty(path: Path) -> dict[str, Any]:
+    """Fake OsvRunner that returns zero findings (clean result)."""
+    return {"results": []}
+
+
+def _fake_osv_runner_none(path: Path) -> None:  # type: ignore[return]
+    """Fake OsvRunner that simulates an osv-scanner execution error."""
+    return None  # type: ignore[return-value]
+
+
+def test_osv_findings_folded_into_report(tmp_path: Path) -> None:
+    """Injected osv runner findings are included in the AuditReport."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    repo = _repo(tmp_path)
+    repo.mkdir()
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_osv_runner_with_finding(p)
+
+    report = run_audit(repo, osv_runner=_runner)
+    osv_findings = [f for f in report.findings if f.rule_id.startswith("OSV:")]
+    assert len(osv_findings) == 1, f"Expected 1 OSV finding, got {osv_findings}"
+    finding = osv_findings[0]
+    assert finding.severity == "high"  # HIGH → high
+    assert "CVE-2023-32681" in finding.rule_id
+    assert "requests" in finding.title.lower()
+
+
+def test_osv_absent_runner_leaves_audit_unchanged(clean_repo: Path) -> None:
+    """When runner=None (no osv-scanner binary / opt-out) audit is completely unchanged."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report_no_osv = run_audit(clean_repo)
+    report_with_none_runner = run_audit(clean_repo, osv_runner=None)
+
+    assert report_no_osv.score == report_with_none_runner.score
+    assert report_no_osv.grade == report_with_none_runner.grade
+    assert report_no_osv.findings == report_with_none_runner.findings
+
+
+def test_osv_error_runner_produces_zero_findings(clean_repo: Path) -> None:
+    """A runner that returns None (execution error) adds zero findings."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report = run_audit(clean_repo, osv_runner=_fake_osv_runner_none)
+    osv_findings = [f for f in report.findings if f.rule_id.startswith("OSV:")]
+    assert osv_findings == []
+
+
+def test_osv_findings_deduct_score(clean_repo: Path) -> None:
+    """OSV findings deduct from the score (high → -15 per finding)."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_osv_runner_with_finding(p)
+
+    report = run_audit(clean_repo, osv_runner=_runner)
+    # One high finding deducts 15 → score = 85
+    assert report.score == 85
+    assert report.grade == "B"
+
+
+def test_osv_critical_finding_deducts_25(clean_repo: Path) -> None:
+    """A CRITICAL OSV finding deducts 25 from the score."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_osv_runner_critical(p)
+
+    report = run_audit(clean_repo, osv_runner=_runner)
+    # One critical finding deducts 25 → score = 75
+    assert report.score == 75
+    assert report.grade == "B"
+
+
+def test_osv_available_mirrors_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """osv_available() returns True/False based on shutil.which result."""
+    from oh_no_my_claudecode.audit.osv import osv_available
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/local/bin/osv-scanner")
+    assert osv_available() is True
+
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    assert osv_available() is False
+
+
+def test_osv_run_osv_deterministic(clean_repo: Path) -> None:
+    """run_osv with the same injected runner produces identical results each call."""
+    from oh_no_my_claudecode.audit.osv import run_osv
+
+    def _runner(p: Path) -> dict[str, Any]:
+        return _fake_osv_runner_with_finding(p)
+
+    findings_a = run_osv(clean_repo, _runner)
+    findings_b = run_osv(clean_repo, _runner)
+
+    assert len(findings_a) == len(findings_b)
+    for a, b in zip(findings_a, findings_b, strict=True):
+        assert a.rule_id == b.rule_id
+        assert a.severity == b.severity
+        assert a.detail == b.detail
+
+
+def test_osv_empty_runner_no_findings(clean_repo: Path) -> None:
+    """A runner that returns an empty results list produces zero OSV findings."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report = run_audit(clean_repo, osv_runner=_fake_osv_runner_empty)
+    osv_findings = [f for f in report.findings if f.rule_id.startswith("OSV:")]
+    assert osv_findings == []
+    assert report.score == 100
+
+
+def test_cli_audit_osv_flag_exits_zero_on_clean(
+    runner: CliRunner, clean_repo: Path
+) -> None:
+    """``onmc audit --no-osv`` on a clean repo exits 0 (flag accepted, no binary needed)."""
+    result = runner.invoke(app, ["audit", str(clean_repo), "--no-osv"])
+    assert result.exit_code == 0, (
+        f"Expected 0, got {result.exit_code}. Output: {result.stdout}"
+    )
+
+
+@pytest.mark.skipif(
+    __import__("shutil").which("osv-scanner") is None,
+    reason="osv-scanner binary not on PATH",
+)
+def test_osv_real_binary_smoke(tmp_path: Path) -> None:
+    """Smoke test: real osv-scanner binary runs without crashing on an empty dir."""
+    from oh_no_my_claudecode.audit.osv import make_osv_runner, run_osv
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runner_fn = make_osv_runner()
+    findings = run_osv(repo, runner_fn)
+    # We just assert it returns a list — content varies by osv-scanner version.
+    assert isinstance(findings, list)
+
+
+# ---------------------------------------------------------------------------
 # SARIF 2.1.0 formatter tests
 # ---------------------------------------------------------------------------
 
