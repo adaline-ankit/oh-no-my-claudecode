@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.73.0] — 2026-07-05
+
+### Fixed
+
+- **PyPI trusted publishing is now enabled and verified** — v0.72.0 was published
+  to PyPI via OIDC after enabling the `PYPI_TRUSTED_PUBLISHING=true` repository
+  variable, closing the gap where GitHub releases were green but PyPI stayed on
+  an old version.
+
+### Changed
+
+- **Release pipeline now fails loudly instead of silently skipping PyPI** — release
+  runs now verify the `vX.Y.Z` tag matches `pyproject.toml`, require PyPI trusted
+  publishing readiness before upload, and install the exact published version from
+  PyPI after upload to prove users can install it.
+- **GitHub triage automation is productionized** — PR/issue automation now manages
+  `priority/*`, `kind/*`, `size/*`, and `risk/*` labels, fixes the noisy generic
+  docs label behavior, and grants the triage workflow the write permission needed
+  to label PRs.
+
 ## [0.72.0] — 2026-07-04
 
 ### Added
