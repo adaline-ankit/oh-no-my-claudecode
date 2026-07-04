@@ -583,6 +583,25 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 @keyframes onmc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes onmc-spin { to { transform: rotate(360deg); } }
 
+/* Timeline view */
+.timeline-body { display: flex; flex-direction: column; gap: 20px; }
+.tl-period { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; }
+.tl-period-label { color: var(--muted); font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; padding-top: 4px; position: sticky; top: 12px; align-self: start; }
+.tl-entries { list-style: none; margin: 0; padding: 0 0 0 4px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
+.tl-entry { position: relative; display: flex; gap: 12px; padding-left: 16px; }
+.tl-dot { position: absolute; left: -7px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--faint); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); }
+.tl-dot.kind-decision { background: var(--violet); }
+.tl-dot.kind-invariant { background: var(--blue); }
+.tl-dot.kind-failed_approach { background: var(--red); }
+.tl-dot.kind-gotcha { background: var(--amber); }
+.tl-dot.kind-hotspot { background: var(--red); }
+.tl-entry-body { min-width: 0; }
+.tl-entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tl-entry-head strong { font-size: 13px; font-weight: 640; }
+.tl-entry-sum { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.tl-more { color: var(--faint); font-size: 11px; padding-left: 16px; }
+@media (max-width: 720px) { .tl-period { grid-template-columns: 1fr; gap: 8px; } .tl-period-label { position: static; } }
+
 /* Scorecard view */
 .scorecard-hero { display: flex; align-items: center; gap: 28px; padding: 22px; flex-wrap: wrap; }
 .score-ring { flex: none; width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#c3ccc7 0deg, #e8ecea 0deg); }

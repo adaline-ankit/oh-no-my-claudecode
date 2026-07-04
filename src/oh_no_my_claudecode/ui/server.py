@@ -5,6 +5,7 @@ import json
 import mimetypes
 import webbrowser
 from collections import defaultdict
+from datetime import UTC
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -79,6 +80,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         "swarms": _swarms_payload(Path(status["repo_root"])),
         "performance": _performance_payload(Path(status["repo_root"])),
         "scorecard": _scorecard_payload(Path(status["repo_root"])),
+        "timeline": _timeline_payload(service),
     }
 
 
@@ -313,6 +315,44 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
                 "total_cost_usd": round(total_cost, 4),
             },
             "swarms": swarms,
+        }
+    except Exception:  # noqa: BLE001
+        return empty
+
+
+def _timeline_payload(service: OnmcService) -> dict[str, Any]:
+    """Repo-evolution narrative: memories grouped into periods (via onmc timeline).
+
+    JSON-safe (datetimes → ISO strings). Any failure returns a safe empty
+    default so the dashboard never 500s.
+    """
+    empty: dict[str, Any] = {"periods": [], "total": 0, "notes": []}
+    try:
+        from datetime import datetime
+
+        from oh_no_my_claudecode.timeline import build_timeline
+
+        timeline = build_timeline(
+            service.list_memories(), group="week", now=datetime.now(UTC)
+        )
+        return {
+            "total": timeline.total,
+            "notes": list(timeline.notes),
+            "periods": [
+                {
+                    "label": period.label,
+                    "entries": [
+                        {
+                            "kind": entry.kind,
+                            "title": entry.title,
+                            "summary": entry.summary,
+                            "ts": entry.ts.isoformat() if entry.ts else None,
+                        }
+                        for entry in period.entries
+                    ],
+                }
+                for period in timeline.periods
+            ],
         }
     except Exception:  # noqa: BLE001
         return empty
