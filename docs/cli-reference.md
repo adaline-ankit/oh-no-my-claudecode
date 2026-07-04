@@ -4076,7 +4076,8 @@ Usage: onmc verify-diff [OPTIONS]
  Passes ONLY when the change is real (non-empty), introduces every expected
  symbol/file, and is lawful (no banned or secret patterns in added lines).
  Designed to close the empty-diff false-converge: a passing test suite over
- an unchanged tree must NOT count as success.
+ an unchanged tree must NOT count as success.  With ``--structural`` and the
+ ``difft`` binary installed, it also rejects reformat-only diffs.
 
  Exit codes:
 
@@ -4090,6 +4091,10 @@ Usage: onmc verify-diff [OPTIONS]
 │                              Repeatable.                                     │
 │ --expect-file          TEXT  Repo-relative path that must receive added      │
 │                              lines.  Repeatable.                             │
+│ --structural                 Use difftastic (the 'difft' binary) for a       │
+│                              structural/AST diff that ignores formatting     │
+│                              noise.  No-op when 'difft' is not on PATH       │
+│                              (falls back to line-diff).                      │
 │ --json                       Emit the full VerifyReport as JSON to stdout.   │
 │ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
