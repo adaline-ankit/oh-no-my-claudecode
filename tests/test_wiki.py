@@ -19,6 +19,7 @@ from oh_no_my_claudecode.utils.time import utc_now
 from oh_no_my_claudecode.wiki.foam import build_foam_vault
 from oh_no_my_claudecode.wiki.generator import build_wiki
 from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
+from oh_no_my_claudecode.wiki.site import _page_slug, build_site
 
 runner = CliRunner()
 
@@ -762,3 +763,213 @@ def test_wiki_foam_cli_json_envelope(
     assert "pages" in envelope
     assert isinstance(envelope["pages"], list)
     assert "count" in envelope
+
+
+# ---------------------------------------------------------------------------
+# Static HTML site export — unit tests: build_site
+# ---------------------------------------------------------------------------
+
+
+def test_site_empty_store_returns_index_html(tmp_path: Path) -> None:
+    """Empty store must still produce index.html (not crash)."""
+    db = tmp_path / ".onmc" / "memory.db"
+    storage = SQLiteStorage(db)
+    storage.initialize()
+
+    pages = build_site(storage)
+
+    assert "index.html" in pages
+    index = pages["index.html"]
+    # Must be valid HTML5
+    assert "<!doctype html>" in index
+    assert "<html" in index
+    assert "</html>" in index
+
+
+def test_site_seeded_produces_one_page_per_memory(tmp_path: Path) -> None:
+    """Each seeded memory must produce exactly one .html page (plus index.html)."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_site(storage)
+
+    memory_pages = [k for k in pages if k != "index.html"]
+    assert len(memory_pages) == len(memories)
+
+
+def test_site_index_links_all_memories(tmp_path: Path) -> None:
+    """index.html must contain an <a href> link to every memory page."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_site(storage)
+
+    index = pages["index.html"]
+    for mem in memories:
+        slug = _page_slug(mem)
+        assert f'href="{slug}.html"' in index, (
+            f"index.html missing href link for memory '{mem.title}' (slug={slug!r})"
+        )
+
+
+def test_site_memory_pages_link_back_to_index(tmp_path: Path) -> None:
+    """Every memory detail page must contain a back-link to index.html."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_site(storage)
+
+    for page_path, content in pages.items():
+        if page_path == "index.html":
+            continue
+        assert 'href="index.html"' in content, (
+            f"{page_path} does not contain a back-link to index.html"
+        )
+
+
+def test_site_html_escaped_content(tmp_path: Path) -> None:
+    """HTML-special characters in memory content must be escaped in output."""
+    db = tmp_path / ".onmc" / "memory.db"
+    storage = SQLiteStorage(db)
+    storage.initialize()
+
+    xss_mem = _mem(
+        title="XSS <script>alert(1)</script> test",
+        summary="A summary with <b>bold</b> & 'quotes' and \"double quotes\".",
+        kind=MemoryKind.GOTCHA,
+        source_ref="src/xss.py",
+    )
+    storage.upsert_memories([xss_mem])
+
+    pages = build_site(storage)
+
+    all_html = "\n".join(pages.values())
+    # Raw unescaped tags must not appear in the output
+    assert "<script>" not in all_html
+    assert "<b>bold</b>" not in all_html
+    # Escaped forms must be present
+    assert "&lt;script&gt;" in all_html
+    assert "&amp;" in all_html
+
+
+def test_site_edge_links_resolve_to_correct_page(tmp_path: Path) -> None:
+    """Edge <a href> in memory pages must point to the correct target slug."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES)
+    storage.upsert_memory_edge(edge)
+
+    pages = build_site(storage)
+
+    slug_0 = _page_slug(memories[0])
+    slug_1 = _page_slug(memories[1])
+
+    # The page for memories[0] must link to memories[1]'s page
+    page_0 = pages[f"{slug_0}.html"]
+    assert f'href="{slug_1}.html"' in page_0, (
+        f"Page for '{memories[0].title}' should link to '{memories[1].title}'"
+    )
+
+
+def test_site_all_edge_kinds_present(tmp_path: Path) -> None:
+    """All four edge types must appear as link labels in the generated HTML."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    edges = [
+        _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES),
+        _edge(memories[1].id, memories[2].id, EdgeType.CONTRADICTS),
+        _edge(memories[2].id, memories[3].id, EdgeType.RELATES),
+        _edge(memories[3].id, memories[0].id, EdgeType.DUPLICATE_OF),
+    ]
+    for e in edges:
+        storage.upsert_memory_edge(e)
+
+    pages = build_site(storage)
+    all_html = "\n".join(pages.values())
+
+    assert "supersedes" in all_html
+    assert "contradicts" in all_html
+    assert "relates to" in all_html
+    assert "duplicate of" in all_html
+
+
+def test_site_determinism(tmp_path: Path) -> None:
+    """Two calls with the same store must produce byte-identical output."""
+    storage, memories = _seeded_storage(tmp_path)
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.RELATES)
+    storage.upsert_memory_edge(edge)
+
+    pages_first = build_site(storage)
+    pages_second = build_site(storage)
+
+    assert pages_first == pages_second
+
+
+# ---------------------------------------------------------------------------
+# Static HTML site export — CLI tests: onmc wiki site
+# ---------------------------------------------------------------------------
+
+
+def test_wiki_site_cli_exits_0(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``onmc wiki site`` must exit 0 after writing pages."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    result = runner.invoke(app, ["wiki", "site"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_wiki_site_cli_writes_index_html(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki site`` must write index.html under the default out dir."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    runner.invoke(app, ["wiki", "site"], catch_exceptions=False)
+
+    assert (sample_repo / ".onmc" / "site" / "index.html").exists()
+
+
+def test_wiki_site_cli_custom_out(
+    sample_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki site --out <dir>`` must write to the specified directory."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "site-export"
+
+    result = runner.invoke(
+        app, ["wiki", "site", "--out", str(out_dir)], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0
+    assert (out_dir / "index.html").exists()
+
+
+def test_wiki_site_cli_json_envelope(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``onmc wiki site --json`` must emit a valid JSON envelope with expected keys."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "site-json"
+
+    result = runner.invoke(
+        app, ["wiki", "site", "--out", str(out_dir), "--json"], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["kind"] == "site"
+    assert "out_dir" in envelope
+    assert "pages" in envelope
+    assert isinstance(envelope["pages"], list)
+    assert "count" in envelope
+    assert "index.html" in envelope["pages"]

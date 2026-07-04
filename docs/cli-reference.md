@@ -4481,6 +4481,7 @@ Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ logseq  Export memory as a Logseq-compatible knowledge graph.                │
 │ foam    Export memory as a Foam-compatible markdown knowledge graph.         │
+│ site    Export memory as a self-contained static HTML site.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4525,6 +4526,28 @@ Usage: onmc wiki logseq [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --out         PATH  Directory to write Logseq pages into. Defaults to        │
 │                     .onmc/logseq/ (gitignored).                              │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki site`
+
+```text
+Usage: onmc wiki site [OPTIONS]
+
+ Export memory as a self-contained static HTML site.
+
+ Writes ``index.html`` listing all memories grouped by kind, plus one
+ ``<slug>.html`` detail page per memory with its full body and resolved
+ ``<a href>`` links for memory edges.  No external app, no JS framework,
+ no network required — open ``index.html`` directly in any browser.
+
+ The output directory defaults to ``.onmc/site/``.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Directory to write the HTML site into. Defaults to       │
+│                     .onmc/site/ (gitignored).                                │
 │ --json              Print a JSON envelope listing written paths.             │
 │ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
