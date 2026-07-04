@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.76.0] — 2026-07-05
+
+### Added
+
+- **`onmc drift` — institutional-memory enforcement** — flags where the current code likely *violates* a recorded decision / invariant / convention (memory that guards, not just stores). Extracts a checkable directive from each memory (`never use X` → forbid, `always use Y` / `adopt Z` → require, `prefer A over B` → forbid B) and scans the codebase for contradicting evidence, reporting candidates with honest confidence (forbidden-token-present = strong; required-token-absent = weak) — explicitly for human review, never a proof. `drift check`, `--json`, `--min-confidence`. Pure/offline, reuses orggraph + memory; completes the institutional-memory arc: `orggraph` stores → `drift` guards.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#221) — onmc building onmc.
+
 ## [0.75.0] — 2026-07-05
 
 ### Fixed
