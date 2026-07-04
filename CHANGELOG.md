@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.63.0] — 2026-07-04
+
+### Added
+
+- **`onmc missioncontrol` — live swarm dashboard** — a read-only view of a running swarm: per-unit state (pending/queued/running/done/failed/aborted), receipt presence + `verified` flag + `diff_sha`, and the abort-sentinel state, read straight from the swarm manifest + tamper-evident receipts. `--all` lists every swarm; `--json` for machine consumption. Never mutates swarm state.
+- **`onmc nightshift` — autonomous verified overnight swarm + morning digest** — plan a bounded, budget-capped backlog of swarm units (dry-run by default, spawns nothing), then render a morning report of what shipped, which units verified, and the PR links. Deterministic planner + receipt summariser.
+- **`onmc badge` — No-Slop verified proof-of-work PR badge** — turns an onmc receipt (`git_tree_sha`, `diff_sha`, `verified`, `receipt_hash`) into a shareable shields.io badge, a shields endpoint JSON payload, and a tamper-evidence-forward PR-comment body. `--post N` publishes the proof comment on PR #N; `--json` emits the endpoint payload.
+
+### Changed
+
+- **`onmc mission` now decomposes by deliverable, not per context-file** — greenfield goals (building new modules) split into one unit per distinct deliverable instead of degenerating into N near-identical units scoped to unrelated context-pack files; change-work still scopes per file but is deduped and capped. A goal naming a real existing path is treated as change-work even with a build verb.
+
 ## [0.62.0] — 2026-06-24
 
 ### Added
