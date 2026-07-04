@@ -2577,6 +2577,18 @@ def audit_command(
             ),
         ),
     ] = False,
+    use_osv: Annotated[
+        bool,
+        typer.Option(
+            "--osv/--no-osv",
+            help=(
+                "Also run osv-scanner dependency-vulnerability scanning and fold "
+                "detected CVEs into the report.  Requires the 'osv-scanner' binary "
+                "on PATH.  When the binary is absent this flag is silently ignored — "
+                "no pip dependency is added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2619,7 +2631,9 @@ def audit_command(
 
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks)
+    report = _service().audit(
+        repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks, osv=use_osv
+    )
 
     if effective_format == "json":
         import dataclasses
