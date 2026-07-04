@@ -736,3 +736,306 @@ def test_get_embedder_default_is_hash_when_no_env(
 
     emb = get_embedder()
     assert isinstance(emb, HashNgramEmbedder)
+
+
+# ---------------------------------------------------------------------------
+# fastembed cross-encoder reranker — all tests are OFFLINE (no model download)
+# ---------------------------------------------------------------------------
+
+import oh_no_my_claudecode.embeddings.rerank as _rerank_module  # noqa: E402
+
+
+def _fake_fastembed_module_with_cross_encoder(
+    monkeypatch: pytest.MonkeyPatch,
+    scores: list[float] | None = None,
+    use_rerank_api: bool = False,
+) -> None:
+    """Inject a fake ``fastembed`` module with a monkeypatched ``TextCrossEncoder``.
+
+    The fake model never downloads anything.  ``scores`` controls what the
+    fake model returns (one float per candidate); defaults to a simple
+    decreasing sequence.  ``use_rerank_api=True`` makes the fake model expose
+    the ``rerank()`` method (newer API); False exposes ``predict()`` (older API).
+    """
+    import sys
+    import types
+
+    _scores = scores
+
+    class _FakeTextCrossEncoder:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
+            if _scores is not None:
+                return _scores[: len(pairs)]
+            return [float(len(pairs) - i) for i in range(len(pairs))]
+
+        def rerank(self, query: str, texts: list[str]) -> list[dict]:  # noqa: ARG002
+            raw = self.predict([(query, t) for t in texts])
+            return [
+                {"corpus_id": idx, "score": score}
+                for idx, score in enumerate(raw)
+            ]
+
+    if use_rerank_api:
+        # Keep rerank method.
+        klass = _FakeTextCrossEncoder
+    else:
+        # Remove rerank so the predict() branch is exercised.
+        klass = type(
+            "_FakeCEPredict",
+            (_FakeTextCrossEncoder,),
+            {"rerank": None},  # type: ignore[dict-item]
+        )
+        # Actually delete the attribute to ensure hasattr returns False.
+        del klass.rerank  # type: ignore[attr-defined]
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextCrossEncoder = klass  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+
+# ---- fastembed_reranker_available / fastembed_reranker_selected ----
+
+
+def test_fastembed_reranker_available_false_when_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fastembed_reranker_available() returns False when fastembed is not importable."""
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: False)
+    from oh_no_my_claudecode.embeddings.rerank import fastembed_reranker_available
+
+    assert fastembed_reranker_available() is False
+
+
+def test_fastembed_reranker_available_true_when_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fastembed_reranker_available() returns True when fastembed is importable."""
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+    from oh_no_my_claudecode.embeddings.rerank import fastembed_reranker_available
+
+    assert fastembed_reranker_available() is True
+
+
+def test_fastembed_reranker_selected_false_without_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-encoder must NOT be auto-selected — requires explicit ONMC_RERANKER=fastembed."""
+    monkeypatch.delenv("ONMC_RERANKER", raising=False)
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+    from oh_no_my_claudecode.embeddings.rerank import fastembed_reranker_selected
+
+    assert fastembed_reranker_selected() is False
+
+
+def test_fastembed_reranker_selected_false_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fastembed_reranker_selected() returns False when env is set but package missing."""
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: False)
+    from oh_no_my_claudecode.embeddings.rerank import fastembed_reranker_selected
+
+    assert fastembed_reranker_selected() is False
+
+
+def test_fastembed_reranker_selected_true_when_env_and_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """fastembed_reranker_selected() returns True when env is set AND extra is present."""
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+    from oh_no_my_claudecode.embeddings.rerank import fastembed_reranker_selected
+
+    assert fastembed_reranker_selected() is True
+
+
+# ---- Default fallback: no ONMC_RERANKER → existing cosine reranker used ----
+
+
+def test_rerank_uses_cosine_blend_when_reranker_not_selected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without ONMC_RERANKER=fastembed, rerank_with_embeddings uses the cosine-blend path.
+
+    We verify that _rerank_via_cross_encoder returns None (not selected),
+    leaving the cosine-blend to do the reranking — and that the result is still
+    sensible (semantically near memory promoted).
+    """
+    monkeypatch.delenv("ONMC_RERANKER", raising=False)
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+
+    query = "cache eviction lru policy"
+    sem_near = _memory(
+        "sem", "LRU eviction cache", "lru ttl eviction cache invalidation memoize purge"
+    )
+    lex_noisy = _memory(
+        "lex", "billing invoice", "cache billing invoice invalidated stripe refund lru"
+    )
+    storage.upsert_memories([sem_near, lex_noisy])
+
+    candidates = [lex_noisy, sem_near]
+    result = rerank_with_embeddings(candidates, query, [5.0, 5.0], storage, embedder=emb)
+    # The cosine-blend should still promote the semantically near memory.
+    assert result[0].id == "sem"
+
+
+# ---- Cross-encoder selected: produces sensible reordering (offline) ----
+
+
+def test_cross_encoder_reranks_correctly_via_rerank_api(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-encoder (rerank API) promotes highest-score candidate to first place.
+
+    Uses a MONKEYPATCHED TextCrossEncoder — no model download.
+    The fake model assigns score=10 to the first pair, 1 to the rest, so the
+    first candidate in *pairs* order gets promoted regardless of lexical score.
+    """
+    # Select the cross-encoder backend.
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+    _fake_fastembed_module_with_cross_encoder(monkeypatch, scores=[10.0, 1.0], use_rerank_api=True)
+
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+
+    # Intentionally put the "winner" second so the reranker must move it.
+    winner = _memory("winner", "cache eviction policy", "lru ttl eviction")
+    loser = _memory("loser", "billing invoice", "stripe payment customer")
+    storage.upsert_memories([winner, loser])
+
+    # The fake reranker gives score 10 to the first pair (loser), 1 to winner.
+    # So loser comes first after reranking by the fake model.
+    candidates = [loser, winner]
+    result = rerank_with_embeddings(candidates, "cache", [1.0, 1.0], storage, embedder=emb)
+    # The fake model gave loser score=10 and winner score=1 → loser is first.
+    assert result[0].id == "loser"
+    assert result[1].id == "winner"
+
+
+def test_cross_encoder_reranks_correctly_via_predict_api(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-encoder (predict API) reorders candidates by descending score.
+
+    Uses MONKEYPATCHED predict() — no model download.
+    """
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+    # scores=[5.0, 99.0] → second candidate gets highest score → promoted first.
+    _fake_fastembed_module_with_cross_encoder(monkeypatch, scores=[5.0, 99.0], use_rerank_api=False)
+
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+
+    first = _memory("first", "auth JWT", "token refresh revocation")
+    second = _memory("second", "cache lru", "lru eviction invalidation")
+    storage.upsert_memories([first, second])
+
+    candidates = [first, second]
+    result = rerank_with_embeddings(candidates, "cache", [3.0, 2.0], storage, embedder=emb)
+    # Fake predict returns [5.0, 99.0] → second candidate gets 99 → promoted.
+    assert result[0].id == "second"
+    assert result[1].id == "first"
+
+
+def test_cross_encoder_graceful_fallback_on_import_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When ONMC_RERANKER=fastembed but fastembed absent, falls back to cosine-blend.
+
+    No exception is raised — the fallback is silent and the result is still
+    a valid reordering (not necessarily the same order as cross-encoder).
+    """
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    # Mark fastembed as unavailable → _try_fastembed_cross_encoder returns None.
+    monkeypatch.setattr(_rerank_module, "fastembed_reranker_available", lambda: False)
+    # Also patch selected to return False so no cross-encoder attempt happens.
+    monkeypatch.setattr(_rerank_module, "fastembed_reranker_selected", lambda: False)
+
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+    mems = [
+        _memory("m1", "title A", "summary about cache"),
+        _memory("m2", "title B", "billing summary"),
+    ]
+    storage.upsert_memories(mems)
+
+    # Must not raise even when backend is "selected" but unavailable.
+    result = rerank_with_embeddings(mems, "cache", [1.0, 1.0], storage, embedder=emb)
+    assert {m.id for m in result} == {"m1", "m2"}
+
+
+def test_cross_encoder_graceful_on_model_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the fake cross-encoder raises, rerank falls back to cosine-blend.
+
+    This verifies the BLE001 broad-exception guard in _rerank_via_cross_encoder.
+    """
+    import sys
+    import types
+
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+
+    class _BrokenCrossEncoder:
+        def __init__(self, **_kw: object) -> None:
+            pass
+
+        def predict(self, pairs: list[tuple[str, str]]) -> list[float]:  # noqa: ARG002
+            msg = "intentional model failure"
+            raise RuntimeError(msg)
+
+    fake_fe = types.ModuleType("fastembed")
+    fake_fe.TextCrossEncoder = _BrokenCrossEncoder  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastembed", fake_fe)
+
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+    mems = [_memory("m1", "title A", "summary"), _memory("m2", "title B", "other")]
+    storage.upsert_memories(mems)
+
+    # Must not raise — falls back to cosine-blend path.
+    result = rerank_with_embeddings(mems, "query", [2.0, 1.0], storage, embedder=emb)
+    assert {m.id for m in result} == {"m1", "m2"}
+
+
+def test_cross_encoder_selection_honored_end_to_end(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: when ONMC_RERANKER=fastembed and model works, result differs from default order.
+
+    Uses MONKEYPATCHED TextCrossEncoder (rerank API) with deterministic scores.
+    No network access.
+    """
+    monkeypatch.setenv("ONMC_RERANKER", "fastembed")
+    monkeypatch.setattr(_rerank_module, "fastembed_available", lambda: True)
+
+    # Fake model: always returns scores [0.1, 0.9, 0.5] for up to 3 candidates.
+    _fake_fastembed_module_with_cross_encoder(
+        monkeypatch, scores=[0.1, 0.9, 0.5], use_rerank_api=True
+    )
+
+    storage = _store(tmp_path)
+    emb = HashNgramEmbedder()
+
+    a = _memory("a", "auth", "auth summary")
+    b = _memory("b", "billing", "billing summary")
+    c = _memory("c", "cache", "cache summary")
+    storage.upsert_memories([a, b, c])
+
+    candidates = [a, b, c]  # scores: a=0.1, b=0.9, c=0.5
+    result = rerank_with_embeddings(candidates, "query", [1.0, 1.0, 1.0], storage, embedder=emb)
+    # Expected order: b (0.9) > c (0.5) > a (0.1)
+    assert [m.id for m in result] == ["b", "c", "a"]
