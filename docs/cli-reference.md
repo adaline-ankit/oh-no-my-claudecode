@@ -111,6 +111,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 dependencies.                                                │
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
+│ session-search  Full-text search across all of onmc's persisted history.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
@@ -170,6 +171,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 + memory.                                                    │
 │ memguard        Memory-integrity firewall: scan memory entries for           │
 │                 adversarial content.                                         │
+│ memstage        Write-approval staging queue: propose memory writes, review  │
+│                 diffs, then approve or reject — nothing lands in the store   │
+│                 without your sign-off.                                       │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
@@ -2745,6 +2749,142 @@ Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc memstage`
+
+```text
+Usage: onmc memstage [OPTIONS] COMMAND [ARGS]...
+
+ Write-approval staging queue: propose memory writes, review diffs, then
+ approve or reject — nothing lands in the store without your sign-off.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add      Stage a proposed memory write into the pending queue.               │
+│ list     List pending proposals with ids and one-line gists.                 │
+│ diff     Show the full proposed entry in unified-diff style.                 │
+│ approve  Approve a pending proposal and persist it to the memory store.      │
+│ reject   Reject a pending proposal: drop it and keep an audit trail.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memstage add`
+
+```text
+Usage: onmc memstage add [OPTIONS] TEXT
+
+ Stage a proposed memory write into the pending queue.
+
+ The entry is NOT written to the memory store — it waits in the queue
+ until you run ``approve`` or ``reject``. Review the diff first with
+ ``onmc memstage diff <id>``.
+
+ Examples:
+
+     onmc memstage add "Always run tests before pushing"
+
+     onmc memstage add "Stripe webhook secret rotates on redeploy" \
+       --kind gotcha --title "Stripe webhook secret rotates" \
+       --reason "Burnt 2h on this"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    text      TEXT  The proposed memory entry body (the summary).           │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --title         TEXT  Short title for the memory entry.                      │
+│ --kind          TEXT  Memory kind (doc_fact, decision, invariant, hotspot,   │
+│                       git_pattern, validation_rule, failed_approach,         │
+│                       design_conflict, gotcha). Defaults to 'doc_fact'.      │
+│ --reason        TEXT  Why this write is being proposed.                      │
+│ --json                Emit the staged proposal as JSON.                      │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memstage approve`
+
+```text
+Usage: onmc memstage approve [OPTIONS] PROPOSAL_ID
+
+ Approve a pending proposal and persist it to the memory store.
+
+ The approved entry is written via the real memory record path
+ (``add_manual_memory``) so it lands in the SQLite store with full
+ provenance. The proposal is then removed from the pending queue and an
+ audit record is written under ``.onmc/memstage/audit/``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to approve (from 'onmc memstage      │
+│                             list').                                          │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the audit record as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memstage diff`
+
+```text
+Usage: onmc memstage diff [OPTIONS] PROPOSAL_ID
+
+ Show the full proposed entry in unified-diff style.
+
+ Compares an empty baseline (entry doesn't exist yet) against the
+ proposed content so every added line is visible. A ``+`` line is
+ something that *would* land in the store on approve.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to diff (from 'onmc memstage list'). │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memstage list`
+
+```text
+Usage: onmc memstage list [OPTIONS]
+
+ List pending proposals with ids and one-line gists.
+
+ Shows proposals in queue order (by seq). Each line contains the
+ proposal id and title for quick scanning. Use ``diff <id>`` to see
+ the full proposed entry.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit pending proposals as JSON.                              │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memstage reject`
+
+```text
+Usage: onmc memstage reject [OPTIONS] PROPOSAL_ID
+
+ Reject a pending proposal: drop it and keep an audit trail.
+
+ The proposal is removed from the pending queue. An audit record is
+ written under ``.onmc/memstage/audit/`` so the decision is traceable.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to reject (from 'onmc memstage       │
+│                             list').                                          │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --reason        TEXT  Why this proposal is being rejected.                   │
+│ --json                Emit the audit record as JSON.                         │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc mine`
 
 ```text
@@ -3791,6 +3931,45 @@ Usage: onmc serve [OPTIONS]
 │ --repo        TEXT  Repository path to serve (resolved once at startup).     │
 │                     [default: .]                                             │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc session-search`
+
+```text
+Usage: onmc session-search [OPTIONS] QUERY
+
+ Full-text search across all of onmc's persisted history.
+
+ Searches memories, attempts, tasks, and memory_artifacts using SQLite's
+ FTS5 engine (falls back to LIKE when FTS5 is absent).  Results are ranked
+ by BM25 relevance and include a short snippet showing the match context.
+
+ Complements ``onmc recall`` (semantic KNN over curated memories) by
+ covering the complete history with keyword search.
+
+ Examples:
+
+     onmc session-search "cache invalidation"
+
+     onmc session-search "auth bug" --limit 5
+
+     onmc session-search "migration" --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query      TEXT  Search query.  All alphanumeric tokens are matched (OR │
+│                       logic).                                                │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit  -n      INTEGER RANGE [1<=x<=500]  Maximum number of results to     │
+│                                             return.                          │
+│                                             [default: 20]                    │
+│ --json                                      Emit results as a JSON envelope  │
+│                                             {"kind": "session-search",       │
+│                                             "query": "...", "hits": [...]}   │
+│                                             for pipeline composition.        │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.78.0] — 2026-07-05
+
+### Added
+
+Three memory features inspired by NousResearch's hermes-agent, built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR:
+
+- **`onmc memguard` — memory-integrity firewall** — scans memory entries for adversarial content before they're trusted: prompt-injection phrasing, credential-exfiltration, SSH/backdoor patterns, and invisible/dangerous Unicode (zero-width, bidi overrides, tag chars). `memguard scan [--json] [--fail-on SEVERITY]` reports per-entry findings with severity + rule id. Pure stdlib, zero false positives on benign text — onmc's memory-poisoning defense, on the audit/attest trust moat. (#228)
+- **`onmc session-search` — FTS5 full-text search over history** — fast keyword search across onmc's entire persisted store (memories, attempts, tasks, artifacts) via SQLite FTS5 with BM25 ranking + snippets, opening the DB read-only (never mutates schema); graceful `LIKE` fallback when FTS5 is absent. Complements `recall` (curated-memory KNN) with raw retrieval over everything. (#226)
+- **`onmc memstage` — write-approval staging queue** — gates memory writes behind human review: `memstage add` stages a proposal (does NOT write the store), `list`/`diff`/`approve`/`reject` review it; approve persists via the real record path, reject keeps an audit trail. Portable `.onmc/memstage/`, deterministic ids. Onmc's accountability-layer thesis applied to memory. (#227)
+
 ## [0.77.0] — 2026-07-05
 
 ### Added
