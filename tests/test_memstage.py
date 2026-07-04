@@ -178,7 +178,9 @@ def test_approve_removes_from_queue(tmp_path: Path) -> None:
 
 
 def test_approve_calls_add_manual_memory(tmp_path: Path) -> None:
-    proposal = stage(tmp_path, kind="invariant", title="Unique titles", summary="Titles must be unique")
+    proposal = stage(
+        tmp_path, kind="invariant", title="Unique titles", summary="Titles must be unique"
+    )
     service = _make_service_mock()
 
     approve(tmp_path, proposal.id, service=service)
@@ -398,7 +400,9 @@ def test_cli_add_stages_proposal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert "staged" in result.output
 
 
-def test_cli_add_json_returns_valid_payload(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_add_json_returns_valid_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     app = _app()
     result = runner.invoke(
@@ -422,7 +426,9 @@ def test_cli_list_empty_is_graceful(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "empty" in result.output.lower()
 
 
-def test_cli_list_json_shows_staged_proposals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cli_list_json_shows_staged_proposals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     app = _app()
     # Stage via the queue core directly so we control the path.
@@ -438,7 +444,9 @@ def test_cli_list_json_shows_staged_proposals(tmp_path: Path, monkeypatch: pytes
 def test_cli_diff_renders_output(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     app = _app()
-    proposal = stage(tmp_path, kind="doc_fact", title="Diff test title", summary="Diff test summary")
+    proposal = stage(
+        tmp_path, kind="doc_fact", title="Diff test title", summary="Diff test summary"
+    )
     result = runner.invoke(app, ["memstage", "diff", proposal.id], catch_exceptions=False)
     assert result.exit_code == 0, result.output
     assert "+kind:" in result.output
