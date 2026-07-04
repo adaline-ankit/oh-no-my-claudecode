@@ -3388,6 +3388,7 @@ class OnmcService:
         expect_symbols: tuple[str, ...] = (),
         expect_files: tuple[str, ...] = (),
         repo_root: Path | None = None,
+        structural: bool = False,
     ) -> VerifyReport:
         """Adversarially verify the working diff against *base*.
 
@@ -3407,13 +3408,24 @@ class OnmcService:
             Repo-relative paths that must each receive added lines.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        structural:
+            Opt in to structural (AST-level) diffing via difftastic.  Only takes
+            effect when the ``difft`` binary is on ``PATH`` (detected with
+            :func:`difftastic_available`); otherwise the gate silently falls back
+            to line-diff behaviour so there is zero regression when the binary is
+            absent.  No pip dependency is added — difftastic is an external tool.
 
         Returns
         -------
         VerifyReport
             ``ok`` is ``True`` only when every check passed.
         """
-        from oh_no_my_claudecode.verifydiff.checker import collect_diff, verify_diff
+        from oh_no_my_claudecode.verifydiff.checker import (
+            collect_diff,
+            difftastic_available,
+            make_difftastic_runner,
+            verify_diff,
+        )
 
         if repo_root is None:
             try:
@@ -3421,10 +3433,14 @@ class OnmcService:
             except FileNotFoundError:
                 repo_root = self.cwd
         diff_text = collect_diff(repo_root, base)
+        structural_runner = None
+        if structural and difftastic_available():
+            structural_runner = make_difftastic_runner(repo_root, base)
         return verify_diff(
             diff_text=diff_text,
             expect_symbols=expect_symbols,
             expect_files=expect_files,
+            structural_runner=structural_runner,
         )
 
     # ------------------------------------------------------------------
@@ -3647,6 +3663,7 @@ class OnmcService:
         *,
         write: bool = False,
         repo_root: Path | None = None,
+        use_git_cliff: bool = True,
     ) -> tuple[Path, ReleaseDraft]:
         """Draft the next release from conventional-commit history.
 
@@ -3663,6 +3680,12 @@ class OnmcService:
             nothing is written — the draft is returned for preview.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        use_git_cliff:
+            When ``True`` (default) and the external ``git-cliff`` binary is on
+            ``PATH``, git-cliff renders the CHANGELOG entry.  When the binary is
+            absent — or this is ``False`` — the built-in conventional-commit
+            renderer is used instead (identical to prior behaviour).  Version
+            bump and commit grouping are unaffected either way.
 
         Returns
         -------
@@ -3672,6 +3695,7 @@ class OnmcService:
         from oh_no_my_claudecode.release import (
             collect_commits,
             current_version,
+            default_cliff_runner,
             draft_release,
             write_release,
         )
@@ -3679,12 +3703,16 @@ class OnmcService:
         if repo_root is None:
             repo_root = discover_repo_root(self.cwd)
 
+        cliff_runner = default_cliff_runner() if use_git_cliff else None
+
         version = current_version(repo_root)
         commits = collect_commits(repo_root)
         draft = draft_release(
             current_version=version,
             commits=commits,
             date=utc_now().strftime("%Y-%m-%d"),
+            cliff_runner=cliff_runner,
+            repo_root=repo_root,
         )
         if write:
             write_release(repo_root, draft)

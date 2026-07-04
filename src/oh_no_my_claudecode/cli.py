@@ -2648,6 +2648,17 @@ def verify_diff_command(
             help="Repo-relative path that must receive added lines.  Repeatable.",
         ),
     ] = None,
+    structural: Annotated[
+        bool,
+        typer.Option(
+            "--structural",
+            help=(
+                "Use difftastic (the 'difft' binary) for a structural/AST diff that"
+                " ignores formatting noise.  No-op when 'difft' is not on PATH"
+                " (falls back to line-diff)."
+            ),
+        ),
+    ] = False,
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Emit the full VerifyReport as JSON to stdout."),
@@ -2658,7 +2669,8 @@ def verify_diff_command(
     Passes ONLY when the change is real (non-empty), introduces every expected
     symbol/file, and is lawful (no banned or secret patterns in added lines).
     Designed to close the empty-diff false-converge: a passing test suite over
-    an unchanged tree must NOT count as success.
+    an unchanged tree must NOT count as success.  With ``--structural`` and the
+    ``difft`` binary installed, it also rejects reformat-only diffs.
 
     Exit codes:
 
@@ -2669,6 +2681,7 @@ def verify_diff_command(
         base=base,
         expect_symbols=tuple(expect_symbol or ()),
         expect_files=tuple(expect_file or ()),
+        structural=structural,
     )
 
     if as_json:
@@ -5141,19 +5154,30 @@ def release_command(
         bool,
         typer.Option("--json", help="Emit the drafted release as JSON."),
     ] = False,
+    git_cliff: Annotated[
+        bool,
+        typer.Option(
+            "--git-cliff/--no-git-cliff",
+            help="Use git-cliff to render the CHANGELOG when its binary is on PATH "
+            "(default: on; falls back to the built-in renderer when absent).",
+        ),
+    ] = True,
 ) -> None:
     """Draft the next release from conventional-commit history.
 
     Classifies commit subjects since the last tag into a semver bump (feat ->
     minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
     next version, and renders a CHANGELOG entry in the repo's format.
-    Deterministic and offline. Dry-run by default — pass --write to bump
-    pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+    Deterministic and offline. When the external git-cliff binary is installed
+    it renders the CHANGELOG entry (best-in-class); otherwise the built-in
+    renderer is used — pass --no-git-cliff to force the built-in one. Dry-run by
+    default — pass --write to bump pyproject.toml and prepend the entry to
+    CHANGELOG.md. Never tags or pushes.
     """
     import dataclasses
 
     try:
-        _, draft = _service().release_draft(write=write)
+        _, draft = _service().release_draft(write=write, use_git_cliff=git_cliff)
     except (FileNotFoundError, ValueError, RepoDiscoveryError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 

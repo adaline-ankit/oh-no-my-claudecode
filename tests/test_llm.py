@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import sys
+import types
 import urllib.error
 from email.message import Message
 from pathlib import Path
@@ -14,12 +16,14 @@ from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.llm import (
     AnthropicProvider,
+    LiteLLMProvider,
     LLMConfigurationError,
     LLMProviderError,
     MockProvider,
     OllamaProvider,
     OpenAIProvider,
     generate_logged,
+    litellm_available,
     provider_from_settings,
 )
 from oh_no_my_claudecode.llm import providers as llm_providers
@@ -222,6 +226,139 @@ def test_validate_ollama_server_unavailable_is_graceful(
 
     assert valid is False
     assert "unavailable" in detail
+
+
+def _install_fake_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+    completion: Any,
+) -> list[dict[str, Any]]:
+    """Register an offline fake `litellm` module and capture completion calls."""
+    calls: list[dict[str, Any]] = []
+
+    def _tracked_completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return completion(**kwargs)
+
+    fake_module = types.ModuleType("litellm")
+    fake_module.completion = _tracked_completion  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "litellm", fake_module)
+    return calls
+
+
+def _litellm_provider(model: str = "gpt-4o") -> LiteLLMProvider:
+    return LiteLLMProvider(
+        LLMSettings(
+            provider=LLMProviderType.LITELLM,
+            model=model,
+            temperature=0.3,
+            max_tokens=321,
+        )
+    )
+
+
+def test_litellm_provider_returns_completion_from_mocked_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Message:
+        content = "unified answer"
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+        def model_dump(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"content": "unified answer"}}]}
+
+    calls = _install_fake_litellm(monkeypatch, lambda **_: _Response())
+
+    response = _litellm_provider("anthropic/claude-sonnet-4-5").generate(
+        LLMGenerationRequest(prompt="hello", system_prompt="be terse")
+    )
+
+    assert response.text == "unified answer"
+    assert response.provider == LLMProviderType.LITELLM
+    assert response.model == "anthropic/claude-sonnet-4-5"
+    assert response.raw == {"choices": [{"message": {"content": "unified answer"}}]}
+    assert len(calls) == 1
+    assert calls[0]["model"] == "anthropic/claude-sonnet-4-5"
+    assert calls[0]["temperature"] == 0.3
+    assert calls[0]["max_tokens"] == 321
+    assert calls[0]["messages"] == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hello"},
+    ]
+
+
+def test_litellm_provider_accepts_dict_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"choices": [{"message": {"content": "  dict answer  "}}]}
+    _install_fake_litellm(monkeypatch, lambda **_: payload)
+
+    response = _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+    assert response.text == "dict answer"
+    assert response.raw == payload
+
+
+def test_litellm_provider_empty_response_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_litellm(monkeypatch, lambda **_: {"choices": []})
+
+    with pytest.raises(LLMProviderError, match="did not contain text"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_provider_wraps_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(**_: Any) -> Any:
+        raise RuntimeError("provider exploded")
+
+    _install_fake_litellm(monkeypatch, _boom)
+
+    with pytest.raises(LLMProviderError, match="LiteLLM request failed: provider exploded"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_provider_unavailable_when_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+
+    with pytest.raises(LLMProviderError, match="litellm package is not installed"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_available_reflects_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    assert litellm_available() is False
+
+    monkeypatch.setitem(sys.modules, "litellm", types.ModuleType("litellm"))
+    assert litellm_available() is True
+
+
+def test_factory_constructs_litellm_provider_without_api_key() -> None:
+    provider = provider_from_settings(
+        LLMSettings(provider=LLMProviderType.LITELLM, model="gpt-4o"),
+        environ={},
+    )
+    assert isinstance(provider, LiteLLMProvider)
+
+
+def test_validate_litellm_reports_availability(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    valid, detail = validate_provider_api_key(LLMProviderType.LITELLM, "")
+    assert valid is False
+    assert "not installed" in detail
+
+    monkeypatch.setitem(sys.modules, "litellm", types.ModuleType("litellm"))
+    valid, detail = validate_provider_api_key(LLMProviderType.LITELLM, "")
+    assert valid is True
+    assert "installed" in detail
 
 
 def test_llm_config_round_trip(sample_repo: Path, monkeypatch: object) -> None:

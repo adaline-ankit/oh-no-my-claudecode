@@ -55,6 +55,12 @@ treesitter = [
 sqlitevec = [
   "sqlite-vec>=0.1.0",
 ]
+# Optional unified multi-provider LLM backend.  Absent by default — the built-in
+# Anthropic/OpenAI/Ollama providers work without it; the `litellm` provider
+# reports itself unavailable gracefully until this extra is installed.
+litellm = [
+  "litellm>=1.0",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
@@ -105,6 +111,11 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["yaml", "sqlite_vec"]
+ignore_missing_imports = true
+
+# Optional unified LLM backend — absent by default and ships no type stubs.
+[[tool.mypy.overrides]]
+module = ["litellm"]
 ignore_missing_imports = true
 
 # Optional tree-sitter parsers are dynamic C extensions without type stubs.
