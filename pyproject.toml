@@ -46,6 +46,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+sqlitevec = [
+  "sqlite-vec>=0.1.0",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
@@ -95,5 +98,5 @@ strict = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["yaml"]
+module = ["yaml", "sqlite_vec"]
 ignore_missing_imports = true
