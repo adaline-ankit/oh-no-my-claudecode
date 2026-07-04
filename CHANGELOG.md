@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.75.0] — 2026-07-05
+
+### Fixed
+
+- **Release verifier now checks out the repository before `setup-python` caching** — closes the post-publish failure where PyPI upload succeeded but the final exact-version install verifier failed before it could run. This release proves the full hardened pipeline end to end.
+
+### Changed
+
+- **Re-issues the scorecard + handoff release on a fully green release workflow** — keeps the v0.74.0 user-facing feature set while making the final GitHub Actions release run auditable and green.
+
 ## [0.74.0] — 2026-07-05
 
 ### Added
