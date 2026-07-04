@@ -159,6 +159,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
 │                 across sibling repos.                                        │
+│ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
@@ -1616,6 +1617,59 @@ Usage: onmc guard [OPTIONS]
 │    --terse                              Emit compact terse output (overrides │
 │                                         ONMC_TERSE env var).                 │
 │    --help                               Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc handoff`
+
+```text
+Usage: onmc handoff [OPTIONS] COMMAND [ARGS]...
+
+ Package / resume portable cross-session task context.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ create  Build a portable handoff bundle for GOAL and write it (or print it). │
+│ resume  Read a handoff bundle FILE and render a resume briefing.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc handoff create`
+
+```text
+Usage: onmc handoff create [OPTIONS] GOAL
+
+ Build a portable handoff bundle for GOAL and write it (or print it).
+
+ Assembles the context pack, goal-relevant decisions, recorded dead-ends,
+ and recent run receipts into one JSON bundle. Missing sources degrade to
+ empty sections with explanatory notes — the command never crashes.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  The task goal to package context for. [required]        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Where to write the bundle JSON.                          │
+│ --json              Emit the bundle JSON to stdout instead of a file.        │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc handoff resume`
+
+```text
+Usage: onmc handoff resume [OPTIONS] FILE
+
+ Read a handoff bundle FILE and render a resume briefing.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    file      PATH  Path to a handoff bundle JSON. [required]               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the parsed bundle as JSON instead of a briefing.        │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
