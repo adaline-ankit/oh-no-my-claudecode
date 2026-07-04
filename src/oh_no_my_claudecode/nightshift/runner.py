@@ -136,7 +136,9 @@ def plan_nightshift(goals: list[str], *, budget: int = DEFAULT_BUDGET) -> Nights
     cap = max(0, budget)
     scheduled = cleaned[:cap]
     units = [NightshiftUnit(index=i, goal=g) for i, g in enumerate(scheduled)]
-    return NightshiftPlan(units=units, budget=budget, total_goals=len(cleaned))
+    # Report the clamped budget: a negative budget means "run nothing" (cap 0),
+    # so surfacing the raw negative would misrepresent the plan.
+    return NightshiftPlan(units=units, budget=cap, total_goals=len(cleaned))
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,7 +202,7 @@ def summarize_receipts(receipts: list[dict[str, object]]) -> NightshiftSummary:
             verified += 1
         else:
             failed += 1
-        goal = str(receipt.get("goal") or "(unknown)")
+        goal = str(receipt.get("goal") or "").strip() or "(unknown)"
         pr_url = receipt.get("pr_url") or receipt.get("pr")
         rows.append(
             {

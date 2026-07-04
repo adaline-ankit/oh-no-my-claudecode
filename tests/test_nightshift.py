@@ -67,6 +67,15 @@ def test_plan_fewer_goals_than_budget_schedules_all() -> None:
     assert plan.deferred_count == 0
 
 
+def test_plan_negative_budget_reports_clamped_zero_not_negative() -> None:
+    # A negative budget means "run nothing"; the reported budget must be the
+    # clamped 0, never the raw negative (Sourcery suggestion).
+    plan = plan_nightshift(["a", "b"], budget=-5)
+    assert plan.scheduled_count == 0
+    assert plan.budget == 0
+    assert plan.deferred_count == 2
+
+
 # --------------------------------------------------------------------------- #
 # summarize_receipts
 # --------------------------------------------------------------------------- #
@@ -98,6 +107,13 @@ def test_summarize_empty_and_all_verified() -> None:
 
 def test_summarize_missing_goal_renders_unknown() -> None:
     summary = summarize_receipts([{"verified": True}])
+    assert summary.results[0]["goal"] == "(unknown)"
+
+
+def test_summarize_whitespace_goal_renders_unknown() -> None:
+    # A whitespace-only goal is truthy but empty once stripped; it must render
+    # as "(unknown)", not a blank string (Sourcery suggestion).
+    summary = summarize_receipts([{"goal": "   ", "verified": False}])
     assert summary.results[0]["goal"] == "(unknown)"
 
 
