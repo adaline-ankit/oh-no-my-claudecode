@@ -152,14 +152,19 @@ def register(app: typer.Typer) -> None:
             )
             raise typer.Exit(code=1)
 
+        body = comment_body(receipt)
+
+        # --post is honoured regardless of --json: posting the proof comment is a
+        # side effect, --json only selects what we print to stdout.
+        if post is not None:
+            _post_comment(post, body)
+
         if as_json:
             typer.echo(json.dumps(endpoint_payload(receipt)))
             return
 
-        body = comment_body(receipt)
-
         if post is not None:
-            _post_comment(post, body)
+            # Already posted; don't also dump the full badge+body to stdout.
             return
 
         typer.echo(render_markdown_badge(receipt))

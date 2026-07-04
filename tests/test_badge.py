@@ -249,3 +249,25 @@ def test_badge_command_json_emits_endpoint_payload(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["schemaVersion"] == 1
     assert payload["message"] == "verified"
+
+
+def test_badge_command_resolves_swarm_id_and_unit(tmp_path: Path, monkeypatch: Any) -> None:
+    # End-to-end CLI: `onmc badge <swarm_id> --unit <unit>` resolves the receipt
+    # via the manifest from cwd (Sourcery testing suggestion).
+    receipts_dir = tmp_path / ".agent-memory" / "receipts"
+    rp0 = _write_receipt(receipts_dir, "run-0.json", _receipt(verified=False))
+    rp1 = _write_receipt(receipts_dir, "run-1.json", _receipt(verified=True))
+    swarm_dir = tmp_path / ".onmc" / "swarm" / "swarmZ"
+    swarm_dir.mkdir(parents=True)
+    manifest = {
+        "units": {
+            "unit-0000": {"receipt_path": str(rp0)},
+            "unit-0001": {"receipt_path": str(rp1)},
+        },
+    }
+    (swarm_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["badge", "swarmZ", "--unit", "unit-0001", "--json"])
+    assert result.exit_code == 0, result.stdout
+    assert json.loads(result.stdout)["message"] == "verified"
