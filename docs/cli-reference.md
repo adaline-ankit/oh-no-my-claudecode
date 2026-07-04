@@ -152,8 +152,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
 │ proptest        Generate property/invariant tests for pure functions.        │
-│ viz             Render onmc graphs as shareable Mermaid diagrams (no server, │
-│                 no dep).                                                     │
+│ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
+│                 server, no dep).                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4146,15 +4146,14 @@ Usage: onmc verify-diff [OPTIONS]
 ```text
 Usage: onmc viz [OPTIONS] COMMAND [ARGS]...
 
- Render onmc graphs as shareable Mermaid diagrams (no server, no dep).
+ Render onmc graphs as shareable diagrams (Mermaid or D2, no server, no dep).
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ memory  Print the memory relationship graph as Mermaid ``graph TD`` text.    │
-│ code    Print the code-graph blast radius of *target* as Mermaid ``graph     │
-│         TD`` text.                                                           │
+│ memory  Print the memory relationship graph as a diagram.                    │
+│ code    Print the code-graph blast radius of *target* as a diagram.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4163,11 +4162,12 @@ Usage: onmc viz [OPTIONS] COMMAND [ARGS]...
 ```text
 Usage: onmc viz code [OPTIONS] TARGET
 
- Print the code-graph blast radius of *target* as Mermaid ``graph TD`` text.
+ Print the code-graph blast radius of *target* as a diagram.
 
  The target file(s) sit in the centre; importers/dependents flow in, the
  target's own imports flow out, and related tests are shown as a group.
- Deterministic and offline.
+ Use ``--format d2`` for D2 (terrastruct.com/d2) output instead of the
+ default Mermaid ``graph TD``. Deterministic and offline.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    target      TEXT  Repo-relative file path or bare symbol name to graph  │
@@ -4175,8 +4175,11 @@ Usage: onmc viz code [OPTIONS] TARGET
 │                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json          Wrap the Mermaid text in a JSON envelope.                    │
-│ --help          Show this message and exit.                                  │
+│ --json                        Wrap the diagram text in a JSON envelope.      │
+│ --format        [mermaid|d2]  Output diagram format: mermaid (default) or    │
+│                               d2.                                            │
+│                               [default: mermaid]                             │
+│ --help                        Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4185,18 +4188,22 @@ Usage: onmc viz code [OPTIONS] TARGET
 ```text
 Usage: onmc viz memory [OPTIONS]
 
- Print the memory relationship graph as Mermaid ``graph TD`` text.
+ Print the memory relationship graph as a diagram.
 
  Nodes are memory entries grouped by kind; edges are the recorded
  ``memory_edges`` relationships (supersedes / contradicts / relates /
- duplicate_of). Deterministic and offline.
+ duplicate_of). Use ``--format d2`` for D2 (terrastruct.com/d2) output
+ instead of the default Mermaid ``graph TD``. Deterministic and offline.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit        INTEGER  Maximum number of memory nodes to render (most       │
-│                         recent first).                                       │
-│                         [default: 40]                                        │
-│ --json                  Wrap the Mermaid text in a JSON envelope.            │
-│ --help                  Show this message and exit.                          │
+│ --limit         INTEGER       Maximum number of memory nodes to render (most │
+│                               recent first).                                 │
+│                               [default: 40]                                  │
+│ --json                        Wrap the diagram text in a JSON envelope.      │
+│ --format        [mermaid|d2]  Output diagram format: mermaid (default) or    │
+│                               d2.                                            │
+│                               [default: mermaid]                             │
+│ --help                        Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

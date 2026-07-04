@@ -6,22 +6,24 @@ of ``CONTRIBUTING.md``): this module exposes a top-level ``register(app)`` that
 the registry invokes at CLI build time, so ``onmc viz`` ships with **zero edits**
 to ``cli.py`` or any other shared hub. Rendering is done inline here.
 
-``onmc viz memory`` prints a Mermaid diagram of the memory relationship graph;
-``onmc viz code [<target>]`` prints a Mermaid diagram of the code-graph blast
-radius. Both emit plain Mermaid ``graph TD`` text (paste into GitHub, Obsidian,
-or mermaid.live) — no server, no dependency. Distinct from the live
+``onmc viz memory`` prints a diagram of the memory relationship graph;
+``onmc viz code [<target>]`` prints a diagram of the code-graph blast radius.
+Both emit plain diagram text (Mermaid ``graph TD`` by default, or D2 when
+``--format d2`` is passed) — no server, no dependency. Distinct from the live
 ``onmc missioncontrol`` dashboard.
 """
 
 from __future__ import annotations
 
 import json
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
+from oh_no_my_claudecode.viz.d2 import code_d2, memory_d2
 from oh_no_my_claudecode.viz.mermaid import (
     DEFAULT_MEMORY_LIMIT,
     code_mermaid,
@@ -29,9 +31,16 @@ from oh_no_my_claudecode.viz.mermaid import (
 )
 
 viz_app = typer.Typer(
-    help="Render onmc graphs as shareable Mermaid diagrams (no server, no dep).",
+    help="Render onmc graphs as shareable diagrams (Mermaid or D2, no server, no dep).",
     no_args_is_help=True,
 )
+
+
+class DiagramFormat(StrEnum):
+    """Supported output diagram formats."""
+
+    MERMAID = "mermaid"
+    D2 = "d2"
 
 
 def register(app: typer.Typer) -> None:
@@ -54,14 +63,22 @@ def viz_memory_command(
     ] = DEFAULT_MEMORY_LIMIT,
     as_json: Annotated[
         bool,
-        typer.Option("--json", help="Wrap the Mermaid text in a JSON envelope."),
+        typer.Option("--json", help="Wrap the diagram text in a JSON envelope."),
     ] = False,
+    fmt: Annotated[
+        DiagramFormat,
+        typer.Option(
+            "--format",
+            help="Output diagram format: mermaid (default) or d2.",
+        ),
+    ] = DiagramFormat.MERMAID,
 ) -> None:
-    """Print the memory relationship graph as Mermaid ``graph TD`` text.
+    """Print the memory relationship graph as a diagram.
 
     Nodes are memory entries grouped by kind; edges are the recorded
     ``memory_edges`` relationships (supersedes / contradicts / relates /
-    duplicate_of). Deterministic and offline.
+    duplicate_of). Use ``--format d2`` for D2 (terrastruct.com/d2) output
+    instead of the default Mermaid ``graph TD``. Deterministic and offline.
     """
     service = OnmcService(Path.cwd())
     try:
@@ -70,10 +87,28 @@ def viz_memory_command(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
-    diagram = memory_mermaid(storage, limit=limit)
-    if as_json:
-        typer.echo(json.dumps({"kind": "memory", "mermaid": diagram}, indent=2, sort_keys=True))
-        return
+    if fmt == DiagramFormat.D2:
+        diagram = memory_d2(storage, limit=limit)
+        if as_json:
+            typer.echo(
+                json.dumps(
+                    {"kind": "memory", "format": "d2", "d2": diagram},
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
+    else:
+        diagram = memory_mermaid(storage, limit=limit)
+        if as_json:
+            typer.echo(
+                json.dumps(
+                    {"kind": "memory", "mermaid": diagram},
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
     typer.echo(diagram)
 
 
@@ -87,14 +122,22 @@ def viz_code_command(
     ],
     as_json: Annotated[
         bool,
-        typer.Option("--json", help="Wrap the Mermaid text in a JSON envelope."),
+        typer.Option("--json", help="Wrap the diagram text in a JSON envelope."),
     ] = False,
+    fmt: Annotated[
+        DiagramFormat,
+        typer.Option(
+            "--format",
+            help="Output diagram format: mermaid (default) or d2.",
+        ),
+    ] = DiagramFormat.MERMAID,
 ) -> None:
-    """Print the code-graph blast radius of *target* as Mermaid ``graph TD`` text.
+    """Print the code-graph blast radius of *target* as a diagram.
 
     The target file(s) sit in the centre; importers/dependents flow in, the
     target's own imports flow out, and related tests are shown as a group.
-    Deterministic and offline.
+    Use ``--format d2`` for D2 (terrastruct.com/d2) output instead of the
+    default Mermaid ``graph TD``. Deterministic and offline.
     """
     service = OnmcService(Path.cwd())
     try:
@@ -103,14 +146,26 @@ def viz_code_command(
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 
-    diagram = code_mermaid(repo_root, target)
-    if as_json:
-        typer.echo(
-            json.dumps(
-                {"kind": "code", "target": target, "mermaid": diagram},
-                indent=2,
-                sort_keys=True,
+    if fmt == DiagramFormat.D2:
+        diagram = code_d2(repo_root, target)
+        if as_json:
+            typer.echo(
+                json.dumps(
+                    {"kind": "code", "format": "d2", "target": target, "d2": diagram},
+                    indent=2,
+                    sort_keys=True,
+                )
             )
-        )
-        return
+            return
+    else:
+        diagram = code_mermaid(repo_root, target)
+        if as_json:
+            typer.echo(
+                json.dumps(
+                    {"kind": "code", "target": target, "mermaid": diagram},
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
     typer.echo(diagram)
