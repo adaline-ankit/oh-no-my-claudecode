@@ -153,6 +153,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 regression report.                                           │
 │ attest          Verifiable, portable proof-of-work — turn a receipt into a   │
 │                 signed attestation.                                          │
+│ autoroute       Apply flywheel learning: recommend the historically-best     │
+│                 model for a goal.                                            │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
@@ -587,6 +589,45 @@ Usage: onmc autopilot [OPTIONS] GOAL
 │                                                           result as JSON.    │
 │ --help                                                    Show this message  │
 │                                                           and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc autoroute`
+
+```text
+Usage: onmc autoroute [OPTIONS] COMMAND [ARGS]...
+
+ Apply flywheel learning: recommend the historically-best model for a goal.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ suggest  Recommend the historically-best model for GOAL from verified        │
+│          receipts.                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc autoroute suggest`
+
+```text
+Usage: onmc autoroute suggest [OPTIONS] GOAL
+
+ Recommend the historically-best model for GOAL from verified receipts.
+
+ Deterministic and offline: reuses the flywheel's learned per-goal-keyword
+ and overall verified-outcome stats to pick a model, with an honest
+ confidence and basis.  With no receipts it returns the default model at
+ confidence 0 (exit 0) — never fabricates a recommendation.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  The goal/task to recommend a model for. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --default        TEXT  Model to fall back to when history is thin.           │
+│                        [default: sonnet]                                     │
+│ --json                 Emit the suggestion as JSON.                          │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
