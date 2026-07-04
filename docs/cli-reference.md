@@ -149,6 +149,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
 │ proptest        Generate property/invariant tests for pure functions.        │
+│ viz             Render onmc graphs as shareable Mermaid diagrams (no server, │
+│                 no dep).                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4060,6 +4062,65 @@ Usage: onmc verify-diff [OPTIONS]
 │                              lines.  Repeatable.                             │
 │ --json                       Emit the full VerifyReport as JSON to stdout.   │
 │ --help                       Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc viz`
+
+```text
+Usage: onmc viz [OPTIONS] COMMAND [ARGS]...
+
+ Render onmc graphs as shareable Mermaid diagrams (no server, no dep).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ memory  Print the memory relationship graph as Mermaid ``graph TD`` text.    │
+│ code    Print the code-graph blast radius of *target* as Mermaid ``graph     │
+│         TD`` text.                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc viz code`
+
+```text
+Usage: onmc viz code [OPTIONS] TARGET
+
+ Print the code-graph blast radius of *target* as Mermaid ``graph TD`` text.
+
+ The target file(s) sit in the centre; importers/dependents flow in, the
+ target's own imports flow out, and related tests are shown as a group.
+ Deterministic and offline.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    target      TEXT  Repo-relative file path or bare symbol name to graph  │
+│                        the blast radius of.                                  │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Wrap the Mermaid text in a JSON envelope.                    │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc viz memory`
+
+```text
+Usage: onmc viz memory [OPTIONS]
+
+ Print the memory relationship graph as Mermaid ``graph TD`` text.
+
+ Nodes are memory entries grouped by kind; edges are the recorded
+ ``memory_edges`` relationships (supersedes / contradicts / relates /
+ duplicate_of). Deterministic and offline.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER  Maximum number of memory nodes to render (most       │
+│                         recent first).                                       │
+│                         [default: 40]                                        │
+│ --json                  Wrap the Mermaid text in a JSON envelope.            │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
