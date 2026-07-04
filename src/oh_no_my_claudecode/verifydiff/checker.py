@@ -22,6 +22,8 @@ no network, and no clock dependency: the same inputs always yield the same
 from __future__ import annotations
 
 import re
+import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +33,17 @@ from oh_no_my_claudecode.audit.rules import _SECRET_PATTERNS
 # 1-based line numbers that the test suite exercised.  ``None`` means "no
 # coverage data was provided" (a soft note, not a failure).
 Coverage = dict[str, set[int]]
+
+# A structural-diff runner is any callable that, given a unified *diff_text*,
+# returns a :class:`StructuralResult` describing whether the change carries a
+# *structural* (AST-level) difference — i.e. one that survives formatting /
+# whitespace normalisation.  It is injected so the pure gate never shells out;
+# the real CLI supplies :func:`difftastic_runner`, tests supply a fake.
+StructuralDiffRunner = Callable[[str], "StructuralResult"]
+
+# Name of the difftastic binary on PATH (``difft``).  difftastic is an external
+# binary, NOT a pip package — we detect it with :func:`shutil.which`.
+_DIFFT_BINARY = "difft"
 
 # A diff hunk header looks like ``@@ -a,b +c,d @@`` — we need the ``+c`` start
 # line so we can attribute added lines to their new line numbers.
@@ -65,6 +78,28 @@ class DiffFinding:
 
     rule: str
     ok: bool
+    detail: str
+
+
+@dataclass(slots=True)
+class StructuralResult:
+    """Outcome of a structural (AST-level) diff over the change.
+
+    Attributes
+    ----------
+    changed:
+        ``True`` when the tool reports a genuine structural change — i.e. one
+        that is *not* pure formatting / whitespace noise.  ``False`` means the
+        two sides are structurally identical (only formatting differs), which
+        the gate treats as a false-converge just like an empty diff.
+    tool:
+        Identifier of the tool that produced this result (e.g. ``difftastic``).
+    detail:
+        One-line human-readable summary of what the tool observed.
+    """
+
+    changed: bool
+    tool: str
     detail: str
 
 
@@ -291,6 +326,50 @@ def _check_lawful(
     return findings
 
 
+def difftastic_available() -> bool:
+    """Return ``True`` when the ``difft`` binary is discoverable on ``PATH``.
+
+    difftastic is an external binary (not a pip package); this is the sole
+    detection point.  When it returns ``False`` the structural check is skipped
+    and the gate falls back to its existing line-diff behaviour unchanged.
+    """
+    return shutil.which(_DIFFT_BINARY) is not None
+
+
+def _check_structural(
+    diff_text: str,
+    runner: StructuralDiffRunner | None,
+) -> DiffFinding:
+    """Structural (AST) sanity check — passes when the change is real *shape*.
+
+    When no *runner* is injected (the common case, or when ``difft`` is absent)
+    this is a soft passing note and the gate relies on the line-based
+    ``non-empty`` check alone — i.e. **zero regression** versus the original
+    behaviour.  When a runner is supplied, its :class:`StructuralResult` decides:
+    a change that is only formatting noise (``changed == False``) FAILS, because
+    a reformat-only diff is the same false-converge the gate exists to catch.
+    """
+    if runner is None:
+        return DiffFinding(
+            rule="structural",
+            ok=True,
+            detail="No structural-diff tool selected — structural check skipped (soft note).",
+        )
+    result = runner(diff_text)
+    return DiffFinding(
+        rule="structural",
+        ok=result.changed,
+        detail=(
+            f"{result.tool}: {result.detail}"
+            if result.changed
+            else (
+                f"{result.tool}: {result.detail} — the change is formatting noise only "
+                "(no structural/AST difference), a false-converge this gate rejects."
+            )
+        ),
+    )
+
+
 def verify_diff(
     *,
     diff_text: str,
@@ -298,6 +377,7 @@ def verify_diff(
     expect_symbols: tuple[str, ...] = (),
     expect_files: tuple[str, ...] = (),
     banned_patterns: tuple[str, ...] = (),
+    structural_runner: StructuralDiffRunner | None = None,
 ) -> VerifyReport:
     """Adversarially verify a unified *diff_text*.
 
@@ -323,6 +403,15 @@ def verify_diff(
     banned_patterns:
         Extra case-insensitive substrings that must not appear in any added
         line, layered on top of the built-in banned markers.
+    structural_runner:
+        Optional injected callable that performs a structural (AST-level) diff
+        and returns a :class:`StructuralResult`.  When supplied — the real CLI
+        wires :func:`difftastic_runner` here *only when* the ``difft`` binary is
+        on ``PATH`` — the gate additionally rejects reformat-only diffs that
+        carry no structural change.  When ``None`` (default, and whenever
+        ``difft`` is absent) the structural check is a soft passing note and the
+        gate behaves exactly as before (zero regression).  Injecting the runner
+        keeps :func:`verify_diff` pure: it never shells a binary itself.
 
     Returns
     -------
@@ -332,6 +421,7 @@ def verify_diff(
     added = _parse_added_lines(diff_text)
 
     findings: list[DiffFinding] = [_check_non_empty(diff_text, added)]
+    findings.append(_check_structural(diff_text, structural_runner))
     findings.extend(_check_symbols(added, expect_symbols))
     findings.extend(_check_files(added, expect_files))
     findings.extend(_check_coverage(added, coverage))
@@ -370,3 +460,118 @@ def collect_diff(repo_root: Path, base: str) -> str:
         check=False,
     )
     return result.stdout
+
+
+# ``diff --git a/path b/path`` — the canonical file-section header we parse to
+# recover the set of changed paths for structural diffing.
+_GIT_HEADER_RE = re.compile(r"^diff --git a/(?P<a>.+?) b/(?P<b>.+?)\s*$")
+
+
+def _changed_paths(diff_text: str) -> list[str]:
+    """Recover repo-relative paths of files touched by *diff_text*.
+
+    Prefers ``diff --git`` headers; falls back to ``+++ b/path`` sections when
+    those are absent.  ``/dev/null`` targets are dropped.  Order-preserving and
+    de-duplicated so the structural runner walks each file once.
+    """
+    paths: list[str] = []
+    seen: set[str] = set()
+
+    def _add(path: str) -> None:
+        if path and path != "/dev/null" and path not in seen:
+            seen.add(path)
+            paths.append(path)
+
+    for raw in diff_text.splitlines():
+        header = _GIT_HEADER_RE.match(raw)
+        if header:
+            _add(header.group("b"))
+            continue
+    if paths:
+        return paths
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++"):
+            match = _PLUS_FILE_RE.match(raw)
+            if match:
+                _add(match.group(1))
+    return paths
+
+
+def make_difftastic_runner(repo_root: Path, base: str) -> StructuralDiffRunner:
+    """Build a real :data:`StructuralDiffRunner` backed by the ``difft`` binary.
+
+    This is an *impure* factory: the returned closure shells ``git show`` (to
+    recover the base and working-tree versions of each changed file) and
+    ``difft`` (to compare them structurally).  It is only ever wired into
+    :func:`verify_diff` when :func:`difftastic_available` is ``True``; the unit
+    tests inject a fake runner instead, so no real binary is invoked offline.
+
+    difftastic is run with ``--exit-code``: exit status ``0`` means the two
+    sides are *structurally identical* (only formatting differs) and ``1`` means
+    a genuine structural change.  Any other status (tool error, unparseable
+    file) is treated conservatively as "structural change present" so the gate
+    never fails a real change just because ``difft`` could not classify it.
+    """
+    import subprocess
+    import tempfile
+
+    def _runner(diff_text: str) -> StructuralResult:
+        paths = _changed_paths(diff_text)
+        if not paths:
+            # Nothing to compare structurally — defer to the line-based
+            # non-empty check (which will have already failed on an empty diff).
+            return StructuralResult(
+                changed=bool(diff_text.strip()),
+                tool="difftastic",
+                detail="no file sections found in diff.",
+            )
+        any_structural = False
+        for rel in paths:
+            old = subprocess.run(
+                ["git", "show", f"{base}:{rel}"],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            old_text = old.stdout if old.returncode == 0 else ""
+            new_path = repo_root / rel
+            try:
+                new_text = new_path.read_text()
+            except OSError:
+                new_text = ""
+            suffix = Path(rel).suffix or ".txt"
+            with (
+                tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False) as old_f,
+                tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False) as new_f,
+            ):
+                old_f.write(old_text)
+                new_f.write(new_text)
+                old_name, new_name = old_f.name, new_f.name
+            try:
+                proc = subprocess.run(
+                    [_DIFFT_BINARY, "--exit-code", old_name, new_name],
+                    cwd=repo_root,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                Path(old_name).unlink(missing_ok=True)
+                Path(new_name).unlink(missing_ok=True)
+            # exit 0 == structurally identical; anything else == treat as changed.
+            if proc.returncode != 0:
+                any_structural = True
+        if any_structural:
+            return StructuralResult(
+                changed=True,
+                tool="difftastic",
+                detail=f"structural change detected across {len(paths)} file(s).",
+            )
+        return StructuralResult(
+            changed=False,
+            tool="difftastic",
+            detail=f"{len(paths)} file(s) differ only in formatting.",
+        )
+
+    return _runner

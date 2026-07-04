@@ -3388,6 +3388,7 @@ class OnmcService:
         expect_symbols: tuple[str, ...] = (),
         expect_files: tuple[str, ...] = (),
         repo_root: Path | None = None,
+        structural: bool = False,
     ) -> VerifyReport:
         """Adversarially verify the working diff against *base*.
 
@@ -3407,13 +3408,24 @@ class OnmcService:
             Repo-relative paths that must each receive added lines.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        structural:
+            Opt in to structural (AST-level) diffing via difftastic.  Only takes
+            effect when the ``difft`` binary is on ``PATH`` (detected with
+            :func:`difftastic_available`); otherwise the gate silently falls back
+            to line-diff behaviour so there is zero regression when the binary is
+            absent.  No pip dependency is added — difftastic is an external tool.
 
         Returns
         -------
         VerifyReport
             ``ok`` is ``True`` only when every check passed.
         """
-        from oh_no_my_claudecode.verifydiff.checker import collect_diff, verify_diff
+        from oh_no_my_claudecode.verifydiff.checker import (
+            collect_diff,
+            difftastic_available,
+            make_difftastic_runner,
+            verify_diff,
+        )
 
         if repo_root is None:
             try:
@@ -3421,10 +3433,14 @@ class OnmcService:
             except FileNotFoundError:
                 repo_root = self.cwd
         diff_text = collect_diff(repo_root, base)
+        structural_runner = None
+        if structural and difftastic_available():
+            structural_runner = make_difftastic_runner(repo_root, base)
         return verify_diff(
             diff_text=diff_text,
             expect_symbols=expect_symbols,
             expect_files=expect_files,
+            structural_runner=structural_runner,
         )
 
     # ------------------------------------------------------------------

@@ -2648,6 +2648,17 @@ def verify_diff_command(
             help="Repo-relative path that must receive added lines.  Repeatable.",
         ),
     ] = None,
+    structural: Annotated[
+        bool,
+        typer.Option(
+            "--structural",
+            help=(
+                "Use difftastic (the 'difft' binary) for a structural/AST diff that"
+                " ignores formatting noise.  No-op when 'difft' is not on PATH"
+                " (falls back to line-diff)."
+            ),
+        ),
+    ] = False,
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Emit the full VerifyReport as JSON to stdout."),
@@ -2658,7 +2669,8 @@ def verify_diff_command(
     Passes ONLY when the change is real (non-empty), introduces every expected
     symbol/file, and is lawful (no banned or secret patterns in added lines).
     Designed to close the empty-diff false-converge: a passing test suite over
-    an unchanged tree must NOT count as success.
+    an unchanged tree must NOT count as success.  With ``--structural`` and the
+    ``difft`` binary installed, it also rejects reformat-only diffs.
 
     Exit codes:
 
@@ -2669,6 +2681,7 @@ def verify_diff_command(
         base=base,
         expect_symbols=tuple(expect_symbol or ()),
         expect_files=tuple(expect_file or ()),
+        structural=structural,
     )
 
     if as_json:

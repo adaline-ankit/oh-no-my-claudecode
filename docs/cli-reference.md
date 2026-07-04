@@ -90,6 +90,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
+│                 receipt.                                                     │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
@@ -442,6 +444,36 @@ Usage: onmc autopilot [OPTIONS] GOAL
 │                                                           result as JSON.    │
 │ --help                                                    Show this message  │
 │                                                           and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc badge`
+
+```text
+Usage: onmc badge [OPTIONS] RECEIPT_OR_SWARM_ID
+
+ Render a "No-Slop verified" proof-of-work badge from an onmc receipt.
+
+ onmc's swarm/loop receipts already prove work is real + verified
+ (``git_tree_sha``, ``diff_sha``, ``verified``, ``receipt_hash``). This
+ turns one receipt into a shareable shields.io badge: pass a receipt path
+ or a swarm id (``--unit`` to pick a unit).
+
+ With no flags, prints the Markdown badge + PR-comment body. ``--json``
+ emits the shields.io endpoint payload. ``--post N`` publishes the comment
+ on PR #N via ``gh``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    receipt_or_swarm_id      TEXT  Path to a receipt JSON, or a swarm id    │
+│                                     (resolved via its manifest).             │
+│                                     [required]                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --unit        TEXT     Unit id to select when a swarm id is given.           │
+│ --json                 Emit the shields.io endpoint payload as JSON.         │
+│ --post        INTEGER  PR number to post the proof-of-work comment to (via   │
+│                        gh pr comment).                                       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1806,7 +1838,7 @@ Usage: onmc llm configure [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --provider               [anthropic|openai|olla  LLM provider to          │
-│                             ma|mock]                configure.               │
+│                             ma|litellm|mock]        configure.               │
 │                                                     [required]               │
 │ *  --model                  TEXT                    Default model name.      │
 │                                                     [required]               │
@@ -4052,7 +4084,8 @@ Usage: onmc verify-diff [OPTIONS]
  Passes ONLY when the change is real (non-empty), introduces every expected
  symbol/file, and is lawful (no banned or secret patterns in added lines).
  Designed to close the empty-diff false-converge: a passing test suite over
- an unchanged tree must NOT count as success.
+ an unchanged tree must NOT count as success.  With ``--structural`` and the
+ ``difft`` binary installed, it also rejects reformat-only diffs.
 
  Exit codes:
 
@@ -4066,6 +4099,10 @@ Usage: onmc verify-diff [OPTIONS]
 │                              Repeatable.                                     │
 │ --expect-file          TEXT  Repo-relative path that must receive added      │
 │                              lines.  Repeatable.                             │
+│ --structural                 Use difftastic (the 'difft' binary) for a       │
+│                              structural/AST diff that ignores formatting     │
+│                              noise.  No-op when 'difft' is not on PATH       │
+│                              (falls back to line-diff).                      │
 │ --json                       Emit the full VerifyReport as JSON to stdout.   │
 │ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
