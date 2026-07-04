@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+    from oh_no_my_claudecode.reuse.astgrep import StructuralMatch
     from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
@@ -1101,7 +1102,17 @@ class OnmcService:
             model_name = config.llm.model
             key_var = config.llm.api_key_env_var or default_api_key_env_var(config.llm.provider)
             report["provider"].append(f"Provider: {provider_name} ({model_name})")
-            if not key_var:
+            if config.llm.provider == LLMProviderType.OLLAMA:
+                # Local, keyless provider — check server reachability instead.
+                reachable, detail = validate_provider_api_key(config.llm.provider, "")
+                if reachable:
+                    report["provider"].append(detail)
+                else:
+                    report["warnings"].append(
+                        f"Ollama provider configured but {detail}. "
+                        "Start a local Ollama server to enable LLM features."
+                    )
+            elif not key_var:
                 report["warnings"].append(
                     f"No API key environment variable is configured for {provider_name}."
                 )
@@ -3267,7 +3278,13 @@ class OnmcService:
         result = compile_recall(storage, query, limit=limit)
         return repo_root, result
 
-    def reuse_find(self, query: str, *, limit: int = 8) -> tuple[Path, list[ReuseHit]]:
+    def reuse_find(
+        self,
+        query: str,
+        *,
+        limit: int = 8,
+        ast_grep: bool = False,
+    ) -> tuple[Path, list[ReuseHit], list[StructuralMatch]]:
         """Surface existing code that already does what *query* describes.
 
         Indexes the repo via stdlib ``ast`` and ranks top-level functions and
@@ -3275,14 +3292,42 @@ class OnmcService:
         Entirely offline and deterministic — no LLM calls, no network — so an
         agent can check "does this already exist?" before reimplementing it.
 
-        Returns ``(repo_root, hits)`` where *hits* is a ranked list of
-        ``ReuseHit`` (may be empty when nothing relevant is found).
+        Parameters
+        ----------
+        query:
+            A description of the desired behaviour, or an existing symbol name.
+        limit:
+            Maximum number of text-based :class:`ReuseHit` objects to return.
+        ast_grep:
+            Opt in to structural (AST-level) matching via the ``ast-grep`` or
+            ``sg`` binary.  Only takes effect when the binary is on ``PATH``
+            (detected with :func:`~oh_no_my_claudecode.reuse.astgrep.ast_grep_available`);
+            otherwise the structural result is an empty list and text-only
+            behaviour is completely unchanged (zero regression).
+
+        Returns
+        -------
+        tuple[Path, list[ReuseHit], list[StructuralMatch]]
+            ``(repo_root, text_hits, structural_hits)`` where *text_hits* is a
+            ranked list of token-based matches and *structural_hits* is a
+            (possibly empty) list of AST-pattern matches from ast-grep.
         """
+        from oh_no_my_claudecode.reuse.astgrep import (
+            ast_grep_available,
+            find_reuse_structural,
+            make_ast_grep_runner,
+        )
         from oh_no_my_claudecode.reuse.radar import find_reuse
 
         repo_root = discover_repo_root(self.cwd)
         hits = find_reuse(repo_root, query, limit=limit)
-        return repo_root, hits
+
+        structural_hits: list[StructuralMatch] = []
+        if ast_grep and ast_grep_available():
+            runner = make_ast_grep_runner(repo_root)
+            structural_hits = find_reuse_structural(repo_root, query, runner=runner)
+
+        return repo_root, hits, structural_hits
 
     def ask(
         self,
@@ -3341,7 +3386,14 @@ class OnmcService:
                 storage.upsert_memory_edge(edge)
         return repo_root, result
 
-    def audit(self, *, repo_root: Path | None = None) -> AuditReport:
+    def audit(
+        self,
+        *,
+        repo_root: Path | None = None,
+        semgrep: bool = False,
+        gitleaks: bool = False,
+        osv: bool = False,
+    ) -> AuditReport:
         """Run the agent-configuration security scanner against the repo.
 
         This is entirely offline — no LLM calls, no network access.  Results
@@ -3354,21 +3406,72 @@ class OnmcService:
             Explicit repo root to scan.  When ``None``, discovered from
             ``self.cwd``.  This lets callers scan a path that has not been
             initialised with ``onmc init``.
+        semgrep:
+            Opt in to an additional semgrep static-analysis pass.  Only takes
+            effect when the ``semgrep`` binary is on ``PATH`` (detected with
+            :func:`~oh_no_my_claudecode.audit.semgrep.semgrep_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — semgrep is an external
+            tool.
+        gitleaks:
+            Opt in to an additional gitleaks secret-scanning pass.  Only takes
+            effect when the ``gitleaks`` binary is on ``PATH`` (detected with
+            :func:`~oh_no_my_claudecode.audit.gitleaks.gitleaks_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — gitleaks is an external
+            tool.
+        osv:
+            Opt in to an additional osv-scanner dependency-vulnerability pass.
+            Only takes effect when the ``osv-scanner`` binary is on ``PATH``
+            (detected with :func:`~oh_no_my_claudecode.audit.osv.osv_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — osv-scanner is an external
+            tool.
 
         Returns
         -------
         AuditReport
             Scored, graded report ready for rendering or JSON serialisation.
         """
+        from oh_no_my_claudecode.audit.gitleaks import (
+            gitleaks_available,
+            make_gitleaks_runner,
+        )
+        from oh_no_my_claudecode.audit.osv import (
+            make_osv_runner,
+            osv_available,
+        )
         from oh_no_my_claudecode.audit.scanner import AuditReport as _AuditReport
         from oh_no_my_claudecode.audit.scanner import run_audit
+        from oh_no_my_claudecode.audit.semgrep import (
+            make_semgrep_runner,
+            semgrep_available,
+        )
 
         if repo_root is None:
             try:
                 repo_root = discover_repo_root(self.cwd)
             except FileNotFoundError:
                 repo_root = self.cwd
-        result: _AuditReport = run_audit(repo_root)
+
+        semgrep_runner = None
+        if semgrep and semgrep_available():
+            semgrep_runner = make_semgrep_runner()
+
+        gitleaks_runner = None
+        if gitleaks and gitleaks_available():
+            gitleaks_runner = make_gitleaks_runner()
+
+        osv_runner = None
+        if osv and osv_available():
+            osv_runner = make_osv_runner()
+
+        result: _AuditReport = run_audit(
+            repo_root,
+            semgrep_runner=semgrep_runner,
+            gitleaks_runner=gitleaks_runner,
+            osv_runner=osv_runner,
+        )
         return result
 
     def verify_diff(
@@ -3378,6 +3481,7 @@ class OnmcService:
         expect_symbols: tuple[str, ...] = (),
         expect_files: tuple[str, ...] = (),
         repo_root: Path | None = None,
+        structural: bool = False,
     ) -> VerifyReport:
         """Adversarially verify the working diff against *base*.
 
@@ -3397,13 +3501,24 @@ class OnmcService:
             Repo-relative paths that must each receive added lines.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        structural:
+            Opt in to structural (AST-level) diffing via difftastic.  Only takes
+            effect when the ``difft`` binary is on ``PATH`` (detected with
+            :func:`difftastic_available`); otherwise the gate silently falls back
+            to line-diff behaviour so there is zero regression when the binary is
+            absent.  No pip dependency is added — difftastic is an external tool.
 
         Returns
         -------
         VerifyReport
             ``ok`` is ``True`` only when every check passed.
         """
-        from oh_no_my_claudecode.verifydiff.checker import collect_diff, verify_diff
+        from oh_no_my_claudecode.verifydiff.checker import (
+            collect_diff,
+            difftastic_available,
+            make_difftastic_runner,
+            verify_diff,
+        )
 
         if repo_root is None:
             try:
@@ -3411,10 +3526,14 @@ class OnmcService:
             except FileNotFoundError:
                 repo_root = self.cwd
         diff_text = collect_diff(repo_root, base)
+        structural_runner = None
+        if structural and difftastic_available():
+            structural_runner = make_difftastic_runner(repo_root, base)
         return verify_diff(
             diff_text=diff_text,
             expect_symbols=expect_symbols,
             expect_files=expect_files,
+            structural_runner=structural_runner,
         )
 
     # ------------------------------------------------------------------
@@ -3427,6 +3546,7 @@ class OnmcService:
         steps: Sequence[str] | None = None,
         repo_root: Path | None = None,
         executor: PreflightExecutor | None = None,
+        provision: bool = False,
     ) -> PreflightReport:
         """Run the exact CI quality gate locally and return the report.
 
@@ -3445,6 +3565,11 @@ class OnmcService:
         executor:
             Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to
             a subprocess runner; tests inject a fake for deterministic runs.
+        provision:
+            When ``True`` each tool runs via ``uv run --with <tool>`` so a
+            fresh worktree resolves the toolchain on demand (and the
+            cli-reference step pins ``typer<1.0`` to match CI).  Passed through
+            to :func:`run_preflight`.
 
         Returns
         -------
@@ -3458,7 +3583,9 @@ class OnmcService:
                 repo_root = discover_repo_root(self.cwd)
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
-        return run_preflight(repo_root, steps=steps, executor=executor)
+        return run_preflight(
+            repo_root, steps=steps, executor=executor, provision=provision
+        )
 
     def fleet_status(self, *, swarm_id: str | None = None) -> FleetStatus:
         """Summarise local swarm/claim/receipt state."""
@@ -3629,6 +3756,7 @@ class OnmcService:
         *,
         write: bool = False,
         repo_root: Path | None = None,
+        use_git_cliff: bool = True,
     ) -> tuple[Path, ReleaseDraft]:
         """Draft the next release from conventional-commit history.
 
@@ -3645,6 +3773,12 @@ class OnmcService:
             nothing is written — the draft is returned for preview.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        use_git_cliff:
+            When ``True`` (default) and the external ``git-cliff`` binary is on
+            ``PATH``, git-cliff renders the CHANGELOG entry.  When the binary is
+            absent — or this is ``False`` — the built-in conventional-commit
+            renderer is used instead (identical to prior behaviour).  Version
+            bump and commit grouping are unaffected either way.
 
         Returns
         -------
@@ -3654,6 +3788,7 @@ class OnmcService:
         from oh_no_my_claudecode.release import (
             collect_commits,
             current_version,
+            default_cliff_runner,
             draft_release,
             write_release,
         )
@@ -3661,12 +3796,16 @@ class OnmcService:
         if repo_root is None:
             repo_root = discover_repo_root(self.cwd)
 
+        cliff_runner = default_cliff_runner() if use_git_cliff else None
+
         version = current_version(repo_root)
         commits = collect_commits(repo_root)
         draft = draft_release(
             current_version=version,
             commits=commits,
             date=utc_now().strftime("%Y-%m-%d"),
+            cliff_runner=cliff_runner,
+            repo_root=repo_root,
         )
         if write:
             write_release(repo_root, draft)

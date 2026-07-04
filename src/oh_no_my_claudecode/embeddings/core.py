@@ -128,6 +128,95 @@ class HashNgramEmbedder:
 # Optional real-model embedders (guarded imports)
 # ---------------------------------------------------------------------------
 
+def _try_fastembed(model_name: str = "BAAI/bge-small-en-v1.5") -> Embedder | None:
+    """Attempt to load ``fastembed`` and return a local ONNX embedder.
+
+    Returns None when the library is not installed, the model cannot be loaded,
+    or any other error occurs.  The import error is silently swallowed so the
+    package stays dependency-free by default.
+
+    The default model (``BAAI/bge-small-en-v1.5``) is a 33 M parameter
+    ONNX-exported bi-encoder that runs on CPU with no GPU or API key required.
+    It produces 384-dimensional L2-normalised float vectors.
+
+    Selection
+    ---------
+    Used only when ``ONMC_EMBEDDER=fastembed`` is set **or** the caller passes
+    the backend name explicitly.  It is never auto-selected even when installed,
+    so CI environments that install the extra but do not set the env var still
+    get the hash-ngram embedder.
+    """
+    try:
+        from fastembed import TextEmbedding  # noqa: PLC0415
+    except ImportError:
+        return None
+
+    class _FastEmbedder:
+        def __init__(self, name: str) -> None:
+            # TextEmbedding downloads the model on first construction.  In CI
+            # tests the model is monkeypatched so this never hits the network.
+            self._model = TextEmbedding(model_name=name)
+            self._id = f"fastembed/{name}"
+            # Determine dimensionality via a single probe embed.
+            probe = list(self._model.embed(["probe"]))
+            self._dim = len(probe[0]) if probe else 384
+
+        @property
+        def embedder_id(self) -> str:
+            return self._id
+
+        @property
+        def dim(self) -> int:
+            return self._dim
+
+        def embed(self, text: str) -> EmbeddingVector:
+            if not text.strip():
+                return [0.0] * self._dim
+            # fastembed.embed() is a generator; consume the first (and only) item.
+            result = list(self._model.embed([text]))
+            if not result:
+                return [0.0] * self._dim
+            vec = [float(v) for v in result[0]]
+            # fastembed already L2-normalises by default, but we re-normalise
+            # for safety so the contract ("unit norm or zero") is always met.
+            norm = math.sqrt(sum(v * v for v in vec))
+            if norm > 0.0:
+                inv = 1.0 / norm
+                return [v * inv for v in vec]
+            return vec
+
+    try:
+        return _FastEmbedder(model_name)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def fastembed_available() -> bool:
+    """Return True when the optional ``fastembed`` package is importable.
+
+    Does NOT load a model — purely a fast import check.  This is the analogue
+    of :func:`~oh_no_my_claudecode.embeddings.vecstore.sqlitevec_available`.
+    """
+    try:
+        import fastembed  # noqa: F401, PLC0415
+    except ImportError:
+        return False
+    return True
+
+
+def fastembed_selected() -> bool:
+    """Return True when the fastembed backend is configured for use.
+
+    Requires **both** availability and opt-in:
+    - ``ONMC_EMBEDDER=fastembed`` environment variable (case-insensitive), or
+    - The environment variable is absent → False (hash-ngram stays default).
+    """
+    if not fastembed_available():
+        return False
+    raw = os.environ.get("ONMC_EMBEDDER", "").strip().lower()
+    return raw == "fastembed"
+
+
 def _try_sentence_transformers() -> Embedder | None:
     """Attempt to load ``sentence-transformers`` and return an embedder.
 
@@ -178,11 +267,14 @@ def get_embedder(*, force_default: bool = False) -> Embedder:
     Resolution order:
     1. If ``ONMC_EMBEDDER=default`` or *force_default* is True → always return
        ``HashNgramEmbedder``.
-    2. If ``sentence-transformers`` is installed → use it.
-    3. Fallback: ``HashNgramEmbedder``.
+    2. If ``ONMC_EMBEDDER=fastembed`` **and** the ``fastembed`` extra is
+       installed → use the local ONNX embedder (CPU, no API key).
+    3. If ``sentence-transformers`` is installed → use it.
+    4. Fallback: ``HashNgramEmbedder``.
 
     The singleton is cached after first resolution so model loading happens at
-    most once per process.
+    most once per process.  Pass *force_default=True* (or reset
+    ``_DEFAULT_EMBEDDER = None``) to re-resolve in tests.
     """
     global _DEFAULT_EMBEDDER  # noqa: PLW0603
 
@@ -192,6 +284,15 @@ def get_embedder(*, force_default: bool = False) -> Embedder:
     if force_default or os.environ.get("ONMC_EMBEDDER", "").lower() == "default":
         _DEFAULT_EMBEDDER = HashNgramEmbedder()
         return _DEFAULT_EMBEDDER
+
+    # Explicit fastembed selection — only auto-selected via env var, never
+    # auto-promoted even if the package is installed.
+    if fastembed_selected():
+        real = _try_fastembed()
+        if real is not None:
+            _DEFAULT_EMBEDDER = real
+            return _DEFAULT_EMBEDDER
+        # fastembed selected but load failed → fall through to hash embedder.
 
     # Try real embedders in preference order.
     real = _try_sentence_transformers()

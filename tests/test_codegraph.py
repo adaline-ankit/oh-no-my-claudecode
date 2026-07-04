@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
@@ -11,6 +12,7 @@ from oh_no_my_claudecode.codegraph import (
     build_codegraph,
     context_files,
     neighbors,
+    treesitter_ext,
 )
 from oh_no_my_claudecode.core.service import OnmcService
 
@@ -270,3 +272,152 @@ def test_cli_summary_still_works(sample_repo: Path, monkeypatch: object) -> None
     result = runner.invoke(app, ["codegraph", "summary", "--max-files", "3"])
     assert result.exit_code == 0
     assert "# ONMC Codegraph" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Fallback (no tree-sitter required) — non-.py files behave predictably
+# ---------------------------------------------------------------------------
+
+
+def test_language_detection_maps_extensions() -> None:
+    # Pure table lookup — no tree-sitter needed.
+    assert treesitter_ext.language_for_path("src/app.ts") == "typescript"
+    assert treesitter_ext.language_for_path("src/app.tsx") == "tsx"
+    assert treesitter_ext.language_for_path("src/app.js") == "javascript"
+    assert treesitter_ext.language_for_path("main.go") == "go"
+    assert treesitter_ext.language_for_path("lib.rs") == "rust"
+    assert treesitter_ext.language_for_path("App.java") == "java"
+    assert treesitter_ext.language_for_path("notes.md") is None
+
+
+def test_build_without_treesitter_ignores_non_python(
+    tmp_path: Path, monkeypatch: object
+) -> None:
+    # Force the "not installed" path regardless of the local environment: when
+    # tree-sitter is unavailable, only *.py files are ever discovered.
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        treesitter_ext, "treesitter_available", lambda: False
+    )
+    repo = tmp_path / "mixed"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "a.py").write_text("def a() -> None:\n    pass\n", encoding="utf-8")
+    (repo / "src" / "app.ts").write_text("export function foo() {}\n", encoding="utf-8")
+    (repo / "main.go").write_text("package main\nfunc Foo() {}\n", encoding="utf-8")
+
+    graph = build_codegraph(repo)
+    # Only the Python file is indexed — exact original behaviour.
+    assert graph.file_count == 1
+    assert "src/a.py" in graph.nodes
+    assert "src/app.ts" not in graph.nodes
+    assert "main.go" not in graph.nodes
+    assert "foo" not in graph.symbols_by_name
+
+
+# ---------------------------------------------------------------------------
+# tree-sitter multi-language path (skipped when the extra is not installed)
+# ---------------------------------------------------------------------------
+
+pytestmark_ts = pytest.mark.skipif(
+    not treesitter_ext.treesitter_available(),
+    reason="tree-sitter optional extra not installed",
+)
+
+
+@pytestmark_ts
+def test_treesitter_extracts_js_ts_symbols(tmp_path: Path) -> None:
+    pytest.importorskip("tree_sitter")
+    pytest.importorskip("tree_sitter_language_pack")
+
+    repo = tmp_path / "jsrepo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "src" / "cache.ts").write_text(
+        "export function invalidateCache(key: string): string {\n"
+        "  return key;\n"
+        "}\n"
+        "export class CacheStore {}\n"
+        "interface Options {}\n",
+        encoding="utf-8",
+    )
+    (repo / "src" / "worker.ts").write_text(
+        'import { invalidateCache } from "./cache";\n'
+        "export function refreshWorker(k: string): string {\n"
+        "  return invalidateCache(k);\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    graph = build_codegraph(repo)
+
+    # Symbols from the TS files land in the same model the Python path uses.
+    assert graph.symbols_by_name["invalidateCache"] == ["src/cache.ts"]
+    assert graph.symbols_by_name["CacheStore"] == ["src/cache.ts"]
+    assert graph.symbols_by_name["Options"] == ["src/cache.ts"]
+    assert graph.symbols_by_name["refreshWorker"] == ["src/worker.ts"]
+
+    cache_kinds = {(s.name, s.kind) for s in graph.nodes["src/cache.ts"].symbols}
+    assert ("invalidateCache", "func") in cache_kinds
+    assert ("CacheStore", "class") in cache_kinds
+
+    # Relative import edge resolved worker.ts → cache.ts.
+    assert graph.nodes["src/worker.ts"].imports == ["src/cache.ts"]
+    assert graph.dependents["src/cache.ts"] == ["src/worker.ts"]
+
+
+@pytestmark_ts
+def test_treesitter_extracts_go_rust_java_symbols(tmp_path: Path) -> None:
+    pytest.importorskip("tree_sitter_language_pack")
+
+    repo = tmp_path / "polyrepo"
+    repo.mkdir()
+    (repo / "main.go").write_text(
+        "package main\n\nfunc RunServer() {}\n\ntype Config struct{}\n",
+        encoding="utf-8",
+    )
+    (repo / "lib.rs").write_text(
+        "pub fn parse_input() {}\nstruct Parser;\ntrait Visitor {}\nenum Mode {}\n",
+        encoding="utf-8",
+    )
+    (repo / "App.java").write_text(
+        "package demo;\n\npublic class App {\n  void run() {}\n}\ninterface Runner {}\n",
+        encoding="utf-8",
+    )
+
+    graph = build_codegraph(repo)
+
+    assert graph.symbols_by_name["RunServer"] == ["main.go"]
+    assert graph.symbols_by_name["Config"] == ["main.go"]
+    assert graph.symbols_by_name["parse_input"] == ["lib.rs"]
+    assert graph.symbols_by_name["Parser"] == ["lib.rs"]
+    assert graph.symbols_by_name["Visitor"] == ["lib.rs"]
+    assert graph.symbols_by_name["Mode"] == ["lib.rs"]
+    assert graph.symbols_by_name["App"] == ["App.java"]
+    assert graph.symbols_by_name["Runner"] == ["App.java"]
+
+    # Kinds: functions map to "func", type-like decls map to "class".
+    go_kinds = {(s.name, s.kind) for s in graph.nodes["main.go"].symbols}
+    assert ("RunServer", "func") in go_kinds
+    assert ("Config", "class") in go_kinds
+
+
+@pytestmark_ts
+def test_treesitter_python_path_unchanged_when_present(sample_repo: Path) -> None:
+    # Even with tree-sitter installed, the Python indexing is byte-for-byte the
+    # same as before (the sample repo has only *.py source).
+    graph = build_codegraph(sample_repo)
+    assert graph.symbols_by_name["invalidate_cache"] == ["src/cache.py"]
+    assert graph.nodes["src/worker.py"].imports == ["src/cache.py"]
+    assert graph.dependents["src/cache.py"] == ["src/worker.py", "tests/test_cache.py"]
+
+
+@pytestmark_ts
+def test_treesitter_malformed_file_yields_empty_symbols(tmp_path: Path) -> None:
+    pytest.importorskip("tree_sitter_language_pack")
+    repo = tmp_path / "broken"
+    repo.mkdir()
+    # Garbage TS — tree-sitter recovers, we must never raise.
+    (repo / "broken.ts").write_text("function (((( ;;; \n", encoding="utf-8")
+    (repo / "ok.ts").write_text("export function good() {}\n", encoding="utf-8")
+
+    graph = build_codegraph(repo)
+    assert "broken.ts" in graph.nodes  # discovered, just no clean symbols
+    assert graph.symbols_by_name.get("good") == ["ok.ts"]

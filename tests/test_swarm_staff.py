@@ -276,7 +276,7 @@ class TestSwarmVerifyCli:
 
         monkeypatch.setattr(
             "oh_no_my_claudecode.swarm.staff.run_preflight",
-            lambda root, executor=None: _PassReport(),
+            lambda root, executor=None, provision=False: _PassReport(),
         )
         monkeypatch.setattr(
             "oh_no_my_claudecode.swarm.staff.collect_diff",
@@ -299,7 +299,7 @@ class TestSwarmVerifyCli:
 
         monkeypatch.setattr(
             "oh_no_my_claudecode.swarm.staff.run_preflight",
-            lambda root, executor=None: _PassReport(),
+            lambda root, executor=None, provision=False: _PassReport(),
         )
         monkeypatch.setattr(
             "oh_no_my_claudecode.swarm.staff.collect_diff",

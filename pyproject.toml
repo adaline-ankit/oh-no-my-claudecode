@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oh-no-my-claudecode"
-version = "0.57.0"
+version = "0.72.0"
 description = "Memory-grounded autonomous coding loops for Claude Code and Codex."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -46,6 +46,27 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional multi-language codegraph parsing (JS/TS/Go/Rust/Java).  Absent by
+# default — `onmc codegraph` falls back to Python-`ast` only when unavailable.
+treesitter = [
+  "tree-sitter>=0.23,<1.0",
+  "tree-sitter-language-pack>=0.7",
+]
+sqlitevec = [
+  "sqlite-vec>=0.1.0",
+]
+# Optional local ONNX embedder via fastembed (CPU, no API key, no network at
+# inference time).  Absent by default — the hash-ngram embedder is used instead.
+# Select at runtime with ONMC_EMBEDDER=fastembed.
+fastembed = [
+  "fastembed>=0.3",
+]
+# Optional unified multi-provider LLM backend.  Absent by default — the built-in
+# Anthropic/OpenAI/Ollama providers work without it; the `litellm` provider
+# reports itself unavailable gracefully until this extra is installed.
+litellm = [
+  "litellm>=1.0",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
@@ -95,5 +116,20 @@ strict = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["yaml"]
+module = ["yaml", "sqlite_vec"]
+ignore_missing_imports = true
+
+# Optional unified LLM backend — absent by default and ships no type stubs.
+[[tool.mypy.overrides]]
+module = ["litellm"]
+ignore_missing_imports = true
+
+# Optional tree-sitter parsers are dynamic C extensions without type stubs.
+[[tool.mypy.overrides]]
+module = ["tree_sitter", "tree_sitter_language_pack"]
+ignore_missing_imports = true
+
+# Optional fastembed ONNX embedder — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["fastembed"]
 ignore_missing_imports = true

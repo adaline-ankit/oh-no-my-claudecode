@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 class LLMProviderType(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
+    OLLAMA = "ollama"
+    LITELLM = "litellm"
     MOCK = "mock"
 
 

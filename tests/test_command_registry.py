@@ -19,14 +19,21 @@ JSON / exit-code outcomes instead.
 
 from __future__ import annotations
 
+import contextlib
 import importlib
+import io
 import json
 
+import pytest
 import typer
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app as real_app
-from oh_no_my_claudecode.command_registry import register_feature_commands
+from oh_no_my_claudecode.command_registry import (
+    DuplicateCommandError,
+    detect_duplicate_commands,
+    register_feature_commands,
+)
 
 runner = CliRunner()
 
@@ -106,3 +113,90 @@ def test_real_app_has_registry_demo() -> None:
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     assert payload["feature"] == "registrydemo"
+
+
+# --- duplicate command-name detection ------------------------------------
+
+
+def _force_two_colliding_features(monkeypatch: object) -> None:
+    """Make discovery yield two synthetic features that both add ``dup-cmd``.
+
+    Neither lives in the real package (so we never ship a duplicate); we patch
+    discovery + import so ``register_feature_commands`` walks two registrars that
+    both register the same top-level command name.
+    """
+    from oh_no_my_claudecode import command_registry
+
+    def fake_discover() -> list[str]:
+        return ["feat_a", "feat_b"]
+
+    def make_register(_feat: str) -> object:
+        def register(app: typer.Typer) -> None:
+            @app.command("dup-cmd")
+            def _dup() -> None:  # pragma: no cover - never invoked
+                ...
+
+        return register
+
+    def fake_import(name: str, *args: object, **kwargs: object) -> object:
+        feat = name.split(".")[1]
+
+        class _Mod:
+            register = staticmethod(make_register(feat))
+
+        return _Mod
+
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        command_registry, "_discover_feature_names", fake_discover
+    )
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        command_registry.importlib, "import_module", fake_import
+    )
+
+
+def test_strict_raises_on_duplicate(monkeypatch: object) -> None:
+    """Two features adding the same command name raise in strict mode."""
+    _force_two_colliding_features(monkeypatch)
+
+    fresh = typer.Typer()
+    with pytest.raises(DuplicateCommandError) as excinfo:
+        register_feature_commands(fresh, strict=True)
+    assert "dup-cmd" in str(excinfo.value)
+
+
+def test_non_strict_warns_and_detects_duplicate(monkeypatch: object) -> None:
+    """In non-strict mode the collision is warned to stderr and still detectable."""
+    _force_two_colliding_features(monkeypatch)
+
+    fresh = typer.Typer()
+    # The project disables pytest's capture plugin, so redirect stderr explicitly.
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        register_feature_commands(fresh, strict=False)  # must not raise
+
+    assert "dup-cmd" in err.getvalue()
+    assert detect_duplicate_commands(fresh) == ["dup-cmd"]
+
+
+def test_detect_duplicate_commands_on_clean_app() -> None:
+    """A freshly built app with distinct names reports no duplicates."""
+    fresh = typer.Typer()
+
+    @fresh.command("alpha")
+    def _alpha() -> None:  # pragma: no cover - never invoked
+        ...
+
+    @fresh.command("beta")
+    def _beta() -> None:  # pragma: no cover - never invoked
+        ...
+
+    assert detect_duplicate_commands(fresh) == []
+
+
+def test_real_app_has_no_duplicate_commands() -> None:
+    """CI guard: the shipped ``onmc`` app has no shadowed top-level names.
+
+    This would have caught the legacy ``pack`` shadow, where two features both
+    registered ``onmc pack`` and one silently won.
+    """
+    assert detect_duplicate_commands(real_app) == []

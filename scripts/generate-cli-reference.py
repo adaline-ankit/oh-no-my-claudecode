@@ -5,7 +5,9 @@ import difflib
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
+import typer.main
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
@@ -13,149 +15,48 @@ from oh_no_my_claudecode.cli import app
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = REPO_ROOT / "docs" / "cli-reference.md"
 
-COMMANDS: list[tuple[str, list[str]]] = [
-    ("onmc", []),
-    ("onmc setup", ["setup"]),
-    ("onmc init", ["init"]),
-    ("onmc ingest", ["ingest"]),
-    ("onmc brief", ["brief"]),
-    ("onmc codegraph", ["codegraph"]),
-    ("onmc codegraph summary", ["codegraph", "summary"]),
-    ("onmc codegraph build", ["codegraph", "build"]),
-    ("onmc codegraph neighbors", ["codegraph", "neighbors"]),
-    ("onmc codegraph context", ["codegraph", "context"]),
-    ("onmc ui", ["ui"]),
-    ("onmc why", ["why"]),
-    ("onmc memory-diff", ["memory-diff"]),
-    ("onmc digest", ["digest"]),
-    ("onmc guard", ["guard"]),
-    ("onmc recall", ["recall"]),
-    ("onmc reuse", ["reuse"]),
-    ("onmc ask", ["ask"]),
-    ("onmc status", ["status"]),
-    ("onmc statusline", ["statusline"]),
-    ("onmc hud", ["hud"]),
-    ("onmc report", ["report"]),
-    ("onmc sync", ["sync"]),
-    ("onmc pull", ["pull"]),
-    ("onmc serve", ["serve"]),
-    ("onmc solve", ["solve"]),
-    ("onmc review", ["review"]),
-    ("onmc teach", ["teach"]),
-    ("onmc mine", ["mine"]),
-    ("onmc doctor", ["doctor"]),
-    ("onmc audit", ["audit"]),
-    ("onmc preflight", ["preflight"]),
-    ("onmc verify-diff", ["verify-diff"]),
-    ("onmc llm", ["llm"]),
-    ("onmc llm status", ["llm", "status"]),
-    ("onmc llm configure", ["llm", "configure"]),
-    ("onmc hooks", ["hooks"]),
-    ("onmc hooks install", ["hooks", "install"]),
-    ("onmc hooks uninstall", ["hooks", "uninstall"]),
-    ("onmc hooks status", ["hooks", "status"]),
-    ("onmc hooks pre-compact", ["hooks", "pre-compact"]),
-    ("onmc hooks session-start", ["hooks", "session-start"]),
-    ("onmc hooks prompt-recall", ["hooks", "prompt-recall"]),
-    ("onmc hooks session-end", ["hooks", "session-end"]),
-    ("onmc consolidate", ["consolidate"]),
-    ("onmc claude-md", ["claude-md"]),
-    ("onmc claude-md generate", ["claude-md", "generate"]),
-    ("onmc claude-md update", ["claude-md", "update"]),
-    ("onmc claude-md preview", ["claude-md", "preview"]),
-    ("onmc memory", ["memory"]),
-    ("onmc memory list", ["memory", "list"]),
-    ("onmc memory add", ["memory", "add"]),
-    ("onmc memory show", ["memory", "show"]),
-    ("onmc memory confirm", ["memory", "confirm"]),
-    ("onmc memory reject", ["memory", "reject"]),
-    ("onmc memory edit", ["memory", "edit"]),
-    ("onmc task", ["task"]),
-    ("onmc task start", ["task", "start"]),
-    ("onmc task list", ["task", "list"]),
-    ("onmc task show", ["task", "show"]),
-    ("onmc task end", ["task", "end"]),
-    ("onmc task status", ["task", "status"]),
-    ("onmc attempt", ["attempt"]),
-    ("onmc attempt add", ["attempt", "add"]),
-    ("onmc attempt list", ["attempt", "list"]),
-    ("onmc attempt show", ["attempt", "show"]),
-    ("onmc attempt update", ["attempt", "update"]),
-    ("onmc playbook", ["playbook"]),
-    ("onmc playbook generate", ["playbook", "generate"]),
-    ("onmc playbook list", ["playbook", "list"]),
-    ("onmc playbook show", ["playbook", "show"]),
-    ("onmc skill", ["skill"]),
-    ("onmc skill promote", ["skill", "promote"]),
-    ("onmc skill list", ["skill", "list"]),
-    ("onmc skill show", ["skill", "show"]),
-    ("onmc skill feedback", ["skill", "feedback"]),
-    ("onmc skill prune", ["skill", "prune"]),
-    ("onmc skill export", ["skill", "export"]),
-    ("onmc user", ["user"]),
-    ("onmc user add", ["user", "add"]),
-    ("onmc user list", ["user", "list"]),
-    ("onmc user show", ["user", "show"]),
-    ("onmc user remove", ["user", "remove"]),
-    ("onmc profile", ["profile"]),
-    ("onmc profile show", ["profile", "show"]),
-    ("onmc profile rebuild", ["profile", "rebuild"]),
-    ("onmc notify", ["notify"]),
-    ("onmc notify status", ["notify", "status"]),
-    ("onmc notify test", ["notify", "test"]),
-    ("onmc notify tail", ["notify", "tail"]),
-    ("onmc spec", ["spec"]),
-    ("onmc spec print", ["spec", "print"]),
-    ("onmc spec validate", ["spec", "validate"]),
-    ("onmc tui", ["tui"]),
-    ("onmc coverage", ["coverage"]),
-    ("onmc bench", ["bench"]),
-    ("onmc benchmark", ["benchmark"]),
-    ("onmc savings", ["savings"]),
-    ("onmc evolution", ["evolution"]),
-    ("onmc loop", ["loop"]),
-    ("onmc loop-templates", ["loop-templates"]),
-    ("onmc autopilot", ["autopilot"]),
-    ("onmc wiki", ["wiki"]),
-    ("onmc plug", ["plug"]),
-    ("onmc gh-aw", ["gh-aw"]),
-    ("onmc gh-aw init", ["gh-aw", "init"]),
-    ("onmc mcp", ["mcp"]),
-    ("onmc mcp policy", ["mcp", "policy"]),
-    ("onmc mcp policy init", ["mcp", "policy", "init"]),
-    ("onmc mcp check", ["mcp", "check"]),
-    ("onmc import", ["import"]),
-    ("onmc feedback", ["feedback"]),
-    ("onmc trace", ["trace"]),
-    ("onmc trace start", ["trace", "start"]),
-    ("onmc trace stop", ["trace", "stop"]),
-    ("onmc trace report", ["trace", "report"]),
-    ("onmc eval", ["eval"]),
-    ("onmc eval create", ["eval", "create"]),
-    ("onmc eval run", ["eval", "run"]),
-    ("onmc eval compare", ["eval", "compare"]),
-    ("onmc replay", ["replay"]),
-    ("onmc replay run", ["replay", "run"]),
-    ("onmc swarm", ["swarm"]),
-    ("onmc swarm run", ["swarm", "run"]),
-    ("onmc swarm status", ["swarm", "status"]),
-    ("onmc swarm list", ["swarm", "list"]),
-    ("onmc swarm abort", ["swarm", "abort"]),
-    ("onmc conventions", ["conventions"]),
-    ("onmc conventions capture", ["conventions", "capture"]),
-    ("onmc conventions show", ["conventions", "show"]),
-    ("onmc release", ["release"]),
-    ("onmc claim", ["claim"]),
-    ("onmc claim acquire", ["claim", "acquire"]),
-    ("onmc claim release", ["claim", "release"]),
-    ("onmc claim status", ["claim", "status"]),
-    ("onmc claim check", ["claim", "check"]),
-    ("onmc ledger", ["ledger"]),
-    ("onmc ledger today", ["ledger", "today"]),
-    ("onmc ledger project", ["ledger", "project"]),
-    ("onmc ledger roi", ["ledger", "roi"]),
-    ("onmc registry-demo", ["registry-demo"]),
-]
+# NOTE (the win): there is deliberately NO hardcoded COMMANDS list here.
+#
+# Commands are auto-discovered from the fully-built Typer ``app`` (see
+# ``discover_commands`` below). The ``app`` is built once at import time and
+# already has every self-registering feature wired in via
+# ``command_registry.register_feature_commands``. A new feature that ships its
+# own ``oh_no_my_claudecode/<feat>/commands.py`` therefore appears in this
+# reference automatically — WITHOUT editing this generator. This kills the last
+# shared-hub file that forced every parallel feature PR to touch one list.
+
+
+def discover_commands(root_app: typer.Typer) -> list[tuple[str, list[str]]]:
+    """Enumerate every command + nested subcommand from a built Typer app.
+
+    Returns a deterministic, sorted list of ``(title, args)`` pairs where
+    ``title`` is the human-facing invocation (e.g. ``"onmc swarm plan"``) and
+    ``args`` is the argument path to pass to the CLI (e.g. ``["swarm", "plan"]``).
+    The root program itself is always emitted first as ``("onmc", [])``.
+
+    Both group nodes (e.g. ``onmc swarm``) and their leaf subcommands
+    (e.g. ``onmc swarm plan``) are emitted, matching the previous hand-written
+    listing. Sub-groups are recursed into so arbitrarily nested commands are
+    covered. Children are walked in sorted order for stable output.
+    """
+    command: Any = typer.main.get_command(root_app)
+    discovered: list[tuple[str, list[str]]] = [("onmc", [])]
+
+    def walk(node: Any, path: list[str]) -> None:
+        # A click/typer Group exposes its children via ``.commands``; leaf
+        # commands either lack the attribute or expose an empty mapping. We
+        # avoid an ``isinstance(node, click.Group)`` check because Typer's
+        # group class is not always a ``click.Group`` subclass across versions.
+        subcommands = getattr(node, "commands", None)
+        if not subcommands:
+            return
+        for name in sorted(subcommands):
+            child_path = [*path, name]
+            discovered.append((f"onmc {' '.join(child_path)}", child_path))
+            walk(subcommands[name], child_path)
+
+    walk(command, [])
+    return discovered
 
 
 def _runner() -> CliRunner:
@@ -192,7 +93,7 @@ def render_reference() -> str:
         "Run `python scripts/generate-cli-reference.py` after changing CLI commands.",
         "",
     ]
-    for title, args in COMMANDS:
+    for title, args in discover_commands(app):
         lines.extend(
             [
                 f"## `{title}`",

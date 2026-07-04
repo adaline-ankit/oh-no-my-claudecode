@@ -89,9 +89,14 @@ To add a command for a feature `myfeat`:
    deterministic (sorted), idempotent, and robust — a broken or optional feature
    is skipped (logged at debug) and never crashes the CLI.
 
+4. The CLI reference picks it up for free. `scripts/generate-cli-reference.py`
+   introspects the fully-built `app` (after auto-discovery) and enumerates every
+   command + nested subcommand automatically — there is **no** hardcoded command
+   list to edit. Just regenerate the doc: `python scripts/generate-cli-reference.py`.
+
 **Do not touch** these shared files when adding a command:
-`cli.py`, `core/service.py`, `rendering/console.py`, `scripts/generate-cli-reference.py`
-(only add a row there if you want the command in the published CLI reference).
+`cli.py`, `core/service.py`, `rendering/console.py`, `scripts/generate-cli-reference.py`.
+None of them need a per-command edit anymore — the generator auto-discovers.
 
 See `src/oh_no_my_claudecode/registrydemo/commands.py` for a complete, working
 example (the `onmc registry-demo` command).

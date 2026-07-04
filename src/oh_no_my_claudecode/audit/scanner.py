@@ -12,7 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from oh_no_my_claudecode.audit.gitleaks import GitleaksRunner
+    from oh_no_my_claudecode.audit.osv import OsvRunner
+    from oh_no_my_claudecode.audit.semgrep import SemgrepRunner
 
 AuditSeverity = Literal["critical", "high", "medium", "low", "info"]
 
@@ -113,16 +118,47 @@ def _compute_grade(score: int) -> str:
     return "F"
 
 
-def run_audit(repo_root: Path) -> AuditReport:
+def run_audit(
+    repo_root: Path,
+    *,
+    semgrep_runner: SemgrepRunner | None = None,
+    gitleaks_runner: GitleaksRunner | None = None,
+    osv_runner: OsvRunner | None = None,
+) -> AuditReport:
     """Scan *repo_root* for agent-configuration security risks.
 
     This is a pure, deterministic function.  It imports and runs every rule
-    defined in :mod:`oh_no_my_claudecode.audit.rules`.
+    defined in :mod:`oh_no_my_claudecode.audit.rules`.  When *semgrep_runner*
+    is supplied (and the ``semgrep`` binary is on ``PATH``), its findings are
+    folded into the report.  When *gitleaks_runner* is supplied (and the
+    ``gitleaks`` binary is on ``PATH``), detected secrets are folded in.
+    When either runner is ``None`` (the default), audit behaviour is completely
+    unchanged — zero regression.
 
     Parameters
     ----------
     repo_root:
         Absolute path to the root of the repository to scan.
+    semgrep_runner:
+        Optional injectable :data:`~oh_no_my_claudecode.audit.semgrep.SemgrepRunner`
+        callable.  When ``None``, semgrep is not invoked.  The real CLI wires
+        :func:`~oh_no_my_claudecode.audit.semgrep.make_semgrep_runner` here
+        only when :func:`~oh_no_my_claudecode.audit.semgrep.semgrep_available`
+        returns ``True`` and the user opts in via ``--semgrep``.  Tests inject
+        a fake runner to stay offline.
+    gitleaks_runner:
+        Optional injectable :data:`~oh_no_my_claudecode.audit.gitleaks.GitleaksRunner`
+        callable.  When ``None``, gitleaks is not invoked.  The real CLI wires
+        :func:`~oh_no_my_claudecode.audit.gitleaks.make_gitleaks_runner` here
+        only when :func:`~oh_no_my_claudecode.audit.gitleaks.gitleaks_available`
+        returns ``True`` and the user opts in via ``--gitleaks``.  Tests inject
+        a fake runner to stay offline.
+    osv_runner:
+        Optional injectable :data:`~oh_no_my_claudecode.audit.osv.OsvRunner`
+        callable.  When ``None``, osv-scanner is not invoked.  The real CLI wires
+        :func:`~oh_no_my_claudecode.audit.osv.make_osv_runner` here only when
+        :func:`~oh_no_my_claudecode.audit.osv.osv_available` returns ``True`` and
+        the user opts in via ``--osv``.  Tests inject a fake runner to stay offline.
 
     Returns
     -------
@@ -130,7 +166,10 @@ def run_audit(repo_root: Path) -> AuditReport:
         Scored, graded, fully populated report.  Suitable for both human
         rendering and JSON serialisation.
     """
+    from oh_no_my_claudecode.audit.gitleaks import run_gitleaks
+    from oh_no_my_claudecode.audit.osv import run_osv
     from oh_no_my_claudecode.audit.rules import ALL_RULES
+    from oh_no_my_claudecode.audit.semgrep import run_semgrep
 
     all_findings: list[AuditFinding] = []
     files_scanned: set[str] = set()
@@ -138,6 +177,18 @@ def run_audit(repo_root: Path) -> AuditReport:
     for rule_fn in ALL_RULES:
         rule_findings = rule_fn(repo_root)
         all_findings.extend(rule_findings)
+
+    # Optional semgrep pass — folded in when caller opts in and runner is wired.
+    semgrep_findings = run_semgrep(repo_root, semgrep_runner)
+    all_findings.extend(semgrep_findings)
+
+    # Optional gitleaks pass — folded in when caller opts in and runner is wired.
+    gitleaks_findings = run_gitleaks(repo_root, gitleaks_runner)
+    all_findings.extend(gitleaks_findings)
+
+    # Optional osv-scanner pass — folded in when caller opts in and runner is wired.
+    osv_findings = run_osv(repo_root, osv_runner)
+    all_findings.extend(osv_findings)
 
     # Collect scanned files from the findings themselves (each rule reports
     # findings per file; the scanner aggregates them here).

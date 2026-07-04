@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import sys
+import types
 import urllib.error
 from email.message import Message
 from pathlib import Path
@@ -14,16 +16,22 @@ from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.llm import (
     AnthropicProvider,
+    LiteLLMProvider,
     LLMConfigurationError,
     LLMProviderError,
     MockProvider,
+    OllamaProvider,
     OpenAIProvider,
     generate_logged,
+    litellm_available,
     provider_from_settings,
 )
 from oh_no_my_claudecode.llm import providers as llm_providers
 from oh_no_my_claudecode.llm import runtime as llm_runtime
-from oh_no_my_claudecode.llm.providers import _provider_http_error_message
+from oh_no_my_claudecode.llm.providers import (
+    _provider_http_error_message,
+    validate_provider_api_key,
+)
 from oh_no_my_claudecode.models import (
     LLMGenerationRequest,
     LLMProviderType,
@@ -41,6 +49,9 @@ OPENAI_MAX_COMPLETION_TOKENS_400_BODY = (
     b'supported with this model. Use max_tokens instead.",'
     b'"type":"invalid_request_error"}}'
 )
+OLLAMA_SUCCESS_BODY = json.dumps(
+    {"model": "llama3", "response": "local answer", "done": True}
+).encode("utf-8")
 
 
 class _FakeHTTPResponse:
@@ -95,6 +106,259 @@ def _openai_provider() -> OpenAIProvider:
         ),
         api_key="test-key",
     )
+
+
+def _ollama_provider() -> OllamaProvider:
+    return OllamaProvider(
+        LLMSettings(
+            provider=LLMProviderType.OLLAMA,
+            model="llama3",
+            temperature=0.2,
+            max_tokens=256,
+        ),
+        host="http://localhost:11434",
+    )
+
+
+def test_ollama_provider_returns_completion_from_mocked_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[dict[str, Any]] = []
+    urls: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: float | None = None) -> _FakeHTTPResponse:
+        urls.append(request.full_url)
+        captured.append(json.loads(request.data.decode("utf-8")))
+        return _FakeHTTPResponse(OLLAMA_SUCCESS_BODY)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    response = _ollama_provider().generate(
+        LLMGenerationRequest(prompt="hello", system_prompt="be terse")
+    )
+
+    assert response.text == "local answer"
+    assert response.provider == LLMProviderType.OLLAMA
+    assert response.model == "llama3"
+    assert urls == ["http://localhost:11434/api/generate"]
+    assert len(captured) == 1
+    assert captured[0]["model"] == "llama3"
+    assert captured[0]["prompt"] == "hello"
+    assert captured[0]["system"] == "be terse"
+    assert captured[0]["stream"] is False
+    assert captured[0]["options"]["temperature"] == 0.2
+    assert captured[0]["options"]["num_predict"] == 256
+
+
+def test_ollama_provider_honors_host_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ONMC_OLLAMA_HOST", "http://remote-box:9999/")
+    urls: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: float | None = None) -> _FakeHTTPResponse:
+        urls.append(request.full_url)
+        return _FakeHTTPResponse(OLLAMA_SUCCESS_BODY)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    provider = OllamaProvider(
+        LLMSettings(provider=LLMProviderType.OLLAMA, model="llama3")
+    )
+    provider.generate(LLMGenerationRequest(prompt="hello"))
+
+    assert urls == ["http://remote-box:9999/api/generate"]
+
+
+def test_ollama_provider_unavailable_server_raises_graceful_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_urlopen(request: object, timeout: float | None = None) -> _FakeHTTPResponse:
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(LLMProviderError, match="Provider request failed"):
+        _ollama_provider().generate(LLMGenerationRequest(prompt="hello"))
+
+
+def test_ollama_provider_empty_response_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_urlopen(request: object, timeout: float | None = None) -> _FakeHTTPResponse:
+        return _FakeHTTPResponse(json.dumps({"response": "  "}).encode("utf-8"))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(LLMProviderError, match="did not contain text"):
+        _ollama_provider().generate(LLMGenerationRequest(prompt="hello"))
+
+
+def test_factory_constructs_ollama_provider_without_api_key() -> None:
+    provider = provider_from_settings(
+        LLMSettings(provider=LLMProviderType.OLLAMA, model="llama3"),
+        environ={},
+    )
+    assert isinstance(provider, OllamaProvider)
+
+
+def test_validate_ollama_server_reachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    urls: list[str] = []
+
+    def fake_urlopen(request: Any, timeout: float | None = None) -> _FakeHTTPResponse:
+        urls.append(request.full_url)
+        return _FakeHTTPResponse(b'{"models":[]}')
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    valid, detail = validate_provider_api_key(LLMProviderType.OLLAMA, "")
+
+    assert valid is True
+    assert "reachable" in detail
+    assert urls == ["http://localhost:11434/api/tags"]
+
+
+def test_validate_ollama_server_unavailable_is_graceful(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_urlopen(request: object, timeout: float | None = None) -> _FakeHTTPResponse:
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    valid, detail = validate_provider_api_key(LLMProviderType.OLLAMA, "")
+
+    assert valid is False
+    assert "unavailable" in detail
+
+
+def _install_fake_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+    completion: Any,
+) -> list[dict[str, Any]]:
+    """Register an offline fake `litellm` module and capture completion calls."""
+    calls: list[dict[str, Any]] = []
+
+    def _tracked_completion(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return completion(**kwargs)
+
+    fake_module = types.ModuleType("litellm")
+    fake_module.completion = _tracked_completion  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "litellm", fake_module)
+    return calls
+
+
+def _litellm_provider(model: str = "gpt-4o") -> LiteLLMProvider:
+    return LiteLLMProvider(
+        LLMSettings(
+            provider=LLMProviderType.LITELLM,
+            model=model,
+            temperature=0.3,
+            max_tokens=321,
+        )
+    )
+
+
+def test_litellm_provider_returns_completion_from_mocked_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Message:
+        content = "unified answer"
+
+    class _Choice:
+        message = _Message()
+
+    class _Response:
+        choices = [_Choice()]
+
+        def model_dump(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"content": "unified answer"}}]}
+
+    calls = _install_fake_litellm(monkeypatch, lambda **_: _Response())
+
+    response = _litellm_provider("anthropic/claude-sonnet-4-5").generate(
+        LLMGenerationRequest(prompt="hello", system_prompt="be terse")
+    )
+
+    assert response.text == "unified answer"
+    assert response.provider == LLMProviderType.LITELLM
+    assert response.model == "anthropic/claude-sonnet-4-5"
+    assert response.raw == {"choices": [{"message": {"content": "unified answer"}}]}
+    assert len(calls) == 1
+    assert calls[0]["model"] == "anthropic/claude-sonnet-4-5"
+    assert calls[0]["temperature"] == 0.3
+    assert calls[0]["max_tokens"] == 321
+    assert calls[0]["messages"] == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hello"},
+    ]
+
+
+def test_litellm_provider_accepts_dict_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"choices": [{"message": {"content": "  dict answer  "}}]}
+    _install_fake_litellm(monkeypatch, lambda **_: payload)
+
+    response = _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+    assert response.text == "dict answer"
+    assert response.raw == payload
+
+
+def test_litellm_provider_empty_response_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_litellm(monkeypatch, lambda **_: {"choices": []})
+
+    with pytest.raises(LLMProviderError, match="did not contain text"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_provider_wraps_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(**_: Any) -> Any:
+        raise RuntimeError("provider exploded")
+
+    _install_fake_litellm(monkeypatch, _boom)
+
+    with pytest.raises(LLMProviderError, match="LiteLLM request failed: provider exploded"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_provider_unavailable_when_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+
+    with pytest.raises(LLMProviderError, match="litellm package is not installed"):
+        _litellm_provider().generate(LLMGenerationRequest(prompt="hi"))
+
+
+def test_litellm_available_reflects_import(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    assert litellm_available() is False
+
+    monkeypatch.setitem(sys.modules, "litellm", types.ModuleType("litellm"))
+    assert litellm_available() is True
+
+
+def test_factory_constructs_litellm_provider_without_api_key() -> None:
+    provider = provider_from_settings(
+        LLMSettings(provider=LLMProviderType.LITELLM, model="gpt-4o"),
+        environ={},
+    )
+    assert isinstance(provider, LiteLLMProvider)
+
+
+def test_validate_litellm_reports_availability(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    valid, detail = validate_provider_api_key(LLMProviderType.LITELLM, "")
+    assert valid is False
+    assert "not installed" in detail
+
+    monkeypatch.setitem(sys.modules, "litellm", types.ModuleType("litellm"))
+    valid, detail = validate_provider_api_key(LLMProviderType.LITELLM, "")
+    assert valid is True
+    assert "installed" in detail
 
 
 def test_llm_config_round_trip(sample_repo: Path, monkeypatch: object) -> None:

@@ -4,7 +4,13 @@ import os
 from collections.abc import Mapping
 
 from oh_no_my_claudecode.llm.base import BaseLLMProvider, LLMConfigurationError
-from oh_no_my_claudecode.llm.providers import AnthropicProvider, MockProvider, OpenAIProvider
+from oh_no_my_claudecode.llm.providers import (
+    AnthropicProvider,
+    LiteLLMProvider,
+    MockProvider,
+    OllamaProvider,
+    OpenAIProvider,
+)
 from oh_no_my_claudecode.models.llm import LLMProviderType, LLMSettings, LLMStatus
 
 DEFAULT_PROVIDER_ENV_VARS = {
@@ -48,6 +54,13 @@ def provider_from_settings(
     env = environ or os.environ
     if settings.provider == LLMProviderType.MOCK:
         return MockProvider(settings, response_text=mock_response_text)
+    if settings.provider == LLMProviderType.OLLAMA:
+        # Ollama is a local, keyless provider — no credentials required.
+        return OllamaProvider(settings)
+    if settings.provider == LLMProviderType.LITELLM:
+        # LiteLLM reads provider credentials from standard env vars itself, so
+        # the factory never requires an api_key_env_var here.
+        return LiteLLMProvider(settings)
 
     api_key_env_var = _resolved_api_key_env_var(settings)
     if api_key_env_var is None:

@@ -4,6 +4,149 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.72.0] — 2026-07-04
+
+### Added
+
+- **`onmc autoroute` — apply flywheel's best-model recommendations per goal** — closes the self-improvement loop: `flywheel` *learns* which model wins for which kind of goal (from verified receipts), and `autoroute suggest <goal>` *applies* it — returning the recommended model, rationale, confidence, and basis (goal-keyword match → overall best → default fallback on insufficient data). Honest: confidence 0 and an explicit "insufficient data" basis when there isn't enough verified history. Pure/offline, reuses `flywheel`, `--json`. Now a swarm/loop can auto-select the historically-best model instead of a fixed default.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#213) — onmc building onmc.
+
+## [0.71.0] — 2026-07-04
+
+### Added
+
+- **`onmc registry` — agent reputation trust ledger** — aggregates signed `attest` attestations into a queryable, rankable per-agent trust ledger: only signature- *and* claim-verified attestations count toward reputation (tampered/wrong-secret ones are flagged `invalid`, never counted); computes verified-rate, distinct goals, first/last seen, and a deterministic `trust_score`, then ranks agents on a leaderboard. `registry add <attestation>`, `registry rank`, `registry agent <subject>`, `--json`. The marketplace/reputation layer on top of `attest` — completing the agent-economy trust stack (badge → flywheel → attest → registry).
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#211) — onmc building onmc.
+
+## [0.70.0] — 2026-07-04
+
+### Added
+
+- **`onmc crossrepo` — cross-repo impact map + federated recall** — the multi-repo super-agent frontier: given N sibling repo paths, `crossrepo scan` builds the ripple surface (top-level modules shared across repos, so a change in repo A that would ripple into repo B is visible), and `crossrepo recall <query>` runs a unified federated memory search across the repos' `.agent-memory/` exports, attributing every hit to its source repo. Pure/deterministic/offline, reuses the federation exporter schema, `--json`. Multi-repo understanding is explicitly unsolved at the agent layer — this is onmc's wedge.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#209) — onmc building onmc.
+
+## [0.69.0] — 2026-07-04
+
+### Added
+
+- **Optional osv-scanner dependency-vulnerability scan in `onmc audit`** — the missing third scan type (semgrep=SAST, gitleaks=secrets, **osv=dependency CVEs**). With `--osv` (default off) and the `osv-scanner` binary on PATH, audit runs OSV against the project and folds CVE findings into the report/score (HIGH −15, CRITICAL −25). `shutil.which` detection (no pip dep), injectable runner, unchanged when absent. Completes the supply-chain story alongside `onmc sbom`.
+- **Optional fastembed cross-encoder reranker** — a real ONNX cross-encoder reranks recall candidates when the `fastembed` extra is installed and `ONMC_RERANKER=fastembed` is set; falls back silently to the existing cosine-blend heuristic otherwise (zero regression). Mirrors the `ONMC_EMBEDDER=fastembed` bi-encoder pattern.
+- **`onmc wiki site [--out DIR] [--json]`** — exports memory as a self-contained, browsable static HTML site (index grouped by kind + one page per memory with resolved edge links), openable in any browser with no external app. Pure stdlib, inline CSS, deterministic — a distinct consumption model from the logseq/foam/obsidian vault exporters.
+
+All three are optional / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#204, #205, #206).
+
+## [0.68.0] — 2026-07-04
+
+### Added
+
+- **`onmc twin` — repo digital-twin change rehearsal** — before an agent edits code, rehearse the change offline: predict the blast radius (dependents via `codegraph`), surface the covering tests to run, and flag high-risk hub files — analysis only, never runs or edits code. `twin plan <paths…>` and `twin rehearse <paths…>`, `--json`. The RL-style "rehearse before you touch prod" frontier, grounded in the structural code graph.
+- **`onmc attest` — verifiable proof-of-work trust layer** — turns an onmc receipt into a signed, portable, ERC-8004-shaped attestation (HMAC-SHA256, constant-time verify) plus an agent reputation summary (verified-rate, distinct goals, track record). Stdlib-only, off-chain, unsigned-digest fallback when no secret. `attest sign/verify/reputation`, `--json`. Completes the receipts→trust story with `badge` (display) and `flywheel` (learn) — the agent-economy white space. (Code shipped in v0.67.0; documented here.)
+
+Both built via the `onmc mission`→swarm dogfood loop, each its own verified PR (#203, #201) — onmc building onmc.
+
+## [0.67.0] — 2026-07-04
+
+### Added
+
+- **Optional fastembed local ONNX embedder** — a real semantic embedder (CPU ONNX, no API key) available via the `fastembed` extra; opt in with `ONMC_EMBEDDER=fastembed`. Import-guarded, and silently falls back to the default zero-dep hash embedder when the extra is absent or not selected (no change to the default install). Closes the "hash embedder is weak" gap `onmc roast` flags.
+- **SARIF 2.1.0 output for `onmc audit`** — `onmc audit --format sarif` emits findings as a valid SARIF 2.1.0 document (uploadable to GitHub code-scanning, viewable in the VS Code SARIF viewer), including any semgrep/gitleaks findings. Pure stdlib; the default Rich scorecard and `--json` output are unchanged.
+- **`onmc sbom` — CycloneDX 1.5 SBOM** — generates a software bill of materials from `uv.lock` (falling back to `pyproject.toml`) with normalized purls and deterministic ordering. Pure stdlib (`tomllib`), no new dependency, `--out`/`--json`. New module via command auto-discovery.
+
+All three are optional, import-guarded / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#197, #198, #200).
+
+## [0.66.0] — 2026-07-04
+
+### Added
+
+- **`onmc orggraph` — institutional-memory knowledge graph** — turns onmc's provenanced memories into an entity/relationship graph: extracts entities (files, components, decisions, people) and typed edges (`decided-by`, `supersedes`, `depends-on`, `caused-by`, `relates-to`), each carrying lineage (the source memory ids it came from). `orggraph build` materializes it, `orggraph query <entity>` shows neighbors + provenance, `orggraph why <decision>` traces a decision's lineage. Pure/deterministic/offline, `--json` on each. Targets the frontier's #1 2026 agent bottleneck — institutional memory that compounds.
+- **`onmc flywheel` — self-improving trajectory analysis** — mines onmc's *verified* run receipts (the outcome-labeled trajectory data no other tool has) to compute which approaches win: per-model verified-rate, avg cost, avg wall-time, and a ranked recommendation ("for goals like X, prefer model Y — verified N/M at $Z"). Honest by construction: null cost is `n/a` never fabricated; below the sample floor it reports insufficient data. `--json`, `--since`.
+
+Both built in parallel by an onmc swarm (planned by `onmc mission`), each its own verified PR — onmc building onmc.
+
+## [0.65.0] — 2026-07-04
+
+### Added
+
+- **Optional gitleaks secret-scan in `onmc audit`** — with `--gitleaks` (default off) and the `gitleaks` binary on PATH, audit runs gitleaks and folds detected secrets into the report/score (critical severity deducts). `shutil.which` detection (no pip dep), injectable runner, audit unchanged when absent — a clean sibling to the semgrep integration.
+- **`onmc wiki foam [--out DIR] [--json]`** — exports the memory store as a Foam workspace: one note per memory under `notes/` with YAML frontmatter, `[[wikilinks]]` for every edge kind, and an `index.md`. Pure stdlib, deterministic, no server — the YAML-frontmatter sibling of the Logseq exporter.
+- **D2 output for `onmc viz` (`--format d2`)** — `onmc viz memory` and `onmc viz code` can emit [D2](https://terrastruct.com/d2) diagram text as an alternative to the default Mermaid. Pure stdlib sibling renderer; existing Mermaid output is unchanged.
+
+All three are optional, import-guarded / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#192–#194).
+
+## [0.64.0] — 2026-07-04
+
+### Added
+
+- **Optional semgrep static-analysis in `onmc audit`** — with `--semgrep` (default off) and the `semgrep` binary on PATH, audit runs semgrep and folds its findings into the audit report/score. Detected via `shutil.which` (no pip dep); the real runner is injectable so core audit stays pure/offline; audit is unchanged when the binary is absent or the flag is off.
+- **Optional ast-grep structural code-search in `onmc reuse`** — with `--ast-grep` (default off) and the `ast-grep`/`sg` binary on PATH, reuse-detection additionally surfaces structurally-similar code (AST-pattern matches) the text heuristic misses. `shutil.which` detection (no pip dep), injectable runner, unchanged when absent.
+- **`onmc wiki logseq [--out DIR] [--json]`** — exports the memory store as a Logseq-compatible knowledge graph: one page per memory with Logseq `key:: value` properties, block/bullet formatting, and `[[wikilinks]]` for every memory-edge kind. Pure stdlib, deterministic, no server. `onmc wiki` is now a group; the bare command is preserved.
+
+All three are optional, import-guarded integrations with graceful zero-dep fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#186–#188).
+
+## [0.63.0] — 2026-07-04
+
+### Added
+
+- **`onmc missioncontrol` — live swarm dashboard** — a read-only view of a running swarm: per-unit state (pending/queued/running/done/failed/aborted), receipt presence + `verified` flag + `diff_sha`, and the abort-sentinel state, read straight from the swarm manifest + tamper-evident receipts. `--all` lists every swarm; `--json` for machine consumption. Never mutates swarm state.
+- **`onmc nightshift` — autonomous verified overnight swarm + morning digest** — plan a bounded, budget-capped backlog of swarm units (dry-run by default, spawns nothing), then render a morning report of what shipped, which units verified, and the PR links. Deterministic planner + receipt summariser.
+- **`onmc badge` — No-Slop verified proof-of-work PR badge** — turns an onmc receipt (`git_tree_sha`, `diff_sha`, `verified`, `receipt_hash`) into a shareable shields.io badge, a shields endpoint JSON payload, and a tamper-evidence-forward PR-comment body. `--post N` publishes the proof comment on PR #N; `--json` emits the endpoint payload.
+
+### Changed
+
+- **`onmc mission` now decomposes by deliverable, not per context-file** — greenfield goals (building new modules) split into one unit per distinct deliverable instead of degenerating into N near-identical units scoped to unrelated context-pack files; change-work still scopes per file but is deduped and capped. A goal naming a real existing path is treated as change-work even with a build verb.
+
+## [0.62.0] — 2026-06-24
+
+### Added
+
+- **Optional Ollama local LLM provider** — `ask`/`judge`/`solve`/`evolve` can run against a local Ollama server (stdlib urllib, no new dep, no API key, offline). Select via `onmc llm configure --provider ollama`; graceful when the server is absent.
+- **Optional sqlite-vec semantic recall backend** — real vector KNN inside the existing `memory_vectors` table when the `sqlitevec` extra is installed; graceful fallback to the default hash embedder otherwise (zero behavioural change).
+- **Optional tree-sitter multi-language codegraph** — `onmc codegraph` now indexes JS/TS/Go/Rust/Java (via the `treesitter` extra); falls back to Python-`ast` when absent (zero regression).
+
+All three are optional, import-guarded integrations with graceful zero-dep fallback — and were built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR.
+
+## [0.61.0] — 2026-06-24
+
+### Added
+
+- **`onmc wrap` / `onmc unwrap`** — make onmc the default layer for Claude Code. `onmc wrap --strict` installs a PreToolUse Task-intercept (raw native agent spawns are denied + redirected to `onmc swarm`) and a UserPromptSubmit prompt-router (every prompt gets an onmc routing verdict via `route` + `guard`), plus a CLAUDE.md policy stanza. Self-exempting (onmc's own swarm fan-out is allowed via a fresh `.onmc/swarm/<id>/ACTIVE` marker or `ONMC_ALLOW_TASK=1`), `--soft` nudges instead of denying, hooks always exit 0 (never brick the CLI), and `onmc unwrap` perfectly reverses (restores settings.json + CLAUDE.md from backup).
+
+## [0.60.0] — 2026-06-24
+
+### Added
+
+- **`onmc mission "<goal>"`** — the keystone: one command that composes the shipped pipeline (recall → pack → codegraph blast-radius → guard dead-ends → swarm plan) into a single mission plan + receipt. Plan-mode default (deterministic, offline, no agents); `--execute` hands off to the swarm. `--json`.
+- **`onmc roast`** — viral repo agent-readiness score (0-100) blending hotspot memory coverage + audit grade + brain size + conventions, with blunt findings + an actionable next step. `--json`.
+- **`onmc fix-ci <pr>`** — CI-fix autopilot: parses a failed PR's CI log → recalls related dead-ends → maps the error to likely-fix files (codegraph) → emits a fix plan. Plan-only; log injectable (offline). `--log`, `--json`.
+
+All three built **in parallel by an onmc swarm** (one unit each, each self-registered via command auto-discovery with zero hub edits, each its own PR), then merged.
+
+## [0.59.0] — 2026-06-24
+
+### Fixed
+
+- **Duplicate command-name guard** — `command_registry` detects + fails loudly on duplicate `onmc <name>` registrations (silent shadowing is gone); `detect_duplicate_commands(app)` is a CI guard.
+- **cli-reference auto-discovery** — `generate-cli-reference.py` introspects the Typer app instead of a hardcoded COMMANDS list, so new features never edit it — removing the last shared hub for collision-free parallel PRs (also recovered 19 stale-missing commands).
+- **preflight toolchain robustness** — `onmc preflight --provision` runs tools via `uv run --with` + pins typer for the cli-reference step, giving true results in fresh worktrees; `onmc swarm verify`/`--auto-verify` provision by default, unblocking the staff-engineer gate.
+
+## [0.58.0] — 2026-06-24
+
+### Added
+
+- **`onmc pack`** — per-task context pack (dead-ends + decisions + reuse hints + tiny codegraph context) for grounding spawned agents.
+- **`onmc contract init`** — spec-as-contract: emits a failing pytest skeleton + stub from a spec (enforced TDD).
+- **`onmc proptest init`** — property/invariant test generator (fixed-seed, stdlib, no new deps).
+- **`onmc inbox`** — ranked work queue from manual adds + TODO/FIXME + coverage gaps + memory.
+
+All four built in parallel by an onmc swarm (each unit self-registered via command auto-discovery, zero hub-code edits, each its own PR), then integrated.
+
+### Removed
+
+- Legacy hub-wired `pack` command (superseded by the auto-discovery `onmc pack`; resolves a silent duplicate-command shadow).
+
 ## [0.57.0] — 2026-06-24
 
 ### Added

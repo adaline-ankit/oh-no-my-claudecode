@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import time
 import urllib.error
@@ -147,6 +148,75 @@ class OpenAIProvider(BaseLLMProvider):
         raise LLMProviderError(msg)
 
 
+DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_HOST_ENV_VAR = "ONMC_OLLAMA_HOST"
+
+
+def ollama_host() -> str:
+    """Return the configured Ollama base URL, defaulting to the local server."""
+    return os.environ.get(OLLAMA_HOST_ENV_VAR, DEFAULT_OLLAMA_HOST).rstrip("/")
+
+
+class OllamaProvider(BaseLLMProvider):
+    """Optional local, free, offline LLM provider backed by an Ollama server.
+
+    Talks to a local Ollama HTTP server (default ``http://localhost:11434``) over
+    stdlib ``urllib`` — no extra dependency. When the server is not running or
+    reachable, requests fail gracefully with a clear :class:`LLMProviderError`
+    rather than crashing the process. Existing providers are unaffected.
+    """
+
+    def __init__(self, settings: LLMSettings, *, host: str | None = None) -> None:
+        super().__init__(settings)
+        self.host = (host or ollama_host()).rstrip("/")
+
+    @property
+    def api_url(self) -> str:
+        return f"{self.host}/api/generate"
+
+    def generate(self, request: LLMGenerationRequest) -> LLMGenerationResponse:
+        model = self._require_model()
+        options: dict[str, Any] = {
+            "temperature": (
+                request.temperature
+                if request.temperature is not None
+                else self.settings.temperature
+            ),
+            "num_predict": request.max_tokens or self.settings.max_tokens,
+        }
+        payload: dict[str, Any] = {
+            "model": model,
+            "prompt": request.prompt,
+            "stream": False,
+            "options": options,
+        }
+        if request.system_prompt:
+            payload["system"] = request.system_prompt
+        raw = _post_json(
+            self.api_url,
+            payload,
+            headers={},
+            provider=LLMProviderType.OLLAMA,
+            model=model,
+        )
+        text = raw.get("response")
+        if not isinstance(text, str) or not text.strip():
+            msg = "Ollama response did not contain text content."
+            raise LLMProviderError(msg)
+        return LLMGenerationResponse(
+            provider=LLMProviderType.OLLAMA,
+            model=model,
+            text=text.strip(),
+            raw=raw,
+        )
+
+    def _require_model(self) -> str:
+        if self.settings.model:
+            return self.settings.model
+        msg = "Ollama provider requires a configured model."
+        raise LLMProviderError(msg)
+
+
 class MockProvider(BaseLLMProvider):
     def __init__(self, settings: LLMSettings, *, response_text: str = "mock response") -> None:
         super().__init__(settings)
@@ -165,6 +235,132 @@ class MockProvider(BaseLLMProvider):
                 "system_prompt": request.system_prompt,
             },
         )
+
+
+LITELLM_UNAVAILABLE_MESSAGE = (
+    "The litellm package is not installed. Install the optional extra with "
+    "`pip install 'oh-no-my-claudecode[litellm]'` to use the unified LiteLLM provider."
+)
+
+
+def litellm_available() -> bool:
+    """Return whether the optional ``litellm`` dependency can be imported.
+
+    Guarded so the core package never hard-depends on litellm — when the extra
+    is absent this reports ``False`` and existing providers stay untouched.
+    """
+    try:
+        import litellm  # noqa: F401  - import probe only.
+    except ImportError:
+        return False
+    return True
+
+
+class LiteLLMProvider(BaseLLMProvider):
+    """Optional unified provider that routes to ANY model via LiteLLM.
+
+    One interface to OpenAI, Anthropic, Gemini, Groq, local servers, and every
+    other backend LiteLLM supports. The model string is passed through verbatim
+    (e.g. ``gpt-4o``, ``anthropic/claude-sonnet-4-5``, ``gemini/gemini-1.5-pro``,
+    ``groq/llama-3.1-70b-versatile``, ``ollama/llama3``).
+
+    ``litellm`` is an OPTIONAL extra. When it is not installed, construction and
+    generation fail gracefully with a clear :class:`LLMProviderError` instead of
+    crashing the process, and the built-in providers are unaffected. Credentials
+    are read by litellm from the standard provider environment variables.
+    """
+
+    def generate(self, request: LLMGenerationRequest) -> LLMGenerationResponse:
+        model = self._require_model()
+        completion = self._require_completion()
+        messages: list[dict[str, str]] = []
+        if request.system_prompt:
+            messages.append({"role": "system", "content": request.system_prompt})
+        messages.append({"role": "user", "content": request.prompt})
+        temperature = (
+            request.temperature
+            if request.temperature is not None
+            else self.settings.temperature
+        )
+        max_tokens = request.max_tokens or self.settings.max_tokens
+        try:
+            raw_response = completion(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=llm_call_timeout_seconds(),
+            )
+        except Exception as exc:  # noqa: BLE001 - litellm raises a broad family of errors.
+            msg = f"LiteLLM request failed: {exc}"
+            raise LLMProviderError(msg) from exc
+        text = _litellm_response_text(raw_response)
+        if not text:
+            msg = "LiteLLM response did not contain text content."
+            raise LLMProviderError(msg)
+        return LLMGenerationResponse(
+            provider=LLMProviderType.LITELLM,
+            model=model,
+            text=text,
+            raw=_litellm_response_raw(raw_response),
+        )
+
+    def _require_model(self) -> str:
+        if self.settings.model:
+            return self.settings.model
+        msg = "LiteLLM provider requires a configured model."
+        raise LLMProviderError(msg)
+
+    @staticmethod
+    def _require_completion() -> Any:
+        try:
+            import litellm
+        except ImportError as exc:
+            raise LLMProviderError(LITELLM_UNAVAILABLE_MESSAGE) from exc
+        return litellm.completion
+
+
+def _litellm_response_text(raw_response: Any) -> str:
+    """Extract assistant text from a litellm ModelResponse (or dict-like)."""
+    choices = _litellm_getattr(raw_response, "choices", [])
+    if not choices:
+        return ""
+    message = _litellm_getattr(choices[0], "message", None)
+    if message is None:
+        return ""
+    content = _litellm_getattr(message, "content", None)
+    if not isinstance(content, str):
+        return ""
+    return content.strip()
+
+
+def _litellm_response_raw(raw_response: Any) -> dict[str, Any]:
+    """Best-effort conversion of a litellm response to a plain dict for logging."""
+    for attr in ("model_dump", "dict"):
+        converter = getattr(raw_response, attr, None)
+        if callable(converter):
+            converted = _safe_call_dict(converter)
+            if converted is not None:
+                return converted
+    if isinstance(raw_response, dict):
+        return raw_response
+    return {}
+
+
+def _safe_call_dict(converter: Any) -> dict[str, Any] | None:
+    """Call a serializer and return its dict result, or None on any failure."""
+    try:
+        converted = converter()
+    except Exception:  # noqa: BLE001 - logging metadata only, never fatal.
+        return None
+    return converted if isinstance(converted, dict) else None
+
+
+def _litellm_getattr(obj: Any, name: str, default: Any) -> Any:
+    """Read an attribute or mapping key — litellm objects support both."""
+    if isinstance(obj, Mapping):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
 
 
 def _post_json(
@@ -274,6 +470,10 @@ def validate_provider_api_key(
     """Validate provider credentials with a lightweight API request."""
     if provider == LLMProviderType.MOCK:
         return True, "Mock provider does not require validation."
+    if provider == LLMProviderType.OLLAMA:
+        return _validate_ollama_server()
+    if provider == LLMProviderType.LITELLM:
+        return _validate_litellm_available()
     url: str
     headers: dict[str, str]
     if provider == LLMProviderType.ANTHROPIC:
@@ -310,6 +510,34 @@ def validate_provider_api_key(
             return False, "validation request timed out"
         return False, reason
     return True, "valid"
+
+
+def _validate_ollama_server() -> tuple[bool, str]:
+    """Check that a local Ollama server is reachable — never raises, degrades gracefully."""
+    url = f"{ollama_host()}/api/tags"
+    request = urllib.request.Request(url, method="GET")  # noqa: S310 - local Ollama host.
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - local Ollama host, keyless.
+            request,
+            timeout=llm_call_timeout_seconds(),
+        ) as response:
+            response.read()
+    except TimeoutError:
+        return False, "Ollama server request timed out"
+    except urllib.error.HTTPError as exc:
+        return False, f"Ollama server returned HTTP {exc.code}"
+    except urllib.error.URLError as exc:
+        return False, f"Ollama server unavailable: {exc.reason}"
+    except OSError as exc:
+        return False, f"Ollama server unavailable: {exc}"
+    return True, "Ollama server reachable"
+
+
+def _validate_litellm_available() -> tuple[bool, str]:
+    """Report whether the optional litellm extra is installed — never raises."""
+    if litellm_available():
+        return True, "litellm installed"
+    return False, "litellm not installed"
 
 
 def _provider_http_error_message(

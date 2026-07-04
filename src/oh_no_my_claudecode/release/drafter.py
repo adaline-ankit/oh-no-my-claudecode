@@ -15,13 +15,24 @@ the live repo; they are intentionally *not* used by the pure drafter.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 Bump = Literal["major", "minor", "patch"]
+
+# A cliff-runner produces a rendered CHANGELOG section for the *next* release.
+# It is injected so tests never shell out to a real binary: ``(repo_root,
+# next_version) -> changelog_entry_text``. ``None`` / empty return means the
+# caller should fall back to the built-in conventional-commit renderer.
+CliffRunner = Callable[[Path, str], "str | None"]
+
+# The external git-cliff binary is looked up on PATH (it is NOT a pip package).
+_GIT_CLIFF_BINARY = "git-cliff"
 
 # Conventional-commit type -> CHANGELOG section heading. The order of this dict
 # is the order sections appear in a rendered entry.
@@ -155,12 +166,23 @@ def draft_release(
     current_version: str,
     commits: list[str],
     date: str,
+    cliff_runner: CliffRunner | None = None,
+    repo_root: Path | None = None,
 ) -> ReleaseDraft:
     """Draft the next release from conventional-commit subjects.
 
     Pure and deterministic: the commit log, *date*, and *current_version* are
     all injected, so the same inputs always produce the same draft (no git,
     network, or LLM access).
+
+    Version bump and grouped ``commits_by_type`` are always computed from the
+    injected *commits* — that logic never changes.  Only the rendered
+    ``changelog_entry`` can optionally be produced by git-cliff: when
+    *cliff_runner* is provided and it returns a non-empty string for the
+    computed *next_version*, that text becomes ``changelog_entry``.  If the
+    runner is absent, returns ``None``/empty, or raises, the built-in
+    conventional-commit renderer is used instead — a strict superset with zero
+    regression when git-cliff is unavailable.
 
     Parameters
     ----------
@@ -172,6 +194,14 @@ def draft_release(
         commits are ignored.  May be empty.
     date:
         The release date as ``"YYYY-MM-DD"`` for the CHANGELOG heading.
+    cliff_runner:
+        Optional injected callable ``(repo_root, next_version) -> str | None``
+        that renders the CHANGELOG section (e.g. a git-cliff wrapper).  When
+        ``None`` (default) or when it yields nothing/errors, the built-in
+        renderer is used.  Injected so tests never shell out to a real binary.
+    repo_root:
+        Repo root passed through to *cliff_runner*.  Only consulted when a
+        runner is supplied.
 
     Returns
     -------
@@ -193,11 +223,17 @@ def draft_release(
         section = _section_for_subject(subject)
         commits_by_type.setdefault(section, []).append(_clean_subject(subject))
 
-    changelog_entry = _render_entry(
-        version=next_version,
-        date=date,
-        commits_by_type=commits_by_type,
+    changelog_entry = _changelog_via_cliff(
+        cliff_runner=cliff_runner,
+        repo_root=repo_root,
+        next_version=next_version,
     )
+    if changelog_entry is None:
+        changelog_entry = _render_entry(
+            version=next_version,
+            date=date,
+            commits_by_type=commits_by_type,
+        )
 
     return ReleaseDraft(
         current_version=current_version,
@@ -206,6 +242,30 @@ def draft_release(
         changelog_entry=changelog_entry,
         commits_by_type=commits_by_type,
     )
+
+
+def _changelog_via_cliff(
+    *,
+    cliff_runner: CliffRunner | None,
+    repo_root: Path | None,
+    next_version: str,
+) -> str | None:
+    """Return a git-cliff-rendered entry, or ``None`` to signal fallback.
+
+    Any missing runner, empty/whitespace output, or runner exception yields
+    ``None`` so the caller falls back to the built-in renderer — the git-cliff
+    path can never regress the deterministic default.
+    """
+    if cliff_runner is None:
+        return None
+    root = repo_root if repo_root is not None else Path.cwd()
+    try:
+        rendered = cliff_runner(root, next_version)
+    except Exception:  # noqa: BLE001 — git-cliff must never break the draft.
+        return None
+    if not rendered or not rendered.strip():
+        return None
+    return rendered if rendered.endswith("\n") else rendered + "\n"
 
 
 def _render_entry(
@@ -242,6 +302,58 @@ def _render_entry(
 # ---------------------------------------------------------------------------
 # Live-repo helpers (used by the CLI, NOT by the pure drafter or its tests)
 # ---------------------------------------------------------------------------
+
+
+def git_cliff_available() -> bool:
+    """True when the external ``git-cliff`` binary is on ``PATH``.
+
+    git-cliff is a standalone Rust binary, not a pip package, so availability
+    is a pure PATH lookup — no import, no pip dependency.
+    """
+    return shutil.which(_GIT_CLIFF_BINARY) is not None
+
+
+def _run_git_cliff(repo_root: Path, next_version: str) -> str | None:
+    """Default cliff-runner: shell the real ``git-cliff`` binary.
+
+    Renders only the *unreleased* section, tagged as *next_version*, so the
+    output slots into ``CHANGELOG.md`` the same way the built-in renderer's
+    entry does.  Returns ``None`` on any failure (binary missing, non-zero
+    exit, empty output) so the caller falls back to the built-in renderer.
+
+    This helper is intentionally NOT exercised by the offline test suite — it
+    is the only place that shells a real binary, and tests inject their own
+    runner instead.
+    """
+    binary = shutil.which(_GIT_CLIFF_BINARY)
+    if binary is None:
+        return None
+    try:
+        result = subprocess.run(
+            [binary, "--unreleased", "--strip", "all", "--tag", next_version],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    output = result.stdout.strip()
+    return output or None
+
+
+def default_cliff_runner() -> CliffRunner | None:
+    """Return the real git-cliff runner when the binary is present, else ``None``.
+
+    The CLI uses this to opt into git-cliff transparently: when git-cliff is
+    installed the returned runner is passed to :func:`draft_release`; otherwise
+    the drafter falls back to its built-in conventional-commit renderer.
+    """
+    if not git_cliff_available():
+        return None
+    return _run_git_cliff
 
 
 def current_version(repo_root: Path) -> str:

@@ -40,7 +40,6 @@ from oh_no_my_claudecode.rendering.console import (
     render_codegraph_build,
     render_codegraph_context,
     render_codegraph_neighbors,
-    render_context_pack,
     render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
@@ -100,6 +99,9 @@ from oh_no_my_claudecode.setup import run_setup_wizard
 from oh_no_my_claudecode.ui import export_dashboard_snapshot, serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
+from oh_no_my_claudecode.wiki.foam import build_foam_vault
+from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
+from oh_no_my_claudecode.wiki.site import build_site
 
 app = typer.Typer(
     help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
@@ -116,6 +118,11 @@ llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=
 hooks_app = typer.Typer(help="Install and run Claude Code compaction hooks.", no_args_is_help=True)
 claude_md_app = typer.Typer(
     help="Generate and maintain CLAUDE.md from ONMC memory.",
+    no_args_is_help=False,
+    invoke_without_command=True,
+)
+wiki_app = typer.Typer(
+    help="Generate wiki and knowledge-graph exports from stored memory.",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -194,6 +201,7 @@ app.add_typer(conventions_app, name="conventions")
 app.add_typer(claim_app, name="claim")
 app.add_typer(ledger_app, name="ledger")
 app.add_typer(fleet_app, name="fleet")
+app.add_typer(wiki_app, name="wiki")
 
 
 @app.command("tui")
@@ -736,41 +744,6 @@ def codegraph_context_command(
     render_codegraph_context(result)
 
 
-@app.command("pack")
-def pack_command(
-    goal: Annotated[
-        str,
-        typer.Argument(help="Goal or task description for the spawned agent."),
-    ],
-    budget_chars: Annotated[
-        int,
-        typer.Option("--budget-chars", min=500, help="Maximum markdown characters."),
-    ] = 6000,
-    json_output: Annotated[
-        bool,
-        typer.Option("--json", help="Emit the pack metadata + markdown as JSON."),
-    ] = False,
-    out: Annotated[
-        Path | None,
-        typer.Option("--out", help="Write markdown to this file instead of stdout."),
-    ] = None,
-) -> None:
-    """Generate a tiny deterministic context pack for spawned agents."""
-    try:
-        pack = _service().pack(goal, budget_chars=budget_chars)
-    except FileNotFoundError as exc:
-        raise typer.Exit(code=_fatal(str(exc))) from exc
-    if json_output:
-        sys.stdout.write(json.dumps(pack.to_dict(), indent=2, sort_keys=True) + "\n")
-        return
-    if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(pack.markdown, encoding="utf-8")
-        console.print(f"[green]Wrote pack:[/green] {out}")
-        return
-    render_context_pack(pack)
-
-
 @app.command("why")
 def why_command(
     path: Annotated[str, typer.Argument(help="File path to explain (repo-relative or absolute).")],
@@ -1293,6 +1266,17 @@ def reuse_command(
         bool,
         typer.Option("--json", help="Emit the ranked hits as JSON instead of a table."),
     ] = False,
+    use_ast_grep: Annotated[
+        bool,
+        typer.Option(
+            "--ast-grep/--no-ast-grep",
+            help=(
+                "Use ast-grep (the 'ast-grep' or 'sg' binary) for structural/AST-pattern"
+                " matching in addition to the text heuristic.  No-op when neither binary"
+                " is on PATH (falls back to text-only, zero regression)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Surface existing code that already does a thing — reuse before reimplementing.
 
@@ -1300,25 +1284,43 @@ def reuse_command(
     how well their name, docstring, and argument names match your query.
     Entirely offline and deterministic — no LLM, no network.
 
+    With ``--ast-grep`` (and the ``ast-grep``/``sg`` binary installed), also runs
+    structural AST-pattern matching that catches structurally-similar code even
+    when variable names differ.
+
     Examples:
 
       onmc reuse "tokenize text into words"
 
       onmc reuse tokenize --json
+
+      onmc reuse "def $F($$$ARGS):" --ast-grep
     """
     try:
-        _, hits = _service().reuse_find(query, limit=limit)
+        _, hits, structural_hits = _service().reuse_find(query, limit=limit, ast_grep=use_ast_grep)
     except RepoDiscoveryError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:
         import dataclasses
 
-        payload = [dataclasses.asdict(hit) for hit in hits]
+        payload: dict[str, object] = {
+            "hits": [dataclasses.asdict(hit) for hit in hits],
+            "structural": [dataclasses.asdict(m) for m in structural_hits],
+        }
         console.print(json.dumps(payload, indent=2), markup=False)
         return
 
     render_reuse_hits(hits, query)
+    if structural_hits:
+        console.print(
+            f"\n[bold]Structural matches (ast-grep)[/bold]: {len(structural_hits)} found",
+            markup=True,
+        )
+        for match in structural_hits:
+            loc = f"{match.file}:{match.line_start}-{match.line_end}"
+            snippet = repr(match.text[:80])
+            console.print(f"  [cyan]{loc}[/cyan]  {snippet}", markup=True)
 
 
 @app.command("ask")
@@ -2253,6 +2255,78 @@ def hooks_pre_tool_use_command() -> None:
         pass
 
 
+@hooks_app.command("task-intercept")
+def hooks_task_intercept_command() -> None:
+    """Intercept native ``Task`` agent-spawning and redirect it to ``onmc swarm``.
+
+    Installed by ``onmc wrap`` on the ``PreToolUse`` hook (matcher ``"Task"``).
+    Reads the hook payload from stdin and emits either a ``deny`` decision
+    (strict) redirecting the model to ``onmc swarm plan``, an
+    ``additionalContext`` nudge (soft), or nothing (non-Task tool, or
+    self-exemption when ``ONMC_ALLOW_TASK`` is set or an onmc swarm is active).
+
+    Design invariants (identical to every onmc hook):
+    - Always exits 0 — a wrapper that bricks Claude Code is unacceptable.
+    - Any exception is swallowed; stdout stays clean (empty = allow) on error.
+    """
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import compile_task_intercept, read_wrap_strict
+
+        payload = _read_hook_payload()
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        strict = read_wrap_strict(repo_root)
+        output = compile_task_intercept(payload, repo_root, strict=strict)
+        if output:
+            sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@hooks_app.command("prompt-router")
+def hooks_prompt_router_command() -> None:
+    """Route the user prompt through onmc and inject a "prefer onmc paths" nudge.
+
+    Installed by ``onmc wrap`` on the ``UserPromptSubmit`` hook. Reads the
+    prompt from the stdin payload, routes it via the deterministic router +
+    dead-end guard, and writes a terse ``additionalContext`` JSON payload.
+    Stdout is always pure JSON or empty. Always exits 0; never raises.
+    """
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import compile_prompt_policy, read_wrap_strict
+
+        payload = _read_hook_payload()
+        raw_prompt = payload.get("prompt", "")
+        prompt = raw_prompt if isinstance(raw_prompt, str) else ""
+        if not prompt.strip():
+            return
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        strict = read_wrap_strict(repo_root)
+        # Storage is optional — the policy degrades to routing-only when memory
+        # is unavailable (e.g. onmc not initialised in this repo).
+        storage = None
+        try:
+            _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+        except Exception:  # noqa: BLE001
+            storage = None
+        output = compile_prompt_policy(prompt, storage, strict=strict)
+        if output:
+            sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
 @app.command("consolidate")
 def consolidate_command(
     dry_run: Annotated[
@@ -2458,6 +2532,18 @@ def audit_command(
         bool,
         typer.Option("--json", help="Emit the full AuditReport as JSON to stdout."),
     ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help=(
+                "Output format.  One of: text (default Rich scorecard), json "
+                "(AuditReport JSON), sarif (SARIF 2.1.0 for GitHub code-scanning "
+                "and VS Code SARIF viewer).  When --format is given it takes "
+                "precedence over the legacy --json flag."
+            ),
+        ),
+    ] = "text",
     fail_on: Annotated[
         str,
         typer.Option(
@@ -2468,6 +2554,42 @@ def audit_command(
             ),
         ),
     ] = "high",
+    use_semgrep: Annotated[
+        bool,
+        typer.Option(
+            "--semgrep/--no-semgrep",
+            help=(
+                "Also run semgrep static analysis and fold its findings into the "
+                "report.  Requires the 'semgrep' binary on PATH.  When the binary "
+                "is absent this flag is silently ignored — no pip dependency is "
+                "added.  Default: off."
+            ),
+        ),
+    ] = False,
+    use_gitleaks: Annotated[
+        bool,
+        typer.Option(
+            "--gitleaks/--no-gitleaks",
+            help=(
+                "Also run gitleaks secret scanning and fold detected secrets into "
+                "the report.  Requires the 'gitleaks' binary on PATH.  When the "
+                "binary is absent this flag is silently ignored — no pip dependency "
+                "is added.  Default: off."
+            ),
+        ),
+    ] = False,
+    use_osv: Annotated[
+        bool,
+        typer.Option(
+            "--osv/--no-osv",
+            help=(
+                "Also run osv-scanner dependency-vulnerability scanning and fold "
+                "detected CVEs into the report.  Requires the 'osv-scanner' binary "
+                "on PATH.  When the binary is absent this flag is silently ignored — "
+                "no pip dependency is added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2483,6 +2605,13 @@ def audit_command(
 
     Use ``--fail-on critical`` for a lenient CI gate, ``--fail-on medium`` for
     a stricter one.
+
+    Output formats:
+
+    - ``text`` (default) — Rich-rendered scorecard in the terminal.
+    - ``json`` — Full AuditReport serialised as JSON (same as legacy ``--json``).
+    - ``sarif`` — SARIF 2.1.0 document for GitHub code-scanning, VS Code SARIF
+      viewer, and other SAST integrations.
     """
     from oh_no_my_claudecode.audit.scanner import AuditSeverity
 
@@ -2491,11 +2620,23 @@ def audit_command(
         msg = f"--fail-on must be one of: {', '.join(valid_severities)}"
         raise typer.Exit(code=_fatal(msg))
 
+    valid_formats = ("text", "json", "sarif")
+    # --json is a legacy alias for --format json; --format takes precedence.
+    effective_format = output_format
+    if effective_format not in valid_formats:
+        msg = f"--format must be one of: {', '.join(valid_formats)}"
+        raise typer.Exit(code=_fatal(msg))
+    # Allow legacy --json flag to override default "text" when --format is not set.
+    if as_json and effective_format == "text":
+        effective_format = "json"
+
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root)
+    report = _service().audit(
+        repo_root=repo_root, semgrep=use_semgrep, gitleaks=use_gitleaks, osv=use_osv
+    )
 
-    if as_json:
+    if effective_format == "json":
         import dataclasses
 
         def _to_dict(obj: object) -> object:
@@ -2509,6 +2650,16 @@ def audit_command(
             return obj
 
         sys.stdout.write(json.dumps(_to_dict(report), indent=2, default=str) + "\n")
+    elif effective_format == "sarif":
+        from oh_no_my_claudecode.audit.sarif import findings_to_sarif
+
+        try:
+            from oh_no_my_claudecode import __version__ as _pkg_version
+        except Exception:
+            _pkg_version = "unknown"
+
+        sarif_doc = findings_to_sarif(report.findings, tool_version=_pkg_version)
+        sys.stdout.write(json.dumps(sarif_doc, indent=2) + "\n")
     else:
         render_audit_report(report)
 
@@ -2532,6 +2683,17 @@ def preflight_command(
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Emit the PreflightReport as JSON to stdout."),
+    ] = False,
+    provision: Annotated[
+        bool,
+        typer.Option(
+            "--provision",
+            help=(
+                "Run each tool via `uv run --with <tool>` so a fresh worktree "
+                "(no dev deps installed) resolves ruff/mypy/pytest on demand, "
+                "and pin typer<1.0 for the cli-reference step to match CI."
+            ),
+        ),
     ] = False,
 ) -> None:
     """Run the exact CI quality gate locally, in the same order CI runs it.
@@ -2564,7 +2726,7 @@ def preflight_command(
             raise typer.Exit(code=_fatal(msg))
         steps = only
 
-    report = _service().preflight(steps=steps)
+    report = _service().preflight(steps=steps, provision=provision)
 
     if as_json:
         import dataclasses
@@ -2601,6 +2763,17 @@ def verify_diff_command(
             help="Repo-relative path that must receive added lines.  Repeatable.",
         ),
     ] = None,
+    structural: Annotated[
+        bool,
+        typer.Option(
+            "--structural",
+            help=(
+                "Use difftastic (the 'difft' binary) for a structural/AST diff that"
+                " ignores formatting noise.  No-op when 'difft' is not on PATH"
+                " (falls back to line-diff)."
+            ),
+        ),
+    ] = False,
     as_json: Annotated[
         bool,
         typer.Option("--json", help="Emit the full VerifyReport as JSON to stdout."),
@@ -2611,7 +2784,8 @@ def verify_diff_command(
     Passes ONLY when the change is real (non-empty), introduces every expected
     symbol/file, and is lawful (no banned or secret patterns in added lines).
     Designed to close the empty-diff false-converge: a passing test suite over
-    an unchanged tree must NOT count as success.
+    an unchanged tree must NOT count as success.  With ``--structural`` and the
+    ``difft`` binary installed, it also rejects reformat-only diffs.
 
     Exit codes:
 
@@ -2622,6 +2796,7 @@ def verify_diff_command(
         base=base,
         expect_symbols=tuple(expect_symbol or ()),
         expect_files=tuple(expect_file or ()),
+        structural=structural,
     )
 
     if as_json:
@@ -2639,8 +2814,9 @@ def verify_diff_command(
         raise typer.Exit(code=1)
 
 
-@app.command("wiki")
-def wiki_command(
+@wiki_app.callback(invoke_without_command=True)
+def wiki_callback(
+    ctx: typer.Context,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -2657,7 +2833,13 @@ def wiki_command(
         typer.Option("--format", help="Output format: markdown wiki or Obsidian vault."),
     ] = WikiFormat.MARKDOWN,
 ) -> None:
-    """Generate a markdown wiki or Obsidian knowledge-graph vault."""
+    """Generate a markdown wiki or Obsidian knowledge-graph vault.
+
+    When invoked without a subcommand, generates the wiki immediately.
+    Use ``onmc wiki logseq`` for a Logseq-compatible knowledge graph export.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
     try:
         repo_root, written = _service().generate_wiki(output_dir=output, format=wiki_format)
     except FileNotFoundError as exc:
@@ -2678,6 +2860,234 @@ def wiki_command(
             display = page
         console.print(f"  {display}")
     console.print(f"\n[bold]Index:[/bold] {index_path}")
+
+
+@wiki_app.command("logseq")
+def wiki_logseq_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write Logseq pages into."
+                " Defaults to .onmc/logseq/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a Logseq-compatible knowledge graph.
+
+    Writes one markdown page per memory into a ``pages/`` subdirectory, using
+    Logseq's ``key:: value`` page properties and ``[[wikilinks]]`` for memory
+    edges.  No new dependency — pure stdlib string generation.
+
+    The output directory defaults to ``.onmc/logseq/`` and is safe to open
+    directly in the Logseq desktop app as a graph folder.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "logseq")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_logseq_vault(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "logseq",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No Logseq pages generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]Logseq graph generated:[/green] {len(written)} page(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    console.print(f"\n[bold]Open in Logseq:[/bold] {out_dir}")
+
+
+@wiki_app.command("foam")
+def wiki_foam_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write Foam notes into."
+                " Defaults to .onmc/foam/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a Foam-compatible markdown knowledge graph.
+
+    Writes one markdown note per memory into a ``notes/`` subdirectory and an
+    ``index.md`` entry point, using YAML frontmatter and ``[[wikilinks]]`` for
+    memory edges.  No new dependency — pure stdlib string generation.
+
+    Foam is a VS Code extension that reads a flat directory of markdown notes
+    and renders an interactive knowledge graph.  The output directory defaults
+    to ``.onmc/foam/`` and can be opened directly in VS Code with the Foam
+    extension installed.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "foam")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_foam_vault(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "foam",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No Foam notes generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]Foam vault generated:[/green] {len(written)} note(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    console.print(f"\n[bold]Open in VS Code (Foam):[/bold] {out_dir}")
+
+
+@wiki_app.command("site")
+def wiki_site_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write the HTML site into."
+                " Defaults to .onmc/site/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a self-contained static HTML site.
+
+    Writes ``index.html`` listing all memories grouped by kind, plus one
+    ``<slug>.html`` detail page per memory with its full body and resolved
+    ``<a href>`` links for memory edges.  No external app, no JS framework,
+    no network required — open ``index.html`` directly in any browser.
+
+    The output directory defaults to ``.onmc/site/``.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "site")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_site(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "site",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No HTML pages generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]HTML site generated:[/green] {len(written)} page(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    index_path = out_dir / "index.html"
+    console.print(f"\n[bold]Open in browser:[/bold] {index_path}")
 
 
 @memory_app.command("list")
@@ -5094,19 +5504,30 @@ def release_command(
         bool,
         typer.Option("--json", help="Emit the drafted release as JSON."),
     ] = False,
+    git_cliff: Annotated[
+        bool,
+        typer.Option(
+            "--git-cliff/--no-git-cliff",
+            help="Use git-cliff to render the CHANGELOG when its binary is on PATH "
+            "(default: on; falls back to the built-in renderer when absent).",
+        ),
+    ] = True,
 ) -> None:
     """Draft the next release from conventional-commit history.
 
     Classifies commit subjects since the last tag into a semver bump (feat ->
     minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
     next version, and renders a CHANGELOG entry in the repo's format.
-    Deterministic and offline. Dry-run by default — pass --write to bump
-    pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+    Deterministic and offline. When the external git-cliff binary is installed
+    it renders the CHANGELOG entry (best-in-class); otherwise the built-in
+    renderer is used — pass --no-git-cliff to force the built-in one. Dry-run by
+    default — pass --write to bump pyproject.toml and prepend the entry to
+    CHANGELOG.md. Never tags or pushes.
     """
     import dataclasses
 
     try:
-        _, draft = _service().release_draft(write=write)
+        _, draft = _service().release_draft(write=write, use_git_cliff=git_cliff)
     except (FileNotFoundError, ValueError, RepoDiscoveryError) as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
@@ -6361,5 +6782,7 @@ def swarm_abort_command(
 
 # Additive command auto-discovery: features expose ``<feat>.commands.register(app)``
 # and self-register here with zero further edits to this hub. See
-# ``oh_no_my_claudecode.command_registry`` and CONTRIBUTING.md.
-register_feature_commands(app)
+# ``oh_no_my_claudecode.command_registry`` and CONTRIBUTING.md. ``strict=False``
+# so a duplicate-name collision is logged loudly to stderr rather than crashing a
+# user's CLI; CI asserts ``detect_duplicate_commands(app) == []`` to fail the build.
+register_feature_commands(app, strict=False)
