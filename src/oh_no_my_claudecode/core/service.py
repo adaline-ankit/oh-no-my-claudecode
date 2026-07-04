@@ -1101,7 +1101,17 @@ class OnmcService:
             model_name = config.llm.model
             key_var = config.llm.api_key_env_var or default_api_key_env_var(config.llm.provider)
             report["provider"].append(f"Provider: {provider_name} ({model_name})")
-            if not key_var:
+            if config.llm.provider == LLMProviderType.OLLAMA:
+                # Local, keyless provider — check server reachability instead.
+                reachable, detail = validate_provider_api_key(config.llm.provider, "")
+                if reachable:
+                    report["provider"].append(detail)
+                else:
+                    report["warnings"].append(
+                        f"Ollama provider configured but {detail}. "
+                        "Start a local Ollama server to enable LLM features."
+                    )
+            elif not key_var:
                 report["warnings"].append(
                     f"No API key environment variable is configured for {provider_name}."
                 )
