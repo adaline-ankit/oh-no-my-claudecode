@@ -54,6 +54,12 @@
           </div>
           <div class="topbar-actions">
             <span id="last-ingest" class="last-ingest"></span>
+            <span id="live-status" class="live-status" title="Auto-refresh status" hidden><span class="live-status-dot" aria-hidden="true"></span><span id="live-status-text"></span></span>
+            <label class="refresh-toggle" title="Toggle live auto-refresh">
+              <input id="autorefresh-toggle" type="checkbox" checked>
+              <span class="refresh-toggle-track" aria-hidden="true"></span>
+              <span class="refresh-toggle-label">Live</span>
+            </label>
             <button id="welcome-open" class="icon-button" type="button" title="Show welcome guide" aria-label="Show welcome guide" hidden>?</button>
             <button id="refresh-button" class="icon-button" type="button" title="Refresh data" aria-label="Refresh data">↻</button>
           </div>
@@ -122,8 +128,15 @@
               <span id="swarms-live-chip" class="status-chip"></span>
             </div>
             <div id="swarm-metric-grid" class="metric-grid"></div>
+            <div class="toolbar">
+              <label class="search-field"><span class="sr-only">Search swarms</span><span aria-hidden="true">⌕</span><input id="swarm-search" type="search" placeholder="Search swarms by goal or id" autocomplete="off"></label>
+              <div class="segmented" role="group" aria-label="Filter swarms">
+                <button class="seg-btn is-active" data-swarm-filter="all" type="button">All</button>
+                <button class="seg-btn" data-swarm-filter="live" type="button">Live</button>
+              </div>
+            </div>
             <div id="swarm-list" class="swarm-list"></div>
-            <div id="swarm-empty" class="empty-state" hidden>No swarms yet — run <code>onmc swarm plan</code> to launch a fleet of agents.</div>
+            <div id="swarm-empty" class="empty-state" hidden>No swarms match — run <code>onmc swarm plan</code> to launch a fleet of agents.</div>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>
@@ -210,6 +223,14 @@
         </div>
       </main>
     </div>
+    <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+    <aside id="unit-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+      <header class="drawer-head">
+        <div><span class="eyebrow" id="drawer-eyebrow">Agent unit</span><h3 id="drawer-title"></h3></div>
+        <button id="drawer-close" class="icon-button" type="button" aria-label="Close details">×</button>
+      </header>
+      <div id="drawer-body" class="drawer-body"></div>
+    </aside>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/assets/app.js" defer></script>
   </body>
