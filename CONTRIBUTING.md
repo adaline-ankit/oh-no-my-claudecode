@@ -117,15 +117,20 @@ used for validation and keep the diff scoped to the issue.
 
 ## Labels
 
-Maintainers use labels to route work:
+Maintainers use deterministic labels to route work. The GitHub triage workflow
+owns `priority/*`, `kind/*`, `size/*`, and `risk/*`; path labeler owns `area/*`.
 
 - `needs-triage`: new issue or PR needs maintainer classification
+- `priority/P0`: critical security, data loss, release breakage, or unusable core workflow
+- `priority/P1`: high-impact bug in a core agent workflow or CI gate
+- `priority/P2`: important but not release-blocking
+- `priority/P3`: backlog, cleanup, polish, or narrow improvement
+- `kind/bug`, `kind/feature`, `kind/docs`, `kind/ci`, `kind/security`, `kind/tests`: what type of work this is
+- `size/XS` through `size/XL`: approximate PR size from changed lines
+- `risk/high`, `risk/security`, `risk/migration`, `risk/agent-runtime`: extra maintainer attention needed
+- `area/agent-runtime`, `area/memory`, `area/mcp`, `area/setup`, `area/ci`, `area/docs`: codebase surface touched
 - `good first issue`: narrow, documented, and safe for new contributors
 - `help wanted`: maintainer wants outside implementation help
-- `agent-integration`: Claude Code, Codex, Cursor, MCP, or cloud-agent path
-- `memory-model`: extraction, provenance, ranking, or sync semantics
-- `security`: vulnerability, secret-handling, or trust-boundary concern
-- `ci`: GitHub Actions, release, packaging, or quality gate work
 
 ## Release Notes
 

@@ -1,6 +1,12 @@
 - name: needs-triage
   color: "fbca04"
   description: "Needs maintainer review and routing"
+- name: status/blocked
+  color: "b60205"
+  description: "Cannot proceed without maintainer input or external change"
+- name: status/ready
+  color: "0e8a16"
+  description: "Ready for maintainer review or merge consideration"
 - name: bug
   color: "d73a4a"
   description: "Something is broken or behaves incorrectly"
@@ -9,7 +15,7 @@
   description: "New capability or improvement"
 - name: documentation
   color: "0075ca"
-  description: "Docs, examples, README, or contributor guidance"
+  description: "Legacy docs label; new automation uses kind/docs and area/docs"
 - name: good first issue
   color: "7057ff"
   description: "Small, well-scoped issue suitable for new contributors"
@@ -43,6 +49,90 @@
 - name: security
   color: "b60205"
   description: "Security boundary, vulnerability, or secret-handling concern"
+- name: priority/P0
+  color: "b60205"
+  description: "Critical: security, data loss, release breakage, or unusable core workflow"
+- name: priority/P1
+  color: "d93f0b"
+  description: "High impact: core agent workflow or CI is broken for many users"
+- name: priority/P2
+  color: "fbca04"
+  description: "Important but not release-blocking"
+- name: priority/P3
+  color: "d4c5f9"
+  description: "Backlog, cleanup, polish, or narrow improvement"
+- name: kind/bug
+  color: "d73a4a"
+  description: "Bug fix, regression, broken behavior, or failing command"
+- name: kind/feature
+  color: "a2eeef"
+  description: "New user-facing capability or workflow"
+- name: kind/docs
+  color: "0075ca"
+  description: "Documentation-only or contributor guidance change"
+- name: kind/ci
+  color: "bfdadc"
+  description: "CI, GitHub Actions, release automation, packaging, or repo ops"
+- name: kind/security
+  color: "b60205"
+  description: "Security, trust policy, secret handling, or abuse-prevention work"
+- name: kind/refactor
+  color: "c5def5"
+  description: "Internal cleanup without intended behavior change"
+- name: kind/tests
+  color: "0e8a16"
+  description: "Test-only change or test coverage expansion"
+- name: kind/release
+  color: "5319e7"
+  description: "Versioning, changelog, release notes, or publishing flow"
+- name: kind/dependencies
+  color: "0366d6"
+  description: "Dependency, lockfile, or compatibility update"
+- name: area/agent-runtime
+  color: "5319e7"
+  description: "Swarm, loop, autopilot, no-mistakes, adapters, or executor behavior"
+- name: area/ci
+  color: "bfdadc"
+  description: "GitHub workflows, scripts, release automation, or quality gates"
+- name: area/docs
+  color: "0075ca"
+  description: "README, docs, templates, citation, or contributor guidance"
+- name: area/mcp
+  color: "0052cc"
+  description: "MCP server, tools, resources, trust policy, or client compatibility"
+- name: area/memory
+  color: "0e8a16"
+  description: "Memory extraction, storage, provenance, ranking, recall, or sync"
+- name: area/setup
+  color: "1d76db"
+  description: "Setup wizard, doctor, install, hooks, or local agent integration"
+- name: risk/high
+  color: "b60205"
+  description: "Large blast radius, release-sensitive, or core runtime change"
+- name: risk/security
+  color: "b60205"
+  description: "Touches trust boundaries, token handling, MCP policy, or security workflows"
+- name: risk/migration
+  color: "d93f0b"
+  description: "May affect persisted memory, schemas, config, or user data migration"
+- name: risk/agent-runtime
+  color: "5319e7"
+  description: "May affect agent spawning, loops, receipts, or autonomous execution"
+- name: size/XS
+  color: "c2e0c6"
+  description: "Tiny change: less than 20 changed lines"
+- name: size/S
+  color: "0e8a16"
+  description: "Small change: less than 100 changed lines"
+- name: size/M
+  color: "fbca04"
+  description: "Medium change: less than 400 changed lines"
+- name: size/L
+  color: "d93f0b"
+  description: "Large change: less than 1000 changed lines"
+- name: size/XL
+  color: "b60205"
+  description: "Very large change: 1000 or more changed lines"
 - name: question
   color: "d876e3"
   description: "Needs clarification or belongs in discussions"
