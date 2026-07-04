@@ -169,6 +169,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ membudget       Memory-budget guard: report store size, flag over-budget,    │
+│                 suggest consolidations.                                      │
 │ memguard        Memory-integrity firewall: scan memory entries for           │
 │                 adversarial content.                                         │
 │ memprovider     Manage and query external memory providers that augment      │
@@ -2462,6 +2464,62 @@ Usage: onmc mcp policy init [OPTIONS] [PATH]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc membudget`
+
+```text
+Usage: onmc membudget [OPTIONS] COMMAND [ARGS]...
+
+ Memory-budget guard: report store size, flag over-budget, suggest
+ consolidations.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ check  Report memory-store size and suggest consolidation actions.           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc membudget check`
+
+```text
+Usage: onmc membudget check [OPTIONS]
+
+ Report memory-store size and suggest consolidation actions.
+
+ Reads every memory entry and computes total UTF-8 byte size across
+ title + summary + details.  Flags when the total exceeds --limit (default
+ 256 KiB) and emits advisory suggestions:
+
+ \b
+ - DROP_STALE    — entries with staleness=stale/orphaned
+ - MERGE_DUPLICATES — near-duplicate pairs (≥55% token overlap, same kind)
+ - MOVE_TO_TOPIC — entries with details > 4 KiB (store a reference instead)
+
+ Advisory only — never deletes or mutates the store.
+
+ Examples:
+
+     onmc membudget check               # human-readable report
+
+     onmc membudget check --json        # JSON envelope for pipelines
+
+     onmc membudget check --limit 131072          # 128 KiB budget
+
+     onmc membudget check --fail-on-over          # exit 1 when over budget
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                       Emit a JSON envelope {"kind": "membudget",      │
+│                              "report": {...}} for pipeline composition.      │
+│ --limit               BYTES  Budget ceiling in bytes (default: 262144 = 256  │
+│                              KiB).                                           │
+│                              [default: 262144]                               │
+│ --fail-on-over               Exit 1 when the store is over budget (useful in │
+│                              CI).                                            │
+│ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
