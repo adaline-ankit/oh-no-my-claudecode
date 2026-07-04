@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.release import ReleaseDraft
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
+    from oh_no_my_claudecode.reuse.astgrep import StructuralMatch
     from oh_no_my_claudecode.reuse.radar import ReuseHit
     from oh_no_my_claudecode.savings.compiler import SavingsResult
     from oh_no_my_claudecode.spec.validator import SpecValidationReport
@@ -3277,7 +3278,13 @@ class OnmcService:
         result = compile_recall(storage, query, limit=limit)
         return repo_root, result
 
-    def reuse_find(self, query: str, *, limit: int = 8) -> tuple[Path, list[ReuseHit]]:
+    def reuse_find(
+        self,
+        query: str,
+        *,
+        limit: int = 8,
+        ast_grep: bool = False,
+    ) -> tuple[Path, list[ReuseHit], list[StructuralMatch]]:
         """Surface existing code that already does what *query* describes.
 
         Indexes the repo via stdlib ``ast`` and ranks top-level functions and
@@ -3285,14 +3292,42 @@ class OnmcService:
         Entirely offline and deterministic — no LLM calls, no network — so an
         agent can check "does this already exist?" before reimplementing it.
 
-        Returns ``(repo_root, hits)`` where *hits* is a ranked list of
-        ``ReuseHit`` (may be empty when nothing relevant is found).
+        Parameters
+        ----------
+        query:
+            A description of the desired behaviour, or an existing symbol name.
+        limit:
+            Maximum number of text-based :class:`ReuseHit` objects to return.
+        ast_grep:
+            Opt in to structural (AST-level) matching via the ``ast-grep`` or
+            ``sg`` binary.  Only takes effect when the binary is on ``PATH``
+            (detected with :func:`~oh_no_my_claudecode.reuse.astgrep.ast_grep_available`);
+            otherwise the structural result is an empty list and text-only
+            behaviour is completely unchanged (zero regression).
+
+        Returns
+        -------
+        tuple[Path, list[ReuseHit], list[StructuralMatch]]
+            ``(repo_root, text_hits, structural_hits)`` where *text_hits* is a
+            ranked list of token-based matches and *structural_hits* is a
+            (possibly empty) list of AST-pattern matches from ast-grep.
         """
+        from oh_no_my_claudecode.reuse.astgrep import (
+            ast_grep_available,
+            find_reuse_structural,
+            make_ast_grep_runner,
+        )
         from oh_no_my_claudecode.reuse.radar import find_reuse
 
         repo_root = discover_repo_root(self.cwd)
         hits = find_reuse(repo_root, query, limit=limit)
-        return repo_root, hits
+
+        structural_hits: list[StructuralMatch] = []
+        if ast_grep and ast_grep_available():
+            runner = make_ast_grep_runner(repo_root)
+            structural_hits = find_reuse_structural(repo_root, query, runner=runner)
+
+        return repo_root, hits, structural_hits
 
     def ask(
         self,
@@ -3351,7 +3386,7 @@ class OnmcService:
                 storage.upsert_memory_edge(edge)
         return repo_root, result
 
-    def audit(self, *, repo_root: Path | None = None) -> AuditReport:
+    def audit(self, *, repo_root: Path | None = None, semgrep: bool = False) -> AuditReport:
         """Run the agent-configuration security scanner against the repo.
 
         This is entirely offline — no LLM calls, no network access.  Results
@@ -3364,6 +3399,13 @@ class OnmcService:
             Explicit repo root to scan.  When ``None``, discovered from
             ``self.cwd``.  This lets callers scan a path that has not been
             initialised with ``onmc init``.
+        semgrep:
+            Opt in to an additional semgrep static-analysis pass.  Only takes
+            effect when the ``semgrep`` binary is on ``PATH`` (detected with
+            :func:`~oh_no_my_claudecode.audit.semgrep.semgrep_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — semgrep is an external
+            tool.
 
         Returns
         -------
@@ -3372,13 +3414,22 @@ class OnmcService:
         """
         from oh_no_my_claudecode.audit.scanner import AuditReport as _AuditReport
         from oh_no_my_claudecode.audit.scanner import run_audit
+        from oh_no_my_claudecode.audit.semgrep import (
+            make_semgrep_runner,
+            semgrep_available,
+        )
 
         if repo_root is None:
             try:
                 repo_root = discover_repo_root(self.cwd)
             except FileNotFoundError:
                 repo_root = self.cwd
-        result: _AuditReport = run_audit(repo_root)
+
+        semgrep_runner = None
+        if semgrep and semgrep_available():
+            semgrep_runner = make_semgrep_runner()
+
+        result: _AuditReport = run_audit(repo_root, semgrep_runner=semgrep_runner)
         return result
 
     def verify_diff(

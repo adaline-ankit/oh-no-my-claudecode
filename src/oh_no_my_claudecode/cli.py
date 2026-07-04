@@ -1264,6 +1264,17 @@ def reuse_command(
         bool,
         typer.Option("--json", help="Emit the ranked hits as JSON instead of a table."),
     ] = False,
+    use_ast_grep: Annotated[
+        bool,
+        typer.Option(
+            "--ast-grep/--no-ast-grep",
+            help=(
+                "Use ast-grep (the 'ast-grep' or 'sg' binary) for structural/AST-pattern"
+                " matching in addition to the text heuristic.  No-op when neither binary"
+                " is on PATH (falls back to text-only, zero regression)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Surface existing code that already does a thing — reuse before reimplementing.
 
@@ -1271,25 +1282,43 @@ def reuse_command(
     how well their name, docstring, and argument names match your query.
     Entirely offline and deterministic — no LLM, no network.
 
+    With ``--ast-grep`` (and the ``ast-grep``/``sg`` binary installed), also runs
+    structural AST-pattern matching that catches structurally-similar code even
+    when variable names differ.
+
     Examples:
 
       onmc reuse "tokenize text into words"
 
       onmc reuse tokenize --json
+
+      onmc reuse "def $F($$$ARGS):" --ast-grep
     """
     try:
-        _, hits = _service().reuse_find(query, limit=limit)
+        _, hits, structural_hits = _service().reuse_find(query, limit=limit, ast_grep=use_ast_grep)
     except RepoDiscoveryError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:
         import dataclasses
 
-        payload = [dataclasses.asdict(hit) for hit in hits]
+        payload: dict[str, object] = {
+            "hits": [dataclasses.asdict(hit) for hit in hits],
+            "structural": [dataclasses.asdict(m) for m in structural_hits],
+        }
         console.print(json.dumps(payload, indent=2), markup=False)
         return
 
     render_reuse_hits(hits, query)
+    if structural_hits:
+        console.print(
+            f"\n[bold]Structural matches (ast-grep)[/bold]: {len(structural_hits)} found",
+            markup=True,
+        )
+        for match in structural_hits:
+            loc = f"{match.file}:{match.line_start}-{match.line_end}"
+            snippet = repr(match.text[:80])
+            console.print(f"  [cyan]{loc}[/cyan]  {snippet}", markup=True)
 
 
 @app.command("ask")
@@ -2511,6 +2540,18 @@ def audit_command(
             ),
         ),
     ] = "high",
+    use_semgrep: Annotated[
+        bool,
+        typer.Option(
+            "--semgrep/--no-semgrep",
+            help=(
+                "Also run semgrep static analysis and fold its findings into the "
+                "report.  Requires the 'semgrep' binary on PATH.  When the binary "
+                "is absent this flag is silently ignored — no pip dependency is "
+                "added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2536,7 +2577,7 @@ def audit_command(
 
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root)
+    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep)
 
     if as_json:
         import dataclasses
