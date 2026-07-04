@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.72.0] — 2026-07-04
+
+### Added
+
+- **`onmc autoroute` — apply flywheel's best-model recommendations per goal** — closes the self-improvement loop: `flywheel` *learns* which model wins for which kind of goal (from verified receipts), and `autoroute suggest <goal>` *applies* it — returning the recommended model, rationale, confidence, and basis (goal-keyword match → overall best → default fallback on insufficient data). Honest: confidence 0 and an explicit "insufficient data" basis when there isn't enough verified history. Pure/offline, reuses `flywheel`, `--json`. Now a swarm/loop can auto-select the historically-best model instead of a fixed default.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#213) — onmc building onmc.
+
 ## [0.71.0] — 2026-07-04
 
 ### Added
