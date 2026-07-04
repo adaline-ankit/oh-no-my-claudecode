@@ -2533,6 +2533,18 @@ def audit_command(
             ),
         ),
     ] = "high",
+    use_semgrep: Annotated[
+        bool,
+        typer.Option(
+            "--semgrep/--no-semgrep",
+            help=(
+                "Also run semgrep static analysis and fold its findings into the "
+                "report.  Requires the 'semgrep' binary on PATH.  When the binary "
+                "is absent this flag is silently ignored — no pip dependency is "
+                "added.  Default: off."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Scan agent configuration for security risks and emit a scored report.
 
@@ -2558,7 +2570,7 @@ def audit_command(
 
     repo_root: Path = path.resolve() if path is not None else Path.cwd()
 
-    report = _service().audit(repo_root=repo_root)
+    report = _service().audit(repo_root=repo_root, semgrep=use_semgrep)
 
     if as_json:
         import dataclasses
