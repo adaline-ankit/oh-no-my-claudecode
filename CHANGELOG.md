@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.70.0] — 2026-07-04
+
+### Added
+
+- **`onmc crossrepo` — cross-repo impact map + federated recall** — the multi-repo super-agent frontier: given N sibling repo paths, `crossrepo scan` builds the ripple surface (top-level modules shared across repos, so a change in repo A that would ripple into repo B is visible), and `crossrepo recall <query>` runs a unified federated memory search across the repos' `.agent-memory/` exports, attributing every hit to its source repo. Pure/deterministic/offline, reuses the federation exporter schema, `--json`. Multi-repo understanding is explicitly unsolved at the agent layer — this is onmc's wedge.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#209) — onmc building onmc.
+
 ## [0.69.0] — 2026-07-04
 
 ### Added
