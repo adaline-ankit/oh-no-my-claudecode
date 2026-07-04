@@ -109,6 +109,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 agent/model/strategy/gate.                                   │
 │ sbom            Generate a CycloneDX 1.5 SBOM of this project's              │
 │                 dependencies.                                                │
+│ scorecard       One shareable agent-readiness + trust scorecard for this     │
+│                 repo.                                                        │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
 │                 wrap``.                                                      │
@@ -3601,6 +3603,26 @@ Usage: onmc sbom [OPTIONS]
 │ --json              Wrap the CycloneDX document in an onmc JSON envelope     │
 │                     {"kind": "sbom", "sbom": {...}} for pipeline             │
 │                     composition.                                             │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc scorecard`
+
+```text
+Usage: onmc scorecard [OPTIONS]
+
+ One shareable agent-readiness + trust scorecard for this repo.
+
+ Aggregates four onmc signals — agent-readiness (roast), top-agent trust
+ (registry), best-verified model (flywheel), and institutional-memory
+ coverage (orggraph) — into a single card. Deterministic and offline. Any
+ unavailable signal degrades to "n/a" with a note; the command always
+ exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit the scorecard as a JSON object.                     │
+│ --markdown          Emit the shareable Markdown scorecard block.             │
 │ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
