@@ -153,6 +153,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 interface spec.                                              │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ orggraph        Institutional-memory knowledge graph — entities, typed       │
+│                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
 │ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
 │                 server, no dep).                                             │
@@ -2637,6 +2639,72 @@ Usage: onmc onboard [OPTIONS]
 │ --steps          Print all tour stops at once and exit (non-interactive).    │
 │                  Suitable for piping, CI, and tests.                         │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc orggraph`
+
+```text
+Usage: onmc orggraph [OPTIONS] COMMAND [ARGS]...
+
+ Institutional-memory knowledge graph — entities, typed edges, lineage.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ build  Build the knowledge graph from stored memories and summarise it.      │
+│ query  Show an entity's neighbours and the provenance (memory ids) behind    │
+│        it.                                                                   │
+│ why    Explain a decision: the ordered chain of edges/memories behind it.    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc orggraph build`
+
+```text
+Usage: onmc orggraph build [OPTIONS]
+
+ Build the knowledge graph from stored memories and summarise it.
+
+ Deterministic and offline: same brain → same graph. Prints entity/edge
+ counts, a per-relation breakdown, and the most-connected entities.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the graph summary as JSON.                              │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc orggraph query`
+
+```text
+Usage: onmc orggraph query [OPTIONS] ENTITY
+
+ Show an entity's neighbours and the provenance (memory ids) behind it.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    entity      TEXT  Entity name to inspect. [required]                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the query result as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc orggraph why`
+
+```text
+Usage: onmc orggraph why [OPTIONS] DECISION
+
+ Explain a decision: the ordered chain of edges/memories behind it.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    decision      TEXT  Decision entity name. [required]                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the lineage as JSON.                                    │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
