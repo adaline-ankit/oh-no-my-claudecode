@@ -1,13 +1,22 @@
 """Deterministic, offline builder for the structural repo code graph.
 
 Walks every ``*.py`` file under a repo root using the standard-library
-:mod:`ast` module (no tree-sitter, no third-party parsers) and assembles a
+:mod:`ast` module (no third-party parsers required) and assembles a
 :class:`~oh_no_my_claudecode.codegraph.models.CodeGraph`:
 
 - top-level ``def`` / ``async def`` / ``class`` symbols per file,
 - in-repo import edges (resolved from ``import`` / ``from ... import``),
 - the reverse blast radius (which files depend on each module), and
 - a test-file → source-file mapping derived from test imports.
+
+**Optional multi-language reach.**  When the optional ``tree-sitter`` extra is
+installed (``pip install oh-no-my-claudecode[treesitter]``), the builder *also*
+indexes JavaScript, TypeScript, Go, Rust, and Java files via
+:mod:`~oh_no_my_claudecode.codegraph.treesitter_ext`, mapping their top-level
+symbols onto the same :class:`~oh_no_my_claudecode.codegraph.models.Symbol`
+model and resolving JS/TS relative import edges.  When tree-sitter is **not**
+installed, the builder behaves exactly as the pure-Python path did — only
+``*.py`` files are discovered and indexed (zero regression).
 
 Everything is bounded and deterministic: files are visited in sorted order,
 ``.venv`` / ``.git`` / ``__pycache__`` and friends are skipped, and unparsable
@@ -18,14 +27,17 @@ from __future__ import annotations
 
 import ast
 import os
+from collections.abc import Callable
 from pathlib import Path
 
+from oh_no_my_claudecode.codegraph import treesitter_ext
 from oh_no_my_claudecode.codegraph.models import (
     CodeGraph,
     ContextSelection,
     GraphNode,
     Neighbors,
     Symbol,
+    SymbolKind,
 )
 from oh_no_my_claudecode.core.repo import is_test_path, relative_path
 from oh_no_my_claudecode.utils.text import tokenize, unique_preserve
@@ -57,7 +69,12 @@ _DEFAULT_CONTEXT_BUDGET = 8
 
 
 def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGraph:
-    """Build a :class:`CodeGraph` for the Python files under *repo_root*.
+    """Build a :class:`CodeGraph` for the source files under *repo_root*.
+
+    Always indexes ``*.py`` files via :mod:`ast`.  When the optional
+    ``tree-sitter`` extra is installed, *also* indexes JS/TS/Go/Rust/Java files;
+    when it is not, only ``*.py`` files are discovered — identical to the
+    original pure-Python behaviour.
 
     Pure read — walks the filesystem, never writes.  Deterministic: the same
     tree always yields the same graph (sorted traversal, sorted edges).
@@ -67,36 +84,49 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
     repo_root:
         Absolute path to the repository root.
     max_files:
-        Hard cap on the number of Python files indexed (defaults to 5000).
+        Hard cap on the number of source files indexed (defaults to 5000).
     """
     repo_root = repo_root.resolve()
-    py_files = _discover_python_files(repo_root, max_files=max_files)
+    source_files = _discover_source_files(repo_root, max_files=max_files)
 
     # First pass: parse each file into a node + build a module→path index so
-    # imports can be resolved to in-repo files.
+    # Python imports can be resolved to in-repo files.
     nodes: dict[str, GraphNode] = {}
     module_index: dict[str, str] = {}
-    for rel_path in py_files:
+    for rel_path in source_files:
         node = _parse_file(repo_root / rel_path, rel_path)
         nodes[rel_path] = node
-        for module_name in _module_names_for(rel_path):
-            # First definition wins for a given module name (deterministic via
-            # sorted py_files), keeping resolution stable.
-            module_index.setdefault(module_name, rel_path)
+        if _is_python(rel_path):
+            for module_name in _module_names_for(rel_path):
+                # First definition wins for a given module name (deterministic
+                # via sorted files), keeping resolution stable.
+                module_index.setdefault(module_name, rel_path)
 
-    # Second pass: resolve raw import names to in-repo file paths.
-    dependents: dict[str, set[str]] = {rel_path: set() for rel_path in py_files}
+    # Second pass: resolve imports to in-repo file paths.  Python uses the
+    # module index; JS/TS uses relative-specifier resolution (tree-sitter).
+    indexed = set(source_files)
+    dependents: dict[str, set[str]] = {rel_path: set() for rel_path in source_files}
     file_tests: dict[str, set[str]] = {}
-    for rel_path in py_files:
+    for rel_path in source_files:
         node = nodes[rel_path]
-        raw_imports = _raw_imports(repo_root / rel_path, rel_path)
-        resolved = sorted(
-            {
-                target
-                for raw in raw_imports
-                if (target := module_index.get(raw)) is not None and target != rel_path
-            }
-        )
+        if _is_python(rel_path):
+            raw_imports = _raw_imports(repo_root / rel_path, rel_path)
+            resolved = sorted(
+                {
+                    target
+                    for raw in raw_imports
+                    if (target := module_index.get(raw)) is not None and target != rel_path
+                }
+            )
+        else:
+            source = _read_bytes(repo_root / rel_path)
+            resolved = sorted(
+                {
+                    target
+                    for target in treesitter_ext.extract_import_targets(rel_path, source)
+                    if target in indexed and target != rel_path
+                }
+            )
         node.imports = resolved
         for target in resolved:
             dependents[target].add(rel_path)
@@ -106,7 +136,7 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
     # Flatten symbols + name index in deterministic order.
     symbols: list[Symbol] = []
     symbols_by_name: dict[str, list[str]] = {}
-    for rel_path in py_files:
+    for rel_path in source_files:
         for symbol in nodes[rel_path].symbols:
             symbols.append(symbol)
             symbols_by_name.setdefault(symbol.name, [])
@@ -119,7 +149,7 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
         symbols_by_name=symbols_by_name,
         dependents={path: sorted(deps) for path, deps in sorted(dependents.items())},
         file_tests={path: sorted(tests) for path, tests in sorted(file_tests.items())},
-        file_count=len(py_files),
+        file_count=len(source_files),
     )
 
 
@@ -229,8 +259,30 @@ def context_files(
 # ---------------------------------------------------------------------------
 
 
-def _discover_python_files(repo_root: Path, *, max_files: int) -> list[str]:
-    """Return sorted repo-relative paths of all indexable ``*.py`` files."""
+def _indexable_extensions() -> frozenset[str]:
+    """Return the file extensions the builder should discover.
+
+    Always ``.py``; plus the tree-sitter languages when that optional extra is
+    installed.  When tree-sitter is absent this is exactly ``{".py"}`` — the
+    original behaviour, zero regression.
+    """
+    if treesitter_ext.treesitter_available():
+        return frozenset({".py"}) | treesitter_ext.supported_extensions()
+    return frozenset({".py"})
+
+
+def _is_python(rel_path: str) -> bool:
+    """Return whether *rel_path* is a Python source file."""
+    return rel_path.endswith(".py")
+
+
+def _discover_source_files(repo_root: Path, *, max_files: int) -> list[str]:
+    """Return sorted repo-relative paths of all indexable source files.
+
+    Includes ``*.py`` always, and the tree-sitter-supported extensions when
+    that optional extra is installed.
+    """
+    extensions = _indexable_extensions()
     found: list[str] = []
     for current_root, dirnames, filenames in os.walk(repo_root):
         dirnames[:] = sorted(
@@ -239,7 +291,7 @@ def _discover_python_files(repo_root: Path, *, max_files: int) -> list[str]:
             if name not in _EXCLUDE_DIRS and not name.startswith(".git")
         )
         for filename in sorted(filenames):
-            if not filename.endswith(".py"):
+            if Path(filename).suffix.lower() not in extensions:
                 continue
             file_path = Path(current_root) / filename
             if file_path.is_symlink():
@@ -259,22 +311,52 @@ def _discover_python_files(repo_root: Path, *, max_files: int) -> list[str]:
 def _parse_file(file_path: Path, rel_path: str) -> GraphNode:
     """Parse one file into a :class:`GraphNode` of top-level symbols.
 
-    Unreadable or unparsable files yield an empty node — never raises.
+    Python files go through :mod:`ast`; other supported extensions go through
+    the optional tree-sitter path.  Unreadable or unparsable files yield an
+    empty node — never raises.
     """
     node = GraphNode(file=rel_path, is_test=is_test_path(rel_path))
-    tree = _safe_parse(file_path)
-    if tree is None:
+    if _is_python(rel_path):
+        tree = _safe_parse(file_path)
+        if tree is None:
+            return node
+        for stmt in tree.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                node.symbols.append(
+                    Symbol(name=stmt.name, kind="func", file=rel_path, lineno=stmt.lineno)
+                )
+            elif isinstance(stmt, ast.ClassDef):
+                node.symbols.append(
+                    Symbol(name=stmt.name, kind="class", file=rel_path, lineno=stmt.lineno)
+                )
         return node
-    for stmt in tree.body:
-        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            node.symbols.append(
-                Symbol(name=stmt.name, kind="func", file=rel_path, lineno=stmt.lineno)
-            )
-        elif isinstance(stmt, ast.ClassDef):
-            node.symbols.append(
-                Symbol(name=stmt.name, kind="class", file=rel_path, lineno=stmt.lineno)
-            )
+
+    # Non-Python: tree-sitter path (only reached when the extra is installed,
+    # since otherwise these extensions are never discovered).
+    source = _read_bytes(file_path)
+    if not source:
+        return node
+    node.symbols.extend(
+        treesitter_ext.extract_symbols(rel_path, source, make_symbol=_make_symbol_for(rel_path))
+    )
     return node
+
+
+def _make_symbol_for(rel_path: str) -> Callable[[str, SymbolKind, int], Symbol]:
+    """Return a ``(name, kind, lineno) -> Symbol`` factory bound to *rel_path*."""
+
+    def _make(name: str, kind: SymbolKind, lineno: int) -> Symbol:
+        return Symbol(name=name, kind=kind, file=rel_path, lineno=lineno)
+
+    return _make
+
+
+def _read_bytes(file_path: Path) -> bytes:
+    """Read *file_path* as bytes, returning empty bytes on any failure."""
+    try:
+        return file_path.read_bytes()
+    except OSError:
+        return b""
 
 
 def _raw_imports(file_path: Path, rel_path: str) -> list[str]:
