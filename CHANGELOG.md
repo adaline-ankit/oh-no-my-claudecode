@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.69.0] — 2026-07-04
+
+### Added
+
+- **Optional osv-scanner dependency-vulnerability scan in `onmc audit`** — the missing third scan type (semgrep=SAST, gitleaks=secrets, **osv=dependency CVEs**). With `--osv` (default off) and the `osv-scanner` binary on PATH, audit runs OSV against the project and folds CVE findings into the report/score (HIGH −15, CRITICAL −25). `shutil.which` detection (no pip dep), injectable runner, unchanged when absent. Completes the supply-chain story alongside `onmc sbom`.
+- **Optional fastembed cross-encoder reranker** — a real ONNX cross-encoder reranks recall candidates when the `fastembed` extra is installed and `ONMC_RERANKER=fastembed` is set; falls back silently to the existing cosine-blend heuristic otherwise (zero regression). Mirrors the `ONMC_EMBEDDER=fastembed` bi-encoder pattern.
+- **`onmc wiki site [--out DIR] [--json]`** — exports memory as a self-contained, browsable static HTML site (index grouped by kind + one page per memory with resolved edge links), openable in any browser with no external app. Pure stdlib, inline CSS, deterministic — a distinct consumption model from the logseq/foam/obsidian vault exporters.
+
+All three are optional / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#204, #205, #206).
+
 ## [0.68.0] — 2026-07-04
 
 ### Added
