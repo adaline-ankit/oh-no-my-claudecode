@@ -78,6 +78,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         "loops": _loops_payload(service),
         "swarms": _swarms_payload(Path(status["repo_root"])),
         "performance": _performance_payload(Path(status["repo_root"])),
+        "scorecard": _scorecard_payload(Path(status["repo_root"])),
     }
 
 
@@ -315,6 +316,23 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
         }
     except Exception:  # noqa: BLE001
         return empty
+
+
+def _scorecard_payload(repo_root: Path) -> dict[str, Any]:
+    """The shareable agent-readiness + trust scorecard (roast/registry/flywheel/orggraph).
+
+    Reuses ``scorecard.build_scorecard`` (each signal degrades to ``None`` with a
+    note). Returns the scorecard dict plus its shareable markdown. Never 500s.
+    """
+    try:
+        from oh_no_my_claudecode.scorecard import build_scorecard, render_markdown
+
+        card = build_scorecard(repo_root)
+        payload = card.to_dict()
+        payload["markdown"] = render_markdown(card)
+        return payload
+    except Exception:  # noqa: BLE001
+        return {"readiness": None, "notes": [], "markdown": ""}
 
 
 def _performance_payload(repo_root: Path) -> dict[str, Any]:

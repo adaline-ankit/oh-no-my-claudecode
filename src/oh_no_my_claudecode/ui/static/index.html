@@ -26,6 +26,9 @@
           <button class="nav-item" data-view="performance">
             <span class="nav-icon" aria-hidden="true">▤</span><span>Performance</span>
           </button>
+          <button class="nav-item" data-view="scorecard">
+            <span class="nav-icon" aria-hidden="true">◈</span><span>Scorecard</span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
           </button>
@@ -157,6 +160,21 @@
               <ul id="perf-recs" class="recs-list"></ul>
             </section>
             <div id="perf-empty" class="empty-state" hidden>No run receipts yet — performance appears once agents record verified runs.</div>
+          </section>
+
+          <section id="view-scorecard" class="view" data-view-panel="scorecard" aria-labelledby="scorecard-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Agent readiness + trust</span><h2 id="scorecard-title">Scorecard</h2></div>
+              <button id="copy-scorecard" class="button" type="button">Copy markdown</button>
+            </div>
+            <section class="panel scorecard-hero">
+              <div class="score-ring" id="score-ring"><div class="score-ring-inner"><strong id="score-num">–</strong><span class="score-denom">/100</span></div></div>
+              <div class="scorecard-tiles metric-grid" id="scorecard-tiles"></div>
+            </section>
+            <section class="panel" id="scorecard-notes-panel">
+              <div class="panel-heading"><h3>Notes</h3><span>unavailable signals</span></div>
+              <ul id="scorecard-notes" class="recs-list"></ul>
+            </section>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>

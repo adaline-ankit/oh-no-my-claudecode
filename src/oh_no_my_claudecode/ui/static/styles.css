@@ -583,6 +583,15 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 @keyframes onmc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes onmc-spin { to { transform: rotate(360deg); } }
 
+/* Scorecard view */
+.scorecard-hero { display: flex; align-items: center; gap: 28px; padding: 22px; flex-wrap: wrap; }
+.score-ring { flex: none; width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#c3ccc7 0deg, #e8ecea 0deg); }
+.score-ring-inner { width: 104px; height: 104px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; align-content: center; gap: 0; }
+.score-ring-inner strong { font-size: 38px; font-weight: 750; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.score-denom { color: var(--faint); font-size: 12px; margin-top: 2px; }
+.scorecard-tiles { flex: 1; min-width: 300px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 720px) { .scorecard-tiles { grid-template-columns: repeat(1, minmax(0, 1fr)); } }
+
 /* Performance view */
 .perf-panel, .recs-panel { margin-top: 16px; }
 #perf-metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
