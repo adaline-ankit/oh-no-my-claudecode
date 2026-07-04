@@ -55,6 +55,12 @@ treesitter = [
 sqlitevec = [
   "sqlite-vec>=0.1.0",
 ]
+# Optional local ONNX embedder via fastembed (CPU, no API key, no network at
+# inference time).  Absent by default — the hash-ngram embedder is used instead.
+# Select at runtime with ONMC_EMBEDDER=fastembed.
+fastembed = [
+  "fastembed>=0.3",
+]
 # Optional unified multi-provider LLM backend.  Absent by default — the built-in
 # Anthropic/OpenAI/Ollama providers work without it; the `litellm` provider
 # reports itself unavailable gracefully until this extra is installed.
@@ -121,4 +127,9 @@ ignore_missing_imports = true
 # Optional tree-sitter parsers are dynamic C extensions without type stubs.
 [[tool.mypy.overrides]]
 module = ["tree_sitter", "tree_sitter_language_pack"]
+ignore_missing_imports = true
+
+# Optional fastembed ONNX embedder — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["fastembed"]
 ignore_missing_imports = true
