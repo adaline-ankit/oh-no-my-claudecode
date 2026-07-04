@@ -2947,15 +2947,23 @@ Usage: onmc release [OPTIONS]
  Classifies commit subjects since the last tag into a semver bump (feat ->
  minor, fix -> patch, "!"/BREAKING -> major, otherwise patch), computes the
  next version, and renders a CHANGELOG entry in the repo's format.
- Deterministic and offline. Dry-run by default — pass --write to bump
- pyproject.toml and prepend the entry to CHANGELOG.md. Never tags or pushes.
+ Deterministic and offline. When the external git-cliff binary is installed
+ it renders the CHANGELOG entry (best-in-class); otherwise the built-in
+ renderer is used — pass --no-git-cliff to force the built-in one. Dry-run by
+ default — pass --write to bump pyproject.toml and prepend the entry to
+ CHANGELOG.md. Never tags or pushes.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --write    --dry-run      Edit pyproject.toml + CHANGELOG.md (default:       │
-│                           dry-run).                                          │
-│                           [default: dry-run]                                 │
-│ --json                    Emit the drafted release as JSON.                  │
-│ --help                    Show this message and exit.                        │
+│ --write        --dry-run           Edit pyproject.toml + CHANGELOG.md        │
+│                                    (default: dry-run).                       │
+│                                    [default: dry-run]                        │
+│ --json                             Emit the drafted release as JSON.         │
+│ --git-cliff    --no-git-cliff      Use git-cliff to render the CHANGELOG     │
+│                                    when its binary is on PATH (default: on;  │
+│                                    falls back to the built-in renderer when  │
+│                                    absent).                                  │
+│                                    [default: git-cliff]                      │
+│ --help                             Show this message and exit.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
