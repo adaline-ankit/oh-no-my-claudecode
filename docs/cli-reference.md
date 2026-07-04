@@ -155,6 +155,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 signed attestation.                                          │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
+│ crossrepo       Cross-repo brain: impact map + federated memory recall       │
+│                 across sibling repos.                                        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
@@ -1137,6 +1139,68 @@ Usage: onmc coverage [OPTIONS]
 │                    already exist. Implies --suggest. Idempotent: re-running  │
 │                    skips stubs that already exist.                           │
 │ --help             Show this message and exit.                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crossrepo`
+
+```text
+Usage: onmc crossrepo [OPTIONS] COMMAND [ARGS]...
+
+ Cross-repo brain: impact map + federated memory recall across sibling repos.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ scan    Map where a change in one repo ripples into its siblings.            │
+│ recall  Search every repo's ``.agent-memory/`` export for a query,           │
+│         attributed by repo.                                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crossrepo recall`
+
+```text
+Usage: onmc crossrepo recall [OPTIONS] QUERY [PATHS]...
+
+ Search every repo's ``.agent-memory/`` export for a query, attributed by repo.
+
+ Loads each repo's memory export (skipping repos without one), ranks hits by
+ deterministic token overlap, and reports the best matches with their source
+ repo. Pass repos via ``--repo`` (repeatable) and/or positional paths.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query           TEXT  Search query for federated memory recall.         │
+│                            [required]                                        │
+│      [paths]...      TEXT  Additional repo paths to search (positional).     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --repo  -r      TEXT  Repo path to search (repeatable).                      │
+│ --json                Emit recall hits as JSON.                              │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crossrepo scan`
+
+```text
+Usage: onmc crossrepo scan [OPTIONS] PATHS...
+
+ Map where a change in one repo ripples into its siblings.
+
+ Scans each repo's top-level module/package names and reports the modules
+ shared across two or more repos — the ripple surface. Deterministic and
+ offline: same repos always yield the same map.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    paths...      TEXT  Sibling repo paths to scan for the cross-repo       │
+│                          impact map.                                         │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the impact map as JSON.                                 │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
