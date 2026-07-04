@@ -206,3 +206,20 @@ def test_deterministic_output() -> None:
     assert [(e.src, e.dst, e.rel, e.memory_ids) for e in g1.edges] == [
         (e.src, e.dst, e.rel, e.memory_ids) for e in g2.edges
     ]
+
+
+def test_pr_ref_extracts_author() -> None:
+    # The documented ``github:pr/123/ankit`` source-ref form must yield a person
+    # entity (Sourcery: parsing previously did not match the documented example).
+    graph = build_org_graph(
+        [
+            _mem(
+                "p1",
+                MemoryKind.DECISION,
+                "Ship the thing",
+                source_ref="github:pr/123/ankit",
+            )
+        ]
+    )
+    people = {e.name for e in graph.entities if e.kind == KIND_PERSON}
+    assert "ankit" in people

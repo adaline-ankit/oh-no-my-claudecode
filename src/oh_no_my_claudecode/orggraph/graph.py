@@ -57,19 +57,28 @@ __all__ = [
 ]
 
 # A path-ish token, e.g. ``src/foo/bar.py`` — mirrors the mission detector.
-_PATH_TOKEN = re.compile(r"[\w./-]*[\w-]/[\w./-]+")
+# Written as ``/``-separated segments with non-overlapping quantifiers so it is
+# linear-time (no catastrophic backtracking on adversarial input).
+_PATH_TOKEN = re.compile(r"[\w.-]+(?:/[\w.-]+)+")
 
 # A component / module identifier: CamelCase, snake_case, or dotted names that
-# are clearly code symbols (>= 3 chars, contains an upper-case letter, an
-# underscore, or a dot separating word chars).
+# are clearly code symbols. Each alternative uses non-overlapping runs (a run
+# never starts with a char its predecessor could also consume) so the regex is
+# linear-time — CamelCase runs after the first capital are lower/digit only.
 _COMPONENT_TOKEN = re.compile(
-    r"\b(?:[A-Z][A-Za-z0-9]*(?:[A-Z][A-Za-z0-9]*)+"  # CamelCase
+    r"\b(?:[A-Za-z][a-z0-9]*(?:[A-Z][a-z0-9]*)+"  # CamelCase (incl. acronym prefix)
     r"|[a-z0-9]+(?:_[a-z0-9]+)+"  # snake_case
-    r"|[A-Za-z][\w]*(?:\.[A-Za-z][\w]*)+)\b"  # dotted.name
+    r"|[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)+)\b"  # dotted.name
 )
 
 # Author markers in tags, e.g. ``author:ankit`` / ``by:codex`` / ``owner:sam``.
 _AUTHOR_TAG = re.compile(r"^(?:author|by|owner|reviewer)[:=](.+)$", re.IGNORECASE)
+
+# Author embedded in a source_ref: an explicit ``author=x`` / ``by:x`` marker
+# anywhere in the ref, or the trailing name of a ``…pr/<n>/<author>`` ref
+# (e.g. ``github:pr/123/ankit`` → ``ankit``).
+_REF_AUTHOR = re.compile(r"(?:author|by|owner|reviewer)[:=]([\w.-]+)", re.IGNORECASE)
+_REF_PR_AUTHOR = re.compile(r"\bpr/\d+/([\w.-]+)", re.IGNORECASE)
 
 # Entity kind labels (stable, lower-case).
 KIND_FILE = "file"
@@ -141,11 +150,10 @@ class _Accumulator:
     def __init__(self) -> None:
         # name -> (kind, ordered-unique memory ids)
         self._entities: dict[str, tuple[str, list[str]]] = {}
-        # (src, dst, rel) -> ordered-unique memory ids
+        # (src, dst, rel) -> ordered-unique memory ids.
+        # Both dicts preserve first-seen insertion order (Python 3.7+), which is
+        # the stable tie-break ``build`` relies on — no separate order list.
         self._edges: dict[tuple[str, str, str], list[str]] = {}
-        # insertion order for deterministic-but-stable first-seen tie-breaks
-        self._entity_order: list[str] = []
-        self._edge_order: list[tuple[str, str, str]] = []
 
     def add_entity(self, name: str, kind: str, memory_id: str) -> None:
         name = name.strip()
@@ -154,7 +162,6 @@ class _Accumulator:
         existing = self._entities.get(name)
         if existing is None:
             self._entities[name] = (kind, [memory_id])
-            self._entity_order.append(name)
             return
         prev_kind, ids = existing
         # Prefer the more specific kind if a later mention upgrades a generic one.
@@ -171,7 +178,6 @@ class _Accumulator:
         ids = self._edges.get(key)
         if ids is None:
             self._edges[key] = [memory_id]
-            self._edge_order.append(key)
             return
         if memory_id not in ids:
             ids.append(memory_id)
@@ -248,12 +254,14 @@ def _extract_people(memory: MemoryEntry) -> list[str]:
                 out.append(name)
     # source_ref like ``github:pr/123/ankit`` or ``commit:abc/author=sam``.
     ref = memory.source_ref or ""
-    ref_author = _AUTHOR_TAG.search(ref)
-    if ref_author:
-        name = ref_author.group(1).strip().rstrip("/")
-        if name and name not in seen:
-            seen.add(name)
-            out.append(name)
+    for rx in (_REF_AUTHOR, _REF_PR_AUTHOR):
+        ref_author = rx.search(ref)
+        if ref_author:
+            name = ref_author.group(1).strip().rstrip("/")
+            if name and name not in seen:
+                seen.add(name)
+                out.append(name)
+            break
     return out
 
 
