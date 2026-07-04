@@ -2,13 +2,19 @@
 name: Bug report
 about: Report a reproducible problem in ONMC
 title: "[Bug] "
-labels: bug
+labels: kind/bug, needs-triage
 assignees: ""
 ---
 
 ## Summary
 
 What broke? Include the exact command you ran.
+
+## Impact
+
+- Priority guess: `P0` / `P1` / `P2` / `P3`
+- Who is blocked?
+- Is there data loss, security exposure, or a broken release?
 
 ## Steps To Reproduce
 

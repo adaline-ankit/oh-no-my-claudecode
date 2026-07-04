@@ -20,12 +20,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ── release-contract ──────────────────────────────────────────────────────
+  # Keep the tag, project metadata, and publish intent aligned before running
+  # expensive gates or touching package indexes.
+  release-contract:
+    name: release contract
+    runs-on: ubuntu-latest
+    outputs:
+      project-version: ${{ steps.contract.outputs.project_version }}
+      tag-version: ${{ steps.contract.outputs.tag_version }}
+      should-publish: ${{ steps.contract.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - id: contract
+        name: Verify release metadata
+        run: |
+          set -euo pipefail
+          PROJECT_VERSION="$(python - <<'PY'
+          from pathlib import Path
+          import tomllib
+
+          data = tomllib.loads(Path("pyproject.toml").read_text())
+          print(data["project"]["version"])
+          PY
+          )"
+
+          TAG_VERSION=""
+          SHOULD_PUBLISH="false"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            SHOULD_PUBLISH="true"
+            if [[ "${PROJECT_VERSION}" != "${TAG_VERSION}" ]]; then
+              echo "::error::Tag v${TAG_VERSION} does not match pyproject.toml version ${PROJECT_VERSION}."
+              exit 1
+            fi
+          elif [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
+            TAG_VERSION="$(jq -r '.release.tag_name | sub("^v"; "")' "${GITHUB_EVENT_PATH}")"
+            SHOULD_PUBLISH="true"
+            if [[ "${PROJECT_VERSION}" != "${TAG_VERSION}" ]]; then
+              echo "::error::Release tag v${TAG_VERSION} does not match pyproject.toml version ${PROJECT_VERSION}."
+              exit 1
+            fi
+          fi
+
+          echo "project_version=${PROJECT_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "tag_version=${TAG_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "should_publish=${SHOULD_PUBLISH}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "### Release contract"
+            echo "- Project version: \`${PROJECT_VERSION}\`"
+            if [[ -n "${TAG_VERSION}" ]]; then
+              echo "- Tag version: \`${TAG_VERSION}\`"
+            else
+              echo "- Tag version: _not a tag/release publish event_"
+            fi
+            echo "- Should publish to PyPI: \`${SHOULD_PUBLISH}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
   # ── gate ──────────────────────────────────────────────────────────────────
   # Run the same quality checks as ci.yml before touching PyPI.
   # Only required on tag pushes; on `release: published` the release creator
   # is responsible for having a green main branch first (see docs/RELEASING.md).
   gate:
     name: gate
+    needs: [release-contract]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     strategy:
@@ -56,9 +116,10 @@ jobs:
     name: build
     runs-on: ubuntu-latest
     # On a tag push, wait for the gate to pass first.
-    needs: [gate]
+    needs: [release-contract, gate]
     if: |
       always() &&
+      needs.release-contract.result == 'success' &&
       (
         !startsWith(github.ref, 'refs/tags/v') ||
         needs.gate.result == 'success'
@@ -84,23 +145,49 @@ jobs:
           path: dist/
           retention-days: 30
 
+  # ── pypi-readiness ────────────────────────────────────────────────────────
+  pypi-readiness:
+    name: pypi readiness
+    runs-on: ubuntu-latest
+    needs: [release-contract, build]
+    if: |
+      always() &&
+      needs.release-contract.outputs.should-publish == 'true' &&
+      needs.build.result == 'success'
+    steps:
+      - name: Verify trusted publishing is enabled
+        env:
+          PYPI_TRUSTED_PUBLISHING: ${{ vars.PYPI_TRUSTED_PUBLISHING }}
+        run: |
+          set -euo pipefail
+          if [[ "${PYPI_TRUSTED_PUBLISHING}" != "true" ]]; then
+            cat <<'EOF' >> "${GITHUB_STEP_SUMMARY}"
+          ### PyPI publishing is not enabled
+
+          Set repository variable `PYPI_TRUSTED_PUBLISHING=true` after registering
+          the PyPI trusted publisher for:
+
+          - Repository: `adaline-ankit/oh-no-my-claudecode`
+          - Workflow: `release.yml`
+          - Environment: `pypi`
+          EOF
+            echo "::error::PYPI_TRUSTED_PUBLISHING is not true; refusing to create a silently-unpublished release."
+            exit 1
+          fi
+
   # ── publish ───────────────────────────────────────────────────────────────
   publish:
     name: publish to PyPI
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [release-contract, build, pypi-readiness]
     # Only publish on actual tag pushes or manually-published GitHub Releases.
     # workflow_dispatch without a tag does NOT publish.
     #
-    # PYPI_TRUSTED_PUBLISHING gate: this job is intentionally skipped until the
-    # PyPI trusted publisher is configured for this repository. Once the one-time
-    # setup is complete (see docs/RELEASING.md § "PyPI trusted publishing"),
-    # set the repository variable PYPI_TRUSTED_PUBLISHING=true to enable this job.
-    # Until then, tagging vX.Y.Z still produces a GitHub Release (see job below).
+    # pypi-readiness fails explicitly when trusted publishing is not enabled.
     if: |
       always() &&
       needs.build.result == 'success' &&
-      vars.PYPI_TRUSTED_PUBLISHING == 'true' &&
+      needs.pypi-readiness.result == 'success' &&
       (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'release')
     permissions:
       contents: read
@@ -117,6 +204,58 @@ jobs:
           path: dist/
       - name: Publish to PyPI (trusted publishing / OIDC)
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+
+  # ── verify-pypi ───────────────────────────────────────────────────────────
+  verify-pypi:
+    name: verify PyPI install
+    runs-on: ubuntu-latest
+    needs: [release-contract, publish]
+    if: |
+      always() &&
+      needs.publish.result == 'success'
+    steps:
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install published package from PyPI
+        env:
+          VERSION: ${{ needs.release-contract.outputs.tag-version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${VERSION}" ]]; then
+            echo "::error::No release version was exported by release-contract."
+            exit 1
+          fi
+
+          # PyPI JSON can update before every simple-index cache. Retry the
+          # user-visible install path so the gate proves the package is really
+          # available to pip users.
+          python -m venv /tmp/onmc-pypi-check
+          /tmp/onmc-pypi-check/bin/python -m pip install --upgrade pip
+          for attempt in {1..12}; do
+            if /tmp/onmc-pypi-check/bin/python -m pip install --no-cache-dir "oh-no-my-claudecode==${VERSION}"; then
+              break
+            fi
+            if [[ "${attempt}" == "12" ]]; then
+              echo "::error::oh-no-my-claudecode==${VERSION} was not installable from PyPI after retries."
+              exit 1
+            fi
+            sleep 10
+          done
+
+          INSTALLED_VERSION="$(
+            /tmp/onmc-pypi-check/bin/python - <<'PY'
+          from importlib.metadata import version
+
+          print(version("oh-no-my-claudecode"))
+          PY
+          )"
+          if [[ "${INSTALLED_VERSION}" != "${VERSION}" ]]; then
+            echo "::error::Installed ${INSTALLED_VERSION}, expected ${VERSION}."
+            exit 1
+          fi
+          /tmp/onmc-pypi-check/bin/onmc --help >/dev/null
 
   # ── github-release ────────────────────────────────────────────────────────
   github-release:
