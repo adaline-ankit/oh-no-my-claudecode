@@ -161,6 +161,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
 │                 across sibling repos.                                        │
+│ drift           Enforce institutional memory — flag CANDIDATE code           │
+│                 violations of recorded decisions/invariants for review       │
+│                 (heuristic, not a proof).                                    │
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
@@ -1291,6 +1294,46 @@ Usage: onmc doctor [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc drift`
+
+```text
+Usage: onmc drift [OPTIONS] COMMAND [ARGS]...
+
+ Enforce institutional memory — flag CANDIDATE code violations of recorded
+ decisions/invariants for review (heuristic, not a proof).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ check  Scan code for CANDIDATE violations of recorded memory.                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc drift check`
+
+```text
+Usage: onmc drift check [OPTIONS]
+
+ Scan code for CANDIDATE violations of recorded memory.
+
+ For each decision/invariant/convention that carries a checkable
+ directive ("never use X", "always use Y", "adopt Z", "prefer A over B"),
+ scan the repo's Python files for contradicting evidence.  Findings are
+ HEURISTIC candidates for human review — never a certainty. Deterministic
+ and offline; degrades gracefully (empty brain → nothing to check).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                             Emit the drift report as  │
+│                                                    JSON.                     │
+│ --min-confidence        FLOAT RANGE [0.0<=x<=1.0]  Drop findings below this  │
+│                                                    confidence (0.0-1.0).     │
+│                                                    [default: 0.0]            │
+│ --help                                             Show this message and     │
+│                                                    exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
