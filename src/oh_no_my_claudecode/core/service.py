@@ -3647,6 +3647,7 @@ class OnmcService:
         *,
         write: bool = False,
         repo_root: Path | None = None,
+        use_git_cliff: bool = True,
     ) -> tuple[Path, ReleaseDraft]:
         """Draft the next release from conventional-commit history.
 
@@ -3663,6 +3664,12 @@ class OnmcService:
             nothing is written — the draft is returned for preview.
         repo_root:
             Explicit repo root.  When ``None``, discovered from ``self.cwd``.
+        use_git_cliff:
+            When ``True`` (default) and the external ``git-cliff`` binary is on
+            ``PATH``, git-cliff renders the CHANGELOG entry.  When the binary is
+            absent — or this is ``False`` — the built-in conventional-commit
+            renderer is used instead (identical to prior behaviour).  Version
+            bump and commit grouping are unaffected either way.
 
         Returns
         -------
@@ -3672,6 +3679,7 @@ class OnmcService:
         from oh_no_my_claudecode.release import (
             collect_commits,
             current_version,
+            default_cliff_runner,
             draft_release,
             write_release,
         )
@@ -3679,12 +3687,16 @@ class OnmcService:
         if repo_root is None:
             repo_root = discover_repo_root(self.cwd)
 
+        cliff_runner = default_cliff_runner() if use_git_cliff else None
+
         version = current_version(repo_root)
         commits = collect_commits(repo_root)
         draft = draft_release(
             current_version=version,
             commits=commits,
             date=utc_now().strftime("%Y-%m-%d"),
+            cliff_runner=cliff_runner,
+            repo_root=repo_root,
         )
         if write:
             write_release(repo_root, draft)
