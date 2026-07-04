@@ -328,12 +328,21 @@ Usage: onmc audit [OPTIONS] [PATH]
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                 Emit the full AuditReport as JSON to stdout.          │
-│ --fail-on        TEXT  Exit non-zero when at least one finding at this       │
-│                        severity or higher exists.  One of: critical, high,   │
-│                        medium, low, info.  Default: high.                    │
-│                        [default: high]                                       │
-│ --help                 Show this message and exit.                           │
+│ --json                             Emit the full AuditReport as JSON to      │
+│                                    stdout.                                   │
+│ --fail-on                    TEXT  Exit non-zero when at least one finding   │
+│                                    at this severity or higher exists.  One   │
+│                                    of: critical, high, medium, low, info.    │
+│                                    Default: high.                            │
+│                                    [default: high]                           │
+│ --semgrep    --no-semgrep          Also run semgrep static analysis and fold │
+│                                    its findings into the report.  Requires   │
+│                                    the 'semgrep' binary on PATH.  When the   │
+│                                    binary is absent this flag is silently    │
+│                                    ignored — no pip dependency is added.     │
+│                                    Default: off.                             │
+│                                    [default: no-semgrep]                     │
+│ --help                             Show this message and exit.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
