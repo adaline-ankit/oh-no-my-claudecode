@@ -583,6 +583,30 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 @keyframes onmc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes onmc-spin { to { transform: rotate(360deg); } }
 
+/* Dark theme — redefine neutrals + darken the light accent tints */
+body.theme-dark {
+  --ink: #e7eee9; --muted: #9daba3; --faint: #75837c;
+  --canvas: #0f1613; --surface: #172019; --surface-alt: #1f2b23; --line: #2a3830;
+  --green-soft: #17321f; --blue-soft: #16303c; --amber-soft: #3a2b13; --red-soft: #3a1d1a;
+}
+body.theme-dark .status-chip.ready { color: #93e2b3; }
+body.theme-dark .status-chip.needs-attention { color: #e6b877; }
+body.theme-dark .status-chip.live { color: #8fcde6; }
+body.theme-dark .distribution-track,
+body.theme-dark .rate-bar,
+body.theme-dark .confidence-bar,
+body.theme-dark .score-ring { background-color: #26322b; }
+body.theme-dark .icon-button:hover { background: #202b24; border-color: #3a4a41; }
+body.theme-dark .swarm-pill.state-running,
+body.theme-dark .live-badge { color: #8fcde6; }
+body.theme-dark .swarm-pill.state-done { color: #93e2b3; }
+body.theme-dark .swarm-pill.state-failed, body.theme-dark .swarm-pill.state-aborted { color: #e79b8e; }
+body.theme-dark .swarm-pill.state-queued, body.theme-dark .swarm-pill.state-pending { color: #e6b877; }
+body.theme-dark .recs-list li,
+body.theme-dark .drawer-error pre { color: var(--ink); }
+body.theme-dark .drawer-error pre { color: #e79b8e; }
+body.theme-dark .brand-mark { background: #d9f26a; color: #152018; }
+
 /* Timeline view */
 .timeline-body { display: flex; flex-direction: column; gap: 20px; }
 .tl-period { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; }
