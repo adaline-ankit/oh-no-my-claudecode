@@ -111,6 +111,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 dependencies.                                                │
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
+│ session-search  Full-text search across all of onmc's persisted history.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
@@ -3930,6 +3931,45 @@ Usage: onmc serve [OPTIONS]
 │ --repo        TEXT  Repository path to serve (resolved once at startup).     │
 │                     [default: .]                                             │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc session-search`
+
+```text
+Usage: onmc session-search [OPTIONS] QUERY
+
+ Full-text search across all of onmc's persisted history.
+
+ Searches memories, attempts, tasks, and memory_artifacts using SQLite's
+ FTS5 engine (falls back to LIKE when FTS5 is absent).  Results are ranked
+ by BM25 relevance and include a short snippet showing the match context.
+
+ Complements ``onmc recall`` (semantic KNN over curated memories) by
+ covering the complete history with keyword search.
+
+ Examples:
+
+     onmc session-search "cache invalidation"
+
+     onmc session-search "auth bug" --limit 5
+
+     onmc session-search "migration" --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    query      TEXT  Search query.  All alphanumeric tokens are matched (OR │
+│                       logic).                                                │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit  -n      INTEGER RANGE [1<=x<=500]  Maximum number of results to     │
+│                                             return.                          │
+│                                             [default: 20]                    │
+│ --json                                      Emit results as a JSON envelope  │
+│                                             {"kind": "session-search",       │
+│                                             "query": "...", "hits": [...]}   │
+│                                             for pipeline composition.        │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
