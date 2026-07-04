@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.71.0] — 2026-07-04
+
+### Added
+
+- **`onmc registry` — agent reputation trust ledger** — aggregates signed `attest` attestations into a queryable, rankable per-agent trust ledger: only signature- *and* claim-verified attestations count toward reputation (tampered/wrong-secret ones are flagged `invalid`, never counted); computes verified-rate, distinct goals, first/last seen, and a deterministic `trust_score`, then ranks agents on a leaderboard. `registry add <attestation>`, `registry rank`, `registry agent <subject>`, `--json`. The marketplace/reputation layer on top of `attest` — completing the agent-economy trust stack (badge → flywheel → attest → registry).
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#211) — onmc building onmc.
+
 ## [0.70.0] — 2026-07-04
 
 ### Added
