@@ -162,6 +162,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
+│ registry        Agent reputation trust ledger — aggregate signed             │
+│                 attestations into a queryable, rankable track record.        │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -3207,6 +3209,89 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc registry`
+
+```text
+Usage: onmc registry [OPTIONS] COMMAND [ARGS]...
+
+ Agent reputation trust ledger — aggregate signed attestations into a
+ queryable, rankable track record.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add    Verify + ingest one attestation into the persisted trust ledger.      │
+│ rank   Show the trust leaderboard — agents ranked by trust score.            │
+│ agent  Show one agent's full reputation + its attestation history count.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc registry add`
+
+```text
+Usage: onmc registry add [OPTIONS] ATTESTATION_FILE
+
+ Verify + ingest one attestation into the persisted trust ledger.
+
+ Reads the attestation, verifies its signature (an unverifiable one is
+ recorded and flagged, never counted toward trust), appends it to the
+ ledger at ``.onmc/registry.json``, recomputes reputations, and prints
+ the affected agent's updated line. Exits non-zero when the file cannot be
+ read at all.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    attestation_file      TEXT  Path to an attestation JSON produced by     │
+│                                  `attest sign --json`.                       │
+│                                  [required]                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the updated agent line as JSON.                   │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc registry agent`
+
+```text
+Usage: onmc registry agent [OPTIONS] SUBJECT
+
+ Show one agent's full reputation + its attestation history count.
+
+ Exits non-zero when the subject has no attestations in the ledger.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    subject      TEXT  The agent subject (identity) to look up. [required]  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the agent's reputation as JSON.                   │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc registry rank`
+
+```text
+Usage: onmc registry rank [OPTIONS]
+
+ Show the trust leaderboard — agents ranked by trust score.
+
+ Recomputes every agent's reputation from the persisted ledger and ranks
+ them by ``trust_score`` (descending, stable tiebreak by subject). An
+ empty ledger prints a friendly note.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the ranked leaderboard as JSON.                   │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
