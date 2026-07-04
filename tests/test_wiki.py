@@ -16,6 +16,7 @@ from oh_no_my_claudecode.models.memory import MemoryEntry
 from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
+from oh_no_my_claudecode.wiki.foam import build_foam_vault
 from oh_no_my_claudecode.wiki.generator import build_wiki
 from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 
@@ -562,6 +563,201 @@ def test_wiki_logseq_cli_json_envelope(
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["kind"] == "logseq"
+    assert "out_dir" in envelope
+    assert "pages" in envelope
+    assert isinstance(envelope["pages"], list)
+    assert "count" in envelope
+
+
+# ---------------------------------------------------------------------------
+# Foam export — unit tests: build_foam_vault
+# ---------------------------------------------------------------------------
+
+
+def test_foam_empty_store_returns_index_page(tmp_path: Path) -> None:
+    """Empty store must still produce index.md (not crash)."""
+    db = tmp_path / ".onmc" / "memory.db"
+    storage = SQLiteStorage(db)
+    storage.initialize()
+
+    pages = build_foam_vault(storage)
+
+    assert "index.md" in pages
+    index = pages["index.md"]
+    assert "type:" in index
+    assert "onmc-vault" in index
+
+
+def test_foam_seeded_produces_one_note_per_memory(tmp_path: Path) -> None:
+    """Each seeded memory must produce exactly one note in notes/."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_foam_vault(storage)
+
+    note_pages = [k for k in pages if k.startswith("notes/")]
+    assert len(note_pages) == len(memories)
+
+
+def test_foam_yaml_frontmatter_present(tmp_path: Path) -> None:
+    """Each memory note must have YAML frontmatter with required keys."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_foam_vault(storage)
+
+    for page_path, content in pages.items():
+        if page_path == "index.md":
+            continue
+        # YAML frontmatter must open and close with ---
+        assert content.startswith("---\n"), f"{page_path} missing opening --- frontmatter"
+        # Must contain required YAML keys (not Logseq key:: syntax)
+        assert "type:" in content, f"{page_path} missing type: frontmatter key"
+        assert "kind:" in content, f"{page_path} missing kind: frontmatter key"
+        assert "created:" in content, f"{page_path} missing created: frontmatter key"
+        assert "confidence:" in content, f"{page_path} missing confidence: frontmatter key"
+        # Must NOT use Logseq key:: syntax
+        assert "type::" not in content, f"{page_path} must use YAML (type:), not Logseq (type::)"
+        assert "kind::" not in content, f"{page_path} must use YAML (kind:), not Logseq (kind::)"
+
+
+def test_foam_wikilinks_for_each_edge_kind(tmp_path: Path) -> None:
+    """Wikilinks must appear for supersedes, contradicts, relates, and duplicate_of edges."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    # Add one edge of each kind
+    edges = [
+        _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES),
+        _edge(memories[1].id, memories[2].id, EdgeType.CONTRADICTS),
+        _edge(memories[2].id, memories[3].id, EdgeType.RELATES),
+        _edge(memories[3].id, memories[0].id, EdgeType.DUPLICATE_OF),
+    ]
+    for edge in edges:
+        storage.upsert_memory_edge(edge)
+
+    pages = build_foam_vault(storage)
+
+    all_content = "\n".join(pages.values())
+    assert "supersedes" in all_content
+    assert "contradicts" in all_content
+    assert "relates to" in all_content
+    assert "duplicate of" in all_content
+    # At least some notes have [[...]] wikilinks
+    assert "[[" in all_content
+
+
+def test_foam_wikilinks_resolve_to_note_slugs(tmp_path: Path) -> None:
+    """Wikilinks in notes must reference slugs that exist as notes/<slug>.md filenames."""
+    storage, memories = _seeded_storage(tmp_path)
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES)
+    storage.upsert_memory_edge(edge)
+
+    pages = build_foam_vault(storage)
+
+    import re
+
+    existing_slugs = {Path(k).stem for k in pages if k.startswith("notes/")}
+    # Only inspect note files (not index.md) for wikilinks — index links notes too
+    notes_content = "\n".join(v for k, v in pages.items() if k.startswith("notes/"))
+    link_targets = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", notes_content)
+    for target in link_targets:
+        assert target in existing_slugs, (
+            f"Wikilink [[{target}]] does not correspond to any generated note"
+        )
+
+
+def test_foam_determinism(tmp_path: Path) -> None:
+    """Two calls with the same store must produce byte-identical output."""
+    storage, memories = _seeded_storage(tmp_path)
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.RELATES)
+    storage.upsert_memory_edge(edge)
+
+    pages_first = build_foam_vault(storage)
+    pages_second = build_foam_vault(storage)
+
+    assert pages_first == pages_second
+
+
+def test_foam_index_links_all_memories(tmp_path: Path) -> None:
+    """index.md must link to every memory note via wikilinks."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_foam_vault(storage)
+
+    index = pages["index.md"]
+    from oh_no_my_claudecode.wiki.foam import _note_slug
+
+    for mem in memories:
+        slug = _note_slug(mem)
+        assert f"[[{slug}|" in index, (
+            f"index.md missing wikilink for memory '{mem.title}' (slug={slug!r})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Foam export — CLI tests: onmc wiki foam
+# ---------------------------------------------------------------------------
+
+
+def test_wiki_foam_cli_exits_0(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``onmc wiki foam`` must exit 0 after writing notes."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    result = runner.invoke(app, ["wiki", "foam"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_wiki_foam_cli_writes_index(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki foam`` must write index.md under the default out dir."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    runner.invoke(app, ["wiki", "foam"], catch_exceptions=False)
+
+    assert (sample_repo / ".onmc" / "foam" / "index.md").exists()
+
+
+def test_wiki_foam_cli_custom_out(
+    sample_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki foam --out <dir>`` must write to the specified directory."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "foam-export"
+
+    result = runner.invoke(
+        app, ["wiki", "foam", "--out", str(out_dir)], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0
+    assert (out_dir / "index.md").exists()
+
+
+def test_wiki_foam_cli_json_envelope(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``onmc wiki foam --json`` must emit a valid JSON envelope with expected keys."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "foam-json"
+
+    result = runner.invoke(
+        app, ["wiki", "foam", "--out", str(out_dir), "--json"], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["kind"] == "foam"
     assert "out_dir" in envelope
     assert "pages" in envelope
     assert isinstance(envelope["pages"], list)

@@ -4316,6 +4316,31 @@ Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ logseq  Export memory as a Logseq-compatible knowledge graph.                │
+│ foam    Export memory as a Foam-compatible markdown knowledge graph.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki foam`
+
+```text
+Usage: onmc wiki foam [OPTIONS]
+
+ Export memory as a Foam-compatible markdown knowledge graph.
+
+ Writes one markdown note per memory into a ``notes/`` subdirectory and an
+ ``index.md`` entry point, using YAML frontmatter and ``[]`` for
+ memory edges.  No new dependency — pure stdlib string generation.
+
+ Foam is a VS Code extension that reads a flat directory of markdown notes
+ and renders an interactive knowledge graph.  The output directory defaults
+ to ``.onmc/foam/`` and can be opened directly in VS Code with the Foam
+ extension installed.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Directory to write Foam notes into. Defaults to          │
+│                     .onmc/foam/ (gitignored).                                │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
