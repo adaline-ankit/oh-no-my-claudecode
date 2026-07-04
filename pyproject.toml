@@ -46,6 +46,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Optional multi-language codegraph parsing (JS/TS/Go/Rust/Java).  Absent by
+# default — `onmc codegraph` falls back to Python-`ast` only when unavailable.
+treesitter = [
+  "tree-sitter>=0.23,<1.0",
+  "tree-sitter-language-pack>=0.7",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
@@ -96,4 +102,9 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["yaml"]
+ignore_missing_imports = true
+
+# Optional tree-sitter parsers are dynamic C extensions without type stubs.
+[[tool.mypy.overrides]]
+module = ["tree_sitter", "tree_sitter_language_pack"]
 ignore_missing_imports = true
