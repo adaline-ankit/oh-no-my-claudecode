@@ -93,6 +93,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
+│ nightshift      Plan a bounded, verified overnight swarm + preview the       │
+│                 morning digest.                                              │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -2337,6 +2339,35 @@ Usage: onmc mission [OPTIONS] GOAL
 │ --json                                       Emit the mission plan as JSON   │
 │                                              instead of markdown.            │
 │ --help                                       Show this message and exit.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc nightshift`
+
+```text
+Usage: onmc nightshift [OPTIONS]
+
+ Plan a bounded, verified overnight swarm + preview the morning digest.
+
+ Collects the backlog from repeated ``--goal`` and/or a ``--file``,
+ de-duplicates and orders it deterministically, and truncates to
+ ``--budget`` units. Dry-run (the default) is offline and spawns no
+ agents: it prints the plan and a sample morning digest. Only ``--json``
+ suppresses the digest, emitting the plan as JSON.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --goal                       TEXT     A backlog goal for the overnight       │
+│                                       swarm. Repeatable.                     │
+│ --file                       PATH     Read backlog goals from a file (one    │
+│                                       per line, # comments ignored).         │
+│ --budget                     INTEGER  Max swarm units to schedule overnight. │
+│                                       [default: 5]                           │
+│ --dry-run    --no-dry-run             Plan only — spawn nothing (default).   │
+│                                       Print the plan + a sample morning      │
+│                                       digest.                                │
+│                                       [default: dry-run]                     │
+│ --json                                Emit the nightshift plan as JSON.      │
+│ --help                                Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
