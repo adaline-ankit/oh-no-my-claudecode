@@ -102,7 +102,7 @@ class DashboardModel:
         Unknown states (should not happen) are appended after the known ones so
         they remain visible rather than silently discarded.
         """
-        counts: dict[str, int] = {s: 0 for s in _KNOWN_STATES}
+        counts: dict[str, int] = dict.fromkeys(_KNOWN_STATES, 0)
         for unit in self.units:
             counts[unit.state] = counts.get(unit.state, 0) + 1
         # Drop known-but-zero buckets is intentionally NOT done: callers want a
