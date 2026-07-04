@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
 from oh_no_my_claudecode.wiki.generator import build_wiki
+from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 
 runner = CliRunner()
 
@@ -371,3 +373,196 @@ def test_wiki_cli_fails_without_init(tmp_path: Path) -> None:
     )
     # Without a git repo / init, it should fail
     assert proc.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# Logseq export — unit tests: build_logseq_vault
+# ---------------------------------------------------------------------------
+
+
+def test_logseq_empty_store_returns_contents_page(tmp_path: Path) -> None:
+    """Empty store must still produce pages/contents.md (not crash)."""
+    db = tmp_path / ".onmc" / "memory.db"
+    storage = SQLiteStorage(db)
+    storage.initialize()
+
+    pages = build_logseq_vault(storage)
+
+    assert "pages/contents.md" in pages
+    contents = pages["pages/contents.md"]
+    assert "type:: onmc-index" in contents
+
+
+def test_logseq_seeded_produces_one_page_per_memory(tmp_path: Path) -> None:
+    """Each seeded memory must produce exactly one page in pages/."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_logseq_vault(storage)
+
+    memory_pages = [k for k in pages if k.startswith("pages/") and k != "pages/contents.md"]
+    assert len(memory_pages) == len(memories)
+
+
+def test_logseq_page_properties_present(tmp_path: Path) -> None:
+    """Each memory page must contain Logseq page properties (key:: value lines)."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_logseq_vault(storage)
+
+    for page_path, content in pages.items():
+        if page_path == "pages/contents.md":
+            continue
+        # Must have at minimum: type::, kind::, created::
+        assert "type::" in content, f"{page_path} missing type:: property"
+        assert "kind::" in content, f"{page_path} missing kind:: property"
+        assert "created::" in content, f"{page_path} missing created:: property"
+        assert "confidence::" in content, f"{page_path} missing confidence:: property"
+
+
+def test_logseq_wikilinks_for_each_edge_kind(tmp_path: Path) -> None:
+    """Wikilinks must appear for supersedes, contradicts, relates, and duplicate_of edges."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    # Add one edge of each kind
+    edges = [
+        _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES),
+        _edge(memories[1].id, memories[2].id, EdgeType.CONTRADICTS),
+        _edge(memories[2].id, memories[3].id, EdgeType.RELATES),
+        _edge(memories[3].id, memories[0].id, EdgeType.DUPLICATE_OF),
+    ]
+    for edge in edges:
+        storage.upsert_memory_edge(edge)
+
+    pages = build_logseq_vault(storage)
+
+    # Collect all wikilinks from all pages
+    all_content = "\n".join(pages.values())
+    assert "supersedes" in all_content
+    assert "contradicts" in all_content
+    assert "relates to" in all_content
+    assert "duplicate of" in all_content
+    # At least some pages have [[...]] wikilinks
+    assert "[[" in all_content
+
+
+def test_logseq_wikilinks_resolve_to_page_slugs(tmp_path: Path) -> None:
+    """Wikilinks in memory pages must reference slugs that exist as page filenames."""
+    storage, memories = _seeded_storage(tmp_path)
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.SUPERSEDES)
+    storage.upsert_memory_edge(edge)
+
+    pages = build_logseq_vault(storage)
+
+    # Every [[slug|...]] in any page must correspond to an existing pages/<slug>.md
+    import re
+
+    existing_slugs = {
+        Path(k).stem for k in pages if k.startswith("pages/") and k != "pages/contents.md"
+    }
+    all_content = "\n".join(pages.values())
+    link_targets = re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", all_content)
+    for target in link_targets:
+        assert target in existing_slugs, (
+            f"Wikilink [[{target}]] does not correspond to any generated page"
+        )
+
+
+def test_logseq_determinism(tmp_path: Path) -> None:
+    """Two calls with the same store must produce byte-identical output."""
+    storage, memories = _seeded_storage(tmp_path)
+    edge = _edge(memories[0].id, memories[1].id, EdgeType.RELATES)
+    storage.upsert_memory_edge(edge)
+
+    pages_first = build_logseq_vault(storage)
+    pages_second = build_logseq_vault(storage)
+
+    assert pages_first == pages_second
+
+
+def test_logseq_contents_page_links_all_memories(tmp_path: Path) -> None:
+    """pages/contents.md must link to every memory page via wikilinks."""
+    storage, memories = _seeded_storage(tmp_path)
+
+    pages = build_logseq_vault(storage)
+
+    contents = pages["pages/contents.md"]
+    # Each memory's slug must appear as a wikilink in contents
+    for mem in memories:
+        from oh_no_my_claudecode.wiki.logseq import _page_slug
+
+        slug = _page_slug(mem)
+        assert f"[[{slug}|" in contents, (
+            f"contents.md missing wikilink for memory '{mem.title}' (slug={slug!r})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Logseq export — CLI tests: onmc wiki logseq
+# ---------------------------------------------------------------------------
+
+
+def test_wiki_logseq_cli_exits_0(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``onmc wiki logseq`` must exit 0 after writing pages."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    result = runner.invoke(app, ["wiki", "logseq"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_wiki_logseq_cli_writes_contents_page(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki logseq`` must write pages/contents.md under the default out dir."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+
+    runner.invoke(app, ["wiki", "logseq"], catch_exceptions=False)
+
+    assert (sample_repo / ".onmc" / "logseq" / "pages" / "contents.md").exists()
+
+
+def test_wiki_logseq_cli_custom_out(
+    sample_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``onmc wiki logseq --out <dir>`` must write to the specified directory."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "logseq-export"
+
+    result = runner.invoke(
+        app, ["wiki", "logseq", "--out", str(out_dir)], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0
+    assert (out_dir / "pages" / "contents.md").exists()
+
+
+def test_wiki_logseq_cli_json_envelope(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``onmc wiki logseq --json`` must emit a valid JSON envelope with expected keys."""
+    monkeypatch.chdir(sample_repo)
+    svc = OnmcService(sample_repo)
+    svc.init_project()
+    svc.ingest(no_llm=True)
+    out_dir = tmp_path / "logseq-json"
+
+    result = runner.invoke(
+        app, ["wiki", "logseq", "--out", str(out_dir), "--json"], catch_exceptions=False
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["kind"] == "logseq"
+    assert "out_dir" in envelope
+    assert "pages" in envelope
+    assert isinstance(envelope["pages"], list)
+    assert "count" in envelope

@@ -70,7 +70,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ preflight       Run the exact CI quality gate locally, in the same order CI  │
 │                 runs it.                                                     │
 │ verify-diff     Adversarially verify the working diff against a base ref.    │
-│ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
 │ bench           Measure whether onmc memory actually reduces wasted work.    │
 │ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
 │ evolution       Show the compounding-proof evolution card across             │
@@ -140,6 +139,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 fabricated.                                                  │
 │ fleet           Operator view for local agent fleets (swarm + claims +       │
 │                 receipts).                                                   │
+│ wiki            Generate wiki and knowledge-graph exports from stored        │
+│                 memory.                                                      │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -3079,11 +3080,17 @@ Usage: onmc reuse [OPTIONS] QUERY
  how well their name, docstring, and argument names match your query.
  Entirely offline and deterministic — no LLM, no network.
 
+ With ``--ast-grep`` (and the ``ast-grep``/``sg`` binary installed), also runs
+ structural AST-pattern matching that catches structurally-similar code even
+ when variable names differ.
+
  Examples:
 
    onmc reuse "tokenize text into words"
 
    onmc reuse tokenize --json
+
+   onmc reuse "def $F($$$ARGS):" --ast-grep
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    query      TEXT  A description of the behaviour you need, or an         │
@@ -3091,11 +3098,26 @@ Usage: onmc reuse [OPTIONS] QUERY
 │                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit        INTEGER RANGE [x>=1]  Maximum number of reuse hits to return. │
-│                                      [default: 8]                            │
-│ --json                               Emit the ranked hits as JSON instead of │
-│                                      a table.                                │
-│ --help                               Show this message and exit.             │
+│ --limit                        INTEGER RANGE [x>=1]  Maximum number of reuse │
+│                                                      hits to return.         │
+│                                                      [default: 8]            │
+│ --json                                               Emit the ranked hits as │
+│                                                      JSON instead of a       │
+│                                                      table.                  │
+│ --ast-grep    --no-ast-grep                          Use ast-grep (the       │
+│                                                      'ast-grep' or 'sg'      │
+│                                                      binary) for             │
+│                                                      structural/AST-pattern  │
+│                                                      matching in addition to │
+│                                                      the text heuristic.     │
+│                                                      No-op when neither      │
+│                                                      binary is on PATH       │
+│                                                      (falls back to          │
+│                                                      text-only, zero         │
+│                                                      regression).            │
+│                                                      [default: no-ast-grep]  │
+│ --help                                               Show this message and   │
+│                                                      exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4225,9 +4247,9 @@ Usage: onmc why [OPTIONS] PATH
 ## `onmc wiki`
 
 ```text
-Usage: onmc wiki [OPTIONS]
+Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
 
- Generate a markdown wiki or Obsidian knowledge-graph vault.
+ Generate wiki and knowledge-graph exports from stored memory.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --output        PATH                 Directory to write wiki pages into.     │
@@ -4238,6 +4260,31 @@ Usage: onmc wiki [OPTIONS]
 │                                      Obsidian vault.                         │
 │                                      [default: markdown]                     │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ logseq  Export memory as a Logseq-compatible knowledge graph.                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki logseq`
+
+```text
+Usage: onmc wiki logseq [OPTIONS]
+
+ Export memory as a Logseq-compatible knowledge graph.
+
+ Writes one markdown page per memory into a ``pages/`` subdirectory, using
+ Logseq's ``key:: value`` page properties and ``[]`` for memory
+ edges.  No new dependency — pure stdlib string generation.
+
+ The output directory defaults to ``.onmc/logseq/`` and is safe to open
+ directly in the Logseq desktop app as a graph folder.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Directory to write Logseq pages into. Defaults to        │
+│                     .onmc/logseq/ (gitignored).                              │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

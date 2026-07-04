@@ -99,6 +99,7 @@ from oh_no_my_claudecode.setup import run_setup_wizard
 from oh_no_my_claudecode.ui import export_dashboard_snapshot, serve_dashboard
 from oh_no_my_claudecode.utils.text import limit_markdown_tokens
 from oh_no_my_claudecode.wiki import WikiFormat
+from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 
 app = typer.Typer(
     help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
@@ -115,6 +116,11 @@ llm_app = typer.Typer(help="Configure optional LLM providers.", no_args_is_help=
 hooks_app = typer.Typer(help="Install and run Claude Code compaction hooks.", no_args_is_help=True)
 claude_md_app = typer.Typer(
     help="Generate and maintain CLAUDE.md from ONMC memory.",
+    no_args_is_help=False,
+    invoke_without_command=True,
+)
+wiki_app = typer.Typer(
+    help="Generate wiki and knowledge-graph exports from stored memory.",
     no_args_is_help=False,
     invoke_without_command=True,
 )
@@ -193,6 +199,7 @@ app.add_typer(conventions_app, name="conventions")
 app.add_typer(claim_app, name="claim")
 app.add_typer(ledger_app, name="ledger")
 app.add_typer(fleet_app, name="fleet")
+app.add_typer(wiki_app, name="wiki")
 
 
 @app.command("tui")
@@ -1257,6 +1264,17 @@ def reuse_command(
         bool,
         typer.Option("--json", help="Emit the ranked hits as JSON instead of a table."),
     ] = False,
+    use_ast_grep: Annotated[
+        bool,
+        typer.Option(
+            "--ast-grep/--no-ast-grep",
+            help=(
+                "Use ast-grep (the 'ast-grep' or 'sg' binary) for structural/AST-pattern"
+                " matching in addition to the text heuristic.  No-op when neither binary"
+                " is on PATH (falls back to text-only, zero regression)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Surface existing code that already does a thing — reuse before reimplementing.
 
@@ -1264,25 +1282,43 @@ def reuse_command(
     how well their name, docstring, and argument names match your query.
     Entirely offline and deterministic — no LLM, no network.
 
+    With ``--ast-grep`` (and the ``ast-grep``/``sg`` binary installed), also runs
+    structural AST-pattern matching that catches structurally-similar code even
+    when variable names differ.
+
     Examples:
 
       onmc reuse "tokenize text into words"
 
       onmc reuse tokenize --json
+
+      onmc reuse "def $F($$$ARGS):" --ast-grep
     """
     try:
-        _, hits = _service().reuse_find(query, limit=limit)
+        _, hits, structural_hits = _service().reuse_find(query, limit=limit, ast_grep=use_ast_grep)
     except RepoDiscoveryError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if json_output:
         import dataclasses
 
-        payload = [dataclasses.asdict(hit) for hit in hits]
+        payload: dict[str, object] = {
+            "hits": [dataclasses.asdict(hit) for hit in hits],
+            "structural": [dataclasses.asdict(m) for m in structural_hits],
+        }
         console.print(json.dumps(payload, indent=2), markup=False)
         return
 
     render_reuse_hits(hits, query)
+    if structural_hits:
+        console.print(
+            f"\n[bold]Structural matches (ast-grep)[/bold]: {len(structural_hits)} found",
+            markup=True,
+        )
+        for match in structural_hits:
+            loc = f"{match.file}:{match.line_start}-{match.line_end}"
+            snippet = repr(match.text[:80])
+            console.print(f"  [cyan]{loc}[/cyan]  {snippet}", markup=True)
 
 
 @app.command("ask")
@@ -2711,8 +2747,9 @@ def verify_diff_command(
         raise typer.Exit(code=1)
 
 
-@app.command("wiki")
-def wiki_command(
+@wiki_app.callback(invoke_without_command=True)
+def wiki_callback(
+    ctx: typer.Context,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -2729,7 +2766,13 @@ def wiki_command(
         typer.Option("--format", help="Output format: markdown wiki or Obsidian vault."),
     ] = WikiFormat.MARKDOWN,
 ) -> None:
-    """Generate a markdown wiki or Obsidian knowledge-graph vault."""
+    """Generate a markdown wiki or Obsidian knowledge-graph vault.
+
+    When invoked without a subcommand, generates the wiki immediately.
+    Use ``onmc wiki logseq`` for a Logseq-compatible knowledge graph export.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
     try:
         repo_root, written = _service().generate_wiki(output_dir=output, format=wiki_format)
     except FileNotFoundError as exc:
@@ -2750,6 +2793,81 @@ def wiki_command(
             display = page
         console.print(f"  {display}")
     console.print(f"\n[bold]Index:[/bold] {index_path}")
+
+
+@wiki_app.command("logseq")
+def wiki_logseq_command(
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory to write Logseq pages into."
+                " Defaults to .onmc/logseq/ (gitignored)."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Print a JSON envelope listing written paths."),
+    ] = False,
+) -> None:
+    """Export memory as a Logseq-compatible knowledge graph.
+
+    Writes one markdown page per memory into a ``pages/`` subdirectory, using
+    Logseq's ``key:: value`` page properties and ``[[wikilinks]]`` for memory
+    edges.  No new dependency — pure stdlib string generation.
+
+    The output directory defaults to ``.onmc/logseq/`` and is safe to open
+    directly in the Logseq desktop app as a graph folder.
+    """
+    service = OnmcService(Path.cwd())
+    try:
+        repo_root, _config, storage = service._load_context()
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    out_dir = out if out is not None else (repo_root / ".onmc" / "logseq")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pages = build_logseq_vault(storage)
+
+    written: list[Path] = []
+    for rel_path, content in pages.items():
+        dest = out_dir / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        written.append(dest)
+
+    if as_json:
+        import json as _json
+
+        typer.echo(
+            _json.dumps(
+                {
+                    "kind": "logseq",
+                    "out_dir": str(out_dir),
+                    "pages": sorted(str(p.relative_to(out_dir)) for p in written),
+                    "count": len(written),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    if not written:
+        console.print("[yellow]No Logseq pages generated (store may be empty).[/yellow]")
+        raise typer.Exit(code=0)
+
+    console.print(f"[green]Logseq graph generated:[/green] {len(written)} page(s)")
+    for page in sorted(written):
+        try:
+            display = page.relative_to(repo_root)
+        except ValueError:
+            display = page
+        console.print(f"  {display}")
+    console.print(f"\n[bold]Open in Logseq:[/bold] {out_dir}")
 
 
 @memory_app.command("list")
