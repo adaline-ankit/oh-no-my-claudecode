@@ -67,6 +67,16 @@ fastembed = [
 litellm = [
   "litellm>=1.0",
 ]
+# Optional external memory provider backends.  Absent by default — the
+# ``builtin`` adapter (onmc's own SQLite store) is always available without
+# any extras.  Each extra enables one external provider; credentials (API
+# keys) are still required at runtime for the provider to report available().
+mem0 = [
+  "mem0ai>=0.1",
+]
+supermemory = [
+  "supermemory>=0.1",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
