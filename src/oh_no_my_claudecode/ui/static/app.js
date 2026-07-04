@@ -42,6 +42,7 @@ function hydrateDashboard() {
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
   renderSwarms();
+  renderPerformance();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -268,6 +269,49 @@ function renderLiveStatus() {
   el.classList.toggle("is-stale", stale || !state.autoRefresh);
   if (!state.autoRefresh) { text.textContent = "paused"; return; }
   text.textContent = ago === null ? "connecting…" : ago < 2 ? "updated now" : `updated ${ago}s ago`;
+}
+
+function renderPerformance() {
+  const perf = (state.data && state.data.performance) || {};
+  const fw = perf.flywheel;
+  const led = perf.ledger;
+  const hasData = !!(fw && fw.total > 0);
+  byId("perf-empty").hidden = hasData;
+  const rate = fw ? Math.round((fw.verified_rate || 0) * 100) : 0;
+  const successRate = led ? Math.round((led.success_rate || 0) * 100) : 0;
+  const cost = led ? Number(led.total_cost_usd || 0) : 0;
+  const costUnknown = led ? (led.cost_unknown_count || 0) : 0;
+  const metrics = [
+    ["Runs", fw ? String(fw.total) : "0", led ? `${successRate}% success` : ""],
+    ["Verified rate", `${rate}%`, fw ? `${fw.verified_total}/${fw.total} verified` : ""],
+    ["Fleet cost", costUnknown && !cost ? "n/a" : `$${cost.toFixed(2)}`, costUnknown ? `${costUnknown} cost unknown` : "recorded"],
+    ["Models", fw ? String(fw.by_model.length) : "0", fw && fw.best ? `best: ${fw.best.model}` : ""],
+  ];
+  byId("perf-metric-grid").innerHTML = metrics.map(([l, v, d]) => `
+    <div class="metric"><span class="metric-label">${escapeHtml(l)}</span><strong class="metric-value">${escapeHtml(v)}</strong><span class="metric-detail">${escapeHtml(d)}</span></div>
+  `).join("");
+
+  const chip = byId("perf-chip");
+  chip.className = `status-chip ${rate >= 70 ? "ready" : "needs-attention"}`;
+  chip.textContent = hasData ? `${rate}% verified` : "no data";
+
+  const models = fw ? fw.by_model : [];
+  byId("perf-model-count").textContent = `${models.length} model${models.length === 1 ? "" : "s"}`;
+  byId("perf-model-body").innerHTML = models.map((m) => {
+    const mrate = Math.round((m.verified_rate || 0) * 100);
+    return `<tr>
+      <td><code>${escapeHtml(m.model)}</code></td>
+      <td class="num">${formatNumber(m.runs)}</td>
+      <td><div class="rate-cell"><span class="rate-bar"><i style="width:${mrate}%"></i></span><span class="rate-num">${formatNumber(m.verified)}/${formatNumber(m.runs)}</span></div></td>
+      <td class="num">${m.avg_cost == null ? "n/a" : "$" + Number(m.avg_cost).toFixed(3)}</td>
+      <td class="num">${Number(m.avg_wall || 0).toFixed(0)}s</td>
+    </tr>`;
+  }).join("");
+
+  const recs = (fw && fw.recommendations) || [];
+  byId("perf-recs").innerHTML = recs.length
+    ? recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")
+    : '<li class="recs-muted">Not enough verified runs yet.</li>';
 }
 
 function renderMemoryFilters() {
