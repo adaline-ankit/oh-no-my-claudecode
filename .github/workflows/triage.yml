@@ -16,7 +16,7 @@ on:
 permissions:
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: triage-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.number || github.run_id }}

@@ -10,23 +10,27 @@ This document is the authoritative guide for cutting a release. The pipeline use
 Pushing a `vX.Y.Z` tag triggers `.github/workflows/release.yml`, which runs these jobs:
 
 ```
-gate  →  build  →  publish        (PyPI — only when PYPI_TRUSTED_PUBLISHING=true)
-               ╰→  github-release (always, independent of publish)
+release-contract  →  gate  →  build  →  pypi-readiness  →  publish  →  verify-pypi
+                                      ╰→  github-release
 ```
 
 | Job | `needs` | What it does |
 |---|---|---|
-| `gate` | — | Full quality gate across Python 3.11–3.13: ruff, mypy, pytest (≥80% coverage) |
-| `build` | `gate` | `python -m build` (sdist + wheel) + `twine check`; uploads dist as workflow artifact |
-| `publish` | `build` | Uploads to PyPI via OIDC trusted publishing. **Skipped** unless the repo variable `PYPI_TRUSTED_PUBLISHING=true` is set (see below). |
+| `release-contract` | — | Verifies `vX.Y.Z` matches `pyproject.toml` before release work starts |
+| `gate` | `release-contract` | Full quality gate across Python 3.11–3.13: ruff, mypy, pytest (≥80% coverage) |
+| `build` | `release-contract`, `gate` | `python -m build` (sdist + wheel) + `twine check`; uploads dist as workflow artifact |
+| `pypi-readiness` | `build` | Fails explicitly if `PYPI_TRUSTED_PUBLISHING=true` is not set for a tag/release publish |
+| `publish` | `build`, `pypi-readiness` | Uploads to PyPI via OIDC trusted publishing |
+| `verify-pypi` | `publish` | Installs the exact released version from PyPI and checks the console entrypoint |
 | `github-release` | `build` | Creates a GitHub Release with auto-generated notes + dist assets attached. Runs whenever the build passes on a tag push — **not** gated on `publish`. |
 
 The `publish` and `github-release` jobs only fire on tag pushes or manually-published
 GitHub Releases — `workflow_dispatch` alone does **not** publish to PyPI or create a
 release.
 
-**Key design principle:** the GitHub Release and the PyPI upload are independent.
-A missing or failed PyPI publish will never block the GitHub Release from being created.
+**Key design principle:** the workflow must not look green when PyPI was silently
+skipped. If the repository is publishing a tag/release and PyPI trusted publishing
+is not enabled, `pypi-readiness` fails with setup instructions.
 
 ---
 
@@ -122,16 +126,14 @@ In **Settings → Variables → Actions**, add (or set) a repository variable:
 PYPI_TRUSTED_PUBLISHING = true
 ```
 
-Once this variable is set, every subsequent `vX.Y.Z` tag push will upload to PyPI.
+Once this variable is set, every subsequent `vX.Y.Z` tag push will upload to PyPI
+and verify that the uploaded package can be installed by `pip`.
 
 ### Until then
 
-Until Step 3 is complete, pushing a `vX.Y.Z` tag still:
-- Runs the full quality gate (ruff, mypy, pytest)
-- Builds the sdist + wheel
-- Creates a GitHub Release with the dist assets attached
-
-The PyPI upload is simply skipped — the rest of the pipeline is unaffected.
+Until Step 3 is complete, pushing a `vX.Y.Z` tag still runs the quality gate and
+builds the distributions, but `pypi-readiness` fails before publish. Fix the PyPI
+setup, then rerun the release workflow.
 
 ---
 
