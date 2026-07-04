@@ -1699,6 +1699,25 @@ class SQLiteStorage:
             row = conn.execute("SELECT COUNT(*) AS count FROM memory_vectors").fetchone()
         return int(row["count"])
 
+    def iter_cached_vectors(
+        self,
+        *,
+        embedder_id: str,
+        dim: int,
+    ) -> list[tuple[str, list[float]]]:
+        """Return ``(memory_id, vector)`` pairs cached for a given embedder+dim.
+
+        Used by the optional sqlite-vec backend to rebuild its KNN index from
+        the ``memory_vectors`` cache without reaching into a private connection.
+        """
+        with self._connection() as conn:
+            rows = conn.execute(
+                "SELECT memory_id, vector_json FROM memory_vectors "
+                "WHERE embedder_id = ? AND dim = ?",
+                (embedder_id, dim),
+            ).fetchall()
+        return [(str(r["memory_id"]), json.loads(r["vector_json"])) for r in rows]
+
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
         """Yield a connection that commits on success, rolls back on error, and closes."""
