@@ -149,6 +149,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 deterministic).                                              │
 │ replay          Replay Lab — re-run a recorded session and produce a         │
 │                 regression report.                                           │
+│ attest          Verifiable, portable proof-of-work — turn a receipt into a   │
+│                 signed attestation.                                          │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
@@ -301,6 +303,92 @@ Usage: onmc attempt update [OPTIONS] ATTEMPT_ID
 │                                                      paths.                  │
 │    --help                                            Show this message and   │
 │                                                      exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc attest`
+
+```text
+Usage: onmc attest [OPTIONS] COMMAND [ARGS]...
+
+ Verifiable, portable proof-of-work — turn a receipt into a signed attestation.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ sign        Build a signed, portable attestation from an onmc receipt.       │
+│ verify      Verify an attestation file; exit 0 when valid, 1 when not.       │
+│ reputation  Summarise this repo's agent track record from all receipts.      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc attest reputation`
+
+```text
+Usage: onmc attest reputation [OPTIONS]
+
+ Summarise this repo's agent track record from all receipts.
+
+ Scans ``.agent-memory/receipts/`` and folds every run into a portable
+ reputation summary: total runs, how many are attestable, verified-rate,
+ distinct goals, and the time span — the shape an ERC-8004 reputation
+ registry would consume.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the reputation summary as JSON.                         │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc attest sign`
+
+```text
+Usage: onmc attest sign [OPTIONS] RECEIPT_OR_SWARM_ID
+
+ Build a signed, portable attestation from an onmc receipt.
+
+ Distils the receipt into a minimal verifiable claim (subject, goal,
+ tamper-evidence hashes, verified flag, timestamp) and signs it. With a
+ secret (``--secret`` or ``ONMC_ATTEST_SECRET``) the signature is an
+ HMAC-SHA256; without one it is a SHA256 integrity digest, clearly marked
+ unsigned. ``--json`` emits the attestation for a verifier or registry.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    receipt_or_swarm_id      TEXT  Path to a receipt JSON, or a swarm id    │
+│                                     (resolved via its manifest).             │
+│                                     [required]                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --unit          TEXT  Unit id to select when a swarm id is given.            │
+│ --secret        TEXT  Shared secret for HMAC signing (else                   │
+│                       ONMC_ATTEST_SECRET, else unsigned).                    │
+│ --json                Emit the attestation as JSON.                          │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc attest verify`
+
+```text
+Usage: onmc attest verify [OPTIONS] FILE
+
+ Verify an attestation file; exit 0 when valid, 1 when not.
+
+ Recomputes the signature over the embedded claim and compares it in
+ constant time. A signed attestation only passes with the correct secret;
+ an unsigned one passes on its integrity digest alone.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    file      TEXT  Path to an attestation JSON produced by `attest sign    │
+│                      --json`.                                                │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the verify result as JSON.                        │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
