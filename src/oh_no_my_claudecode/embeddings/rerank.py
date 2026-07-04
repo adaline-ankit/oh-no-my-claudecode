@@ -97,6 +97,54 @@ def _softmax_normalize(scores: list[float]) -> list[float]:
 _ALPHA = 0.4
 
 
+def _rerank_via_sqlitevec(
+    candidates: list[MemoryEntry],
+    query: str,
+    storage: SQLiteStorage,
+    embedder: Embedder,
+) -> list[MemoryEntry] | None:
+    """Reorder *candidates* using the optional sqlite-vec KNN backend.
+
+    Returns a reordered list restricted to the input *candidates* (semantic
+    nearest first, with any candidates missing from the KNN result appended in
+    their original order), or ``None`` when the backend is unavailable / not
+    selected / errors — signalling the caller to fall back to the pure-Python
+    cosine blend.  Never raises.
+    """
+    try:
+        from oh_no_my_claudecode.embeddings.vecstore import (  # noqa: PLC0415
+            semantic_search,
+            sqlitevec_selected,
+        )
+
+        if not sqlitevec_selected():
+            return None
+
+        ranked = semantic_search(
+            storage, query, limit=len(candidates), embedder=embedder
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+    if ranked is None:
+        return None
+
+    candidate_ids = {m.id for m in candidates}
+    by_id = {m.id: m for m in candidates}
+    ordered: list[MemoryEntry] = []
+    seen: set[str] = set()
+    for memory in ranked:
+        if memory.id in candidate_ids and memory.id not in seen:
+            ordered.append(by_id[memory.id])
+            seen.add(memory.id)
+    # Preserve any candidates the KNN didn't surface, in original order.
+    for memory in candidates:
+        if memory.id not in seen:
+            ordered.append(memory)
+            seen.add(memory.id)
+    return ordered
+
+
 def rerank_with_embeddings(
     candidates: list[MemoryEntry],
     query: str,
@@ -136,6 +184,13 @@ def rerank_with_embeddings(
             embedder = get_embedder()
         except Exception:  # noqa: BLE001
             return candidates
+
+    # Optional sqlite-vec backend: when installed AND selected, use its indexed
+    # KNN to reorder the candidate set semantically.  Any miss returns None and
+    # we fall through to the pure-Python cosine blend below (zero regression).
+    vec_ordered = _rerank_via_sqlitevec(candidates, query, storage, embedder)
+    if vec_ordered is not None:
+        return vec_ordered
 
     try:
         query_vec = embedder.embed(query)
