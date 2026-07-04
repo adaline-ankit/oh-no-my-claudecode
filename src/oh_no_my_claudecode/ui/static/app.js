@@ -44,6 +44,7 @@ function hydrateDashboard() {
   renderSwarms();
   renderPerformance();
   renderScorecard();
+  renderTimeline();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -336,6 +337,29 @@ function renderScorecard() {
   const notes = sc.notes || [];
   byId("scorecard-notes-panel").hidden = notes.length === 0;
   byId("scorecard-notes").innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+}
+
+const TIMELINE_PER_PERIOD = 40;
+
+function renderTimeline() {
+  const tl = (state.data && state.data.timeline) || { periods: [], total: 0 };
+  byId("timeline-total").textContent = `${formatNumber(tl.total || 0)} milestone${tl.total === 1 ? "" : "s"}`;
+  byId("timeline-empty").hidden = (tl.total || 0) > 0;
+  byId("timeline-body").innerHTML = (tl.periods || []).map((p) => {
+    const entries = p.entries || [];
+    const shown = entries.slice(0, TIMELINE_PER_PERIOD);
+    const more = entries.length - shown.length;
+    const rows = shown.map((e) => `
+      <li class="tl-entry">
+        <span class="tl-dot kind-${escapeHtml(e.kind)}" aria-hidden="true"></span>
+        <div class="tl-entry-body">
+          <div class="tl-entry-head"><span class="kind-badge">${escapeHtml(formatKind(e.kind))}</span><strong>${escapeHtml(truncate(e.title || "", 84))}</strong></div>
+          ${e.summary ? `<p class="tl-entry-sum">${escapeHtml(truncate(e.summary, 150))}</p>` : ""}
+        </div>
+      </li>`).join("");
+    const moreRow = more > 0 ? `<li class="tl-more">+ ${formatNumber(more)} more this period</li>` : "";
+    return `<div class="tl-period"><div class="tl-period-label">${escapeHtml(p.label)}</div><ul class="tl-entries">${rows}${moreRow}</ul></div>`;
+  }).join("");
 }
 
 function renderMemoryFilters() {

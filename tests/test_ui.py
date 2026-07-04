@@ -114,6 +114,22 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_timeline_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """timeline groups memories into JSON-safe periods (via onmc timeline)."""
+    service = _ready_service(sample_repo, monkeypatch)
+    tl = build_dashboard_payload(service)["timeline"]
+    assert "periods" in tl
+    assert "total" in tl
+    assert "notes" in tl
+    # Any entry timestamps are ISO strings (JSON-safe), never datetime objects.
+    for period in tl["periods"]:
+        for entry in period["entries"]:
+            assert entry["ts"] is None or isinstance(entry["ts"], str)
+
+
 def test_dashboard_payload_includes_scorecard_section(
     sample_repo: Path,
     monkeypatch: object,
