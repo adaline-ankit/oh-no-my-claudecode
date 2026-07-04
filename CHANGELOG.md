@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.77.0] — 2026-07-05
+
+### Added
+
+- **`onmc timeline` — repo-evolution narrative from the brain** — orders recorded memories (decisions, invariants, gotchas, dead-ends) by timestamp into a readable evolution story, grouped into periods (day/week) with one-line milestones. Great for onboarding and a shareable "how this repo got here". `--since`, `--group`, `--json`, `--markdown`. Pure/offline, clock-free core (the command layer injects `now`); undated memories are bucketed and noted, never given a fabricated timestamp.
+
+Built via the `onmc mission`→swarm dogfood loop, its own verified PR (#224) — onmc building onmc.
+
 ## [0.76.0] — 2026-07-05
 
 ### Added
