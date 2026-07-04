@@ -3048,11 +3048,17 @@ Usage: onmc reuse [OPTIONS] QUERY
  how well their name, docstring, and argument names match your query.
  Entirely offline and deterministic — no LLM, no network.
 
+ With ``--ast-grep`` (and the ``ast-grep``/``sg`` binary installed), also runs
+ structural AST-pattern matching that catches structurally-similar code even
+ when variable names differ.
+
  Examples:
 
    onmc reuse "tokenize text into words"
 
    onmc reuse tokenize --json
+
+   onmc reuse "def $F($$$ARGS):" --ast-grep
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    query      TEXT  A description of the behaviour you need, or an         │
@@ -3060,11 +3066,26 @@ Usage: onmc reuse [OPTIONS] QUERY
 │                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit        INTEGER RANGE [x>=1]  Maximum number of reuse hits to return. │
-│                                      [default: 8]                            │
-│ --json                               Emit the ranked hits as JSON instead of │
-│                                      a table.                                │
-│ --help                               Show this message and exit.             │
+│ --limit                        INTEGER RANGE [x>=1]  Maximum number of reuse │
+│                                                      hits to return.         │
+│                                                      [default: 8]            │
+│ --json                                               Emit the ranked hits as │
+│                                                      JSON instead of a       │
+│                                                      table.                  │
+│ --ast-grep    --no-ast-grep                          Use ast-grep (the       │
+│                                                      'ast-grep' or 'sg'      │
+│                                                      binary) for             │
+│                                                      structural/AST-pattern  │
+│                                                      matching in addition to │
+│                                                      the text heuristic.     │
+│                                                      No-op when neither      │
+│                                                      binary is on PATH       │
+│                                                      (falls back to          │
+│                                                      text-only, zero         │
+│                                                      regression).            │
+│                                                      [default: no-ast-grep]  │
+│ --help                                               Show this message and   │
+│                                                      exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
