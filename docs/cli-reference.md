@@ -1838,7 +1838,7 @@ Usage: onmc llm configure [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ *  --provider               [anthropic|openai|olla  LLM provider to          │
-│                             ma|mock]                configure.               │
+│                             ma|litellm|mock]        configure.               │
 │                                                     [required]               │
 │ *  --model                  TEXT                    Default model name.      │
 │                                                     [required]               │
