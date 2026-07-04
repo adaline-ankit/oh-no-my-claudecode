@@ -70,7 +70,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ preflight       Run the exact CI quality gate locally, in the same order CI  │
 │                 runs it.                                                     │
 │ verify-diff     Adversarially verify the working diff against a base ref.    │
-│ wiki            Generate a markdown wiki or Obsidian knowledge-graph vault.  │
 │ bench           Measure whether onmc memory actually reduces wasted work.    │
 │ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
 │ evolution       Show the compounding-proof evolution card across             │
@@ -138,6 +137,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 fabricated.                                                  │
 │ fleet           Operator view for local agent fleets (swarm + claims +       │
 │                 receipts).                                                   │
+│ wiki            Generate wiki and knowledge-graph exports from stored        │
+│                 memory.                                                      │
 │ codegraph       Structural repo graph — tiny, smart context for agents.      │
 │                 Deterministic, offline (stdlib ast only).                    │
 │ trace           Agent Trace Observatory — instrument a session and get a     │
@@ -4194,9 +4195,9 @@ Usage: onmc why [OPTIONS] PATH
 ## `onmc wiki`
 
 ```text
-Usage: onmc wiki [OPTIONS]
+Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
 
- Generate a markdown wiki or Obsidian knowledge-graph vault.
+ Generate wiki and knowledge-graph exports from stored memory.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --output        PATH                 Directory to write wiki pages into.     │
@@ -4207,6 +4208,31 @@ Usage: onmc wiki [OPTIONS]
 │                                      Obsidian vault.                         │
 │                                      [default: markdown]                     │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ logseq  Export memory as a Logseq-compatible knowledge graph.                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wiki logseq`
+
+```text
+Usage: onmc wiki logseq [OPTIONS]
+
+ Export memory as a Logseq-compatible knowledge graph.
+
+ Writes one markdown page per memory into a ``pages/`` subdirectory, using
+ Logseq's ``key:: value`` page properties and ``[]`` for memory
+ edges.  No new dependency — pure stdlib string generation.
+
+ The output directory defaults to ``.onmc/logseq/`` and is safe to open
+ directly in the Logseq desktop app as a graph folder.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         PATH  Directory to write Logseq pages into. Defaults to        │
+│                     .onmc/logseq/ (gitignored).                              │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
