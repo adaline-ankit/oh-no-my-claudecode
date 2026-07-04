@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.65.0] — 2026-07-04
+
+### Added
+
+- **Optional gitleaks secret-scan in `onmc audit`** — with `--gitleaks` (default off) and the `gitleaks` binary on PATH, audit runs gitleaks and folds detected secrets into the report/score (critical severity deducts). `shutil.which` detection (no pip dep), injectable runner, audit unchanged when absent — a clean sibling to the semgrep integration.
+- **`onmc wiki foam [--out DIR] [--json]`** — exports the memory store as a Foam workspace: one note per memory under `notes/` with YAML frontmatter, `[[wikilinks]]` for every edge kind, and an `index.md`. Pure stdlib, deterministic, no server — the YAML-frontmatter sibling of the Logseq exporter.
+- **D2 output for `onmc viz` (`--format d2`)** — `onmc viz memory` and `onmc viz code` can emit [D2](https://terrastruct.com/d2) diagram text as an alternative to the default Mermaid. Pure stdlib sibling renderer; existing Mermaid output is unchanged.
+
+All three are optional, import-guarded / zero-dep additions with graceful fallback — built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR (#192–#194).
+
 ## [0.64.0] — 2026-07-04
 
 ### Added
