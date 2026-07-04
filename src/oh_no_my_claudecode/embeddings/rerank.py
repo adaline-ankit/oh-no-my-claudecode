@@ -12,12 +12,30 @@ Gating
 ------
 All entry-points check ``embeddings_enabled()`` first.  When disabled, the
 input list is returned unchanged so all call-sites degrade gracefully.
+
+Optional fastembed cross-encoder backend
+----------------------------------------
+When the optional ``fastembed`` extra is installed (``pip install
+oh-no-my-claudecode[fastembed]``) **and** the reranker is selected
+(``ONMC_RERANKER=fastembed``), :func:`rerank_with_embeddings` uses
+``fastembed.TextCrossEncoder`` as a **cross-encoder** re-scorer instead of
+the default bi-encoder cosine blend.  A cross-encoder scores (query, document)
+pairs jointly, typically producing sharper relevance discrimination.
+
+Selection rules:
+- ``ONMC_RERANKER=fastembed`` **and** fastembed extra installed → cross-encoder
+- Anything else (env absent, ``default``, extra missing) → existing cosine blend
+
+The cross-encoder is **never auto-selected** — it must be explicitly opted in,
+mirroring the ``ONMC_EMBEDDER=fastembed`` convention for the bi-encoder.
+Tests MUST monkeypatch ``TextCrossEncoder`` so no model is downloaded.
 """
 
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+import os
+from typing import TYPE_CHECKING, Any
 
 from oh_no_my_claudecode.embeddings.core import (
     Embedder,
@@ -25,6 +43,7 @@ from oh_no_my_claudecode.embeddings.core import (
     _memory_content_hash,
     cosine_similarity,
     embeddings_enabled,
+    fastembed_available,
     get_embedder,
 )
 from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
@@ -32,6 +51,116 @@ from oh_no_my_claudecode.utils.time import isoformat_utc, utc_now
 if TYPE_CHECKING:
     from oh_no_my_claudecode.models import MemoryEntry
     from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
+
+
+# ---------------------------------------------------------------------------
+# Optional fastembed cross-encoder reranker (guarded import)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+
+def fastembed_reranker_available() -> bool:
+    """Return True when the optional ``fastembed`` package is importable.
+
+    Does NOT load a model.  The cross-encoder shares the same ``fastembed``
+    extra as the bi-encoder — no separate install is required.
+    """
+    return fastembed_available()
+
+
+def fastembed_reranker_selected() -> bool:
+    """Return True when the fastembed cross-encoder reranker is configured.
+
+    Requires **both** availability and opt-in:
+    - ``ONMC_RERANKER=fastembed`` environment variable (case-insensitive).
+    - The ``fastembed`` extra must be installed.
+
+    When absent or not selected, :func:`rerank_with_embeddings` falls back to
+    the existing cosine-blend heuristic without error.
+    """
+    if not fastembed_reranker_available():
+        return False
+    raw = os.environ.get("ONMC_RERANKER", "").strip().lower()
+    return raw == "fastembed"
+
+
+def _try_fastembed_cross_encoder(
+    model_name: str = _DEFAULT_CROSS_ENCODER_MODEL,
+) -> Any | None:  # noqa: ANN401
+    """Attempt to load the fastembed ``TextCrossEncoder`` and return it.
+
+    Returns the loaded model object on success, or ``None`` when:
+    - ``fastembed`` is not installed, or
+    - the model cannot be loaded (any exception).
+
+    The import error is silently swallowed so the package never fails to import
+    on a fresh install.  Tests MUST monkeypatch this function or inject a fake
+    ``fastembed`` module into ``sys.modules`` — no network is ever hit.
+
+    The return type is ``Any`` because ``TextCrossEncoder`` is a third-party
+    class not available at type-check time (import-guarded).
+    """
+    try:
+        from fastembed import TextCrossEncoder  # noqa: PLC0415
+    except ImportError:
+        return None
+
+    try:
+        return TextCrossEncoder(model_name=model_name)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _rerank_via_cross_encoder(
+    candidates: list[MemoryEntry],
+    query: str,
+) -> list[MemoryEntry] | None:
+    """Reorder *candidates* using the fastembed ``TextCrossEncoder``.
+
+    Scores each (query, candidate_text) pair jointly, sorts descending by
+    score, and returns the reordered list.  Returns ``None`` when the
+    cross-encoder backend is unavailable or not selected, or on any error —
+    signalling the caller to fall back to the cosine-blend path.  Never raises.
+    """
+    if not fastembed_reranker_selected():
+        return None
+
+    model = _try_fastembed_cross_encoder()
+    if model is None:
+        return None
+
+    try:
+        texts = [_memory_text(m) for m in candidates]
+        pairs = [(query, t) for t in texts]
+        # TextCrossEncoder.rerank returns an iterable of (score, index) or a
+        # list of scores depending on the fastembed version.  We call
+        # ``rerank`` when available (preferred), else ``predict`` on pairs.
+        if hasattr(model, "rerank"):
+            results = list(model.rerank(query, texts))
+            # rerank() returns dicts with 'score' and 'index' keys.
+            scored: list[tuple[float, MemoryEntry]] = []
+            for item in results:
+                if isinstance(item, dict):
+                    raw_idx = item.get("corpus_id") or item.get("index") or 0
+                    idx = int(raw_idx)
+                    score = float(item.get("score") or 0.0)
+                else:
+                    # Fallback: treat as (score, index) tuple.
+                    score, idx = float(item[0]), int(item[1])
+                if 0 <= idx < len(candidates):
+                    scored.append((score, candidates[idx]))
+        else:
+            # Older fastembed: predict() returns a list of float scores
+            # aligned with *pairs*.
+            raw_model: Any = model
+            scores = list(raw_model.predict(pairs))
+            scored = [(float(s), m) for s, m in zip(scores, candidates, strict=True)]
+
+        scored.sort(key=lambda item: (-item[0], item[1].title))
+        return [m for _, m in scored]
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _memory_text(memory: MemoryEntry) -> str:
@@ -184,6 +313,14 @@ def rerank_with_embeddings(
             embedder = get_embedder()
         except Exception:  # noqa: BLE001
             return candidates
+
+    # Optional fastembed cross-encoder: when installed AND ONMC_RERANKER=fastembed,
+    # use a cross-encoder to jointly score (query, document) pairs for sharper
+    # relevance discrimination.  Any miss returns None and we fall through to
+    # the existing paths (zero regression).
+    ce_ordered = _rerank_via_cross_encoder(candidates, query)
+    if ce_ordered is not None:
+        return ce_ordered
 
     # Optional sqlite-vec backend: when installed AND selected, use its indexed
     # KNN to reorder the candidate set semantically.  Any miss returns None and
