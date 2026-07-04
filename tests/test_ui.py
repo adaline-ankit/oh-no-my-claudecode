@@ -114,6 +114,87 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_swarms_section_exception_safe(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The swarms section is always present and empty-safe with no swarm state."""
+    service = _ready_service(sample_repo, monkeypatch)
+
+    payload = build_dashboard_payload(service)
+
+    assert "swarms" in payload
+    swarms = payload["swarms"]
+    assert swarms["swarms"] == []
+    assert swarms["summary"]["live"] == 0
+    assert swarms["summary"]["swarms"] == 0
+
+
+def test_dashboard_payload_swarms_reads_manifest(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """swarms surfaces live units + verified counts from a swarm manifest."""
+    service = _ready_service(sample_repo, monkeypatch)
+    swarm_dir = sample_repo / ".onmc" / "swarm" / "sw1"
+    swarm_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "swarm_id": "sw1",
+        "mode": "inline",
+        "agent": "claude-code-subagent",
+        "concurrency": 2,
+        "started_at": "2026-07-05T00:00:00",
+        "units": {
+            "unit-0000": {
+                "goal": "build alpha",
+                "status": "running",
+                "verified": None,
+                "cost_usd": 0.0,
+            },
+            "unit-0001": {
+                "goal": "build beta",
+                "status": "done",
+                "verified": True,
+                "cost_usd": 0.5,
+            },
+        },
+    }
+    (swarm_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    swarms = build_dashboard_payload(service)["swarms"]
+
+    assert swarms["summary"]["swarms"] == 1
+    assert swarms["summary"]["live"] == 1  # one unit still running
+    assert swarms["summary"]["running_units"] == 1
+    assert swarms["summary"]["verified_units"] == 1
+    row = swarms["swarms"][0]
+    assert row["swarm_id"] == "sw1"
+    assert row["live"] is True
+    assert row["label"] == "build alpha"
+    assert row["verified_count"] == 1
+
+
+def test_dashboard_html_contains_swarms_view(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard exposes the Swarms (live agents) view + auto-refresh."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="view-swarms"' in html
+    assert 'data-view="swarms"' in html
+    assert "refreshSilently" in js
+
+
 def test_dashboard_html_contains_mission_control_view(
     sample_repo: Path,
     monkeypatch: object,

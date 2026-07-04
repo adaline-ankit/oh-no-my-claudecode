@@ -539,6 +539,54 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
   .runs-table { min-width: 560px; }
 }
 
+/* ── Swarms (live agents) ───────────────────────────────────────────────── */
+#swarm-metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 16px; }
+.metric.metric-live .metric-value { color: var(--blue); }
+.status-chip.live { color: #1d4b63; background: var(--blue-soft); border: 1px solid #b6d2e1; }
+.status-chip.live::before { content: ""; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #2f86b4; animation: onmc-pulse 1.6s ease-in-out infinite; }
+
+.nav-live-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: #d9f26a; box-shadow: 0 0 0 3px rgb(217 242 106 / 20%); animation: onmc-pulse 1.6s ease-in-out infinite; }
+
+.swarm-list { display: flex; flex-direction: column; gap: 12px; }
+.swarm-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.swarm-card.is-live { border-color: #b6d2e1; box-shadow: inset 3px 0 0 var(--blue); }
+.swarm-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.swarm-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.swarm-label { font-size: 14px; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 999px; background: var(--blue-soft); color: #1d4b63; font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: #2f86b4; animation: onmc-pulse 1.6s ease-in-out infinite; }
+.swarm-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--faint); font-size: 10px; }
+.swarm-meta code { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
+.swarm-aborted { color: #80311f; font-weight: 700; }
+
+.swarm-stats { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 11px 0 4px; }
+.swarm-pill { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: capitalize; border: 1px solid var(--line); background: var(--surface-alt); color: #46534c; font-variant-numeric: tabular-nums; }
+.swarm-pill.state-running { color: #1d4b63; background: var(--blue-soft); border-color: #b6d2e1; }
+.swarm-pill.state-done { color: #135d3c; background: var(--green-soft); border-color: #b8dcc6; }
+.swarm-pill.state-failed, .swarm-pill.state-aborted { color: #80311f; background: var(--red-soft); border-color: #e6bcb6; }
+.swarm-pill.state-queued, .swarm-pill.state-pending { color: #80420b; background: var(--amber-soft); border-color: #e7c9a5; }
+.swarm-verified { margin-left: auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.swarm-cost { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.unit-list { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+.unit-row { display: flex; align-items: center; gap: 10px; padding: 4px 2px; min-width: 0; }
+.unit-glyph { flex: none; width: 16px; text-align: center; font-size: 12px; }
+.unit-glyph.ok { color: var(--green); }
+.unit-glyph.bad { color: var(--red); }
+.unit-glyph.run { color: var(--blue); animation: onmc-spin 1.4s linear infinite; display: inline-block; }
+.unit-glyph.pending { color: var(--faint); }
+.unit-state { flex: none; width: 62px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.unit-row.state-running .unit-state { color: var(--blue); font-weight: 700; }
+.unit-goal { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12px; }
+.unit-sha { flex: none; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--faint); }
+
+@keyframes onmc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes onmc-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  #swarm-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
