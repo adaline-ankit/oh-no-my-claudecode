@@ -338,6 +338,36 @@ def test_plan_mission_change_work_scopes_per_file_and_dedupes(
     _no_dupe_goals(plan.swarm_units)
 
 
+def test_plan_mission_build_verb_on_existing_path_is_change_work(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+
+    # A build/create verb ("Add") that names a REAL existing file must be treated
+    # as change-work, not greenfield (Sourcery bug_risk: markers + existing path).
+    plan = plan_mission(storage, sample_repo, "Add rate limiting to src/cache.py")
+
+    assert not any("deliverable:" in u for u in plan.swarm_units), plan.swarm_units
+    assert any("focus on" in u for u in plan.swarm_units)
+
+
+def test_plan_mission_greenfield_fan_out_is_capped(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+
+    # 15 distinct greenfield deliverables must not reintroduce runaway fan-out —
+    # the greenfield path is capped just like change-work (Sourcery bug_risk).
+    clauses = " ".join(f"({i}) build a new module src/mod{i}/" for i in range(1, 16))
+    plan = plan_mission(storage, sample_repo, f"Build new modules: {clauses}")
+
+    deliverable_units = [u for u in plan.swarm_units if "deliverable:" in u]
+    assert 0 < len(deliverable_units) <= 12  # _SWARM_UNIT_LIMIT
+    _no_dupe_goals(plan.swarm_units)
+
+
 def test_mission_cli_execute_flag(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(sample_repo)
     _storage(sample_repo)

@@ -228,14 +228,16 @@ def _is_greenfield(goal: str, repo_root: Path | None, pack: ContextPack) -> bool
 
     named = _named_paths(goal)
     if named and repo_root is not None:
-        missing = [p for p in named if not (repo_root / p).exists()]
-        if missing:
-            return True
+        existing = [p for p in named if (repo_root / p).exists()]
+        # The goal points at real files on disk → change-work, even if it also
+        # carries a build/create verb ("add tests to src/foo.py"). Concrete
+        # targets to edit win over the marker. Named paths that don't exist yet
+        # → building new things (greenfield).
+        return not existing
 
-    # A build/create verb with no resolved context files to edit → greenfield.
-    if marker_hit and not pack.context_files:
-        return True
-    return marker_hit and bool(named)
+    # No named paths (or no repo_root to check): a build/create verb with no
+    # resolved context files to edit is greenfield; otherwise change-work.
+    return marker_hit and not pack.context_files
 
 
 def _split_deliverables(goal: str) -> list[str]:
@@ -301,7 +303,9 @@ def _derive_swarm_units(
     units: list[str]
     if _is_greenfield(goal, repo_root, pack):
         deliverables = _split_deliverables(goal)
-        units = [f"{goal} — deliverable: {clause}" for clause in deliverables]
+        # Cap greenfield fan-out too: a goal that splits into dozens of clauses
+        # must not reintroduce the runaway fan-out the change-work path guards.
+        units = [f"{goal} — deliverable: {clause}" for clause in deliverables][:_SWARM_UNIT_LIMIT]
     else:
         units = [f"{goal} — focus on `{path}`" for path in pack.context_files]
         units = _dedupe(units)[:_SWARM_UNIT_LIMIT]
