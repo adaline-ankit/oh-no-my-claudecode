@@ -757,3 +757,160 @@ def test_semgrep_real_binary_smoke(tmp_path: Path) -> None:
     findings = run_semgrep(repo, runner_fn)
     # We just assert it returns a list — content varies by semgrep version.
     assert isinstance(findings, list)
+
+
+# ---------------------------------------------------------------------------
+# Gitleaks integration tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_gitleaks_runner_with_finding(path: Path) -> list[dict[str, Any]]:
+    """Fake GitleaksRunner that returns one critical secret finding."""
+    return [
+        {
+            "RuleID": "generic-api-key",
+            "Description": "Detected a Generic API Key, potentially exposing access to various services.",  # noqa: E501
+            "File": str(path / "config.py"),
+            "StartLine": 42,
+            "Secret": "REDACTED",
+            "Match": "api_key = 'REDACTED'",
+        }
+    ]
+
+
+def _fake_gitleaks_runner_empty(path: Path) -> list[dict[str, Any]]:
+    """Fake GitleaksRunner that returns zero findings (clean result)."""
+    return []
+
+
+def _fake_gitleaks_runner_none(path: Path) -> None:  # type: ignore[return]
+    """Fake GitleaksRunner that simulates a gitleaks execution error."""
+    return None  # type: ignore[return-value]
+
+
+def test_gitleaks_findings_folded_into_report(tmp_path: Path) -> None:
+    """Injected gitleaks runner findings are included in the AuditReport."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    repo = _repo(tmp_path)
+    repo.mkdir()
+
+    def _runner(p: Path) -> list[dict[str, Any]]:
+        return _fake_gitleaks_runner_with_finding(p)
+
+    report = run_audit(repo, gitleaks_runner=_runner)
+    gitleaks_findings = [f for f in report.findings if f.rule_id.startswith("GITLEAKS:")]
+    assert len(gitleaks_findings) == 1, f"Expected 1 gitleaks finding, got {gitleaks_findings}"
+    finding = gitleaks_findings[0]
+    assert finding.severity == "critical"
+    assert "generic-api-key" in finding.rule_id
+
+
+def test_gitleaks_absent_runner_leaves_audit_unchanged(clean_repo: Path) -> None:
+    """When runner=None (no gitleaks binary / opt-out) audit is completely unchanged."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report_no_gitleaks = run_audit(clean_repo)
+    report_with_none_runner = run_audit(clean_repo, gitleaks_runner=None)
+
+    assert report_no_gitleaks.score == report_with_none_runner.score
+    assert report_no_gitleaks.grade == report_with_none_runner.grade
+    assert report_no_gitleaks.findings == report_with_none_runner.findings
+
+
+def test_gitleaks_error_runner_produces_zero_findings(clean_repo: Path) -> None:
+    """A runner that returns None (execution error) adds zero findings."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report = run_audit(clean_repo, gitleaks_runner=_fake_gitleaks_runner_none)
+    gitleaks_findings = [f for f in report.findings if f.rule_id.startswith("GITLEAKS:")]
+    assert gitleaks_findings == []
+
+
+def test_gitleaks_findings_deduct_score(clean_repo: Path) -> None:
+    """Gitleaks findings deduct from the score (critical → -25 per finding)."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    def _runner(p: Path) -> list[dict[str, Any]]:
+        return _fake_gitleaks_runner_with_finding(p)
+
+    report = run_audit(clean_repo, gitleaks_runner=_runner)
+    # One critical finding deducts 25 → score = 75
+    assert report.score == 75
+    assert report.grade == "B"
+
+
+def test_gitleaks_available_mirrors_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """gitleaks_available() returns True/False based on shutil.which result."""
+    from oh_no_my_claudecode.audit.gitleaks import gitleaks_available
+
+    monkeypatch.setattr("shutil.which", lambda _name: "/usr/local/bin/gitleaks")
+    assert gitleaks_available() is True
+
+    monkeypatch.setattr("shutil.which", lambda _name: None)
+    assert gitleaks_available() is False
+
+
+def test_gitleaks_run_gitleaks_deterministic(clean_repo: Path) -> None:
+    """run_gitleaks with the same injected runner produces identical results each call."""
+    from oh_no_my_claudecode.audit.gitleaks import run_gitleaks
+
+    def _runner(p: Path) -> list[dict[str, Any]]:
+        return _fake_gitleaks_runner_with_finding(p)
+
+    findings_a = run_gitleaks(clean_repo, _runner)
+    findings_b = run_gitleaks(clean_repo, _runner)
+
+    assert len(findings_a) == len(findings_b)
+    for a, b in zip(findings_a, findings_b, strict=True):
+        assert a.rule_id == b.rule_id
+        assert a.severity == b.severity
+        assert a.detail == b.detail
+
+
+def test_gitleaks_finding_line_number_captured(clean_repo: Path) -> None:
+    """Gitleaks findings capture the line number when present."""
+    from oh_no_my_claudecode.audit.gitleaks import run_gitleaks
+
+    def _runner(p: Path) -> list[dict[str, Any]]:
+        return _fake_gitleaks_runner_with_finding(p)
+
+    findings = run_gitleaks(clean_repo, _runner)
+    assert len(findings) == 1
+    assert findings[0].line == 42
+
+
+def test_gitleaks_empty_runner_no_findings(clean_repo: Path) -> None:
+    """A runner that returns an empty list produces zero GITLEAKS findings."""
+    from oh_no_my_claudecode.audit.scanner import run_audit
+
+    report = run_audit(clean_repo, gitleaks_runner=_fake_gitleaks_runner_empty)
+    gitleaks_findings = [f for f in report.findings if f.rule_id.startswith("GITLEAKS:")]
+    assert gitleaks_findings == []
+    assert report.score == 100
+
+
+def test_cli_audit_gitleaks_flag_exits_zero_on_clean(
+    runner: CliRunner, clean_repo: Path
+) -> None:
+    """``onmc audit --no-gitleaks`` on a clean repo exits 0 (flag accepted, no binary needed)."""
+    result = runner.invoke(app, ["audit", str(clean_repo), "--no-gitleaks"])
+    assert result.exit_code == 0, (
+        f"Expected 0, got {result.exit_code}. Output: {result.stdout}"
+    )
+
+
+@pytest.mark.skipif(
+    __import__("shutil").which("gitleaks") is None,
+    reason="gitleaks binary not on PATH",
+)
+def test_gitleaks_real_binary_smoke(tmp_path: Path) -> None:
+    """Smoke test: real gitleaks binary runs without crashing on an empty dir."""
+    from oh_no_my_claudecode.audit.gitleaks import make_gitleaks_runner, run_gitleaks
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    runner_fn = make_gitleaks_runner()
+    findings = run_gitleaks(repo, runner_fn)
+    # We just assert it returns a list — content varies by gitleaks version.
+    assert isinstance(findings, list)

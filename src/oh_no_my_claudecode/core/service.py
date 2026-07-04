@@ -3386,7 +3386,13 @@ class OnmcService:
                 storage.upsert_memory_edge(edge)
         return repo_root, result
 
-    def audit(self, *, repo_root: Path | None = None, semgrep: bool = False) -> AuditReport:
+    def audit(
+        self,
+        *,
+        repo_root: Path | None = None,
+        semgrep: bool = False,
+        gitleaks: bool = False,
+    ) -> AuditReport:
         """Run the agent-configuration security scanner against the repo.
 
         This is entirely offline — no LLM calls, no network access.  Results
@@ -3406,12 +3412,23 @@ class OnmcService:
             when the binary is absent the flag is silently ignored — zero
             regression.  No pip dependency is added — semgrep is an external
             tool.
+        gitleaks:
+            Opt in to an additional gitleaks secret-scanning pass.  Only takes
+            effect when the ``gitleaks`` binary is on ``PATH`` (detected with
+            :func:`~oh_no_my_claudecode.audit.gitleaks.gitleaks_available`);
+            when the binary is absent the flag is silently ignored — zero
+            regression.  No pip dependency is added — gitleaks is an external
+            tool.
 
         Returns
         -------
         AuditReport
             Scored, graded report ready for rendering or JSON serialisation.
         """
+        from oh_no_my_claudecode.audit.gitleaks import (
+            gitleaks_available,
+            make_gitleaks_runner,
+        )
         from oh_no_my_claudecode.audit.scanner import AuditReport as _AuditReport
         from oh_no_my_claudecode.audit.scanner import run_audit
         from oh_no_my_claudecode.audit.semgrep import (
@@ -3429,7 +3446,15 @@ class OnmcService:
         if semgrep and semgrep_available():
             semgrep_runner = make_semgrep_runner()
 
-        result: _AuditReport = run_audit(repo_root, semgrep_runner=semgrep_runner)
+        gitleaks_runner = None
+        if gitleaks and gitleaks_available():
+            gitleaks_runner = make_gitleaks_runner()
+
+        result: _AuditReport = run_audit(
+            repo_root,
+            semgrep_runner=semgrep_runner,
+            gitleaks_runner=gitleaks_runner,
+        )
         return result
 
     def verify_diff(
