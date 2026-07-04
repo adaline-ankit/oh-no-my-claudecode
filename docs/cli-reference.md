@@ -169,6 +169,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ memguard        Memory-integrity firewall: scan memory entries for           │
+│                 adversarial content.                                         │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ proptest        Generate property/invariant tests for pure functions.        │
@@ -2453,6 +2455,58 @@ Usage: onmc mcp policy init [OPTIONS] [PATH]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memguard`
+
+```text
+Usage: onmc memguard [OPTIONS] COMMAND [ARGS]...
+
+ Memory-integrity firewall: scan memory entries for adversarial content.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ scan  Scan the onmc memory store for adversarial content.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memguard scan`
+
+```text
+Usage: onmc memguard scan [OPTIONS]
+
+ Scan the onmc memory store for adversarial content.
+
+ Reads every memory entry and checks for:
+
+ \b
+ - Prompt-injection / system-prompt override phrases (MG-INJ-*)
+ - Credential exfiltration attempts (MG-EXF-*)
+ - SSH authorized_keys writes and reverse-shell one-liners (MG-SSH-*)
+ - Invisible/dangerous Unicode: zero-width chars, bidi overrides,
+   tag chars (MG-UNI-*)
+
+ Pure stdlib — deterministic, offline, no network calls.
+
+ Examples:
+
+     onmc memguard scan               # human-readable report
+
+     onmc memguard scan --json        # JSON envelope for pipelines
+
+     onmc memguard scan --fail-on high  # exit 1 when high+ findings exist
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                           Emit a JSON envelope {"kind": "memguard",   │
+│                                  "report": {...}} for pipeline composition.  │
+│ --include-clean                  Include clean (no-finding) entries in the   │
+│                                  output.                                     │
+│ --fail-on              SEVERITY  Exit 1 when a finding exists at or above    │
+│                                  SEVERITY (critical/high/medium/low).        │
+│ --help                           Show this message and exit.                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
