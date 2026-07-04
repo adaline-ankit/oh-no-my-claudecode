@@ -4,6 +4,17 @@ const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
 const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmSearch: "", autoRefresh: true, lastUpdated: null };
+const THEME_KEY = "onmc_theme";
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.body.classList.toggle("theme-dark", dark);
+  try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch { /* ignore */ }
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = dark ? "○" : "◐";
+}
+function toggleTheme() { applyTheme(document.body.classList.contains("theme-dark") ? "light" : "dark"); }
+try { if (localStorage.getItem(THEME_KEY) === "dark") document.body.classList.add("theme-dark"); } catch { /* ignore */ }
 const palette = ["#237a50", "#356f91", "#a65e18", "#6b5b95", "#a23d3d", "#55766a"];
 
 const byId = (id) => document.getElementById(id);
@@ -623,6 +634,25 @@ byId("autorefresh-toggle").addEventListener("change", (event) => {
   state.autoRefresh = event.target.checked;
   renderLiveStatus();
   if (state.autoRefresh) refreshSilently();
+});
+byId("theme-toggle").addEventListener("click", toggleTheme);
+applyTheme(document.body.classList.contains("theme-dark") ? "dark" : "light");
+
+// Keyboard shortcuts: 1-9 jump to a view, "/" focuses the current search, "t" theme.
+const SHORTCUT_VIEWS = ["overview", "swarms", "performance", "scorecard", "timeline", "memory", "tasks", "codegraph", "health", "mission"];
+document.addEventListener("keydown", (event) => {
+  const typing = /^(input|textarea|select)$/i.test(event.target.tagName);
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (typing) { if (event.key === "Escape") event.target.blur(); return; }
+  if (event.key >= "1" && event.key <= "9") {
+    const view = SHORTCUT_VIEWS[Number(event.key) - 1];
+    if (view) { event.preventDefault(); switchView(view); }
+  } else if (event.key === "/") {
+    const search = state.view === "swarms" ? byId("swarm-search") : state.view === "memory" ? byId("memory-search") : null;
+    if (search) { event.preventDefault(); search.focus(); }
+  } else if (event.key === "t") {
+    toggleTheme();
+  }
 });
 
 // Live auto-refresh: silently re-fetch and re-render so running swarms update
