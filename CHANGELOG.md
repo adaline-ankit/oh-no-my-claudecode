@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.62.0] — 2026-06-24
+
+### Added
+
+- **Optional Ollama local LLM provider** — `ask`/`judge`/`solve`/`evolve` can run against a local Ollama server (stdlib urllib, no new dep, no API key, offline). Select via `onmc llm configure --provider ollama`; graceful when the server is absent.
+- **Optional sqlite-vec semantic recall backend** — real vector KNN inside the existing `memory_vectors` table when the `sqlitevec` extra is installed; graceful fallback to the default hash embedder otherwise (zero behavioural change).
+- **Optional tree-sitter multi-language codegraph** — `onmc codegraph` now indexes JS/TS/Go/Rust/Java (via the `treesitter` extra); falls back to Python-`ast` when absent (zero regression).
+
+All three are optional, import-guarded integrations with graceful zero-dep fallback — and were built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR.
+
 ## [0.61.0] — 2026-06-24
 
 ### Added
