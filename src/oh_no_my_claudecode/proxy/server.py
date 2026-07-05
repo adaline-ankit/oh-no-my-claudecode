@@ -405,6 +405,7 @@ class ProxyServer:
         self.host = host
         self._requested_port = port
         self._server: http.server.HTTPServer | None = None
+        self._serving = False
 
     @property
     def port(self) -> int:
@@ -425,12 +426,23 @@ class ProxyServer:
         if self._server is None:  # pragma: no cover — start() always sets it
             msg = "Server failed to start."
             raise RuntimeError(msg)
-        self._server.serve_forever()
+        self._serving = True
+        try:
+            self._server.serve_forever()
+        finally:
+            self._serving = False
 
     def stop(self) -> None:
-        """Shut down the server and release the socket."""
+        """Shut down the server and release the socket.
+
+        ``shutdown()`` blocks until a running ``serve_forever()`` loop exits, so
+        it is only safe to call when one is actually running — otherwise (e.g.
+        after single-shot ``handle_one_request()``) it deadlocks. Guard on
+        ``_serving`` and always ``server_close()`` to release the socket.
+        """
         if self._server is not None:
-            self._server.shutdown()
+            if self._serving:
+                self._server.shutdown()
             self._server.server_close()
             self._server = None
 
