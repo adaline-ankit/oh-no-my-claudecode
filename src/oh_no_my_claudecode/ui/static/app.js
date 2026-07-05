@@ -3,7 +3,7 @@
 const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
-const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmScope: "repo", swarmSearch: "", autoRefresh: true, lastUpdated: null, renderedSwarms: [] };
+const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmScope: "repo", swarmSearch: "", autoRefresh: true, lastUpdated: null, renderedSwarms: [], seenVerified: null };
 const THEME_KEY = "onmc_theme";
 
 function applyTheme(theme) {
@@ -67,8 +67,27 @@ function hydrateDashboard() {
   renderMission();
   renderLiveStatus();
   renderWall();
+  celebrateVerifications();
   switchView(state.view);
   renderWelcome();
+}
+
+function celebrateVerifications() {
+  const swarms = (state.data && state.data.global && state.data.global.swarms)
+    || (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  const current = new Set();
+  swarms.forEach((s) => (s.units || []).forEach((u) => {
+    if (u.verified === true) current.add(`${s.swarm_id}:${u.unit_id}`);
+  }));
+  if (state.seenVerified === null) { state.seenVerified = current; return; } // first load: no toast storm
+  let fresh = 0;
+  current.forEach((k) => { if (!state.seenVerified.has(k)) fresh += 1; });
+  state.seenVerified = current;
+  if (fresh > 0) {
+    showToast(`✓ ${fresh} agent${fresh > 1 ? "s" : ""} verified`);
+    document.body.classList.add("celebrate");
+    setTimeout(() => document.body.classList.remove("celebrate"), 900);
+  }
 }
 
 function renderWelcome() {
