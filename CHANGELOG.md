@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.79.0] — 2026-07-05
+
+### Added
+
+Second batch of memory features inspired by NousResearch's hermes-agent, built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR:
+
+- **`onmc membudget` — memory-budget guard + consolidation suggester** — reports total store size with a per-kind breakdown, flags when over a configurable budget, and suggests concrete consolidation actions (DROP_STALE / MERGE_DUPLICATES / MOVE_TO_TOPIC). Read-only/advisory, deterministic, zero deps. (#231)
+- **`onmc memprovider` — external memory-provider adapter interface** — a `MemoryProvider` Protocol + registry with a zero-dep `builtin` adapter over onmc's store plus import-guarded optional **Mem0** and **Supermemory** adapters (extras), running alongside built-in memory, never replacing it. `memprovider list`/`search`. (#232)
+- **`onmc proxy` — OpenAI-compatible local proxy** — exposes onmc's configured LLM provider at `POST /v1/chat/completions` + `GET /v1/models` (stdlib `http.server`, no new dep) so external tools (Codex/Aider/Cline/Continue) can point at onmc. Pure request/response mappers are socket-free testable; graceful error JSON when no provider is configured. (#233)
+
 ## [0.78.0] — 2026-07-05
 
 ### Added
