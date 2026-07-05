@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.80.0] — 2026-07-05
+
+### Added
+
+Third batch of memory features inspired by NousResearch's hermes-agent, built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR:
+
+- **`onmc skillguard` — skill write-approval gate with unified diffs** — the skill sibling of `memstage`: stages proposed skill create/edit/delete ops under `.onmc/skillguard/` for human review (unified diff via `difflib`) before anything touches the skill store. `stage`/`list`/`diff`/`approve`/`reject` with an audit trail; approve applies via the real skill path. Pure stdlib, deterministic ids. (#243)
+- **`onmc selfimprove` — after-turn learning review** — scans a transcript/session for durable learnings (user corrections, repeated preferences, confirmed conventions) via pure regex heuristics and, with `--stage`, proposes them into the `memstage` approval queue for human sign-off. No LLM, no new deps; distinct from `flywheel` (which analyzes run receipts). (#242)
+
 ## [0.79.0] — 2026-07-05
 
 ### Added
