@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.81.0] — 2026-07-06
+
+### Added
+
+The **fun track** — features that make coding with an agent genuinely delightful. Built in parallel by an onmc swarm (planned by `onmc mission`), each its own PR:
+
+- **`onmc whip` — the reins** — a live control surface over a running agent: `whip nudge`/`whip redirect` queue steering directives (persisted, priority-ordered) for the hooks layer to inject, while `whip treat`/`whip crack` record a reward/correction ledger that flywheel can learn from. `whip pending`/`clear`/`tally`. Steer the agent, whip it back on task, reward it when it nails something. (#247)
+- **`onmc arena` — model gladiator** — record head-to-head model/approach bouts and maintain ELO ratings + a leaderboard: `arena bout A B --winner`, `arena leaderboard`, `arena standings`. Ratings recompute from an append-only bout log (can't drift). Turns model choice into a spectator sport backed by real numbers. (#248)
+- **`onmc quest` — gamified RPG backlog** — your work as an RPG: XP from verified receipts, levels on a triangular curve, achievements, boss-fights (gnarly tasks), and loot (merged/completed). `quest log`/`achievements`/`stats`. Deterministic, receipt-driven. (#249)
+- **`onmc coach` — live hype/roast commentator** — reacts to session events (test_pass, build_break, pr_merged, …) with deterministic hype/roast/dry quips and tracks current streak, best streak, and a combo meter. `coach react`/`streak`/`cheer`. The personality layer for long sessions. (#250)
+
+All four are pure-stdlib, offline, deterministic, auto-discovered modules (zero hub edits).
+
 ## [0.80.0] — 2026-07-05
 
 ### Added
