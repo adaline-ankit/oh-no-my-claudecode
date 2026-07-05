@@ -187,6 +187,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ proptest        Generate property/invariant tests for pure functions.        │
 │ proxy           OpenAI-compatible local proxy for onmc's configured LLM      │
 │                 provider.                                                    │
+│ quest           Gamified RPG backlog: XP from verified runs, levels, bosses, │
+│                 loot.                                                        │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
@@ -3794,6 +3796,72 @@ Usage: onmc pull [OPTIONS] [SOURCE]
 │                        memories (--all only).                                │
 │ --json                 Emit a machine-readable JSON summary to stdout.       │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc quest`
+
+```text
+Usage: onmc quest [OPTIONS] COMMAND [ARGS]...
+
+ Gamified RPG backlog: XP from verified runs, levels, bosses, loot.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ log           Show the full quest log: level, XP, active quests, boss        │
+│               fights, loot.                                                  │
+│ achievements  List all unlocked achievements.                                │
+│ stats         Show level, total XP, streak, and run counts.                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc quest achievements`
+
+```text
+Usage: onmc quest achievements [OPTIONS]
+
+ List all unlocked achievements.
+
+ Achievements are milestone markers based on verified-run counts,
+ streak length, boss defeats, and level reached.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit achievements as JSON.                                   │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc quest log`
+
+```text
+Usage: onmc quest log [OPTIONS]
+
+ Show the full quest log: level, XP, active quests, boss fights, loot.
+
+ XP is earned from verified ``onmc loop`` / ``onmc swarm`` runs.
+ Boss fights are high-risk open tasks. Recent loot is the last 10
+ verified completions.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the quest log as JSON.                                  │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc quest stats`
+
+```text
+Usage: onmc quest stats [OPTIONS]
+
+ Show level, total XP, streak, and run counts.
+
+ A compact summary suitable for dashboards or status lines.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit stats as JSON.                                          │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
