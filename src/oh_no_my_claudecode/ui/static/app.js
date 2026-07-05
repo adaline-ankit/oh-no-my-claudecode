@@ -53,6 +53,7 @@ function hydrateDashboard() {
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
   renderHomeLive();
+  renderActivity();
   renderSwarms();
   renderPerformance();
   renderScorecard();
@@ -442,6 +443,48 @@ function runCmdk(index) {
   const item = cmdk.filtered[index];
   closeCmdk();
   if (item) item.run();
+}
+
+function timeAgo(ts) {
+  if (!ts) return "";
+  const then = new Date(ts).valueOf();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+function activityGlyph(u) {
+  if (u.verified === true) return '<span class="feed-glyph ok" title="verified">✓</span>';
+  if (u.state === "failed" || u.state === "aborted") return '<span class="feed-glyph bad" title="failed">✕</span>';
+  if (u.state === "running") return '<span class="feed-glyph run" title="running">◐</span>';
+  return '<span class="feed-glyph pending" title="pending">•</span>';
+}
+
+function renderActivity() {
+  const swarms = (state.data && state.data.global && state.data.global.swarms)
+    || (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  const events = [];
+  swarms.forEach((s) => (s.units || []).forEach((u) => {
+    events.push({ unit: u, repo: s.repo, label: u.goal || s.label || "unit", ts: u.ended_at || u.started_at || s.started_at });
+  }));
+  events.sort((a, b) => String(b.ts || "").localeCompare(String(a.ts || "")));
+  const top = events.slice(0, 14);
+  byId("activity-feed-sub").textContent = `${formatNumber(events.length)} events`;
+  byId("activity-feed").innerHTML = top.length
+    ? top.map((e) => `
+      <li class="feed-row">
+        ${activityGlyph(e.unit)}
+        <span class="feed-text">${escapeHtml(truncate(e.label, 78))}</span>
+        ${e.repo ? `<span class="feed-repo">${escapeHtml(e.repo)}</span>` : ""}
+        <span class="feed-state feed-${escapeHtml(e.unit.state)}">${escapeHtml(e.unit.state)}</span>
+        <span class="feed-when">${escapeHtml(timeAgo(e.ts))}</span>
+      </li>`).join("")
+    : '<li class="feed-empty">No agent activity yet.</li>';
 }
 
 function renderHomeLive() {
