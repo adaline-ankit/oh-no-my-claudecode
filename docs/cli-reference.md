@@ -189,6 +189,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 attestations into a queryable, rankable track record.        │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
 │                 a transcript and propose memory updates for human approval.  │
+│ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
+│                 review diffs, then approve or reject — nothing lands in the  │
+│                 skill store without your sign-off.                           │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -4385,6 +4388,151 @@ Usage: onmc skill show [OPTIONS] SKILL_ID
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the skill as JSON.                                      │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard`
+
+```text
+Usage: onmc skillguard [OPTIONS] COMMAND [ARGS]...
+
+ Skill write-approval gate: propose skill create/edit/delete, review diffs,
+ then approve or reject — nothing lands in the skill store without your
+ sign-off.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ stage    Stage a proposed skill change into the pending queue.               │
+│ list     List pending proposals with ids and one-line gists.                 │
+│ diff     Show a unified diff of the proposed skill change.                   │
+│ approve  Approve a pending proposal and apply it to the skill store.         │
+│ reject   Reject a pending proposal: drop it and keep an audit trail.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard approve`
+
+```text
+Usage: onmc skillguard approve [OPTIONS] PROPOSAL_ID
+
+ Approve a pending proposal and apply it to the skill store.
+
+ The approved change is written via the real skill storage path so it
+ lands with full provenance. The proposal is then removed from the
+ pending queue and an audit record is written under
+ ``.onmc/skillguard/audit/``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to approve (from 'onmc skillguard    │
+│                             list').                                          │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the audit record as JSON.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard diff`
+
+```text
+Usage: onmc skillguard diff [OPTIONS] PROPOSAL_ID
+
+ Show a unified diff of the proposed skill change.
+
+ Compares the current skill body (or an empty baseline for new skills)
+ against the proposed content. ``+`` lines would be added on approve;
+ ``-`` lines would be removed.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to diff (from 'onmc skillguard       │
+│                             list').                                          │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard list`
+
+```text
+Usage: onmc skillguard list [OPTIONS]
+
+ List pending proposals with ids and one-line gists.
+
+ Shows proposals in queue order (by seq). Each line contains the
+ proposal id, operation, and skill name. Use ``diff <id>`` to see the
+ full unified diff.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit pending proposals as JSON.                              │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard reject`
+
+```text
+Usage: onmc skillguard reject [OPTIONS] PROPOSAL_ID
+
+ Reject a pending proposal: drop it and keep an audit trail.
+
+ The proposal is removed from the pending queue. An audit record is
+ written under ``.onmc/skillguard/audit/`` so the decision is traceable.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    proposal_id      TEXT  Proposal id to reject (from 'onmc skillguard     │
+│                             list').                                          │
+│                             [required]                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --reason        TEXT  Why this proposal is being rejected.                   │
+│ --json                Emit the audit record as JSON.                         │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skillguard stage`
+
+```text
+Usage: onmc skillguard stage [OPTIONS]
+
+ Stage a proposed skill change into the pending queue.
+
+ The change is NOT applied to the skill store — it waits in the queue
+ until you run ``approve`` or ``reject``. Review the diff first with
+ ``onmc skillguard diff <id>``.
+
+ Exactly one of ``--content`` or ``--content-file`` must be supplied for
+ create/edit operations.  For delete, both may be omitted.
+
+ Examples:
+
+     onmc skillguard stage --name "my-pattern" --op create \
+       --content "Always prefer uv over pip" --reason "team convention"
+
+     onmc skillguard stage --name "my-pattern" --op edit \
+       --content-file updated_skill.md
+
+     onmc skillguard stage --name "old-pattern" --op delete \
+       --reason "obsolete since v2 migration"
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --name                TEXT  Name of the skill to create, edit, or delete. │
+│                                [required]                                    │
+│ *  --op                  TEXT  Operation to propose: create, edit, or        │
+│                                delete.                                       │
+│                                [required]                                    │
+│    --content             TEXT  Proposed skill body (inline string). Mutually │
+│                                exclusive with --content-file.                │
+│    --content-file        FILE  Path to a file whose contents become the      │
+│                                proposed skill body.                          │
+│    --reason              TEXT  Why this skill change is being proposed.      │
+│    --json                      Emit the staged proposal as JSON.             │
+│    --help                      Show this message and exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
