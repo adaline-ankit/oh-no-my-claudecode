@@ -558,6 +558,7 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 .swarm-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--faint); font-size: 10px; }
 .swarm-meta code { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
 .swarm-aborted { color: #80311f; font-weight: 700; }
+.swarm-repo { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 .swarm-stats { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 11px 0 4px; }
 .swarm-pill { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: capitalize; border: 1px solid var(--line); background: var(--surface-alt); color: #46534c; font-variant-numeric: tabular-nums; }

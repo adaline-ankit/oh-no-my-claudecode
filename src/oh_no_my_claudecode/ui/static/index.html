@@ -147,7 +147,11 @@
             </div>
             <div id="swarm-metric-grid" class="metric-grid"></div>
             <div class="toolbar">
-              <label class="search-field"><span class="sr-only">Search swarms</span><span aria-hidden="true">⌕</span><input id="swarm-search" type="search" placeholder="Search swarms by goal or id" autocomplete="off"></label>
+              <div class="segmented" role="group" aria-label="Swarm scope">
+                <button class="seg-btn is-active" data-swarm-scope="repo" type="button">This repo</button>
+                <button class="seg-btn" data-swarm-scope="global" type="button">All repos</button>
+              </div>
+              <label class="search-field"><span class="sr-only">Search swarms</span><span aria-hidden="true">⌕</span><input id="swarm-search" type="search" placeholder="Search swarms by goal, repo, or id" autocomplete="off"></label>
               <div class="segmented" role="group" aria-label="Filter swarms">
                 <button class="seg-btn is-active" data-swarm-filter="all" type="button">All</button>
                 <button class="seg-btn" data-swarm-filter="live" type="button">Live</button>

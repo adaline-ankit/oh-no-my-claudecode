@@ -78,6 +78,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         "report": service.agent_readiness_report(),
         "loops": _loops_payload(service),
         "swarms": _swarms_payload(Path(status["repo_root"])),
+        "global": _global_swarms_payload(),
         "performance": _performance_payload(Path(status["repo_root"])),
         "scorecard": _scorecard_payload(Path(status["repo_root"])),
         "timeline": _timeline_payload(service),
@@ -450,6 +451,64 @@ def _unit_receipt_extra(state_dir: Path, receipt_path: str | None) -> dict[str, 
         }
     except (OSError, json.JSONDecodeError, ValueError, TypeError):
         return {}
+
+
+def _global_swarms_payload(home: Path | None = None) -> dict[str, Any]:
+    """Aggregate swarms across EVERY onmc repo on this machine (the global view).
+
+    Reads the known-repos registry and folds each repo's swarms into one list,
+    tagging each with its repo. This is the local, zero-infra "all projects"
+    dashboard. Any failure returns a safe empty default (never 500s).
+    """
+    empty: dict[str, Any] = {
+        "repos": [],
+        "summary": {"repos": 0, "swarms": 0, "live": 0, "running_units": 0},
+        "swarms": [],
+    }
+    try:
+        from oh_no_my_claudecode.home import list_known_repos
+
+        repos: list[dict[str, Any]] = []
+        all_swarms: list[dict[str, Any]] = []
+        live = running = 0
+        for root in list_known_repos(home):
+            repo_root = Path(root)
+            repo_name = repo_root.name
+            per_repo = _swarms_payload(repo_root)
+            repo_swarms = per_repo.get("swarms", [])
+            summary = per_repo.get("summary", {})
+            repos.append(
+                {
+                    "name": repo_name,
+                    "root": root,
+                    "swarms": len(repo_swarms),
+                    "live": summary.get("live", 0),
+                    "running_units": summary.get("running_units", 0),
+                }
+            )
+            for swarm in repo_swarms:
+                swarm["repo"] = repo_name
+                all_swarms.append(swarm)
+            live += summary.get("live", 0)
+            running += summary.get("running_units", 0)
+
+        # Live repos + most-recent swarms first.
+        all_swarms.sort(
+            key=lambda s: (s.get("live", False), s.get("started_at") or ""), reverse=True
+        )
+        repos.sort(key=lambda r: (r["live"], r["swarms"]), reverse=True)
+        return {
+            "repos": repos,
+            "summary": {
+                "repos": len(repos),
+                "swarms": len(all_swarms),
+                "live": live,
+                "running_units": running,
+            },
+            "swarms": all_swarms,
+        }
+    except Exception:  # noqa: BLE001
+        return empty
 
 
 def _swarm_label(goals: list[str]) -> str:
