@@ -32,6 +32,10 @@
           <button class="nav-item" data-view="timeline">
             <span class="nav-icon" aria-hidden="true">◷</span><span>Timeline</span>
           </button>
+          <button class="nav-item" data-view="integration">
+            <span class="nav-icon" aria-hidden="true">⧉</span><span>Integration</span>
+            <span id="nav-integ-dot" class="nav-integ-dot" aria-hidden="true" hidden></span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
           </button>
@@ -143,7 +147,11 @@
             </div>
             <div id="swarm-metric-grid" class="metric-grid"></div>
             <div class="toolbar">
-              <label class="search-field"><span class="sr-only">Search swarms</span><span aria-hidden="true">⌕</span><input id="swarm-search" type="search" placeholder="Search swarms by goal or id" autocomplete="off"></label>
+              <div class="segmented" role="group" aria-label="Swarm scope">
+                <button class="seg-btn is-active" data-swarm-scope="repo" type="button">This repo</button>
+                <button class="seg-btn" data-swarm-scope="global" type="button">All repos</button>
+              </div>
+              <label class="search-field"><span class="sr-only">Search swarms</span><span aria-hidden="true">⌕</span><input id="swarm-search" type="search" placeholder="Search swarms by goal, repo, or id" autocomplete="off"></label>
               <div class="segmented" role="group" aria-label="Filter swarms">
                 <button class="seg-btn is-active" data-swarm-filter="all" type="button">All</button>
                 <button class="seg-btn" data-swarm-filter="live" type="button">Live</button>
@@ -192,6 +200,22 @@
             </div>
             <div id="timeline-body" class="timeline-body"></div>
             <div id="timeline-empty" class="empty-state" hidden>No memories yet — the timeline fills in as onmc learns your repo.</div>
+          </section>
+
+          <section id="view-integration" class="view" data-view-panel="integration" aria-labelledby="integration-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Claude Code</span><h2 id="integration-title">Integration</h2></div>
+              <span id="integration-chip" class="status-chip"></span>
+            </div>
+            <section class="panel integ-banner" id="integ-banner"></section>
+            <section class="panel integ-panel" aria-labelledby="integ-wiring-title">
+              <div class="panel-heading"><h3 id="integ-wiring-title">Wiring</h3><span>onmc → Claude Code</span></div>
+              <ul id="integ-checklist" class="integ-checklist"></ul>
+            </section>
+            <section class="panel integ-panel" id="integ-steps-panel" aria-labelledby="integ-steps-title">
+              <div class="panel-heading"><h3 id="integ-steps-title">Complete setup</h3><span>run these</span></div>
+              <ul id="integ-steps" class="integ-steps"></ul>
+            </section>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>

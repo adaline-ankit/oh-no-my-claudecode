@@ -1534,6 +1534,11 @@ def ui_command(
         service.status()
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
+    # Remember this repo so the dashboard's global ("all projects") view can
+    # aggregate agent activity across every repo you've opened it in.
+    from oh_no_my_claudecode.home import register_repo
+
+    register_repo(Path.cwd())
     if export_path is not None:
         written = export_dashboard_snapshot(service, export_path)
         console.print(f"[green]Dashboard snapshot:[/green] {written}")

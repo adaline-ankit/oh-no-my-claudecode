@@ -114,6 +114,65 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_integration_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """integration reports whether onmc is the Claude Code default layer."""
+    it = build_dashboard_payload(_ready_service(sample_repo, monkeypatch))["integration"]
+    assert "level" in it
+    assert it["level"] in {"none", "partial", "full"}
+    assert "next_steps" in it
+
+
+def test_dashboard_html_contains_integration_view(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard ships an Integration view (Claude Code wiring status)."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="view-integration"' in html
+    assert "renderIntegration" in js
+
+
+def test_global_swarms_payload_aggregates_repos(tmp_path: Path) -> None:
+    """The global payload folds swarms from every registered repo, tagged by repo."""
+    from oh_no_my_claudecode.home import register_repo
+    from oh_no_my_claudecode.ui.server import _global_swarms_payload
+
+    home = tmp_path / "home"
+    repo = tmp_path / "proj-x"
+    swarm_dir = repo / ".onmc" / "swarm" / "sw1"
+    swarm_dir.mkdir(parents=True)
+    (swarm_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "swarm_id": "sw1",
+                "units": {"unit-0000": {"goal": "g", "status": "running", "verified": None}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    register_repo(repo, home=home)
+
+    payload = _global_swarms_payload(home=home)
+
+    assert payload["summary"]["repos"] == 1
+    assert payload["summary"]["swarms"] == 1
+    assert payload["summary"]["running_units"] == 1
+    assert payload["swarms"][0]["repo"] == "proj-x"
+
+
 def test_dashboard_payload_includes_timeline_section(
     sample_repo: Path,
     monkeypatch: object,

@@ -3,7 +3,7 @@
 const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
-const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmSearch: "", autoRefresh: true, lastUpdated: null };
+const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmScope: "repo", swarmSearch: "", autoRefresh: true, lastUpdated: null, renderedSwarms: [] };
 const THEME_KEY = "onmc_theme";
 
 function applyTheme(theme) {
@@ -57,6 +57,7 @@ function hydrateDashboard() {
   renderPerformance();
   renderScorecard();
   renderTimeline();
+  renderIntegration();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -159,11 +160,11 @@ function unitVerifiedGlyph(unit) {
   return '<span class="unit-glyph pending" title="not yet verified">•</span>';
 }
 
-function renderSwarmCard(sc, swarmIndex) {
+function renderSwarmCard(sc, cardIndex) {
   const counts = sc.state_counts || {};
   const pills = SWARM_STATE_ORDER.filter((st) => counts[st]).map((st) => swarmStatePill(st, counts[st])).join("");
   const units = (sc.units || []).map((u, unitIndex) => `
-    <li class="unit-row state-${escapeHtml(u.state)}" data-swarm-index="${swarmIndex}" data-unit-index="${unitIndex}" tabindex="0" role="button" aria-label="Open ${escapeHtml(u.unit_id || "unit")} details">
+    <li class="unit-row state-${escapeHtml(u.state)}" data-card-index="${cardIndex}" data-unit-index="${unitIndex}" tabindex="0" role="button" aria-label="Open ${escapeHtml(u.unit_id || "unit")} details">
       ${unitVerifiedGlyph(u)}
       <span class="unit-state">${escapeHtml(u.state)}</span>
       <span class="unit-goal" title="${escapeHtml(u.goal)}">${escapeHtml(truncate(u.goal || "unit", 76))}</span>
@@ -176,6 +177,7 @@ function renderSwarmCard(sc, swarmIndex) {
     <header class="swarm-card-head">
       <div class="swarm-title">
         ${sc.live ? '<span class="live-badge"><span class="live-dot"></span>LIVE</span>' : ""}
+        ${sc.repo ? `<span class="swarm-repo" title="repo">${escapeHtml(sc.repo)}</span>` : ""}
         <span class="swarm-label" title="${escapeHtml(sc.label || "")}">${escapeHtml(truncate(sc.label || "swarm", 66))}</span>
       </div>
       <div class="swarm-meta">
@@ -194,26 +196,42 @@ function renderSwarmCard(sc, swarmIndex) {
   </article>`;
 }
 
+function scopedSwarms() {
+  if (state.swarmScope === "global") {
+    return (state.data && state.data.global && state.data.global.swarms) || [];
+  }
+  return (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+}
+
 function visibleSwarms() {
-  const all = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
   const q = state.swarmSearch.trim().toLowerCase();
-  return all.filter((sc) => {
+  return scopedSwarms().filter((sc) => {
     if (state.swarmFilter === "live" && !sc.live) return false;
     if (!q) return true;
-    return String(sc.label || "").toLowerCase().includes(q) || String(sc.swarm_id || "").toLowerCase().includes(q);
+    return `${sc.label || ""} ${sc.swarm_id || ""} ${sc.repo || ""}`.toLowerCase().includes(q);
   });
 }
 
 function renderSwarms() {
+  const global = state.swarmScope === "global";
   const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
+  const g = (state.data && state.data.global) || { summary: {}, swarms: [] };
   const s = sw.summary || {};
-  const liveN = s.live || 0;
-  const metrics = [
-    ["Live swarms", String(liveN), `${formatNumber(s.swarms || 0)} total`],
-    ["Running agents", String(s.running_units || 0), "in flight now"],
-    ["Verified units", String(s.verified_units || 0), `of ${formatNumber(s.total_units || 0)}`],
-    ["Fleet cost", `$${Number(s.total_cost_usd || 0).toFixed(2)}`, "recorded"],
-  ];
+  const gs = g.summary || {};
+  const liveN = global ? (gs.live || 0) : (s.live || 0);
+  const metrics = global
+    ? [
+        ["Live swarms", String(liveN), `${formatNumber(gs.swarms || 0)} across repos`],
+        ["Running agents", String(gs.running_units || 0), "in flight now"],
+        ["Repos", String(gs.repos || 0), "with agent activity"],
+        ["Swarms", String(gs.swarms || 0), "all projects"],
+      ]
+    : [
+        ["Live swarms", String(liveN), `${formatNumber(s.swarms || 0)} total`],
+        ["Running agents", String(s.running_units || 0), "in flight now"],
+        ["Verified units", String(s.verified_units || 0), `of ${formatNumber(s.total_units || 0)}`],
+        ["Fleet cost", `$${Number(s.total_cost_usd || 0).toFixed(2)}`, "recorded"],
+      ];
   byId("swarm-metric-grid").innerHTML = metrics.map(([label, value, detail]) => `
     <div class="metric ${label === "Running agents" && liveN ? "metric-live" : ""}"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><span class="metric-detail">${escapeHtml(detail)}</span></div>
   `).join("");
@@ -225,15 +243,13 @@ function renderSwarms() {
   if (dot) dot.hidden = !liveN;
 
   const shown = visibleSwarms();
+  state.renderedSwarms = shown;
   byId("swarm-empty").hidden = shown.length > 0;
-  // Map filtered rows back to their index in the full list for drilldown lookup.
-  const all = sw.swarms || [];
-  byId("swarm-list").innerHTML = shown.map((sc) => renderSwarmCard(sc, all.indexOf(sc))).join("");
+  byId("swarm-list").innerHTML = shown.map((sc, i) => renderSwarmCard(sc, i)).join("");
 }
 
-function openUnitDrawer(swarmIndex, unitIndex) {
-  const swarms = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
-  const sc = swarms[swarmIndex];
+function openUnitDrawer(cardIndex, unitIndex) {
+  const sc = (state.renderedSwarms || [])[cardIndex];
   if (!sc) return;
   const u = (sc.units || [])[unitIndex];
   if (!u) return;
@@ -438,6 +454,38 @@ function renderScorecard() {
 }
 
 const TIMELINE_PER_PERIOD = 40;
+
+function renderIntegration() {
+  const it = (state.data && state.data.integration) || {};
+  const level = it.level || "none";
+  const chip = byId("integration-chip");
+  chip.className = `status-chip ${level === "full" ? "ready" : "needs-attention"}`;
+  chip.textContent = level === "full" ? "default layer" : level === "partial" ? "partial" : "not connected";
+  const dot = byId("nav-integ-dot");
+  if (dot) dot.hidden = level === "full";
+
+  const heads = {
+    full: ["onmc is the default layer", "All Claude Code agent work routes through onmc — swarm, memory, and verified receipts."],
+    partial: ["Partially wired", "Some pieces are active. Finish setup so every Claude Code session runs on onmc."],
+    none: ["Not connected yet", "Wire onmc into Claude Code so it becomes the default layer for every session."],
+  };
+  const [head, sub] = heads[level] || heads.none;
+  byId("integ-banner").innerHTML = `<div class="integ-banner-body level-${escapeHtml(level)}"><strong>${escapeHtml(head)}</strong><p>${escapeHtml(sub)}</p></div>`;
+
+  const checks = [
+    ["MCP server registered", it.mcp_registered, "onmc serve --mcp · .mcp.json"],
+    ["Session hooks installed", it.hooks_installed, "PreCompact · SessionStart · UserPromptSubmit · SessionEnd"],
+    ["Strict wrap (Task intercept)", it.wrap_installed, "native agent spawns → onmc swarm"],
+    ["CLAUDE.md policy stanza", it.claude_md_stanza, "onmc usage policy for the agent"],
+  ];
+  byId("integ-checklist").innerHTML = checks.map(([label, ok, detail]) => `
+    <li class="integ-check ${ok ? "ok" : "off"}"><span class="integ-mark" aria-hidden="true">${ok ? "✓" : "○"}</span><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div></li>`).join("");
+
+  const steps = it.next_steps || [];
+  byId("integ-steps-panel").hidden = steps.length === 0;
+  byId("integ-steps").innerHTML = steps.map((s) => `
+    <li class="integ-step"><code>${escapeHtml(s)}</code><button class="text-button integ-copy" data-copy="${escapeHtml(s)}" type="button">Copy</button></li>`).join("");
+}
 
 function renderTimeline() {
   const tl = (state.data && state.data.timeline) || { periods: [], total: 0 };
@@ -701,13 +749,18 @@ window.addEventListener("resize", () => { if (state.view === "codegraph") reques
 // Swarm drilldown, filters, and live-refresh controls.
 byId("swarm-list").addEventListener("click", (event) => {
   const row = event.target.closest(".unit-row");
-  if (row) openUnitDrawer(Number(row.dataset.swarmIndex), Number(row.dataset.unitIndex));
+  if (row) openUnitDrawer(Number(row.dataset.cardIndex), Number(row.dataset.unitIndex));
 });
 byId("swarm-list").addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   const row = event.target.closest(".unit-row");
-  if (row) { event.preventDefault(); openUnitDrawer(Number(row.dataset.swarmIndex), Number(row.dataset.unitIndex)); }
+  if (row) { event.preventDefault(); openUnitDrawer(Number(row.dataset.cardIndex), Number(row.dataset.unitIndex)); }
 });
+document.querySelectorAll("[data-swarm-scope]").forEach((btn) => btn.addEventListener("click", () => {
+  state.swarmScope = btn.dataset.swarmScope;
+  document.querySelectorAll("[data-swarm-scope]").forEach((b) => b.classList.toggle("is-active", b === btn));
+  renderSwarms();
+}));
 byId("drawer-close").addEventListener("click", closeDrawer);
 byId("drawer-backdrop").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !byId("unit-drawer").hidden) closeDrawer(); });
@@ -723,6 +776,11 @@ byId("autorefresh-toggle").addEventListener("change", (event) => {
   if (state.autoRefresh) refreshSilently();
 });
 byId("theme-toggle").addEventListener("click", toggleTheme);
+document.addEventListener("click", async (event) => {
+  const copyBtn = event.target.closest(".integ-copy");
+  if (!copyBtn) return;
+  try { await navigator.clipboard.writeText(copyBtn.dataset.copy || ""); showToast("Command copied"); } catch { showToast("Copy unavailable"); }
+});
 applyTheme(document.body.classList.contains("theme-dark") ? "dark" : "light");
 
 // Keyboard shortcuts: 1-9 jump to a view, "/" focuses the current search, "t" theme.

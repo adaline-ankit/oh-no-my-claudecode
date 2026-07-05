@@ -558,6 +558,7 @@ th:nth-child(1) { width: 130px; } th:nth-child(3) { width: 220px; } th:nth-child
 .swarm-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--faint); font-size: 10px; }
 .swarm-meta code { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
 .swarm-aborted { color: #80311f; font-weight: 700; }
+.swarm-repo { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 
 .swarm-stats { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 11px 0 4px; }
 .swarm-pill { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: capitalize; border: 1px solid var(--line); background: var(--surface-alt); color: #46534c; font-variant-numeric: tabular-nums; }
@@ -606,6 +607,28 @@ body.theme-dark .recs-list li,
 body.theme-dark .drawer-error pre { color: var(--ink); }
 body.theme-dark .drawer-error pre { color: #e79b8e; }
 body.theme-dark .brand-mark { background: #d9f26a; color: #152018; }
+
+/* Integration (Claude Code) view */
+.nav-integ-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: #d99a3a; }
+.integ-banner { padding: 0; overflow: hidden; }
+.integ-banner-body { padding: 18px 20px; border-left: 4px solid var(--faint); }
+.integ-banner-body strong { display: block; font-size: 16px; }
+.integ-banner-body p { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.integ-banner-body.level-full { border-left-color: var(--green); background: var(--green-soft); }
+.integ-banner-body.level-partial { border-left-color: var(--amber); background: var(--amber-soft); }
+.integ-banner-body.level-none { border-left-color: var(--red); background: var(--red-soft); }
+.integ-panel { margin-top: 16px; }
+.integ-checklist { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.integ-check { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: var(--radius); }
+.integ-check .integ-mark { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 800; }
+.integ-check.ok .integ-mark { background: var(--green-soft); color: #135d3c; }
+.integ-check.off .integ-mark { background: var(--surface-alt); color: var(--faint); }
+.integ-check strong { display: block; font-size: 13px; }
+.integ-check span { color: var(--muted); font-size: 11px; }
+.integ-check.off strong { color: var(--muted); }
+.integ-steps { list-style: none; margin: 0; padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.integ-step { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 13px; background: var(--surface-alt); border: 1px solid var(--line); border-radius: var(--radius); }
+.integ-step code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); }
 
 /* Command palette (⌘K) */
 .cmdk-backdrop { position: fixed; inset: 0; background: rgb(15 24 20 / 34%); z-index: 50; }
