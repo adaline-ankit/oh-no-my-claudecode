@@ -204,6 +204,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
+│ vibe            Ambient agent-mood HUD: aggregates coach streak, whip        │
+│                 rewards, and quest level into a single glanceable status.    │
+│                 Read-only.                                                   │
 │ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
 │                 server, no dep).                                             │
 │ whip            Steer a running agent and record reward signals (the reins + │
@@ -5805,6 +5808,44 @@ Usage: onmc verify-diff [OPTIONS]
 │                              (falls back to line-diff).                      │
 │ --json                       Emit the full VerifyReport as JSON to stdout.   │
 │ --help                       Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc vibe`
+
+```text
+Usage: onmc vibe [OPTIONS] COMMAND [ARGS]...
+
+ Ambient agent-mood HUD: aggregates coach streak, whip rewards, and quest level
+ into a single glanceable status. Read-only.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the HUD as a JSON envelope.                             │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ mood  Show just the computed mood and score.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc vibe mood`
+
+```text
+Usage: onmc vibe mood [OPTIONS]
+
+ Show just the computed mood and score.
+
+ A compact single-line output for use in status bars or pipelines.
+
+ Examples:
+
+     onmc vibe mood
+
+     onmc vibe mood --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit mood + score as JSON.                                   │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
