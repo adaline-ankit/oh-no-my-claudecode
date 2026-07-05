@@ -57,6 +57,7 @@ function hydrateDashboard() {
   renderPerformance();
   renderScorecard();
   renderTimeline();
+  renderIntegration();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -439,6 +440,38 @@ function renderScorecard() {
 
 const TIMELINE_PER_PERIOD = 40;
 
+function renderIntegration() {
+  const it = (state.data && state.data.integration) || {};
+  const level = it.level || "none";
+  const chip = byId("integration-chip");
+  chip.className = `status-chip ${level === "full" ? "ready" : "needs-attention"}`;
+  chip.textContent = level === "full" ? "default layer" : level === "partial" ? "partial" : "not connected";
+  const dot = byId("nav-integ-dot");
+  if (dot) dot.hidden = level === "full";
+
+  const heads = {
+    full: ["onmc is the default layer", "All Claude Code agent work routes through onmc — swarm, memory, and verified receipts."],
+    partial: ["Partially wired", "Some pieces are active. Finish setup so every Claude Code session runs on onmc."],
+    none: ["Not connected yet", "Wire onmc into Claude Code so it becomes the default layer for every session."],
+  };
+  const [head, sub] = heads[level] || heads.none;
+  byId("integ-banner").innerHTML = `<div class="integ-banner-body level-${escapeHtml(level)}"><strong>${escapeHtml(head)}</strong><p>${escapeHtml(sub)}</p></div>`;
+
+  const checks = [
+    ["MCP server registered", it.mcp_registered, "onmc serve --mcp · .mcp.json"],
+    ["Session hooks installed", it.hooks_installed, "PreCompact · SessionStart · UserPromptSubmit · SessionEnd"],
+    ["Strict wrap (Task intercept)", it.wrap_installed, "native agent spawns → onmc swarm"],
+    ["CLAUDE.md policy stanza", it.claude_md_stanza, "onmc usage policy for the agent"],
+  ];
+  byId("integ-checklist").innerHTML = checks.map(([label, ok, detail]) => `
+    <li class="integ-check ${ok ? "ok" : "off"}"><span class="integ-mark" aria-hidden="true">${ok ? "✓" : "○"}</span><div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div></li>`).join("");
+
+  const steps = it.next_steps || [];
+  byId("integ-steps-panel").hidden = steps.length === 0;
+  byId("integ-steps").innerHTML = steps.map((s) => `
+    <li class="integ-step"><code>${escapeHtml(s)}</code><button class="text-button integ-copy" data-copy="${escapeHtml(s)}" type="button">Copy</button></li>`).join("");
+}
+
 function renderTimeline() {
   const tl = (state.data && state.data.timeline) || { periods: [], total: 0 };
   byId("timeline-total").textContent = `${formatNumber(tl.total || 0)} milestone${tl.total === 1 ? "" : "s"}`;
@@ -723,6 +756,11 @@ byId("autorefresh-toggle").addEventListener("change", (event) => {
   if (state.autoRefresh) refreshSilently();
 });
 byId("theme-toggle").addEventListener("click", toggleTheme);
+document.addEventListener("click", async (event) => {
+  const copyBtn = event.target.closest(".integ-copy");
+  if (!copyBtn) return;
+  try { await navigator.clipboard.writeText(copyBtn.dataset.copy || ""); showToast("Command copied"); } catch { showToast("Copy unavailable"); }
+});
 applyTheme(document.body.classList.contains("theme-dark") ? "dark" : "light");
 
 // Keyboard shortcuts: 1-9 jump to a view, "/" focuses the current search, "t" theme.

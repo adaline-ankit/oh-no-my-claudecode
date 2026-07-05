@@ -114,6 +114,37 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_integration_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """integration reports whether onmc is the Claude Code default layer."""
+    it = build_dashboard_payload(_ready_service(sample_repo, monkeypatch))["integration"]
+    assert "level" in it
+    assert it["level"] in {"none", "partial", "full"}
+    assert "next_steps" in it
+
+
+def test_dashboard_html_contains_integration_view(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard ships an Integration view (Claude Code wiring status)."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="view-integration"' in html
+    assert "renderIntegration" in js
+
+
 def test_dashboard_payload_includes_timeline_section(
     sample_repo: Path,
     monkeypatch: object,

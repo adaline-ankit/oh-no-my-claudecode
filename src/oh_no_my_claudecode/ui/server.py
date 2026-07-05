@@ -81,6 +81,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         "performance": _performance_payload(Path(status["repo_root"])),
         "scorecard": _scorecard_payload(Path(status["repo_root"])),
         "timeline": _timeline_payload(service),
+        "integration": _integration_payload(Path(status["repo_root"])),
     }
 
 
@@ -318,6 +319,23 @@ def _swarms_payload(repo_root: Path) -> dict[str, Any]:
         }
     except Exception:  # noqa: BLE001
         return empty
+
+
+def _integration_payload(repo_root: Path) -> dict[str, Any]:
+    """Is onmc the default layer on Claude Code? (MCP + hooks + wrap.) Never 500s."""
+    try:
+        from oh_no_my_claudecode.integration import integration_status
+
+        return integration_status(repo_root).to_dict()
+    except Exception:  # noqa: BLE001
+        return {
+            "mcp_registered": False,
+            "hooks_installed": False,
+            "wrap_installed": False,
+            "claude_md_stanza": False,
+            "level": "none",
+            "next_steps": [],
+        }
 
 
 def _timeline_payload(service: OnmcService) -> dict[str, Any]:
