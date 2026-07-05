@@ -155,6 +155,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 deterministic).                                              │
 │ replay          Replay Lab — re-run a recorded session and produce a         │
 │                 regression report.                                           │
+│ arena           Model gladiator: head-to-head ELO scoreboard — record bouts  │
+│                 between models and track their ratings over time.            │
 │ attest          Verifiable, portable proof-of-work — turn a receipt into a   │
 │                 signed attestation.                                          │
 │ autoroute       Apply flywheel learning: recommend the historically-best     │
@@ -197,6 +199,86 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 only — never runs or edits code.                             │
 │ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
 │                 server, no dep).                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc arena`
+
+```text
+Usage: onmc arena [OPTIONS] COMMAND [ARGS]...
+
+ Model gladiator: head-to-head ELO scoreboard — record bouts between models and
+ track their ratings over time.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ bout         Record a head-to-head bout result and update ELO ratings.       │
+│ leaderboard  Show the ELO leaderboard — models ranked by rating.             │
+│ standings    Show one model's ELO record + rating history.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc arena bout`
+
+```text
+Usage: onmc arena bout [OPTIONS] MODEL_A MODEL_B
+
+ Record a head-to-head bout result and update ELO ratings.
+
+ MODEL_A and MODEL_B are model names (e.g. ``gpt-4o``, ``claude-3-7``).
+ ``--winner`` must be ``A``, ``B``, or ``draw``.
+
+ The bout is appended to ``.onmc/arena/bouts.jsonl`` and ratings are
+ recomputed from scratch via the deterministic ELO formula, then
+ snapshotted to ``.onmc/arena/ratings.json``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    model_a      TEXT  Name / identifier of the first model. [required]     │
+│ *    model_b      TEXT  Name / identifier of the second model. [required]    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --winner        TEXT  Bout outcome: A (model_a won), B (model_b won), or  │
+│                          draw.                                               │
+│                          [required]                                          │
+│    --task          TEXT  Optional free-text task description for context.    │
+│    --json                Emit the updated ratings as JSON.                   │
+│    --help                Show this message and exit.                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc arena leaderboard`
+
+```text
+Usage: onmc arena leaderboard [OPTIONS]
+
+ Show the ELO leaderboard — models ranked by rating.
+
+ Ratings are recomputed from the persisted bouts log on every call so
+ they always reflect the deterministic ELO formula.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the leaderboard as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc arena standings`
+
+```text
+Usage: onmc arena standings [OPTIONS] MODEL
+
+ Show one model's ELO record + rating history.
+
+ Exits non-zero when the model has no bouts recorded.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    model      TEXT  The model name to look up. [required]                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the model's standings as JSON.                          │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
