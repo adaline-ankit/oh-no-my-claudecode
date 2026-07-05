@@ -65,6 +65,7 @@ function hydrateDashboard() {
   renderHealth();
   renderMission();
   renderLiveStatus();
+  renderWall();
   switchView(state.view);
   renderWelcome();
 }
@@ -343,6 +344,38 @@ function renderPerformance() {
     ? recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
 }
+
+// ── Agent Wall (fullscreen monitor mode) ─────────────────────────────────
+const wall = { open: false };
+
+function wallSwarms() {
+  const g = (state.data && state.data.global) || {};
+  const gs = (g.swarms || []).filter((s) => s.live);
+  if (gs.length) return gs;
+  const repo = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  return repo.filter((s) => s.live);
+}
+
+function renderWall() {
+  if (!wall.open) return;
+  const swarms = wallSwarms();
+  const running = swarms.reduce((n, s) => n + (s.running_units || 0), 0);
+  byId("wall-sub").textContent = `${swarms.length} live · ${running} agents running`;
+  byId("wall-empty").hidden = swarms.length > 0;
+  byId("wall-grid").innerHTML = swarms.map((s) => {
+    const counts = s.state_counts || {};
+    const pills = SWARM_STATE_ORDER.filter((st) => counts[st]).map((st) => `<span class="wall-pill state-${escapeHtml(st)}">${escapeHtml(st)} ${counts[st]}</span>`).join("");
+    return `<article class="wall-tile">
+      <div class="wall-tile-top"><span class="wall-live"><span class="wall-live-dot"></span>LIVE</span>${s.repo ? `<span class="wall-repo">${escapeHtml(s.repo)}</span>` : ""}</div>
+      <div class="wall-label">${escapeHtml(truncate(s.label || "swarm", 90))}</div>
+      <div class="wall-run"><strong>${formatNumber(s.running_units || 0)}</strong> running · ${formatNumber(s.verified_count || 0)}/${formatNumber(s.total || 0)} verified</div>
+      <div class="wall-pills">${pills}</div>
+    </article>`;
+  }).join("");
+}
+
+function openWall() { wall.open = true; byId("wall").hidden = false; document.body.classList.add("wall-active"); renderWall(); }
+function closeWall() { wall.open = false; byId("wall").hidden = true; document.body.classList.remove("wall-active"); }
 
 // ── Command palette (⌘K) ────────────────────────────────────────────────
 const cmdk = { open: false, items: [], filtered: [], index: 0 };
@@ -764,6 +797,9 @@ document.querySelectorAll("[data-swarm-scope]").forEach((btn) => btn.addEventLis
 byId("drawer-close").addEventListener("click", closeDrawer);
 byId("drawer-backdrop").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !byId("unit-drawer").hidden) closeDrawer(); });
+byId("wall-open").addEventListener("click", openWall);
+byId("wall-close").addEventListener("click", closeWall);
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && wall.open) closeWall(); });
 byId("swarm-search").addEventListener("input", (event) => { state.swarmSearch = event.target.value; renderSwarms(); });
 document.querySelectorAll("[data-swarm-filter]").forEach((btn) => btn.addEventListener("click", () => {
   state.swarmFilter = btn.dataset.swarmFilter;
@@ -817,6 +853,8 @@ document.addEventListener("keydown", (event) => {
     if (search) { event.preventDefault(); search.focus(); }
   } else if (event.key === "t") {
     toggleTheme();
+  } else if (event.key === "w") {
+    wall.open ? closeWall() : openWall();
   }
 });
 
