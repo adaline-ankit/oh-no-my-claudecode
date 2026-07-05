@@ -670,6 +670,10 @@ body.wall-active { overflow: hidden; }
 .cmdk-sub { flex: none; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
 .cmdk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
+/* Verified celebration flash */
+body.celebrate::after { content: ""; position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 70; background: linear-gradient(90deg, transparent, var(--green), transparent); animation: onmc-celebrate 900ms ease-out; pointer-events: none; }
+@keyframes onmc-celebrate { 0% { opacity: 0; transform: scaleX(0.2); } 30% { opacity: 1; } 100% { opacity: 0; transform: scaleX(1); } }
+
 /* Overview activity feed */
 .activity-feed-panel { margin-top: 16px; }
 .activity-feed { list-style: none; margin: 0; padding: 6px 8px 10px; display: flex; flex-direction: column; }

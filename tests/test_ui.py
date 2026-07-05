@@ -397,6 +397,27 @@ def test_dashboard_html_contains_command_palette(
     assert "commandItems" in js
 
 
+def test_dashboard_ships_verify_celebration(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """A newly-verified agent triggers a celebration toast + flash."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, js = _get(port, "/assets/app.js")
+        _, _, css = _get(port, "/assets/styles.css")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert "celebrateVerifications" in js
+    assert "seenVerified" in js
+    assert "body.celebrate" in css
+
+
 def test_dashboard_html_contains_activity_feed(
     sample_repo: Path,
     monkeypatch: object,
