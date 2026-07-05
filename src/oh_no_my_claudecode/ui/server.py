@@ -416,10 +416,32 @@ def _performance_payload(repo_root: Path) -> dict[str, Any]:
             "recommendations": list(recommend(report)),
         }
         receipts = load_receipts(repo_root, scope="project")
+        flywheel["trend"] = _perf_trend(receipts)
         ledger = dataclasses.asdict(summarize_receipts(receipts, scope="project"))
         return {"flywheel": flywheel, "ledger": ledger}
     except Exception:  # noqa: BLE001
         return empty
+
+
+def _perf_trend(receipts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Chronological verified/cost points for the sparklines; ``[]`` on failure.
+
+    Sorts receipts by ``ended_at`` and keeps the last 30 so the UI can draw a
+    verified-rate and cost trend without shipping every historical run.
+    """
+    try:
+        dated = [r for r in receipts if isinstance(r, dict) and r.get("ended_at")]
+        dated.sort(key=lambda r: str(r.get("ended_at")))
+        return [
+            {
+                "verified": bool(r.get("verified")),
+                "ended_at": r.get("ended_at"),
+                "cost": float(r.get("cost_usd") or 0),
+            }
+            for r in dated[-30:]
+        ]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _unit_receipt_extra(state_dir: Path, receipt_path: str | None) -> dict[str, Any]:

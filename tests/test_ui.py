@@ -234,6 +234,11 @@ def test_dashboard_payload_includes_performance_section(
     assert perf["flywheel"]["verified_total"] == 2
     assert perf["ledger"]["run_count"] == 3
     assert any(m["model"] == "opus" for m in perf["flywheel"]["by_model"])
+    # Trend powers the sparklines: chronological verified/cost points.
+    trend = perf["flywheel"]["trend"]
+    assert len(trend) == 3
+    assert [p["verified"] for p in trend] == [True, True, False]
+    assert all("cost" in p and "ended_at" in p for p in trend)
 
 
 def test_dashboard_payload_performance_exception_safe(
@@ -245,6 +250,29 @@ def test_dashboard_payload_performance_exception_safe(
     perf = build_dashboard_payload(service)["performance"]
     assert "flywheel" in perf
     assert "ledger" in perf
+
+
+def test_dashboard_ships_performance_sparklines(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Performance view renders verified-rate + cost sparklines from the trend."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+        _, _, css = _get(port, "/assets/styles.css")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="perf-trend-panel"' in html
+    assert "renderSparklines" in js
+    assert "sparklineSvg" in js
+    assert ".spark-grid" in css
 
 
 def test_dashboard_payload_includes_swarms_section_exception_safe(
