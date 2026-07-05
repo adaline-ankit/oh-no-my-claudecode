@@ -143,7 +143,10 @@
           <section id="view-swarms" class="view" data-view-panel="swarms" aria-labelledby="swarms-title" hidden>
             <div class="section-heading">
               <div><span class="eyebrow">Live agents</span><h2 id="swarms-title">Swarms</h2></div>
-              <span id="swarms-live-chip" class="status-chip"></span>
+              <div class="heading-actions">
+                <span id="swarms-live-chip" class="status-chip"></span>
+                <button id="wall-open" class="button button-outline" type="button" title="Fullscreen agent wall (w)">⛶ Wall</button>
+              </div>
             </div>
             <div id="swarm-metric-grid" class="metric-grid"></div>
             <div class="toolbar">
@@ -315,6 +318,14 @@
       </header>
       <div id="drawer-body" class="drawer-body"></div>
     </aside>
+    <div id="wall" class="wall" role="dialog" aria-modal="true" aria-label="Agent wall" hidden>
+      <header class="wall-head">
+        <div class="wall-brand"><span class="brand-mark" aria-hidden="true">O</span><div><strong>onmc</strong><span id="wall-sub" class="wall-sub"></span></div></div>
+        <button id="wall-close" class="icon-button" type="button" aria-label="Exit wall (Esc)">×</button>
+      </header>
+      <div id="wall-grid" class="wall-grid"></div>
+      <div id="wall-empty" class="wall-empty" hidden>No agents running right now.</div>
+    </div>
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/assets/app.js" defer></script>
   </body>
