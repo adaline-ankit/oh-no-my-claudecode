@@ -174,6 +174,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ leash           Guardrails-as-game: define session rules, check compliance,  │
+│                 and score the agent.                                         │
 │ membudget       Memory-budget guard: report store size, flag over-budget,    │
 │                 suggest consolidations.                                      │
 │ memguard        Memory-integrity firewall: scan memory entries for           │
@@ -2313,6 +2315,157 @@ Usage: onmc init [OPTIONS]
  Initialize ONMC state in the current git repository.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash`
+
+```text
+Usage: onmc leash [OPTIONS] COMMAND [ARGS]...
+
+ Guardrails-as-game: define session rules, check compliance, and score the
+ agent.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add     Add a new guardrail rule to the leash.                               │
+│ list    List all active guardrail rules.                                     │
+│ remove  Remove a guardrail rule by its ID.                                   │
+│ check   Evaluate an event or action text against the active rules.           │
+│ score   Show the compliance score, streak, and grade.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash add`
+
+```text
+Usage: onmc leash add [OPTIONS] RULE
+
+ Add a new guardrail rule to the leash.
+
+ The rule TEXT is used both as the human-readable description and as the
+ match pattern.  Patterns are tried as regexes first; if the regex is
+ invalid it falls back to case-insensitive substring matching.
+
+ Severity controls what happens on a match:
+
+ \b soft\b  — advisory; violations are reported but no buzz is emitted.
+
+ \b hard\b  — triggers a buzz (``buzz: true`` in JSON output) to signal
+ a serious guardrail breach.
+
+ Examples:
+
+     onmc leash add "no console.log"
+
+     onmc leash add "TODO" --severity hard
+
+     onmc leash add "rm -rf" --severity hard
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    rule      TEXT  The house rule to add. [required]                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --severity        TEXT  Rule severity: 'soft' (advisory) or 'hard' (triggers │
+│                         a buzz on violation).                                │
+│                         [default: soft]                                      │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash check`
+
+```text
+Usage: onmc leash check [OPTIONS] EVENT
+
+ Evaluate an event or action text against the active rules.
+
+ Violations are reported with their rule id, severity, matched text, and
+ whether a buzz is emitted (hard violations only).  The check event is
+ recorded in the history ledger so ``onmc leash score`` can track the
+ compliance trend.
+
+ Examples:
+
+     onmc leash check "I just ran rm -rf node_modules"
+
+     onmc leash check "added a console.log for debugging" --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event text or action description to evaluate.          │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the result as a JSON envelope.                          │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash list`
+
+```text
+Usage: onmc leash list [OPTIONS]
+
+ List all active guardrail rules.
+
+ Examples:
+
+ onmc leash list
+
+ onmc leash list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit rules as a JSON envelope.                               │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash remove`
+
+```text
+Usage: onmc leash remove [OPTIONS] RULE_ID
+
+ Remove a guardrail rule by its ID.
+
+ Use ``onmc leash list`` to find the rule ID.
+
+ Examples:
+
+     onmc leash remove rule_abc123
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    rule_id      TEXT  The rule ID to remove. [required]                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc leash score`
+
+```text
+Usage: onmc leash score [OPTIONS]
+
+ Show the compliance score, streak, and grade.
+
+ Compliance is computed from all ``onmc leash check`` events recorded in
+ the current session.  A ``streak`` counts consecutive clean checks from
+ the most recent event backwards.
+
+ Grade thresholds: A (≥95%), B (≥80%), C (≥60%), D (≥40%), F (<40%).
+ ``N/A`` when no checks have been recorded yet.
+
+ Examples:
+
+     onmc leash score
+
+     onmc leash score --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the score as a JSON envelope.                           │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
