@@ -464,7 +464,7 @@ class StreakState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "StreakState":
+    def from_dict(cls, data: dict[str, object]) -> StreakState:
         """Reconstruct a ``StreakState`` from a JSON-loaded dict."""
 
         def _int(key: str) -> int:
