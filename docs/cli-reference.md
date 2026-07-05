@@ -187,6 +187,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 provider.                                                    │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
+│ selfimprove     After-turn learning review -- extract durable learnings from │
+│                 a transcript and propose memory updates for human approval.  │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -4107,6 +4109,57 @@ Usage: onmc scorecard [OPTIONS]
 │ --json              Emit the scorecard as a JSON object.                     │
 │ --markdown          Emit the shareable Markdown scorecard block.             │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc selfimprove`
+
+```text
+Usage: onmc selfimprove [OPTIONS] COMMAND [ARGS]...
+
+ After-turn learning review -- extract durable learnings from a transcript and
+ propose memory updates for human approval.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ review  Extract candidate learnings from a transcript and rank them.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc selfimprove review`
+
+```text
+Usage: onmc selfimprove review [OPTIONS]
+
+ Extract candidate learnings from a transcript and rank them.
+
+ Reads from FILE (``--from-file``) or stdin. Scans for user corrections,
+ stated preferences, and confirmed conventions using pure heuristics -- no
+ LLM calls, no network.
+
+ With ``--stage`` each candidate is pushed into the memstage pending queue
+ so a human can review and approve via ``onmc memstage approve``.
+
+ Examples:
+
+     onmc selfimprove review --from-file session.txt
+
+     onmc selfimprove review --from-file session.txt --json
+
+     onmc selfimprove review --from-file session.txt --stage
+
+     cat session.txt | onmc selfimprove review
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --from-file        FILE  Read transcript text from FILE instead of stdin.    │
+│ --json                   Wrap output in a JSON envelope {"kind":             │
+│                          "selfimprove", "candidates": [...]} for pipeline    │
+│                          composition.                                        │
+│ --stage                  Push each candidate into the memstage pending queue │
+│                          (human approves via ``onmc memstage approve``).     │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
