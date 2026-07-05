@@ -199,6 +199,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 only — never runs or edits code.                             │
 │ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
 │                 server, no dep).                                             │
+│ whip            Steer a running agent and record reward signals (the reins + │
+│                 whip control surface).                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5548,6 +5550,210 @@ Usage: onmc viz memory [OPTIONS]
 │                               d2.                                            │
 │                               [default: mermaid]                             │
 │ --help                        Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip`
+
+```text
+Usage: onmc whip [OPTIONS] COMMAND [ARGS]...
+
+ Steer a running agent and record reward signals (the reins + whip control
+ surface).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ nudge     Queue a gentle steering directive for the running agent.           │
+│ redirect  Queue a hard course-correction directive for the running agent.    │
+│ pending   Show queued directives without consuming them.                     │
+│ clear     Consume and discard all queued directives.                         │
+│ crack     Record a negative reward signal (correction) for the current agent │
+│           run.                                                               │
+│ treat     Record a positive reward signal (praise) for the current agent     │
+│           run.                                                               │
+│ tally     Show the reward signal tally (praises vs corrections per           │
+│           goal/agent).                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip clear`
+
+```text
+Usage: onmc whip clear [OPTIONS]
+
+ Consume and discard all queued directives.
+
+ After this call ``onmc whip pending`` will show an empty queue.  Use this
+ to drain stale directives that are no longer relevant.
+
+ Examples:
+
+     onmc whip clear
+
+     onmc whip clear --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a JSON confirmation envelope.                           │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip crack`
+
+```text
+Usage: onmc whip crack [OPTIONS]
+
+ Record a negative reward signal (correction) for the current agent run.
+
+ Signals are appended to ``.onmc/whip/rewards.jsonl`` — a schema
+ compatible with flywheel receipts so future analysis can learn from
+ steering feedback alongside run outcomes.
+
+ Examples:
+
+     onmc whip crack
+
+     onmc whip crack --reason "hallucinated an API that doesn't exist"
+
+     onmc whip crack --goal "add timeout param" --agent my-swarm-unit
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --reason  -r      TEXT  Optional rationale for the correction.               │
+│ --goal            TEXT  Override the current goal label (default:            │
+│                         'current').                                          │
+│                         [default: current]                                   │
+│ --agent           TEXT  Agent identifier (default: 'claude').                │
+│                         [default: claude]                                    │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip nudge`
+
+```text
+Usage: onmc whip nudge [OPTIONS] MSG
+
+ Queue a gentle steering directive for the running agent.
+
+ The message is appended to ``.onmc/whip/pending.jsonl`` and delivered
+ (in FIFO order, after any pending redirects) when the agent next calls
+ ``onmc whip pending`` or ``onmc whip clear``.
+
+ Examples:
+
+     onmc whip nudge "prefer smaller functions"
+
+     onmc whip nudge "add a docstring to each new public method"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    msg      TEXT  Gentle steering message to queue. [required]             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip pending`
+
+```text
+Usage: onmc whip pending [OPTIONS]
+
+ Show queued directives without consuming them.
+
+ Directives are shown in priority order: redirects first, then nudges,
+ each sub-group in FIFO insertion order.  This command is read-only;
+ to consume-and-clear the queue use ``onmc whip clear``.
+
+ Examples:
+
+     onmc whip pending
+
+     onmc whip pending --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit directives as a JSON envelope.                          │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip redirect`
+
+```text
+Usage: onmc whip redirect [OPTIONS] MSG
+
+ Queue a hard course-correction directive for the running agent.
+
+ Redirects have higher priority than nudges: ``onmc whip pending`` and
+ ``onmc whip clear`` surface all redirects first (FIFO within the redirect
+ group), then nudges (FIFO within the nudge group).
+
+ Examples:
+
+     onmc whip redirect "stop — revert the last edit, it breaks the API
+ contract"
+
+     onmc whip redirect "do NOT touch the migration files"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    msg      TEXT  Hard course-correction message to queue. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip tally`
+
+```text
+Usage: onmc whip tally [OPTIONS]
+
+ Show the reward signal tally (praises vs corrections per goal/agent).
+
+ Aggregates all signals in ``.onmc/whip/rewards.jsonl`` and prints a
+ summary table.  With ``--json``, emits a machine-readable envelope for
+ pipeline composition or flywheel consumption.
+
+ Examples:
+
+     onmc whip tally
+
+     onmc whip tally --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the reward tally as a JSON envelope.                    │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc whip treat`
+
+```text
+Usage: onmc whip treat [OPTIONS]
+
+ Record a positive reward signal (praise) for the current agent run.
+
+ Signals are appended to ``.onmc/whip/rewards.jsonl`` — a schema
+ compatible with flywheel receipts so future analysis can learn from
+ steering feedback alongside run outcomes.
+
+ Examples:
+
+     onmc whip treat
+
+     onmc whip treat --reason "minimal diff, all tests green"
+
+     onmc whip treat --goal "refactor parser" --agent my-swarm-unit
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --reason  -r      TEXT  Optional rationale for the praise.                   │
+│ --goal            TEXT  Override the current goal label (default:            │
+│                         'current').                                          │
+│                         [default: current]                                   │
+│ --agent           TEXT  Agent identifier (default: 'claude').                │
+│                         [default: claude]                                    │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
