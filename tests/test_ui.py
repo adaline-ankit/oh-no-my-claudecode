@@ -397,6 +397,27 @@ def test_dashboard_html_contains_command_palette(
     assert "commandItems" in js
 
 
+def test_dashboard_html_contains_activity_feed(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Overview ships a live activity feed of agent events."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="activity-feed"' in html
+    assert "renderActivity" in js
+    assert "timeAgo" in js
+
+
 def test_dashboard_html_contains_overview_live_home(
     sample_repo: Path,
     monkeypatch: object,
