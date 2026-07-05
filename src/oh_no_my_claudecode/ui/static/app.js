@@ -363,6 +363,57 @@ function renderPerformance() {
   byId("perf-recs").innerHTML = recs.length
     ? recs.map((r) => `<li>${escapeHtml(r)}</li>`).join("")
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
+
+  renderSparklines((fw && fw.trend) || []);
+}
+
+// Rolling verified-rate + cost-per-run sparklines over recent receipts.
+function sparklineSvg(values, color, fill) {
+  const n = values.length;
+  if (n < 2) return "";
+  const w = 240, h = 44, pad = 3;
+  const lo = Math.min(...values), hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const x = (i) => pad + (i / (n - 1)) * (w - pad * 2);
+  const y = (v) => h - pad - ((v - lo) / span) * (h - pad * 2);
+  const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  const line = `M${pts.join(" L")}`;
+  const area = `${line} L${x(n - 1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+  const lastX = x(n - 1).toFixed(1), lastY = y(values[n - 1]).toFixed(1);
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-hidden="true">
+    <path d="${area}" fill="${fill}"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lastX}" cy="${lastY}" r="2.4" fill="${color}"/>
+  </svg>`;
+}
+
+function renderSparklines(trend) {
+  const panel = byId("perf-trend-panel");
+  if (!panel) return;
+  if (!trend || trend.length < 2) { panel.hidden = true; return; }
+  panel.hidden = false;
+  byId("perf-trend-count").textContent = `last ${trend.length} runs`;
+
+  // Rolling verified rate (window of 5) → percentage series.
+  const win = 5;
+  const rate = trend.map((_, i) => {
+    const from = Math.max(0, i - win + 1);
+    const slice = trend.slice(from, i + 1);
+    const ok = slice.filter((p) => p.verified).length;
+    return Math.round((ok / slice.length) * 100);
+  });
+  byId("spark-rate").innerHTML = sparklineSvg(rate, "#237a50", "rgba(35,122,80,.12)");
+  byId("spark-rate-val").textContent = `${rate[rate.length - 1]}%`;
+
+  const costs = trend.map((p) => Number(p.cost || 0));
+  const hasCost = costs.some((c) => c > 0);
+  if (hasCost) {
+    byId("spark-cost").innerHTML = sparklineSvg(costs, "#356f91", "rgba(53,111,145,.12)");
+    byId("spark-cost-val").textContent = `$${costs[costs.length - 1].toFixed(2)}`;
+  } else {
+    byId("spark-cost").innerHTML = '<span class="spark-none">no cost recorded</span>';
+    byId("spark-cost-val").textContent = "n/a";
+  }
 }
 
 // ── Agent Wall (fullscreen monitor mode) ─────────────────────────────────

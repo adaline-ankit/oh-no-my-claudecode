@@ -735,6 +735,16 @@ body.celebrate::after { content: ""; position: fixed; inset: 0 0 auto 0; height:
 /* Performance view */
 .perf-panel, .recs-panel { margin-top: 16px; }
 #perf-metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.spark-panel { margin-top: 16px; }
+.spark-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.spark-card { padding: 14px 16px 12px; background: var(--surface); }
+.spark-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.spark-label { color: var(--muted); font-size: 11px; }
+.spark-val { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.spark-svg { width: 100%; height: 44px; }
+.spark-svg svg { width: 100%; height: 44px; display: block; }
+.spark-none { display: inline-flex; align-items: center; height: 44px; color: var(--faint); font-size: 11px; }
+@media (max-width: 720px) { .spark-grid { grid-template-columns: 1fr; } }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .rate-cell { display: flex; align-items: center; gap: 9px; }
 .rate-bar { flex: 1; min-width: 60px; max-width: 160px; height: 7px; border-radius: 999px; background: #e8ecea; overflow: hidden; }
