@@ -670,6 +670,23 @@ body.wall-active { overflow: hidden; }
 .cmdk-sub { flex: none; color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
 .cmdk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
+/* Overview activity feed */
+.activity-feed-panel { margin-top: 16px; }
+.activity-feed { list-style: none; margin: 0; padding: 6px 8px 10px; display: flex; flex-direction: column; }
+.feed-row { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 6px; min-width: 0; }
+.feed-row:hover { background: var(--surface-alt); }
+.feed-glyph { flex: none; width: 16px; text-align: center; font-size: 12px; }
+.feed-glyph.ok { color: var(--green); }
+.feed-glyph.bad { color: var(--red); }
+.feed-glyph.run { color: var(--blue); display: inline-block; animation: onmc-spin 1.4s linear infinite; }
+.feed-glyph.pending { color: var(--faint); }
+.feed-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12px; }
+.feed-repo { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--surface-alt); border: 1px solid var(--line); color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.feed-state { flex: none; width: 58px; text-align: right; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.feed-state.feed-running { color: var(--blue); font-weight: 700; }
+.feed-when { flex: none; width: 56px; text-align: right; color: var(--faint); font-size: 10px; font-variant-numeric: tabular-nums; }
+.feed-empty { padding: 16px; color: var(--muted); font-size: 12px; }
+
 /* Overview live-agents home strip */
 .live-home-panel { margin-top: 16px; }
 .live-home-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; }
