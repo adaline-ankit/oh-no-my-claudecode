@@ -114,6 +114,22 @@ def test_dashboard_payload_loops_reads_receipts(
     assert loops["recent_runs"][0]["goal"] == "make pytest green"
 
 
+def test_dashboard_payload_includes_timeline_section(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """timeline groups memories into JSON-safe periods (via onmc timeline)."""
+    service = _ready_service(sample_repo, monkeypatch)
+    tl = build_dashboard_payload(service)["timeline"]
+    assert "periods" in tl
+    assert "total" in tl
+    assert "notes" in tl
+    # Any entry timestamps are ISO strings (JSON-safe), never datetime objects.
+    for period in tl["periods"]:
+        for entry in period["entries"]:
+            assert entry["ts"] is None or isinstance(entry["ts"], str)
+
+
 def test_dashboard_payload_includes_scorecard_section(
     sample_repo: Path,
     monkeypatch: object,
@@ -278,6 +294,70 @@ def test_swarm_units_enriched_with_receipt_detail(
     assert unit["wall_seconds"] == 42.5
     assert unit["verifier_exit"] == 0
     assert unit["receipt_hash"] == "abc123def456"
+
+
+def test_dashboard_html_contains_command_palette(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard ships a command palette (cmdk) for fuzzy navigation."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="cmdk-input"' in html
+    assert "openCmdk" in js
+    assert "commandItems" in js
+
+
+def test_dashboard_html_contains_overview_live_home(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Overview surfaces a live-agents home strip that jumps to Swarms."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="live-home-panel"' in html
+    assert "renderHomeLive" in js
+
+
+def test_dashboard_html_contains_theme_toggle_and_shortcuts(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """The dashboard ships dark-mode toggle + keyboard shortcuts."""
+    service = _ready_service(sample_repo, monkeypatch)
+    server = create_ui_server(service, host="127.0.0.1", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    try:
+        _, _, html = _get(port, "/")
+        _, _, js = _get(port, "/assets/app.js")
+        _, _, css = _get(port, "/assets/styles.css")
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+    assert 'id="theme-toggle"' in html
+    assert "applyTheme" in js
+    assert "SHORTCUT_VIEWS" in js
+    assert "body.theme-dark" in css
 
 
 def test_dashboard_html_contains_agent_drilldown_and_live_controls(

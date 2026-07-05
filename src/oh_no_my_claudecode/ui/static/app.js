@@ -4,6 +4,17 @@ const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
 const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmSearch: "", autoRefresh: true, lastUpdated: null };
+const THEME_KEY = "onmc_theme";
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.body.classList.toggle("theme-dark", dark);
+  try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch { /* ignore */ }
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = dark ? "○" : "◐";
+}
+function toggleTheme() { applyTheme(document.body.classList.contains("theme-dark") ? "light" : "dark"); }
+try { if (localStorage.getItem(THEME_KEY) === "dark") document.body.classList.add("theme-dark"); } catch { /* ignore */ }
 const palette = ["#237a50", "#356f91", "#a65e18", "#6b5b95", "#a23d3d", "#55766a"];
 
 const byId = (id) => document.getElementById(id);
@@ -41,9 +52,11 @@ function hydrateDashboard() {
   byId("repo-path").textContent = data.repo.root;
   byId("last-ingest").textContent = `Ingested ${formatDate(data.repo.last_ingest_at)}`;
   renderOverview();
+  renderHomeLive();
   renderSwarms();
   renderPerformance();
   renderScorecard();
+  renderTimeline();
   renderMemoryFilters();
   renderMemories();
   renderTasks();
@@ -315,6 +328,92 @@ function renderPerformance() {
     : '<li class="recs-muted">Not enough verified runs yet.</li>';
 }
 
+// ── Command palette (⌘K) ────────────────────────────────────────────────
+const cmdk = { open: false, items: [], filtered: [], index: 0 };
+
+function commandItems() {
+  const items = SHORTCUT_VIEWS.map((v, i) => ({
+    kind: "View",
+    label: `Go to ${v.charAt(0).toUpperCase()}${v.slice(1)}`,
+    sub: `press ${i + 1}`,
+    run: () => switchView(v),
+  }));
+  const swarms = (state.data && state.data.swarms && state.data.swarms.swarms) || [];
+  swarms.forEach((s) => items.push({
+    kind: "Swarm",
+    label: s.label || s.swarm_id,
+    sub: `${s.live ? "live · " : ""}${String(s.swarm_id).slice(0, 8)}`,
+    run: () => { switchView("swarms"); state.swarmSearch = String(s.swarm_id).slice(0, 8); const el = byId("swarm-search"); if (el) el.value = state.swarmSearch; renderSwarms(); },
+  }));
+  const memories = (state.data && state.data.memories) || [];
+  memories.slice(0, 60).forEach((m) => items.push({
+    kind: "Memory",
+    label: m.title,
+    sub: formatKind(m.kind),
+    run: () => { switchView("memory"); state.search = m.title; byId("memory-search").value = m.title; renderMemories(); },
+  }));
+  return items;
+}
+
+function renderCmdk() {
+  const list = byId("cmdk-results");
+  list.innerHTML = cmdk.filtered.slice(0, 40).map((it, i) => `
+    <li class="cmdk-item ${i === cmdk.index ? "is-active" : ""}" role="option" aria-selected="${i === cmdk.index}" data-cmdk-index="${i}">
+      <span class="cmdk-kind">${escapeHtml(it.kind)}</span>
+      <span class="cmdk-label">${escapeHtml(truncate(it.label || "", 64))}</span>
+      <span class="cmdk-sub">${escapeHtml(it.sub || "")}</span>
+    </li>`).join("") || '<li class="cmdk-empty">No matches</li>';
+}
+
+function filterCmdk(query) {
+  const q = query.trim().toLowerCase();
+  cmdk.filtered = !q ? cmdk.items : cmdk.items.filter((it) => `${it.label} ${it.sub} ${it.kind}`.toLowerCase().includes(q));
+  cmdk.index = 0;
+  renderCmdk();
+}
+
+function openCmdk() {
+  cmdk.open = true;
+  cmdk.items = commandItems();
+  byId("cmdk-backdrop").hidden = false;
+  byId("cmdk").hidden = false;
+  const input = byId("cmdk-input");
+  input.value = "";
+  filterCmdk("");
+  input.focus();
+}
+
+function closeCmdk() {
+  cmdk.open = false;
+  byId("cmdk-backdrop").hidden = true;
+  byId("cmdk").hidden = true;
+}
+
+function runCmdk(index) {
+  const item = cmdk.filtered[index];
+  closeCmdk();
+  if (item) item.run();
+}
+
+function renderHomeLive() {
+  const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
+  const s = sw.summary || {};
+  const live = (sw.swarms || []).filter((x) => x.live).slice(0, 4);
+  const stats = `<div class="live-home-stats">
+    <span class="${(s.live || 0) ? "on" : ""}"><strong>${formatNumber(s.live || 0)}</strong> live</span>
+    <span class="${(s.running_units || 0) ? "on" : ""}"><strong>${formatNumber(s.running_units || 0)}</strong> running agents</span>
+    <span><strong>${formatNumber(s.swarms || 0)}</strong> swarms</span>
+    <span><strong>${formatNumber(s.verified_units || 0)}</strong> verified</span>
+  </div>`;
+  const rows = live.length
+    ? live.map((sc) => `<button class="live-home-row" data-go-view="swarms" type="button">
+        <span class="live-badge"><span class="live-dot"></span>LIVE</span>
+        <span class="live-home-label">${escapeHtml(truncate(sc.label || "swarm", 72))}</span>
+        <span class="live-home-run">${formatNumber(sc.running_units || 0)} running</span></button>`).join("")
+    : '<div class="live-home-empty">No agents running right now — start one with <code>onmc swarm plan</code>.</div>';
+  byId("live-home-body").innerHTML = stats + rows;
+}
+
 function renderScorecard() {
   const sc = (state.data && state.data.scorecard) || {};
   const readiness = sc.readiness;
@@ -336,6 +435,29 @@ function renderScorecard() {
   const notes = sc.notes || [];
   byId("scorecard-notes-panel").hidden = notes.length === 0;
   byId("scorecard-notes").innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
+}
+
+const TIMELINE_PER_PERIOD = 40;
+
+function renderTimeline() {
+  const tl = (state.data && state.data.timeline) || { periods: [], total: 0 };
+  byId("timeline-total").textContent = `${formatNumber(tl.total || 0)} milestone${tl.total === 1 ? "" : "s"}`;
+  byId("timeline-empty").hidden = (tl.total || 0) > 0;
+  byId("timeline-body").innerHTML = (tl.periods || []).map((p) => {
+    const entries = p.entries || [];
+    const shown = entries.slice(0, TIMELINE_PER_PERIOD);
+    const more = entries.length - shown.length;
+    const rows = shown.map((e) => `
+      <li class="tl-entry">
+        <span class="tl-dot kind-${escapeHtml(e.kind)}" aria-hidden="true"></span>
+        <div class="tl-entry-body">
+          <div class="tl-entry-head"><span class="kind-badge">${escapeHtml(formatKind(e.kind))}</span><strong>${escapeHtml(truncate(e.title || "", 84))}</strong></div>
+          ${e.summary ? `<p class="tl-entry-sum">${escapeHtml(truncate(e.summary, 150))}</p>` : ""}
+        </div>
+      </li>`).join("");
+    const moreRow = more > 0 ? `<li class="tl-more">+ ${formatNumber(more)} more this period</li>` : "";
+    return `<div class="tl-period"><div class="tl-period-label">${escapeHtml(p.label)}</div><ul class="tl-entries">${rows}${moreRow}</ul></div>`;
+  }).join("");
 }
 
 function renderMemoryFilters() {
@@ -599,6 +721,45 @@ byId("autorefresh-toggle").addEventListener("change", (event) => {
   state.autoRefresh = event.target.checked;
   renderLiveStatus();
   if (state.autoRefresh) refreshSilently();
+});
+byId("theme-toggle").addEventListener("click", toggleTheme);
+applyTheme(document.body.classList.contains("theme-dark") ? "dark" : "light");
+
+// Keyboard shortcuts: 1-9 jump to a view, "/" focuses the current search, "t" theme.
+const SHORTCUT_VIEWS = ["overview", "swarms", "performance", "scorecard", "timeline", "memory", "tasks", "codegraph", "health", "mission"];
+
+// Command palette input handling (arrows/enter/esc) + open shortcut.
+byId("cmdk-input").addEventListener("input", (event) => filterCmdk(event.target.value));
+byId("cmdk-input").addEventListener("keydown", (event) => {
+  if (event.key === "ArrowDown") { event.preventDefault(); cmdk.index = Math.min(cmdk.index + 1, cmdk.filtered.length - 1); renderCmdk(); }
+  else if (event.key === "ArrowUp") { event.preventDefault(); cmdk.index = Math.max(cmdk.index - 1, 0); renderCmdk(); }
+  else if (event.key === "Enter") { event.preventDefault(); runCmdk(cmdk.index); }
+  else if (event.key === "Escape") { event.preventDefault(); closeCmdk(); }
+});
+byId("cmdk-results").addEventListener("click", (event) => {
+  const li = event.target.closest("[data-cmdk-index]");
+  if (li) runCmdk(Number(li.dataset.cmdkIndex));
+});
+byId("cmdk-backdrop").addEventListener("click", closeCmdk);
+
+document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && (event.key === "k" || event.key === "K")) {
+    event.preventDefault();
+    cmdk.open ? closeCmdk() : openCmdk();
+    return;
+  }
+  const typing = /^(input|textarea|select)$/i.test(event.target.tagName);
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  if (typing) { if (event.key === "Escape") event.target.blur(); return; }
+  if (event.key >= "1" && event.key <= "9") {
+    const view = SHORTCUT_VIEWS[Number(event.key) - 1];
+    if (view) { event.preventDefault(); switchView(view); }
+  } else if (event.key === "/") {
+    const search = state.view === "swarms" ? byId("swarm-search") : state.view === "memory" ? byId("memory-search") : null;
+    if (search) { event.preventDefault(); search.focus(); }
+  } else if (event.key === "t") {
+    toggleTheme();
+  }
 });
 
 // Live auto-refresh: silently re-fetch and re-render so running swarms update

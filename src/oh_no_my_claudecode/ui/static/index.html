@@ -29,6 +29,9 @@
           <button class="nav-item" data-view="scorecard">
             <span class="nav-icon" aria-hidden="true">◈</span><span>Scorecard</span>
           </button>
+          <button class="nav-item" data-view="timeline">
+            <span class="nav-icon" aria-hidden="true">◷</span><span>Timeline</span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon" aria-hidden="true">≡</span><span>Memory</span>
           </button>
@@ -66,6 +69,7 @@
               <span class="refresh-toggle-track" aria-hidden="true"></span>
               <span class="refresh-toggle-label">Live</span>
             </label>
+            <button id="theme-toggle" class="icon-button" type="button" title="Toggle dark mode (t)" aria-label="Toggle dark mode">◐</button>
             <button id="welcome-open" class="icon-button" type="button" title="Show welcome guide" aria-label="Show welcome guide" hidden>?</button>
             <button id="refresh-button" class="icon-button" type="button" title="Refresh data" aria-label="Refresh data">↻</button>
           </div>
@@ -112,6 +116,10 @@
               <span id="readiness-chip" class="status-chip"></span>
             </div>
             <div id="metric-grid" class="metric-grid"></div>
+            <section class="panel live-home-panel" id="live-home-panel" aria-labelledby="live-home-title">
+              <div class="panel-heading"><h3 id="live-home-title">Live agents</h3><button class="text-button" data-go-view="swarms" type="button">Open swarms →</button></div>
+              <div id="live-home-body" class="live-home-body"></div>
+            </section>
             <div class="overview-grid">
               <section class="panel distribution-panel" aria-labelledby="distribution-title">
                 <div class="panel-heading"><h3 id="distribution-title">Memory distribution</h3><span id="memory-total"></span></div>
@@ -175,6 +183,15 @@
               <div class="panel-heading"><h3>Notes</h3><span>unavailable signals</span></div>
               <ul id="scorecard-notes" class="recs-list"></ul>
             </section>
+          </section>
+
+          <section id="view-timeline" class="view" data-view-panel="timeline" aria-labelledby="timeline-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Repo evolution</span><h2 id="timeline-title">Timeline</h2></div>
+              <span id="timeline-total"></span>
+            </div>
+            <div id="timeline-body" class="timeline-body"></div>
+            <div id="timeline-empty" class="empty-state" hidden>No memories yet — the timeline fills in as onmc learns your repo.</div>
           </section>
 
           <section id="view-memory" class="view" data-view-panel="memory" aria-labelledby="memory-title" hidden>
@@ -260,6 +277,11 @@
           </section>
         </div>
       </main>
+    </div>
+    <div id="cmdk-backdrop" class="cmdk-backdrop" hidden></div>
+    <div id="cmdk" class="cmdk" role="dialog" aria-modal="true" aria-label="Command palette" hidden>
+      <div class="cmdk-field"><span class="cmdk-icon" aria-hidden="true">⌕</span><input id="cmdk-input" class="cmdk-input" type="text" placeholder="Jump to a view, swarm, or memory…" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="cmdk-results"></div>
+      <ul id="cmdk-results" class="cmdk-results" role="listbox"></ul>
     </div>
     <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
     <aside id="unit-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
