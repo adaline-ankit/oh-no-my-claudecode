@@ -94,6 +94,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
+│ highlight       Curated highlight reel: the best moments from your verified  │
+│                 runs.                                                        │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
 │                 plan.                                                        │
 │ missioncontrol  Live, read-only dashboard for an onmc swarm.                 │
@@ -1926,6 +1928,49 @@ Usage: onmc handoff resume [OPTIONS] FILE
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the parsed bundle as JSON instead of a briefing.        │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc highlight`
+
+```text
+Usage: onmc highlight [OPTIONS]
+
+ Curated highlight reel: the best moments from your verified runs.
+
+ Mines verified run receipts for the most spectacular achievements —
+ biggest win, boss kills, streaks, efficiency records, and speed runs —
+ and renders them as a ranked "best-of" recap. Distinct from `replay`
+ (step-by-step) and `timeline` (chronological narrative).
+
+ Deterministic and fully offline (no LLM call). An empty receipt store
+ prints a "no highlights yet" note and exits 0.
+
+ Examples:
+
+     onmc highlight                  # rich table (plain text fallback)
+
+     onmc highlight --since 7d       # only runs from the last 7 days
+
+     onmc highlight --limit 3        # top 3 moments only
+
+     onmc highlight --markdown       # shareable Markdown block
+
+     onmc highlight --json           # JSON envelope for pipelines
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --since           TEXT                      Only include runs since this     │
+│                                             point — a relative window (7d,   │
+│                                             48h, 30m) or ISO date            │
+│                                             (2026-07-01).                    │
+│ --limit           INTEGER RANGE [1<=x<=20]  Maximum number of highlight      │
+│                                             moments to show (default 5).     │
+│                                             [default: 5]                     │
+│ --json                                      Emit the reel as a JSON          │
+│                                             envelope.                        │
+│ --markdown                                  Emit the reel as a shareable     │
+│                                             Markdown block.                  │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
