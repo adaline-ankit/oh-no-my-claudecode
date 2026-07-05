@@ -159,6 +159,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 signed attestation.                                          │
 │ autoroute       Apply flywheel learning: recommend the historically-best     │
 │                 model for a goal.                                            │
+│ coach           Live hype/roast session commentator + streaks. Reacts to     │
+│                 coding-session events with personality-driven quips and      │
+│                 tracks your green/red streak.                                │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
@@ -985,6 +988,103 @@ Usage: onmc claude-md update [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --no-llm          Use deterministic generation only.                         │
 │ --help            Show this message and exit.                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc coach`
+
+```text
+Usage: onmc coach [OPTIONS] COMMAND [ARGS]...
+
+ Live hype/roast session commentator + streaks. Reacts to coding-session events
+ with personality-driven quips and tracks your green/red streak.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ react   React to a coding-session event with a quip + updated streak.        │
+│ streak  Show the current streak, best streak, combo meter, and recent        │
+│         events.                                                              │
+│ cheer   A random-but-deterministic pep line seeded from your event count.    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc coach cheer`
+
+```text
+Usage: onmc coach cheer [OPTIONS]
+
+ A random-but-deterministic pep line seeded from your event count.
+
+ The same event count always yields the same pep line — fully reproducible,
+ no wallclock, no random module.
+
+ Examples:
+
+     onmc coach cheer
+
+     onmc coach cheer --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the cheer as JSON.                                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc coach react`
+
+```text
+Usage: onmc coach react [OPTIONS] EVENT
+
+ React to a coding-session event with a quip + updated streak.
+
+ The quip is deterministic: the same event, tone, and current event count
+ always produce the same line.  Streak state is persisted across calls in
+ ``.onmc/coach/streak.json``.
+
+ Examples:
+
+     onmc coach react test_pass
+
+     onmc coach react pr_merged --tone roast
+
+     onmc coach react build_break --tone dry --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event kind to react to. Recognised: test_pass,         │
+│                       test_fail, pr_merged, build_break, build_pass, commit, │
+│                       revert, lint_pass, lint_fail, deploy_pass,             │
+│                       deploy_fail, review_approved, review_rejected.         │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --tone             [hype|roast|dry]  Commentary personality: hype, roast, or │
+│                                      dry.                                    │
+│                                      [default: hype]                         │
+│ --from-file        FILE              Read the event kind from the last word  │
+│                                      of the first line of FILE.              │
+│ --json                               Emit the result as JSON.                │
+│ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc coach streak`
+
+```text
+Usage: onmc coach streak [OPTIONS]
+
+ Show the current streak, best streak, combo meter, and recent events.
+
+ Examples:
+
+ onmc coach streak
+
+ onmc coach streak --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit streak data as JSON.                                    │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
