@@ -207,6 +207,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
 │                 review diffs, then approve or reject — nothing lands in the  │
 │                 skill store without your sign-off.                           │
+│ soundboard      Fun inline terminal reactions for session events (emoji /    │
+│                 ASCII / optional terminal bell).                             │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -5132,6 +5134,128 @@ Usage: onmc solve [OPTIONS]
 │    --no-llm               Use heuristic fallback instead of the configured   │
 │                           LLM.                                               │
 │    --help                 Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard`
+
+```text
+Usage: onmc soundboard [OPTIONS] COMMAND [ARGS]...
+
+ Fun inline terminal reactions for session events (emoji / ASCII / optional
+ terminal bell).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ react   Emit the reaction for a session event.                               │
+│ list    List all event→reaction bindings (defaults merged with user          │
+│         overrides).                                                          │
+│ bind    Set or override the reaction for an event.                           │
+│ unbind  Remove a user override, restoring the default reaction.              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard bind`
+
+```text
+Usage: onmc soundboard bind [OPTIONS] EVENT REACTION_TEXT
+
+ Set or override the reaction for an event.
+
+ The binding is persisted to ``.onmc/soundboard/bindings.json``.
+ Pass ``--bell`` to also sound a terminal bell when the reaction fires.
+
+ Examples:
+
+     onmc soundboard bind test_pass "✅ all green!"
+
+     onmc soundboard bind build_break "💀 rip" --bell
+
+     onmc soundboard bind deploy_done "🚢 sailing!"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event              TEXT  Event name to bind (e.g. test_pass).           │
+│                               [required]                                     │
+│ *    reaction_text      TEXT  Reaction string (e.g. "🎉 nice!"). [required]  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --bell          Append a terminal bell (\a) to the reaction.                 │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard list`
+
+```text
+Usage: onmc soundboard list [OPTIONS]
+
+ List all event→reaction bindings (defaults merged with user overrides).
+
+ User overrides (set with ``onmc soundboard bind``) are marked with an
+ asterisk ``*`` in the plain-text output.
+
+ Examples:
+
+     onmc soundboard list
+
+     onmc soundboard list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit all bindings as a JSON envelope.                        │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard react`
+
+```text
+Usage: onmc soundboard react [OPTIONS] EVENT
+
+ Emit the reaction for a session event.
+
+ The reaction is looked up from the default map plus any user overrides
+ stored in ``.onmc/soundboard/bindings.json``.  Unknown events emit a safe
+ default ``"…"`` reaction rather than erroring.
+
+ Examples:
+
+     onmc soundboard react test_pass
+
+     onmc soundboard react build_break --json
+
+     onmc soundboard react pr_merged
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event name to react to (e.g. test_pass). [required]    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the reaction as a JSON envelope.                        │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard unbind`
+
+```text
+Usage: onmc soundboard unbind [OPTIONS] EVENT
+
+ Remove a user override, restoring the default reaction.
+
+ If the event has no user override, the command exits cleanly without error.
+
+ Examples:
+
+     onmc soundboard unbind test_pass
+
+     onmc soundboard unbind build_break
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event name to remove the override for. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
