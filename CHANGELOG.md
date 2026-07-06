@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.83.0] — 2026-07-06
+
+### Added
+
+The **fun track, batch 3** — stakes, personality, and reactions. Swarm-built (planned by `onmc mission`), each its own PR:
+
+- **`onmc bounty` — task wagers** — put a points wager on a task (scaled by difficulty: easy 1× / med 2× / hard 3×), then `claim` the payout on completion or `forfeit` it. `bounty post`/`list`/`board`/`claim`/`forfeit`/`balance`, backed by a payout ledger. A stakes layer over your work. (#262)
+- **`onmc persona` — personality presets** — pick a voice the fun layer speaks in: drill-sergeant, hype-beast, zen-master, pirate, or professional. `persona list`/`set`/`show`/`say`, deterministic per-event lines, persisted per-repo. (#261)
+- **`onmc soundboard` — terminal event reactions** — map session events to fun inline reactions (🎉 test pass, 💥 build break, 🚀 merged) with custom `bind`/`unbind` and an optional terminal `--bell`. 20 built-in defaults; distinct from `notify` (external delivery). (#260)
+
+All three are pure-stdlib, offline, deterministic, auto-discovered modules (zero hub edits).
+
 ## [0.82.0] — 2026-07-06
 
 ### Added
