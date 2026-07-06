@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.89.0] — 2026-07-06
+
+### Added
+
+The **agent-observability track, batch 7** — prediction + comparison. Dogfood-swarm built, each its own PR:
+
+- **`onmc estimate <goal> [--model M]`** — predictive PRE-run forecast: clusters historical receipts by goal-keyword overlap and projects expected cost (median + range), wall time, iterations, and probability-of-verified; honest fallback to overall averages / "no history" under 3 similar runs. `--json`. (#287)
+- **`onmc compare <swarm-a> [swarm-b]`** — side-by-side comparison of two swarm runs (units, verified rate, wall, cost, avg iterations, models) with per-metric winners + a one-line verdict; defaults the second arg to the most recent other swarm. `--json`. (#286)
+
 ## [0.88.0] — 2026-07-06
 
 ### Added
