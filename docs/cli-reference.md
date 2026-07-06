@@ -89,11 +89,16 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ achievements    Show your XP, level, streaks, and badges earned from         │
+│                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
+│ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
+│ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
+│                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
 │                 runs.                                                        │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
@@ -228,6 +233,24 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 server, no dep).                                             │
 │ whip            Steer a running agent and record reward signals (the reins + │
 │                 whip control surface).                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc achievements`
+
+```text
+Usage: onmc achievements [OPTIONS]
+
+ Show your XP, level, streaks, and badges earned from verified runs.
+
+ XP and streaks are earned only from *verified* ``onmc loop`` /
+ ``onmc swarm`` receipts — unverified runs never inflate the score.
+ Deterministic and offline: no LLM calls, no randomness. An empty
+ receipt log prints an honest zero-state and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the achievements report as JSON.                        │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2065,6 +2088,29 @@ Usage: onmc flywheel [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc formats`
+
+```text
+Usage: onmc formats [OPTIONS]
+
+ Emit the spec of onmc's portable, open on-disk schemas.
+
+ Describes the run receipt, the attestation, and the exported memory
+ record + federation manifest — the stable JSON shapes onmc writes to
+ disk that other tools/agents can read directly. Every field list is
+ derived live from the real dataclasses/models (never hand-copied), so
+ this can never silently drift from what onmc actually writes.
+
+ Read-only and deterministic: no filesystem, network, or clock reads.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                Emit the spec as machine-readable JSON.                │
+│ --schema        TEXT  Only emit one schema: 'receipt', 'attestation', or     │
+│                       'memory'. Default: all three.                          │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc gh-aw`
 
 ```text
@@ -2180,6 +2226,28 @@ Usage: onmc handoff resume [OPTIONS] FILE
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the parsed bundle as JSON instead of a briefing.        │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc heatmap`
+
+```text
+Usage: onmc heatmap [OPTIONS]
+
+ Render a GitHub-contributions-style heatmap of agent run activity.
+
+ Reads the tamper-evident run receipts written by ``onmc loop`` /
+ ``onmc swarm``, buckets them by calendar day, and renders a
+ block-glyph calendar grid plus totals (total runs, active days,
+ busiest day, current streak). Deterministic and fully offline (no
+ LLM call). An empty receipts directory prints a "no runs yet" note
+ and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --weeks        INTEGER  Number of weeks to include in the grid.              │
+│                         [default: 12]                                        │
+│ --json                  Emit the heatmap as JSON.                            │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
