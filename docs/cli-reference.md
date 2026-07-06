@@ -123,6 +123,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
 │ session-search  Full-text search across all of onmc's persisted history.     │
+│ standup         Summarize recent agent run activity — a daily-standup-style  │
+│                 digest.                                                      │
 │ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
@@ -5593,6 +5595,28 @@ Usage: onmc spec validate [OPTIONS]
 │ --path        PATH  Path to the .agent-memory/ directory to validate.        │
 │                     Defaults to .agent-memory/ in the current repo root.     │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc standup`
+
+```text
+Usage: onmc standup [OPTIONS]
+
+ Summarize recent agent run activity — a daily-standup-style digest.
+
+ Reads run receipts from ``.agent-memory/receipts/`` and reports total
+ runs, verified/failed counts, cost, wall time, a per-model breakdown,
+ top goals worked on, and notable items (failures, high-iteration
+ runs) within the window. Deterministic and offline — no LLM call. An
+ empty window prints an honest "no agent runs" note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --since        TEXT  Window to summarize — a relative window (24h, 7d) or an │
+│                      ISO date/datetime. Defaults to 24h.                     │
+│                      [default: 24h]                                          │
+│ --json               Emit the standup as JSON.                               │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
