@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oh-no-my-claudecode"
-version = "0.81.0"
+version = "0.82.0"
 description = "Memory-grounded autonomous coding loops for Claude Code and Codex."
 readme = "README.md"
 license = { file = "LICENSE" }

@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.82.0] — 2026-07-06
+
+### Added
+
+The **fun track, batch 2** — the delight features start composing each other. Swarm-built (planned by `onmc mission`), each its own PR:
+
+- **`onmc leash` — guardrails-as-game** — define playful session "house rules" (soft advisory or hard buzz-triggering), check any action/text against them via deterministic offline pattern-matching (regex-first, literal fallback on bad patterns), and track compliance with a letter grade + clean-streak. `leash add`/`list`/`remove`/`check`/`score`. Distinct from `drift` (memory-directive enforcement on code) and `wrap` (hook tool-intercept). (#257)
+- **`onmc vibe` — ambient agent-mood HUD** — a read-only dashboard that aggregates your `coach` streak, `whip` reward tally, and `quest` level into a single glanceable mood (🔥 on fire / 😎 cruising / 😐 meh / 🥵 struggling) with component readouts. Degrades gracefully when a source is absent. `onmc vibe` / `vibe mood`. (#256)
+- **`onmc highlight` — session highlight reel** — mines verified receipts for the best moments (biggest win, gnarliest bug slain, longest streak, most efficient, fastest merge) into a curated, ranked, shareable recap (`--markdown`). Distinct from `replay` (step-by-step) and `timeline` (chronological). (#258)
+
+All three are pure-stdlib, offline, deterministic, auto-discovered modules (zero hub edits).
+
 ## [0.81.0] — 2026-07-06
 
 ### Added
