@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.87.0] — 2026-07-06
+
+### Added
+
+- **`onmc blackboard post|show <swarm-id>`** — an append-only shared-memory coordination board for swarms (`.onmc/swarm/<id>/blackboard.jsonl`): units post findings/claims/warnings/questions that other units and humans can read, instead of working blind. Pure stdlib core (`BoardEntry`/`append_entry`/`read_board`/`render_board`), clock-free; `--json`, `--kind`, `--unit` filters; defaults to the most recent swarm. The foundation for collaborative multi-agent runs. (#281)
+
 ## [0.86.0] — 2026-07-06
 
 ### Added

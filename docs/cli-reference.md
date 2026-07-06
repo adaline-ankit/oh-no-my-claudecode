@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ cost            Spend breakdown and forecast from run receipts.              │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
@@ -1642,6 +1643,29 @@ Usage: onmc conventions show [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc cost`
+
+```text
+Usage: onmc cost [OPTIONS]
+
+ Spend breakdown and forecast from run receipts.
+
+ Reads run receipts from ``.agent-memory/receipts/`` and reports total
+ spend, spend by model, spend by day over the trailing window, cost
+ per verified run, and a clearly-labelled linear forecast of monthly
+ spend. Deterministic and offline — no LLM call. Distinct from
+ ``onmc savings`` (an ROI estimate) and ``onmc standup`` (an activity
+ digest): this is about money. An empty window prints an honest
+ "no agent runs" note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --days        INTEGER  Trailing window size in days. Defaults to 30.         │
+│                        [default: 30]                                         │
+│ --json                 Emit the cost report as JSON.                         │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
