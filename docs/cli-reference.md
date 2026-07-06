@@ -110,6 +110,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 files.                                                       │
 │ postmortem      LLM-free structured narrative recap of a completed swarm     │
 │                 run.                                                         │
+│ prbadge         Post a "verified-work" onmc badge comment on a GitHub PR.    │
 │ race            Offline model/strategy tournament over recorded run          │
 │                 receipts.                                                    │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -4335,6 +4336,40 @@ Usage: onmc postmortem [OPTIONS] [SWARM_ID]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured postmortem as JSON.                      │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc prbadge`
+
+```text
+Usage: onmc prbadge [OPTIONS] PR_NUMBER
+
+ Post a "verified-work" onmc badge comment on a GitHub PR.
+
+ Aggregates local run receipts (``.agent-memory/receipts/``, the same
+ corpus ``onmc ledger`` reads) into a compact, honest Markdown badge —
+ "N loops recorded, X% verified, built with onmc vY" — and posts it as
+ a PR comment via ``gh pr comment``.
+
+ Read-only with respect to the repository: the only side effect is the
+ ``gh`` call, and it only happens when neither ``--dry-run`` nor
+ ``--json`` is passed. With no verified receipts on disk, the badge
+ honestly reports "no verified receipts yet" rather than a fabricated
+ number.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr_number      INTEGER  PR number to post the onmc verified-work badge  │
+│                              to.                                             │
+│                              [required]                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run              Build and print the comment without posting it        │
+│                        (default when --json is set).                         │
+│ --repo           TEXT  owner/name to post to (defaults to auto-detection via │
+│                        gh/git remote).                                       │
+│ --json                 Emit the structured badge data as JSON. Implies       │
+│                        --dry-run; never posts.                               │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
