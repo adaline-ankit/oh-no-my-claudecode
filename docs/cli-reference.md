@@ -103,6 +103,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 morning digest.                                              │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
+│ postmortem      LLM-free structured narrative recap of a completed swarm     │
+│                 run.                                                         │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
 │ roast           Roast this repo's agent-readiness — a blunt 0-100 score +    │
@@ -4039,6 +4041,30 @@ Usage: onmc plug [OPTIONS] TARGET
 │                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc postmortem`
+
+```text
+Usage: onmc postmortem [OPTIONS] [SWARM_ID]
+
+ LLM-free structured narrative recap of a completed swarm run.
+
+ Reads the swarm manifest + each unit's tamper-evident receipt and
+ assembles a deterministic English recap: an overview (units / verified
+ / failed / total wall time), a per-unit account of what happened, and
+ an honest summary of what went well versus what needs attention.
+ Never calls an LLM. Never mutates swarm state. Degrades gracefully on
+ missing/partial data instead of crashing.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Swarm id to recap. Omit to use the most recent       │
+│                         swarm.                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the structured postmortem as JSON.                      │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
