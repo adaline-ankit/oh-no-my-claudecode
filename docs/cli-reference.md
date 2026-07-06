@@ -176,6 +176,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
 │                 across sibling repos.                                        │
+│ daily           Don't-break-the-chain calendar streak. Tracks which calendar │
+│                 days you were active and rewards consecutive-day runs.       │
 │ drift           Enforce institutional memory — flag CANDIDATE code           │
 │                 violations of recorded decisions/invariants for review       │
 │                 (heuristic, not a proof).                                    │
@@ -1641,6 +1643,77 @@ Usage: onmc crossrepo scan [OPTIONS] PATHS...
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the impact map as JSON.                                 │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily`
+
+```text
+Usage: onmc daily [OPTIONS] COMMAND [ARGS]...
+
+ Don't-break-the-chain calendar streak. Tracks which calendar days you were
+ active and rewards consecutive-day runs.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the result as JSON.                                     │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ grid     Show a contribution-grid-style calendar of active days.             │
+│ checkin  Mark a calendar day active (persist to .onmc/daily/activity.json).  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily checkin`
+
+```text
+Usage: onmc daily checkin [OPTIONS]
+
+ Mark a calendar day active (persist to .onmc/daily/activity.json).
+
+ By default marks today (UTC) as active.  Explicit --date allows
+ back-filling a day you forgot to check in.
+
+ Examples:
+
+     onmc daily checkin
+
+     onmc daily checkin --date 2024-03-15
+
+     onmc daily checkin --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --date        TEXT  Date to mark active (YYYY-MM-DD). Defaults to today      │
+│                     (UTC).                                                   │
+│ --json              Emit the check-in result as JSON.                        │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily grid`
+
+```text
+Usage: onmc daily grid [OPTIONS]
+
+ Show a contribution-grid-style calendar of active days.
+
+ Renders the last WEEKS calendar weeks, marking active days with a filled
+ block (■) and inactive days with an open block (□).  Today is marked
+ with a diamond (◆).
+
+ Examples:
+
+     onmc daily grid
+
+     onmc daily grid --weeks 4
+
+     onmc daily grid --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --weeks  -w      INTEGER  Number of weeks to show (default 12).              │
+│                           [default: 12]                                      │
+│ --json                    Emit the grid as JSON.                             │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
