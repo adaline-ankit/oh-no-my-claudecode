@@ -128,6 +128,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
 │ session-search  Full-text search across all of onmc's persisted history.     │
+│ share           Publish a shareable snapshot of this repo's onmc state to a  │
+│                 Gist.                                                        │
 │ standup         Summarize recent agent run activity — a daily-standup-style  │
 │                 digest.                                                      │
 │ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
@@ -5386,6 +5388,34 @@ Usage: onmc setup [OPTIONS]
 │ --yes             Use defaults and skip interactive prompts.                 │
 │ --no-llm          Skip provider setup and LLM-assisted extraction.           │
 │ --help            Show this message and exit.                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc share`
+
+```text
+Usage: onmc share [OPTIONS]
+
+ Publish a shareable snapshot of this repo's onmc state to a Gist.
+
+ By default, publishes the standalone dashboard HTML (the same
+ self-contained file ``onmc ui --export`` produces). With
+ ``--scorecard``, publishes the shareable Markdown scorecard instead.
+
+ Read-only with respect to the repository: the only side effect is the
+ ``gh gist create`` call, and it only happens when neither
+ ``--dry-run`` nor ``--json`` is passed. ``--private`` creates a secret
+ gist instead of a public one.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --scorecard          Publish the Markdown scorecard instead of the           │
+│                      dashboard.                                              │
+│ --private            Create a secret gist instead of a public one.           │
+│ --dry-run            Write the snapshot locally and print its path without   │
+│                      publishing.                                             │
+│ --json               Emit the snapshot path as JSON. Implies --dry-run;      │
+│                      never publishes.                                        │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
