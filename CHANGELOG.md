@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.84.0] — 2026-07-06
+
+### Added
+
+The **agent-observability + fun track, batch 4** — SOTA "watch your agents" features. Planned via `onmc mission`, built by a dogfood swarm (each its own PR, fresh-clone isolation):
+
+- **`onmc postmortem <swarm-id>`** — LLM-free, deterministic narrative recap of a completed swarm run (overview, per-unit lines, honest went-well / needs-attention summary), reusing the missioncontrol readers. `--json`; defaults to the most recent swarm. (#263)
+- **`onmc race <goal>` / `--all`** — offline model/strategy tournament over run receipts: clusters by goal keywords, builds a per-model leaderboard (verified-rate then cost), declares a winner (≥3 verified runs, else honest "insufficient data"). `--json`; never fabricates cost. (#264)
+- **`onmc swarmreplay <swarm-id>`** — time-travel step-by-step reconstruction of a swarm run's ordered timeline from manifest + receipts (units by `started_at`, one step per iteration). `--json` (stable UI-scrubber schema), `--step N`. (#265)
+- **`onmc heatmap`** — GitHub-contributions-style calendar heatmap of agent run density from receipts, with month labels, legend, totals (runs, active days, busiest day, streak). `--weeks N`, `--json`. (#267)
+- **`onmc formats` / `--schema`** — emits a versioned, introspection-derived spec of onmc's portable schemas (receipt, attestation, memory + manifest) for external-tool interop. `--json`. (#269)
+- **`onmc achievements`** — gamified XP, verified-run streaks, milestones and badges computed purely from run receipts. `--json`; honest zero-state. (#270)
+
 ## [0.83.0] — 2026-07-06
 
 ### Added
