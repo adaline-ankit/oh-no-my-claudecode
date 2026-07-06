@@ -95,6 +95,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 receipt.                                                     │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
+│ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
@@ -1869,6 +1870,35 @@ Usage: onmc drift check [OPTIONS]
 │                                                    [default: 0.0]            │
 │ --help                                             Show this message and     │
 │                                                    exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc estimate`
+
+```text
+Usage: onmc estimate [OPTIONS] GOAL
+
+ Predict cost/time/outcome for <goal> from similar past runs.
+
+ Clusters recorded run receipts whose ``goal`` shares keywords with
+ <goal> (same keyword-overlap approach as ``onmc race`` / ``onmc
+ flywheel``) and forecasts expected cost (median + range), expected
+ wall time, expected iterations, and probability-of-verified from that
+ cluster. Requires >= 3 similar runs for a confident estimate; below
+ that, honestly falls back to overall-corpus averages (or "no history"
+ when there are no receipts at all) rather than guessing. Every number
+ is explicitly labelled as an ESTIMATE derived from historical data.
+ Deterministic and fully offline (no LLM call).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal to forecast a run for (keyword-matched against     │
+│                      history).                                               │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --model        TEXT  Condition the estimate on a specific model.             │
+│ --json               Emit the estimate as JSON.                              │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
