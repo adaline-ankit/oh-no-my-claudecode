@@ -6315,6 +6315,16 @@ def swarm_plan_command(
         bool,
         typer.Option("--json", help="Emit the plan as JSON to stdout."),
     ] = False,
+    auto_model: Annotated[
+        bool,
+        typer.Option(
+            "--auto-model",
+            help=(
+                "Advisory: annotate each unit with a flywheel-learned "
+                "suggested_model (does not change execution)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Allocate an IN-SESSION (subagent) swarm — token-free fan-out.
 
@@ -6330,6 +6340,7 @@ def swarm_plan_command(
     --------
     onmc swarm plan --file tasks.txt --json
     onmc swarm plan --task "audit module A" --task "audit module B" --json
+    onmc swarm plan --task "fix the parser" --auto-model --json
     """
     tasks: list[str] = []
     if task is not None and file is not None:
@@ -6353,8 +6364,16 @@ def swarm_plan_command(
 
     from oh_no_my_claudecode.swarm.inline import plan_inline_swarm
 
+    auto_model_report = None
+    if auto_model:
+        from oh_no_my_claudecode.flywheel.analyze import load_trajectories, summarize
+
+        auto_model_report = summarize(load_trajectories(repo_root))
+
     width = concurrency if concurrency is not None else min(8, len(tasks))
-    plan = plan_inline_swarm(repo_root, tasks, concurrency=width)
+    plan = plan_inline_swarm(
+        repo_root, tasks, concurrency=width, auto_model_report=auto_model_report
+    )
 
     if json_output:
         sys.stdout.write(json.dumps(plan, indent=2) + "\n")
@@ -6367,6 +6386,11 @@ def swarm_plan_command(
     console.print(f"[dim]recommended fan-out: {width} · abort: {plan['abort_path']}[/dim]")
     for u in plan["units"]:
         console.print(f"  [dim]{u['id']}[/dim]  {u['goal'][:80]}")
+    if auto_model_report is not None:
+        from oh_no_my_claudecode.swarm.auto_model import build_routing_summary_lines
+
+        for line in build_routing_summary_lines(plan["units"]):
+            console.print(f"  [dim]{line}[/dim]")
     console.print(
         "[dim]Claude Code fans subagents out (token-free); "
         "report each with `onmc swarm record`.[/dim]"

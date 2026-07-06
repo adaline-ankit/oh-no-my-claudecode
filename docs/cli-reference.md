@@ -5733,6 +5733,7 @@ Usage: onmc swarm plan [OPTIONS]
  --------
  onmc swarm plan --file tasks.txt --json
  onmc swarm plan --task "audit module A" --task "audit module B" --json
+ onmc swarm plan --task "fix the parser" --auto-model --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --task               TEXT                  Goal text for one unit.  Repeat   │
@@ -5743,6 +5744,10 @@ Usage: onmc swarm plan [OPTIONS]
 │                                            (advisory; Claude Code caps ~10   │
 │                                            subagents).                       │
 │ --json                                     Emit the plan as JSON to stdout.  │
+│ --auto-model                               Advisory: annotate each unit with │
+│                                            a flywheel-learned                │
+│                                            suggested_model (does not change  │
+│                                            execution).                       │
 │ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
