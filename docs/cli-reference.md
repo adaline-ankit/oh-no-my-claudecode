@@ -94,6 +94,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
+│ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
 │ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
 │                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
@@ -1991,6 +1992,29 @@ Usage: onmc flywheel [OPTIONS]
 │ --since        TEXT  Only include runs since this time (e.g. 7d, 48h, or ISO │
 │                      date).                                                  │
 │ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc formats`
+
+```text
+Usage: onmc formats [OPTIONS]
+
+ Emit the spec of onmc's portable, open on-disk schemas.
+
+ Describes the run receipt, the attestation, and the exported memory
+ record + federation manifest — the stable JSON shapes onmc writes to
+ disk that other tools/agents can read directly. Every field list is
+ derived live from the real dataclasses/models (never hand-copied), so
+ this can never silently drift from what onmc actually writes.
+
+ Read-only and deterministic: no filesystem, network, or clock reads.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                Emit the spec as machine-readable JSON.                │
+│ --schema        TEXT  Only emit one schema: 'receipt', 'attestation', or     │
+│                       'memory'. Default: all three.                          │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
