@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ bottleneck      Find what's slowing your agents down.                        │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
@@ -971,6 +972,29 @@ Usage: onmc blame [OPTIONS] PATH
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --terse          Emit compact terse output (overrides ONMC_TERSE env var).   │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bottleneck`
+
+```text
+Usage: onmc bottleneck [OPTIONS]
+
+ Find what's slowing your agents down.
+
+ Reads run receipts from ``.agent-memory/receipts/`` and ranks the
+ slowest goals (by total and average wall-clock time), the slowest
+ models (by average wall-clock and average iterations), and flags
+ outlier runs (unusually slow or iteration-heavy relative to the rest
+ of the fleet). Deterministic and offline — no LLM call. An empty
+ receipt set prints an honest "no agent runs" note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --top         INTEGER  Number of entries to show per ranked list. Defaults   │
+│                        to 5.                                                 │
+│                        [default: 5]                                          │
+│ --json                 Emit the bottleneck report as JSON.                   │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
