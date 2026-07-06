@@ -55,6 +55,7 @@ def plan_inline_swarm(
     swarm_id: str | None = None,
     now: datetime | None = None,
     claim_paths: list[list[str]] | None = None,
+    auto_model_report: Any | None = None,
 ) -> dict[str, Any]:
     """Allocate an inline (subagent-driven) swarm and write its manifest.
 
@@ -81,18 +82,33 @@ def plan_inline_swarm(
         acquired via the claim ledger so concurrent units don't stomp on the
         same files.  Lease acquisition is NON-FATAL: a conflict or any error is
         recorded on the unit but never blocks planning.
+    auto_model_report:
+        Optional :class:`~oh_no_my_claudecode.flywheel.analyze.FlywheelReport`.
+        When supplied, each unit is annotated (via
+        :func:`oh_no_my_claudecode.swarm.auto_model.annotate_units_with_models`)
+        with ``suggested_model`` / ``suggested_model_confidence`` — purely
+        advisory fields recorded on the manifest and the returned unit dicts.
+        When ``None`` (the default), these fields are simply absent — existing
+        callers and manifests are byte-for-byte unaffected.
 
     Returns
     -------
     dict
         ``{swarm_id, mode, concurrency, agent, abort_path, manifest_path,
         state_dir, units: [{id, goal}]}`` — everything the model needs to drive
-        the fan-out and later record each unit.
+        the fan-out and later record each unit.  When ``auto_model_report`` is
+        given, each unit dict additionally carries ``suggested_model`` and
+        ``suggested_model_confidence``.
     """
     sid = swarm_id if swarm_id is not None else secrets.token_hex(8)
     started_at = _now_iso(now)
 
     units = [{"id": f"unit-{i:04d}", "goal": g} for i, g in enumerate(goals)]
+
+    if auto_model_report is not None:
+        from oh_no_my_claudecode.swarm.auto_model import annotate_units_with_models
+
+        units = annotate_units_with_models(units, auto_model_report)
 
     claimed = _acquire_unit_claims(repo_root, sid, units, claim_paths)
 
@@ -112,6 +128,14 @@ def plan_inline_swarm(
                 "error": None,
                 "verified": None,
                 "claimed_paths": claimed.get(u["id"], []),
+                **(
+                    {
+                        "suggested_model": u.get("suggested_model"),
+                        "suggested_model_confidence": u.get("suggested_model_confidence"),
+                    }
+                    if auto_model_report is not None
+                    else {}
+                ),
             }
             for u in units
         },
