@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.90.0] — 2026-07-06
+
+### Added
+
+- **`onmc daily` — don't-break-the-chain calendar streak** — a calendar-DAY engagement streak (GitHub-contribution / Duolingo style), a distinct axis from `coach`'s per-event combo. `onmc daily` shows current chain, longest chain, total active days, and days-to-next-milestone (7/30/100); `daily grid` renders a contribution-style calendar; `daily checkin` marks a day active. Active days are the union of explicit check-ins and verified run receipts; a grace rule extends the streak from yesterday until today's first check-in. Pure stdlib, deterministic (injected `today`), auto-discovered. Completes the fun track. (#268)
+
 ## [0.89.0] — 2026-07-06
 
 ### Added

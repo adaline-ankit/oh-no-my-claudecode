@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ bottleneck      Find what's slowing your agents down.                        │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
@@ -193,6 +194,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 interface spec.                                              │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
 │                 across sibling repos.                                        │
+│ daily           Don't-break-the-chain calendar streak. Tracks which calendar │
+│                 days you were active and rewards consecutive-day runs.       │
 │ drift           Enforce institutional memory — flag CANDIDATE code           │
 │                 violations of recorded decisions/invariants for review       │
 │                 (heuristic, not a proof).                                    │
@@ -971,6 +974,29 @@ Usage: onmc blame [OPTIONS] PATH
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --terse          Emit compact terse output (overrides ONMC_TERSE env var).   │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bottleneck`
+
+```text
+Usage: onmc bottleneck [OPTIONS]
+
+ Find what's slowing your agents down.
+
+ Reads run receipts from ``.agent-memory/receipts/`` and ranks the
+ slowest goals (by total and average wall-clock time), the slowest
+ models (by average wall-clock and average iterations), and flags
+ outlier runs (unusually slow or iteration-heavy relative to the rest
+ of the fleet). Deterministic and offline — no LLM call. An empty
+ receipt set prints an honest "no agent runs" note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --top         INTEGER  Number of entries to show per ranked list. Defaults   │
+│                        to 5.                                                 │
+│                        [default: 5]                                          │
+│ --json                 Emit the bottleneck report as JSON.                   │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1788,6 +1814,77 @@ Usage: onmc crossrepo scan [OPTIONS] PATHS...
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the impact map as JSON.                                 │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily`
+
+```text
+Usage: onmc daily [OPTIONS] COMMAND [ARGS]...
+
+ Don't-break-the-chain calendar streak. Tracks which calendar days you were
+ active and rewards consecutive-day runs.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the result as JSON.                                     │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ grid     Show a contribution-grid-style calendar of active days.             │
+│ checkin  Mark a calendar day active (persist to .onmc/daily/activity.json).  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily checkin`
+
+```text
+Usage: onmc daily checkin [OPTIONS]
+
+ Mark a calendar day active (persist to .onmc/daily/activity.json).
+
+ By default marks today (UTC) as active.  Explicit --date allows
+ back-filling a day you forgot to check in.
+
+ Examples:
+
+     onmc daily checkin
+
+     onmc daily checkin --date 2024-03-15
+
+     onmc daily checkin --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --date        TEXT  Date to mark active (YYYY-MM-DD). Defaults to today      │
+│                     (UTC).                                                   │
+│ --json              Emit the check-in result as JSON.                        │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc daily grid`
+
+```text
+Usage: onmc daily grid [OPTIONS]
+
+ Show a contribution-grid-style calendar of active days.
+
+ Renders the last WEEKS calendar weeks, marking active days with a filled
+ block (■) and inactive days with an open block (□).  Today is marked
+ with a diamond (◆).
+
+ Examples:
+
+     onmc daily grid
+
+     onmc daily grid --weeks 4
+
+     onmc daily grid --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --weeks  -w      INTEGER  Number of weeks to show (default 12).              │
+│                           [default: 12]                                      │
+│ --json                    Emit the grid as JSON.                             │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
