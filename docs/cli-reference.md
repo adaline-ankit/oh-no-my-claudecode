@@ -93,7 +93,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
+│ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
@@ -1546,6 +1548,31 @@ Usage: onmc codegraph summary [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc compare`
+
+```text
+Usage: onmc compare [OPTIONS] SWARM_ID_A [SWARM_ID_B]
+
+ Side-by-side, read-only comparison of two swarm runs.
+
+ Reads each swarm's manifest + unit receipts and reports units total,
+ verified count/rate, wall time, cost, average iterations, and models
+ used for both runs side by side, with a per-metric winner marker and
+ a one-line verdict on which run did better. Never calls an LLM, never
+ mutates swarm state. Degrades gracefully on missing/partial data
+ instead of crashing.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id_a        TEXT  First swarm id to compare. [required]           │
+│      [swarm_id_b]      TEXT  Second swarm id to compare. Omit to use the     │
+│                              most recent OTHER swarm.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the structured comparison as JSON.                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc consolidate`
 
 ```text
@@ -1916,6 +1943,35 @@ Usage: onmc drift check [OPTIONS]
 │                                                    [default: 0.0]            │
 │ --help                                             Show this message and     │
 │                                                    exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc estimate`
+
+```text
+Usage: onmc estimate [OPTIONS] GOAL
+
+ Predict cost/time/outcome for <goal> from similar past runs.
+
+ Clusters recorded run receipts whose ``goal`` shares keywords with
+ <goal> (same keyword-overlap approach as ``onmc race`` / ``onmc
+ flywheel``) and forecasts expected cost (median + range), expected
+ wall time, expected iterations, and probability-of-verified from that
+ cluster. Requires >= 3 similar runs for a confident estimate; below
+ that, honestly falls back to overall-corpus averages (or "no history"
+ when there are no receipts at all) rather than guessing. Every number
+ is explicitly labelled as an ESTIMATE derived from historical data.
+ Deterministic and fully offline (no LLM call).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    goal      TEXT  Goal to forecast a run for (keyword-matched against     │
+│                      history).                                               │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --model        TEXT  Condition the estimate on a specific model.             │
+│ --json               Emit the estimate as JSON.                              │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
