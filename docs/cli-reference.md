@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
@@ -1541,6 +1542,31 @@ Usage: onmc codegraph summary [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc compare`
+
+```text
+Usage: onmc compare [OPTIONS] SWARM_ID_A [SWARM_ID_B]
+
+ Side-by-side, read-only comparison of two swarm runs.
+
+ Reads each swarm's manifest + unit receipts and reports units total,
+ verified count/rate, wall time, cost, average iterations, and models
+ used for both runs side by side, with a per-metric winner marker and
+ a one-line verdict on which run did better. Never calls an LLM, never
+ mutates swarm state. Degrades gracefully on missing/partial data
+ instead of crashing.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id_a        TEXT  First swarm id to compare. [required]           │
+│      [swarm_id_b]      TEXT  Second swarm id to compare. Omit to use the     │
+│                              most recent OTHER swarm.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the structured comparison as JSON.                      │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
