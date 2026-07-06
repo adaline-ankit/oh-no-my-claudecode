@@ -103,6 +103,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 morning digest.                                              │
 │ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
 │                 files.                                                       │
+│ race            Offline model/strategy tournament over recorded run          │
+│                 receipts.                                                    │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
 │                 ``cli.py``.                                                  │
 │ roast           Roast this repo's agent-readiness — a blunt 0-100 score +    │
@@ -4332,6 +4334,31 @@ Usage: onmc quest stats [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit stats as JSON.                                          │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc race`
+
+```text
+Usage: onmc race [OPTIONS] [GOAL]
+
+ Offline model/strategy tournament over recorded run receipts.
+
+ Clusters run receipts whose ``goal`` shares keywords with <goal>,
+ builds a per-model leaderboard (runs, verified rate, avg cost, avg
+ wall-time) ranked by verified rate then cost, and declares a
+ tournament winner. Requires >= 3 verified runs in the cluster, else
+ prints an honest "insufficient data" instead of guessing. Use --all
+ for an overall leaderboard with no clustering. Deterministic and
+ fully offline (no LLM call).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [goal]      TEXT  Goal to cluster receipts on (keyword overlap).           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --all           Race every model over the whole receipt corpus.              │
+│ --json          Emit the race result as JSON.                                │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
