@@ -191,6 +191,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 without your sign-off.                                       │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
+│ persona         Selectable agent personality presets. Pick a voice           │
+│                 (drill-sergeant, hype-beast, zen-master, pirate,             │
+│                 professional) that flavours how the fun layer talks. Active  │
+│                 persona is persisted per repository.                         │
 │ proptest        Generate property/invariant tests for pure functions.        │
 │ proxy           OpenAI-compatible local proxy for onmc's configured LLM      │
 │                 provider.                                                    │
@@ -3780,6 +3784,131 @@ Usage: onmc pack [OPTIONS] GOAL
 │ --json                                  Emit the pack as JSON instead of     │
 │                                         markdown.                            │
 │ --help                                  Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc persona`
+
+```text
+Usage: onmc persona [OPTIONS] COMMAND [ARGS]...
+
+ Selectable agent personality presets. Pick a voice (drill-sergeant,
+ hype-beast, zen-master, pirate, professional) that flavours how the fun layer
+ talks. Active persona is persisted per repository.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ list  List all available personality presets.                                │
+│ set   Set the active personality preset for this repository.                 │
+│ show  Show the current active persona and sample lines.                      │
+│ say   Emit a line for EVENT in the active persona's voice.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc persona list`
+
+```text
+Usage: onmc persona list [OPTIONS]
+
+ List all available personality presets.
+
+ Shows each preset's name, tone, and description.  Use ``onmc persona set``
+ to activate one.
+
+ Examples:
+
+     onmc persona list
+
+     onmc persona list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the preset list as JSON.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc persona say`
+
+```text
+Usage: onmc persona say [OPTIONS] EVENT
+
+ Emit a line for EVENT in the active persona's voice.
+
+ Selection is deterministic: the same persona + event + seed always
+ produces the same line.  No LLM, no network, no randomness.
+
+ Examples:
+
+     onmc persona say test_pass
+
+     onmc persona say pr_merged --seed 3
+
+     onmc persona say build_break --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event kind to speak to. Recognised: test_pass,         │
+│                       test_fail, pr_merged, build_pass, build_break, commit, │
+│                       generic. Unknown events fall through to the generic    │
+│                       bank.                                                  │
+│                       [required]                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --seed        INTEGER  Deterministic selection seed. The same (persona,      │
+│                        event, seed) triple always produces the same line.    │
+│                        [default: 0]                                          │
+│ --json                 Emit the result as JSON.                              │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc persona set`
+
+```text
+Usage: onmc persona set [OPTIONS] NAME
+
+ Set the active personality preset for this repository.
+
+ The chosen persona is persisted to ``.onmc/persona/active.json``.
+ Other ``onmc persona`` subcommands and any modules that call
+ ``onmc persona`` will reflect the new choice immediately.
+
+ Examples:
+
+     onmc persona set zen-master
+
+     onmc persona set hype-beast --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    name      TEXT  Persona name to activate. Available: drill-sergeant,    │
+│                      hype-beast, pirate, professional, zen-master.           │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the result as JSON.                                     │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc persona show`
+
+```text
+Usage: onmc persona show [OPTIONS]
+
+ Show the current active persona and sample lines.
+
+ When no persona has been set, the default (``professional``) is shown.
+
+ Examples:
+
+     onmc persona show
+
+     onmc persona show --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the persona details as JSON.                            │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
