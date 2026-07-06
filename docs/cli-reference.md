@@ -89,6 +89,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
 │                 receipt verdict.                                             │
 │ release         Draft the next release from conventional-commit history.     │
+│ achievements    Show your XP, level, streaks, and badges earned from         │
+│                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
@@ -229,6 +231,24 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 server, no dep).                                             │
 │ whip            Steer a running agent and record reward signals (the reins + │
 │                 whip control surface).                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc achievements`
+
+```text
+Usage: onmc achievements [OPTIONS]
+
+ Show your XP, level, streaks, and badges earned from verified runs.
+
+ XP and streaks are earned only from *verified* ``onmc loop`` /
+ ``onmc swarm`` receipts — unverified runs never inflate the score.
+ Deterministic and offline: no LLM calls, no randomness. An empty
+ receipt log prints an honest zero-state and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the achievements report as JSON.                        │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
