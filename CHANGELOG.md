@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.91.0] — 2026-07-06
+
+### Added
+
+The **agent-observability track, batch 8** — perf + sharing. Dogfood-swarm built, each its own PR:
+
+- **`onmc bottleneck [--top N]`** — surfaces the slowest goals and models plus outlier runs (wall/iterations > p90 or 2× median) with a "time sinks" summary, from run receipts. `--json`. (#289)
+- **`onmc share [--scorecard] [--private] [--dry-run]`** — publishes a dashboard HTML snapshot (or the scorecard markdown) to a GitHub Gist and returns the public URL: a one-command shareable link for demos. `--dry-run`/`--json` never touch `gh`. (#291)
+
 ## [0.90.0] — 2026-07-06
 
 ### Added
