@@ -163,6 +163,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 signed attestation.                                          │
 │ autoroute       Apply flywheel learning: recommend the historically-best     │
 │                 model for a goal.                                            │
+│ bounty          Wager points on tasks — post bounties, claim payouts, track  │
+│                 balance.                                                     │
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
 │                 coding-session events with personality-driven quips and      │
 │                 tracks your green/red streak.                                │
@@ -203,6 +205,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
 │                 review diffs, then approve or reject — nothing lands in the  │
 │                 skill store without your sign-off.                           │
+│ soundboard      Fun inline terminal reactions for session events (emoji /    │
+│                 ASCII / optional terminal bell).                             │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -860,6 +864,172 @@ Usage: onmc blame [OPTIONS] PATH
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --terse          Emit compact terse output (overrides ONMC_TERSE env var).   │
 │ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty`
+
+```text
+Usage: onmc bounty [OPTIONS] COMMAND [ARGS]...
+
+ Wager points on tasks — post bounties, claim payouts, track balance.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ post     Post a new bounty with a points wager on a task.                    │
+│ list     List all open bounties and the total pot.                           │
+│ board    Show the full bounty board (open, claimed, and forfeited).          │
+│ claim    Claim a bounty — mark it resolved and award the payout.             │
+│ forfeit  Forfeit a bounty — close it unpaid.                                 │
+│ balance  Show total points earned from claimed bounties.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty balance`
+
+```text
+Usage: onmc bounty balance [OPTIONS]
+
+ Show total points earned from claimed bounties.
+
+ Sums all ``payout_awarded`` values in ``.onmc/bounty/ledger.jsonl``.
+
+ Examples:
+
+     onmc bounty balance
+
+     onmc bounty balance --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the balance as a JSON envelope.                         │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty board`
+
+```text
+Usage: onmc bounty board [OPTIONS]
+
+ Show the full bounty board (open, claimed, and forfeited).
+
+ Alias for ``onmc bounty list`` with all statuses visible.
+
+ Examples:
+
+     onmc bounty board
+
+     onmc bounty board --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the full board as a JSON envelope.                      │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty claim`
+
+```text
+Usage: onmc bounty claim [OPTIONS] BOUNTY_ID
+
+ Claim a bounty — mark it resolved and award the payout.
+
+ The payout is appended to ``.onmc/bounty/ledger.jsonl`` and the bounty
+ status is updated to ``claimed``.
+
+ Examples:
+
+     onmc bounty claim abc123de
+
+     onmc bounty claim abc123de --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    bounty_id      TEXT  Bounty ID to claim. [required]                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the claim result as a JSON envelope.                    │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty forfeit`
+
+```text
+Usage: onmc bounty forfeit [OPTIONS] BOUNTY_ID
+
+ Forfeit a bounty — close it unpaid.
+
+ The bounty status is updated to ``forfeited`` with an optional reason.
+ No payout is recorded.
+
+ Examples:
+
+     onmc bounty forfeit abc123de
+
+     onmc bounty forfeit abc123de --reason "task no longer relevant"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    bounty_id      TEXT  Bounty ID to forfeit. [required]                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --reason  -r      TEXT  Optional rationale for forfeiting.                   │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty list`
+
+```text
+Usage: onmc bounty list [OPTIONS]
+
+ List all open bounties and the total pot.
+
+ Shows each open bounty with its id, reward, difficulty, payout, and task
+ description.
+
+ Examples:
+
+     onmc bounty list
+
+     onmc bounty list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit open bounties as a JSON envelope.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc bounty post`
+
+```text
+Usage: onmc bounty post [OPTIONS] TASK
+
+ Post a new bounty with a points wager on a task.
+
+ The bounty is persisted to ``.onmc/bounty/bounties.json``.  Difficulty
+ multiplies the payout: easy=1×, med=2×, hard=3×.
+
+ Examples:
+
+     onmc bounty post "fix the auth bug" --reward 50
+
+     onmc bounty post "refactor the parser" --reward 100 --difficulty hard
+
+     onmc bounty post "update README" --reward 20 --difficulty easy --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    task      TEXT  Task description for the bounty. [required]             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --reward      -r      INTEGER  Base reward points to wager (> 0).         │
+│                                   [required]                                 │
+│    --difficulty  -d      TEXT     Difficulty multiplier: easy (1×), med      │
+│                                   (2×), hard (3×).                           │
+│                                   [default: med]                             │
+│    --json                         Emit the new bounty as a JSON envelope.    │
+│    --help                         Show this message and exit.                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5003,6 +5173,128 @@ Usage: onmc solve [OPTIONS]
 │    --no-llm               Use heuristic fallback instead of the configured   │
 │                           LLM.                                               │
 │    --help                 Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard`
+
+```text
+Usage: onmc soundboard [OPTIONS] COMMAND [ARGS]...
+
+ Fun inline terminal reactions for session events (emoji / ASCII / optional
+ terminal bell).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ react   Emit the reaction for a session event.                               │
+│ list    List all event→reaction bindings (defaults merged with user          │
+│         overrides).                                                          │
+│ bind    Set or override the reaction for an event.                           │
+│ unbind  Remove a user override, restoring the default reaction.              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard bind`
+
+```text
+Usage: onmc soundboard bind [OPTIONS] EVENT REACTION_TEXT
+
+ Set or override the reaction for an event.
+
+ The binding is persisted to ``.onmc/soundboard/bindings.json``.
+ Pass ``--bell`` to also sound a terminal bell when the reaction fires.
+
+ Examples:
+
+     onmc soundboard bind test_pass "✅ all green!"
+
+     onmc soundboard bind build_break "💀 rip" --bell
+
+     onmc soundboard bind deploy_done "🚢 sailing!"
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event              TEXT  Event name to bind (e.g. test_pass).           │
+│                               [required]                                     │
+│ *    reaction_text      TEXT  Reaction string (e.g. "🎉 nice!"). [required]  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --bell          Append a terminal bell (\a) to the reaction.                 │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard list`
+
+```text
+Usage: onmc soundboard list [OPTIONS]
+
+ List all event→reaction bindings (defaults merged with user overrides).
+
+ User overrides (set with ``onmc soundboard bind``) are marked with an
+ asterisk ``*`` in the plain-text output.
+
+ Examples:
+
+     onmc soundboard list
+
+     onmc soundboard list --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit all bindings as a JSON envelope.                        │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard react`
+
+```text
+Usage: onmc soundboard react [OPTIONS] EVENT
+
+ Emit the reaction for a session event.
+
+ The reaction is looked up from the default map plus any user overrides
+ stored in ``.onmc/soundboard/bindings.json``.  Unknown events emit a safe
+ default ``"…"`` reaction rather than erroring.
+
+ Examples:
+
+     onmc soundboard react test_pass
+
+     onmc soundboard react build_break --json
+
+     onmc soundboard react pr_merged
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event name to react to (e.g. test_pass). [required]    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the reaction as a JSON envelope.                        │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc soundboard unbind`
+
+```text
+Usage: onmc soundboard unbind [OPTIONS] EVENT
+
+ Remove a user override, restoring the default reaction.
+
+ If the event has no user override, the command exits cleanly without error.
+
+ Examples:
+
+     onmc soundboard unbind test_pass
+
+     onmc soundboard unbind build_break
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    event      TEXT  Event name to remove the override for. [required]      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
