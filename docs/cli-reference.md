@@ -94,6 +94,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
+│ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
+│                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
 │                 runs.                                                        │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
@@ -2107,6 +2109,28 @@ Usage: onmc handoff resume [OPTIONS] FILE
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the parsed bundle as JSON instead of a briefing.        │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc heatmap`
+
+```text
+Usage: onmc heatmap [OPTIONS]
+
+ Render a GitHub-contributions-style heatmap of agent run activity.
+
+ Reads the tamper-evident run receipts written by ``onmc loop`` /
+ ``onmc swarm``, buckets them by calendar day, and renders a
+ block-glyph calendar grid plus totals (total runs, active days,
+ busiest day, current streak). Deterministic and fully offline (no
+ LLM call). An empty receipts directory prints a "no runs yet" note
+ and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --weeks        INTEGER  Number of weeks to include in the grid.              │
+│                         [default: 12]                                        │
+│ --json                  Emit the heatmap as JSON.                            │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
