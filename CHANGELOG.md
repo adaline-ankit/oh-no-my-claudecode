@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.86.0] — 2026-07-06
+
+### Added
+
+- **`onmc swarm plan --auto-model`** — self-improving model routing that closes the loop: `flywheel` learns which model wins per goal → `autoroute` picks it → `swarm plan` records it. When the flag is set, each planned unit is annotated with optional `suggested_model` / `suggested_model_confidence` fields (from `autoroute.suggest_model` over the flywheel report) and a routing summary is printed. Fully backward-compatible — absent the flag, planning is unchanged. Pure helper `swarm/auto_model.py`. (#279)
+
 ## [0.85.0] — 2026-07-06
 
 ### Added
