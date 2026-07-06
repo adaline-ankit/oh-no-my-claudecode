@@ -125,6 +125,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ session-search  Full-text search across all of onmc's persisted history.     │
 │ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
+│ watch           Auto-refreshing terminal live monitor of active swarms.      │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
 │                 wrap``.                                                      │
@@ -6535,6 +6536,34 @@ Usage: onmc viz memory [OPTIONS]
 │                               d2.                                            │
 │                               [default: mermaid]                             │
 │ --help                        Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc watch`
+
+```text
+Usage: onmc watch [OPTIONS]
+
+ Auto-refreshing terminal live monitor of active swarms.
+
+ The terminal-native complement to the web ``onmc ui``: continuously
+ re-renders a compact summary of every active swarm under
+ ``.onmc/swarm`` — running/queued/pending/done/failed unit counts,
+ verified count, and the most recent in-flight unit goals. Unlike
+ ``onmc missioncontrol`` (a one-shot snapshot of a single named
+ swarm), ``watch`` re-renders on an interval across all swarms until
+ interrupted with Ctrl-C.
+
+ Read-only: never mutates swarm state. An empty repo (no active
+ swarms) renders an honest empty-state message.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --interval        FLOAT  Seconds between refreshes. [default: 2.0]           │
+│ --once                   Render exactly one frame and exit.                  │
+│ --json                   Emit one JSON frame and exit (implies --once).      │
+│ --all                    Include swarms whose units are all terminal, not    │
+│                          just active ones.                                   │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
