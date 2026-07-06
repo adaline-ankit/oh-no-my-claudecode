@@ -93,6 +93,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 verified runs.                                               │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
+│ cost            Spend breakdown and forecast from run receipts.              │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
@@ -110,6 +111,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 files.                                                       │
 │ postmortem      LLM-free structured narrative recap of a completed swarm     │
 │                 run.                                                         │
+│ prbadge         Post a "verified-work" onmc badge comment on a GitHub PR.    │
 │ race            Offline model/strategy tournament over recorded run          │
 │                 receipts.                                                    │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -176,6 +178,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 signed attestation.                                          │
 │ autoroute       Apply flywheel learning: recommend the historically-best     │
 │                 model for a goal.                                            │
+│ blackboard      Shared-memory coordination board for a swarm — post and read │
+│                 findings/claims/warnings.                                    │
 │ bounty          Wager points on tasks — post bounties, claim payouts, track  │
 │                 balance.                                                     │
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
@@ -879,6 +883,70 @@ Usage: onmc benchmark [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc blackboard`
+
+```text
+Usage: onmc blackboard [OPTIONS] COMMAND [ARGS]...
+
+ Shared-memory coordination board for a swarm — post and read
+ findings/claims/warnings.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ post  Append one entry to a swarm's blackboard.                              │
+│ show  Render a swarm's blackboard in post order.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc blackboard post`
+
+```text
+Usage: onmc blackboard post [OPTIONS] SWARM_ID
+
+ Append one entry to a swarm's blackboard.
+
+ The board is append-only: this never rewrites or removes prior entries.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id      TEXT  Swarm id to post to. [required]                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --note        TEXT  The note text to post. [required]                     │
+│    --unit        TEXT  Posting unit id (or a human handle). [default: human] │
+│    --kind        TEXT  Entry kind: one of finding, claim, warning, question, │
+│                        done.                                                 │
+│                        [default: finding]                                    │
+│    --help              Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc blackboard show`
+
+```text
+Usage: onmc blackboard show [OPTIONS] [SWARM_ID]
+
+ Render a swarm's blackboard in post order.
+
+ Shows a small header (entry count, distinct units) followed by one line
+ per entry: timestamp · unit · kind · note. An empty or missing board
+ prints an honest empty-state message rather than an error.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Swarm id to show. Omit to use the most recently      │
+│                         modified swarm.                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --kind        TEXT  Filter to one kind: one of finding, claim, warning,      │
+│                     question, done.                                          │
+│ --unit        TEXT  Filter to entries posted by this unit id.                │
+│ --json              Emit the raw entries as JSON instead of a rendered       │
+│                     board.                                                   │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc blame`
 
 ```text
@@ -1577,6 +1645,29 @@ Usage: onmc conventions show [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the conventions as JSON for agent injection.            │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc cost`
+
+```text
+Usage: onmc cost [OPTIONS]
+
+ Spend breakdown and forecast from run receipts.
+
+ Reads run receipts from ``.agent-memory/receipts/`` and reports total
+ spend, spend by model, spend by day over the trailing window, cost
+ per verified run, and a clearly-labelled linear forecast of monthly
+ spend. Deterministic and offline — no LLM call. Distinct from
+ ``onmc savings`` (an ROI estimate) and ``onmc standup`` (an activity
+ digest): this is about money. An empty window prints an honest
+ "no agent runs" note and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --days        INTEGER  Trailing window size in days. Defaults to 30.         │
+│                        [default: 30]                                         │
+│ --json                 Emit the cost report as JSON.                         │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4345,6 +4436,40 @@ Usage: onmc postmortem [OPTIONS] [SWARM_ID]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc prbadge`
+
+```text
+Usage: onmc prbadge [OPTIONS] PR_NUMBER
+
+ Post a "verified-work" onmc badge comment on a GitHub PR.
+
+ Aggregates local run receipts (``.agent-memory/receipts/``, the same
+ corpus ``onmc ledger`` reads) into a compact, honest Markdown badge —
+ "N loops recorded, X% verified, built with onmc vY" — and posts it as
+ a PR comment via ``gh pr comment``.
+
+ Read-only with respect to the repository: the only side effect is the
+ ``gh`` call, and it only happens when neither ``--dry-run`` nor
+ ``--json`` is passed. With no verified receipts on disk, the badge
+ honestly reports "no verified receipts yet" rather than a fabricated
+ number.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr_number      INTEGER  PR number to post the onmc verified-work badge  │
+│                              to.                                             │
+│                              [required]                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run              Build and print the comment without posting it        │
+│                        (default when --json is set).                         │
+│ --repo           TEXT  owner/name to post to (defaults to auto-detection via │
+│                        gh/git remote).                                       │
+│ --json                 Emit the structured badge data as JSON. Implies       │
+│                        --dry-run; never posts.                               │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc preflight`
 
 ```text
@@ -5806,6 +5931,7 @@ Usage: onmc swarm plan [OPTIONS]
  --------
  onmc swarm plan --file tasks.txt --json
  onmc swarm plan --task "audit module A" --task "audit module B" --json
+ onmc swarm plan --task "fix the parser" --auto-model --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --task               TEXT                  Goal text for one unit.  Repeat   │
@@ -5816,6 +5942,10 @@ Usage: onmc swarm plan [OPTIONS]
 │                                            (advisory; Claude Code caps ~10   │
 │                                            subagents).                       │
 │ --json                                     Emit the plan as JSON to stdout.  │
+│ --auto-model                               Advisory: annotate each unit with │
+│                                            a flywheel-learned                │
+│                                            suggested_model (does not change  │
+│                                            execution).                       │
 │ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
