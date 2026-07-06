@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.88.0] — 2026-07-06
+
+### Added
+
+The **agent-observability track, batch 6** — spend + distribution. Dogfood-swarm built, each its own PR:
+
+- **`onmc cost [--days N]`** — spend breakdown + forecast from run receipts: total, by-model, by-day, cost-per-verified-run, and a labelled linear monthly projection. Honest about unknown/zero cost. `--json`. (#283)
+- **`onmc prbadge <pr> [--dry-run]`** — posts a shareable "verified-work" badge comment on a GitHub PR from local receipts (honest zero-state, never a fabricated %); `--dry-run`/`--json` never call `gh`. Turns every onmc-built PR into proof-of-work. (#284)
+
 ## [0.87.0] — 2026-07-06
 
 ### Added
