@@ -176,6 +176,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 signed attestation.                                          │
 │ autoroute       Apply flywheel learning: recommend the historically-best     │
 │                 model for a goal.                                            │
+│ blackboard      Shared-memory coordination board for a swarm — post and read │
+│                 findings/claims/warnings.                                    │
 │ bounty          Wager points on tasks — post bounties, claim payouts, track  │
 │                 balance.                                                     │
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
@@ -874,6 +876,70 @@ Usage: onmc benchmark [OPTIONS]
 │                        [default: 20]                                         │
 │ --json                 Print machine-readable JSON to stdout.                │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc blackboard`
+
+```text
+Usage: onmc blackboard [OPTIONS] COMMAND [ARGS]...
+
+ Shared-memory coordination board for a swarm — post and read
+ findings/claims/warnings.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ post  Append one entry to a swarm's blackboard.                              │
+│ show  Render a swarm's blackboard in post order.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc blackboard post`
+
+```text
+Usage: onmc blackboard post [OPTIONS] SWARM_ID
+
+ Append one entry to a swarm's blackboard.
+
+ The board is append-only: this never rewrites or removes prior entries.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id      TEXT  Swarm id to post to. [required]                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --note        TEXT  The note text to post. [required]                     │
+│    --unit        TEXT  Posting unit id (or a human handle). [default: human] │
+│    --kind        TEXT  Entry kind: one of finding, claim, warning, question, │
+│                        done.                                                 │
+│                        [default: finding]                                    │
+│    --help              Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc blackboard show`
+
+```text
+Usage: onmc blackboard show [OPTIONS] [SWARM_ID]
+
+ Render a swarm's blackboard in post order.
+
+ Shows a small header (entry count, distinct units) followed by one line
+ per entry: timestamp · unit · kind · note. An empty or missing board
+ prints an honest empty-state message rather than an error.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Swarm id to show. Omit to use the most recently      │
+│                         modified swarm.                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --kind        TEXT  Filter to one kind: one of finding, claim, warning,      │
+│                     question, done.                                          │
+│ --unit        TEXT  Filter to entries posted by this unit id.                │
+│ --json              Emit the raw entries as JSON instead of a rendered       │
+│                     board.                                                   │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
