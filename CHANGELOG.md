@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.85.0] — 2026-07-06
+
+### Added
+
+The **agent-observability track, batch 5** — terminal-native "watch my agents". Planned via `onmc mission`, built by a dogfood swarm (each its own PR):
+
+- **`onmc standup [--since 24h]`** — periodic daily-standup digest of agent RUN activity (runs, verified/failed + rate, cost, wall, per-model breakdown, top goals, notable failures) from run receipts. `--json`; honest empty-state. Distinct from `digest`/`timeline` (which cover memory). (#276)
+- **`onmc watch [--interval N]`** — auto-refreshing terminal live monitor of active swarms (the terminal-native complement to `onmc ui`; distinct from the one-shot `onmc missioncontrol`). Pure frame builder reusing the missioncontrol readers; `--once` renders a single frame, `--json`, `--all`. (#277)
+
 ## [0.84.0] — 2026-07-06
 
 ### Added
