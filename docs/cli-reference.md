@@ -96,6 +96,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
+│ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
+│ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
+│                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
 │                 runs.                                                        │
 │ mission         Run the engineering pipeline end-to-end into one mission     │
@@ -120,6 +123,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ scorecard       One shareable agent-readiness + trust scorecard for this     │
 │                 repo.                                                        │
 │ session-search  Full-text search across all of onmc's persisted history.     │
+│ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
 │ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
@@ -2011,6 +2015,29 @@ Usage: onmc flywheel [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc formats`
+
+```text
+Usage: onmc formats [OPTIONS]
+
+ Emit the spec of onmc's portable, open on-disk schemas.
+
+ Describes the run receipt, the attestation, and the exported memory
+ record + federation manifest — the stable JSON shapes onmc writes to
+ disk that other tools/agents can read directly. Every field list is
+ derived live from the real dataclasses/models (never hand-copied), so
+ this can never silently drift from what onmc actually writes.
+
+ Read-only and deterministic: no filesystem, network, or clock reads.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                Emit the spec as machine-readable JSON.                │
+│ --schema        TEXT  Only emit one schema: 'receipt', 'attestation', or     │
+│                       'memory'. Default: all three.                          │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc gh-aw`
 
 ```text
@@ -2126,6 +2153,28 @@ Usage: onmc handoff resume [OPTIONS] FILE
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the parsed bundle as JSON instead of a briefing.        │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc heatmap`
+
+```text
+Usage: onmc heatmap [OPTIONS]
+
+ Render a GitHub-contributions-style heatmap of agent run activity.
+
+ Reads the tamper-evident run receipts written by ``onmc loop`` /
+ ``onmc swarm``, buckets them by calendar day, and renders a
+ block-glyph calendar grid plus totals (total runs, active days,
+ busiest day, current streak). Deterministic and fully offline (no
+ LLM call). An empty receipts directory prints a "no runs yet" note
+ and exits 0.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --weeks        INTEGER  Number of weeks to include in the grid.              │
+│                         [default: 12]                                        │
+│ --json                  Emit the heatmap as JSON.                            │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5893,6 +5942,41 @@ Usage: onmc swarm verify [OPTIONS] SWARM_ID UNIT_ID
 │                            [default: main]                                   │
 │    --json                  Emit the verdict as JSON.                         │
 │    --help                  Show this message and exit.                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc swarmreplay`
+
+```text
+Usage: onmc swarmreplay [OPTIONS] [SWARM_ID]
+
+ Time-travel, step-by-step reconstruction of a swarm run.
+
+ Reconstructs the ordered, cross-unit timeline of a swarm run from its
+ manifest + tamper-evident receipts: units ordered by their receipt's
+ started_at, one step per iteration (from iteration_hashes) within
+ each unit. Read-only and deterministic — the same on-disk state
+ always replays identically. This is the CLI foundation for a future
+ UI scrubber, so --json emits a stable, additive-only schema.
+
+ Examples:
+
+   onmc swarmreplay                  # most recent swarm, human-readable
+
+   onmc swarmreplay abc123           # a specific swarm
+
+   onmc swarmreplay abc123 --json    # full ordered step list as JSON
+
+   onmc swarmreplay abc123 --step 3  # just step 3's detail
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Swarm id to replay. Omit to use the most recently    │
+│                         active swarm.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                 Emit the full ordered step list as JSON.              │
+│ --step        INTEGER  Print only step N's detail (0-based index).           │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
