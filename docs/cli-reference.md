@@ -64,8 +64,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ mine            Mine Claude Code session transcripts into ONMC memory.       │
 │ capture         Heuristically capture durable memory from a session          │
 │                 transcript.                                                  │
-│ doctor          Run a health check over repo state, memory, provider setup,  │
-│                 and integrations.                                            │
 │ audit           Scan agent configuration for security risks and emit a       │
 │                 scored report.                                               │
 │ preflight       Run the exact CI quality gate locally, in the same order CI  │
@@ -98,6 +96,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ commands        Browse all onmc commands grouped by category.                │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
+│ doctor          Diagnose onmc integration with Claude Code and print         │
+│                 actionable fixes.                                            │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
@@ -2062,9 +2062,28 @@ Usage: onmc digest [OPTIONS]
 ```text
 Usage: onmc doctor [OPTIONS]
 
- Run a health check over repo state, memory, provider setup, and integrations.
+ Diagnose onmc integration with Claude Code and print actionable fixes.
+
+ Runs six checks and reports each as ok, warn, or fail:
+
+ 1. **initialized**  — ``.onmc/memory.db`` present (onmc init was run).
+ 2. **version**      — installed package version.
+ 3. **on PATH**      — ``onmc`` binary visible on PATH.
+ 4. **hooks**        — Claude Code lifecycle hooks wired in settings.json.
+ 5. **MCP**          — onmc MCP server registered in ``.mcp.json``.
+ 6. **wrap**         — ``/onmc`` slash command installed + deep-wrap state.
+
+ Exit code 0 when no check fails, 1 when any check fails.
+
+ Examples:
+
+     onmc doctor              # human-readable table
+
+     onmc doctor --json       # machine-readable JSON
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a machine-readable JSON envelope {"kind": "doctor",     │
+│                 "checks": [...], "summary": {...}} for pipeline composition. │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

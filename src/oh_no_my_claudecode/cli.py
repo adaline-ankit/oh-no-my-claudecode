@@ -43,7 +43,6 @@ from oh_no_my_claudecode.rendering.console import (
     render_conventions,
     render_coverage_suggestions,
     render_coverage_summary,
-    render_doctor_report,
     render_evolution_card,
     render_fleet_doctor,
     render_fleet_status,
@@ -2693,14 +2692,6 @@ def capture_command(
             console.print("No new memory entries captured (nothing matched or already stored).")
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
-
-
-@app.command("doctor")
-def doctor_command() -> None:
-    """Run a health check over repo state, memory, provider setup, and integrations."""
-    ok, report = _service().doctor()
-    render_doctor_report(ok, report)
-    raise typer.Exit(code=0 if ok else 1)
 
 
 @app.command("audit")
