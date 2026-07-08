@@ -96,8 +96,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ commands        Browse all onmc commands grouped by category.                │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
-│ doctor          Diagnose onmc integration with Claude Code and print         │
-│                 actionable fixes.                                            │
+│ doctor          Diagnose onmc integration with Claude Code — repo, memory,   │
+│                 and provider health.                                         │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
 │ explain         Plain-English verdict of a run receipt.                      │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
@@ -2063,9 +2063,12 @@ Usage: onmc digest [OPTIONS]
 ```text
 Usage: onmc doctor [OPTIONS]
 
- Diagnose onmc integration with Claude Code and print actionable fixes.
+ Diagnose onmc integration with Claude Code — repo, memory, and provider
+ health.
 
- Runs six checks and reports each as ok, warn, or fail:
+ Combines two check layers:
+
+ **Integration checks** (six Claude Code diagnostics):
 
  1. **initialized**  — ``.onmc/memory.db`` present (onmc init was run).
  2. **version**      — installed package version.
@@ -2074,17 +2077,21 @@ Usage: onmc doctor [OPTIONS]
  5. **MCP**          — onmc MCP server registered in ``.mcp.json``.
  6. **wrap**         — ``/onmc`` slash command installed + deep-wrap state.
 
- Exit code 0 when no check fails, 1 when any check fails.
+ **Repo health** — git repo, memory records, provider config, sync state.
+
+ Exit code 0 when no check fails and repo health is ok.
+ Exit code 1 when any integration check fails or repo health reports errors.
 
  Examples:
 
-     onmc doctor              # human-readable table
+     onmc doctor              # human-readable table + health panel
 
      onmc doctor --json       # machine-readable JSON
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json          Emit a machine-readable JSON envelope {"kind": "doctor",     │
-│                 "checks": [...], "summary": {...}} for pipeline composition. │
+│ --json          Emit a machine-readable JSON envelope                        │
+│                 {"kind":"doctor","integration":[...],"repo_health":{...},"s… │
+│                 for pipeline composition.                                    │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
