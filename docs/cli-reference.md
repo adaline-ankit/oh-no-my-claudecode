@@ -100,6 +100,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
+│ explain         Plain-English verdict of a run receipt.                      │
 │ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
@@ -2320,6 +2321,66 @@ Usage: onmc evolution [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc explain`
+
+```text
+Usage: onmc explain [OPTIONS] [RECEIPT_REF]
+
+ Plain-English verdict of a run receipt.
+
+ Reads the latest (or a specified) tamper-evident receipt from
+ ``.agent-memory/receipts/`` and explains what happened: whether the run
+ verified, why it stopped, and key cost/token figures.
+
+ Never calls an LLM. Never mutates any file. Safe to run at any time.
+
+ Resolution of RECEIPT_REF (optional):
+ - Full absolute path → used directly.
+ - Bare filename → looked up inside ``.agent-memory/receipts/``.
+ - Short hash → matches the first receipt whose stem contains the string.
+ - Omitted → picks the newest receipt by modification time.
+
+ Special stop_reasons:
+
+ ``no-changes``:  The verify command exited 0 but the agent made NO changes
+ to the working tree — a vacuous pass.  Marked NOT VERIFIED.
+
+ ``max-iterations``:  Hit the iteration cap before converging.
+
+ ``budget``/``cost``:  Ran out of token budget or cost limit.
+
+ ``wall-time``:  Exceeded the maximum allowed wall-clock duration.
+
+ ``duplicate-action``:  The agent repeated the same action — stuck in a loop.
+
+ ``repeated-error``:  The verifier kept returning the same error output.
+
+ ``aborted``:  Manually interrupted (Ctrl-C or signal).
+
+ ``agent-error``:  Adapter-level error (API failure, auth problem, etc.).
+
+ Examples:
+
+     onmc explain
+
+     onmc explain run-abc12345-def67890.json
+
+     onmc explain abc12345
+
+     onmc explain --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [receipt_ref]      TEXT  Path to a receipt file, its filename, or a short  │
+│                            hash (substring of the filename stem). Omit to    │
+│                            use the newest receipt.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a machine-readable JSON envelope                        │
+│                 {"kind":"explain","verified":bool,"stop_reason":str,"verdic… │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
