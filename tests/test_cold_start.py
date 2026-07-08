@@ -13,7 +13,7 @@ from oh_no_my_claudecode.ingest.llm_extractor import (
 from oh_no_my_claudecode.llm import provider_from_settings
 from oh_no_my_claudecode.models import LLMProviderType, LLMSettings, RepoFileRecord
 from oh_no_my_claudecode.rendering.console import console
-from oh_no_my_claudecode.setup.wizard import interactive_seed, should_seed_interactively
+from oh_no_my_claudecode.setup.wizard import interactive_seed
 
 
 def test_should_extract_file_accepts_test_files_churn_and_todo(tmp_path: Path) -> None:
@@ -154,7 +154,13 @@ def test_layer_two_runs_only_when_commit_layer_is_sparse(
     assert calls == []
 
 
-def test_layer_three_only_triggers_for_tiny_memory_sets() -> None:
-    assert should_seed_interactively(4, yes=False) is True
-    assert should_seed_interactively(5, yes=False) is False
-    assert should_seed_interactively(4, yes=True) is False
+def test_layer_three_only_triggers_for_tiny_memory_sets(monkeypatch: object) -> None:
+    import sys as _sys
+
+    import oh_no_my_claudecode.setup.wizard as _wiz
+
+    # Simulate a real TTY so the interactive-mode branch is exercised.
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: True)
+    assert _wiz.should_seed_interactively(4, yes=False) is True
+    assert _wiz.should_seed_interactively(5, yes=False) is False
+    assert _wiz.should_seed_interactively(4, yes=True) is False
