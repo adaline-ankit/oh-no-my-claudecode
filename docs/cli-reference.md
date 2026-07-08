@@ -92,6 +92,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ release         Draft the next release from conventional-commit history.     │
 │ achievements    Show your XP, level, streaks, and badges earned from         │
 │                 verified runs.                                               │
+│ context         Show codegraph blast radius and relevant memory for a file.  │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ bottleneck      Find what's slowing your agents down.                        │
@@ -1665,6 +1666,47 @@ Usage: onmc consolidate [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --dry-run          Compute the consolidation plan without writing anything.  │
 │ --help             Show this message and exit.                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc context`
+
+```text
+Usage: onmc context [OPTIONS] FILE
+
+ Show codegraph blast radius and relevant memory for a file.
+
+ Combines two signals a coding agent needs before editing a file:
+
+
+ 1. Blast radius — dependents (files that import it), imports (files it
+    depends on), and test files — from the structural code graph.
+ 2. Relevant memory — onmc memories whose tags or source ref mention the
+    file.
+
+ When the file is not yet indexed, suggests running
+ ``onmc codegraph build`` rather than crashing.
+
+ Examples:
+
+     onmc context src/mypackage/cache.py
+
+     onmc context src/mypackage/cache.py --limit 5
+
+     onmc context src/mypackage/cache.py --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    file      TEXT  Repo-relative or absolute path of the file to inspect   │
+│                      (e.g. src/mypackage/cache.py).                          │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --limit        INTEGER  Maximum number of memory entries to show (default    │
+│                         8).                                                  │
+│                         [default: 8]                                         │
+│ --json                  Emit machine-readable JSON:                          │
+│                         {"kind":"context","file":str,"blast_radius":{...},"… │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
