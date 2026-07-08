@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.98.0] — 2026-07-08
+
+### Fixed
+
+Three bugs surfaced by dogfooding the `/onmc` deep-wrap switch in a real Claude Code session:
+
+- **`onmc autopilot` no longer reports false-green** (P0): a run could print `VERIFIED / converged` and spend real cost while writing zero code — an agent whose edits were blocked (e.g. pending permission approval) produced no diff, yet a lenient verifier (`pytest` exiting 0 on pre-existing tests) was counted as a win, poisoning memory with fake success. The loop engine now gates a win on the agent actually changing the working tree: a new injectable `ChangeProbe` (default `git status --porcelain`, which also catches untracked new files a plain `git diff` would miss) is sampled before/after each agent step; a verify pass with an unchanged tree is recorded as a loss (`[no-op]`) and shows `NOT VERIFIED — no-changes`. A new `no_change_limit` breaker (default 2) stops the loop after consecutive no-ops. (#318)
+- **`onmc ui` auto-falls-back to the next free port** when the requested one is busy, instead of crashing with `Address already in use` — which previously left users viewing a stale dashboard (rooted in another repo) where their runs showed as "No runs yet". `port=0` still lets the OS choose. (#319)
+- **`onmc --version` / `-V`** now prints the installed version (previously errored `No such option: --version`); the installer's day-1 banner is aligned with the `onmc quickstart` card. (#317)
+
 ## [0.97.0] — 2026-07-08
 
 ### Fixed
