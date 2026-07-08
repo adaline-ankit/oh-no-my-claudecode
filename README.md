@@ -15,13 +15,30 @@ limits, and writes a tamper-evident run receipt.
 Use the execution loop, the memory layer, or both. ONMC is local-first, cross-agent, and works
 without a hosted account.
 
+## Install (one line)
+
 ```bash
-pip install oh-no-my-claudecode
-cd your-repo
-onmc setup
+curl -fsSL https://raw.githubusercontent.com/adaline-ankit/oh-no-my-claudecode/main/install.sh | bash
 ```
 
-Prefer isolated CLI installs? Use `uv tool install oh-no-my-claudecode`.
+The installer detects `uv` → `pipx` → `pip`, installs `oh-no-my-claudecode`, then runs
+`onmc setup` to wire up hooks and MCP integration. Safe to re-run (idempotent). Never uses `sudo`.
+
+### Alternative: manual install
+
+```bash
+# uv (recommended — isolated, fast)
+uv tool install oh-no-my-claudecode
+cd your-repo && onmc setup
+
+# pipx
+pipx install oh-no-my-claudecode
+cd your-repo && onmc setup
+
+# pip
+pip install oh-no-my-claudecode
+cd your-repo && onmc setup
+```
 
 ## Why ONMC
 
