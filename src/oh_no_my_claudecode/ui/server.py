@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import errno
 import json
 import mimetypes
 import subprocess
@@ -249,6 +250,10 @@ def _ingest_events(raw: bytes, live_dir: Path) -> tuple[dict[str, Any], int]:
     return {"ok": True, "accepted": accepted}, 200
 
 
+_PORT_SCAN_LIMIT = 20
+"""How many consecutive ports to try when the requested one is already bound."""
+
+
 def create_ui_server(
     service: OnmcService,
     *,
@@ -263,6 +268,44 @@ def create_ui_server(
     )
     handler = _handler_factory(service, command_runner=runner, token=token, live_dir=live_dir)
     return ThreadingHTTPServer((host, port), handler)
+
+
+def create_ui_server_scanning(
+    service: OnmcService,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    token: str | None = None,
+    scan_limit: int = _PORT_SCAN_LIMIT,
+) -> ThreadingHTTPServer:
+    """Bind a UI server, falling back to the next free port when *port* is busy.
+
+    A common footgun: a stale ``onmc ui`` from an earlier session still holds
+    the default port, so a fresh launch would crash with ``[Errno 48] Address
+    already in use`` — and worse, the user ends up looking at the *old*
+    dashboard (rooted in a different repo) thinking it is the new one.  Instead
+    we scan forward from *port* and bind the first free port.  ``port=0`` (let
+    the OS choose) is honoured as-is with no scan.
+
+    Raises the last :class:`OSError` when no port in the scan window is free.
+    """
+    if port == 0:
+        return create_ui_server(service, host=host, port=port, token=token)
+
+    last_exc: OSError | None = None
+    for candidate in range(port, port + max(1, scan_limit)):
+        try:
+            return create_ui_server(service, host=host, port=candidate, token=token)
+        except OSError as exc:
+            if exc.errno in {errno.EADDRINUSE, errno.EACCES}:
+                last_exc = exc
+                continue
+            raise
+    msg = (
+        f"could not bind any port in {port}–{port + scan_limit - 1} "
+        f"(all in use); free one or pass --port"
+    )
+    raise OSError(errno.EADDRINUSE, msg) from last_exc
 
 
 def export_dashboard_snapshot(service: OnmcService, output: Path) -> Path:
@@ -304,11 +347,15 @@ def serve_dashboard(
     open_browser: bool = True,
     token: str | None = None,
 ) -> None:
-    server = create_ui_server(service, host=host, port=port, token=token)
+    server = create_ui_server_scanning(service, host=host, port=port, token=token)
     raw_host, bound_port = server.server_address[:2]
     bound_host = bytes(raw_host).decode() if isinstance(raw_host, (bytes, bytearray)) else raw_host
     browser_host = "127.0.0.1" if ip_address(bound_host).is_unspecified else bound_host
     url = f"http://{browser_host}:{bound_port}"
+    if port not in (0, bound_port):
+        print(
+            f"Port {port} was busy (another onmc ui?) — using {bound_port} instead."
+        )
     print(f"ONMC dashboard: {url}")
     print("Press Ctrl+C to stop.")
     if open_browser:
