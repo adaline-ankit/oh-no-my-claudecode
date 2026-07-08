@@ -1527,8 +1527,46 @@ def ui_command(
         Path | None,
         typer.Option("--export", help="Write a standalone HTML snapshot instead of serving."),
     ] = None,
+    serve: Annotated[
+        bool,
+        typer.Option(
+            "--serve/--no-serve",
+            help=(
+                "Shared-dashboard mode: bind beyond localhost and enable the "
+                "POST /api/live/ingest event-ingest endpoint so remote onmc "
+                "instances can push telemetry to this central dashboard."
+            ),
+        ),
+    ] = False,
+    token: Annotated[
+        str | None,
+        typer.Option(
+            "--token",
+            envvar="ONMC_UI_TOKEN",
+            help=(
+                "Bearer token for dashboard auth. When set (or via ONMC_UI_TOKEN "
+                "env var), every request must supply 'Authorization: Bearer <token>'; "
+                "unauthenticated requests receive 401. Not set by default."
+            ),
+        ),
+    ] = None,
 ) -> None:
-    """Open the local read-only ONMC visual dashboard."""
+    """Open the local read-only ONMC visual dashboard.
+
+    By default binds 127.0.0.1 (localhost only, no auth).
+
+    With ``--serve`` the dashboard is intended for shared access: combine with
+    ``--host 0.0.0.0`` to expose it on the network and ``--token SECRET`` (or
+    set ONMC_UI_TOKEN) to require bearer-token auth on every request.
+
+    Remote agents push telemetry via ``POST /api/live/ingest``.  The Agents view
+    aggregates events from every source, giving a central view of all running
+    swarms regardless of which machine they are on.
+
+    Model: remote onmc instances PUSH events to ``/api/live/ingest``; this
+    dashboard AGGREGATES them.  The remote-push client side is a follow-on;
+    ship the server ingest + serve here.
+    """
     service = _service()
     try:
         service.status()
@@ -1548,12 +1586,14 @@ def ui_command(
 
             webbrowser.open(written.as_uri())
         return
-    if host not in {"127.0.0.1", "localhost", "::1"}:
+    if not serve and host not in {"127.0.0.1", "localhost", "::1"}:
         console.print(
             "[yellow]Warning: non-loopback binding exposes repository memory "
             "to your network.[/yellow]"
         )
-    serve_dashboard(service, host=host, port=port, open_browser=open_browser)
+    if token:
+        console.print("[cyan]Auth enabled — Bearer token required for all requests.[/cyan]")
+    serve_dashboard(service, host=host, port=port, open_browser=open_browser, token=token or None)
 
 
 @app.command("status")

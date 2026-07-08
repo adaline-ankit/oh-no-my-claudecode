@@ -623,9 +623,16 @@ def test_ui_cli_delegates_to_dashboard_server(
         host: str,
         port: int,
         open_browser: bool,
+        token: str | None = None,
     ) -> None:
         captured.update(
-            {"service": service, "host": host, "port": port, "open_browser": open_browser}
+            {
+                "service": service,
+                "host": host,
+                "port": port,
+                "open_browser": open_browser,
+                "token": token,
+            }
         )
 
     monkeypatch.setattr("oh_no_my_claudecode.cli.serve_dashboard", fake_serve)
