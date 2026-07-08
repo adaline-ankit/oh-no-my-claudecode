@@ -241,6 +241,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ teams           AutoGen / AG2 interop — export onmc plans as team specs and  │
 │                 run them under onmc receipts.  The ``export`` command is     │
 │                 always available; ``run`` requires the ```` extra.           │
+│ live            Live agent activity: snapshot active agents and recent       │
+│                 events.                                                      │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -2585,6 +2587,10 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │                 SessionEnd.                                                  │
 │ pre-tool-use    Inject file-level danger warnings before the agent edits a   │
 │                 file.                                                        │
+│ post-tool-use   Emit a live telemetry ``tool_call`` event for each           │
+│                 PostToolUse hook fire.                                       │
+│ subagent-stop   Emit a live telemetry ``subagent_stop`` event on             │
+│                 SubagentStop or Stop.                                        │
 │ task-intercept  Intercept native ``Task`` agent-spawning and redirect it to  │
 │                 ``onmc swarm``.                                              │
 │ prompt-router   Route the user prompt through onmc and inject a "prefer onmc │
@@ -2613,6 +2619,27 @@ Usage: onmc hooks post-compact [OPTIONS]
 
  (deprecated)
  Deprecated alias for `onmc hooks session-start`.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks post-tool-use`
+
+```text
+Usage: onmc hooks post-tool-use [OPTIONS]
+
+ Emit a live telemetry ``tool_call`` event for each PostToolUse hook fire.
+
+ Called automatically by the Claude Code PostToolUse hook (matcher ``""`` —
+ fires on every tool).  Reads the hook payload from stdin, extracts the tool
+ name and a brief target field, and appends a ``tool_call`` event to
+ ``.onmc/live/events.jsonl``.  No-ops silently when ``.onmc/`` is absent.
+
+ Design invariants:
+ - Always exits 0 — never blocks the tool execution.
+ - Any exception is silently swallowed.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -2730,6 +2757,27 @@ Usage: onmc hooks session-start [OPTIONS]
 Usage: onmc hooks status [OPTIONS]
 
  Show current Claude hook installation and snapshot status.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks subagent-stop`
+
+```text
+Usage: onmc hooks subagent-stop [OPTIONS]
+
+ Emit a live telemetry ``subagent_stop`` event on SubagentStop or Stop.
+
+ Called automatically by the Claude Code SubagentStop and Stop hooks
+ (matcher ``""``).  Reads the hook payload from stdin and appends a
+ ``subagent_stop`` event to ``.onmc/live/events.jsonl``.  No-ops
+ silently when ``.onmc/`` is absent.
+
+ Design invariants:
+ - Always exits 0 — never blocks Claude Code shutdown.
+ - Any exception is silently swallowed.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -3167,6 +3215,55 @@ Usage: onmc ledger today [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc live`
+
+```text
+Usage: onmc live [OPTIONS] COMMAND [ARGS]...
+
+ Live agent activity: snapshot active agents and recent events.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json           Emit JSON instead of human-readable text.                   │
+│ --last        N  Number of recent events to show (default: 50).              │
+│                  [default: 50]                                               │
+│ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ tail  Print events from the live log (bounded, not an infinite tail).        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc live tail`
+
+```text
+Usage: onmc live tail [OPTIONS]
+
+ Print events from the live log (bounded, not an infinite tail).
+
+ Reads ``.onmc/live/events.jsonl`` and prints matching events.
+ Use ``--since TS`` to page through events after a known timestamp,
+ ``--kinds k1,k2`` to filter by event kind.
+
+ Examples:
+
+     onmc live tail                      # last 200 events
+
+     onmc live tail --since 1700000000   # events after that timestamp
+
+     onmc live tail --kinds tool_call    # only tool_call events
+
+     onmc live tail --json               # JSONL output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --since        TS     Only show events with ts > SINCE (Unix timestamp).     │
+│ --kinds        KINDS  Comma-separated list of event kinds to include.        │
+│ --json                Emit one JSON object per line instead of text.         │
+│ --limit        N      Maximum number of events to return (default: 200).     │
+│                       [default: 200]                                         │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

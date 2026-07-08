@@ -2260,6 +2260,48 @@ def hooks_pre_tool_use_command() -> None:
         pass
 
 
+@hooks_app.command("post-tool-use")
+def hooks_post_tool_use_command() -> None:
+    """Emit a live telemetry ``tool_call`` event for each PostToolUse hook fire.
+
+    Called automatically by the Claude Code PostToolUse hook (matcher ``""`` —
+    fires on every tool).  Reads the hook payload from stdin, extracts the tool
+    name and a brief target field, and appends a ``tool_call`` event to
+    ``.onmc/live/events.jsonl``.  No-ops silently when ``.onmc/`` is absent.
+
+    Design invariants:
+    - Always exits 0 — never blocks the tool execution.
+    - Any exception is silently swallowed.
+    """
+    try:
+        from oh_no_my_claudecode.hooks.post_tool_use import handle_post_tool_use
+
+        handle_post_tool_use()
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@hooks_app.command("subagent-stop")
+def hooks_subagent_stop_command() -> None:
+    """Emit a live telemetry ``subagent_stop`` event on SubagentStop or Stop.
+
+    Called automatically by the Claude Code SubagentStop and Stop hooks
+    (matcher ``""``).  Reads the hook payload from stdin and appends a
+    ``subagent_stop`` event to ``.onmc/live/events.jsonl``.  No-ops
+    silently when ``.onmc/`` is absent.
+
+    Design invariants:
+    - Always exits 0 — never blocks Claude Code shutdown.
+    - Any exception is silently swallowed.
+    """
+    try:
+        from oh_no_my_claudecode.hooks.post_tool_use import handle_subagent_stop
+
+        handle_subagent_stop()
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
 @hooks_app.command("task-intercept")
 def hooks_task_intercept_command() -> None:
     """Intercept native ``Task`` agent-spawning and redirect it to ``onmc swarm``.
