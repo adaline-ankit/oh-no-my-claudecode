@@ -205,6 +205,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ land            Safe PR lander: poll checks, rebase if behind, squash-merge  │
+│                 when green.                                                  │
 │ leash           Guardrails-as-game: define session rules, check compliance,  │
 │                 and score the agent.                                         │
 │ membudget       Memory-budget guard: report store size, flag over-budget,    │
@@ -2947,6 +2949,96 @@ Usage: onmc init [OPTIONS]
  Initialize ONMC state in the current git repository.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc land`
+
+```text
+Usage: onmc land [OPTIONS] COMMAND [ARGS]...
+
+ Safe PR lander: poll checks, rebase if behind, squash-merge when green.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ run     Land PR safely: poll checks, rebase if behind, squash-merge when     │
+│         green.                                                               │
+│ status  Show what the lander would do for this PR — read-only, no mutations. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc land run`
+
+```text
+Usage: onmc land run [OPTIONS] PR
+
+ Land PR safely: poll checks, rebase if behind, squash-merge when green.
+
+ Polls ``gh pr view`` on a cadence, applies the landing planner, and takes
+ the appropriate action (rebase, resolve threads, or merge) until the PR
+ lands or the deadline is reached.
+
+ Gate logic:
+
+ \b
+ - CodeQL FAILURE → abort immediately (exit 1).
+ - Branch BEHIND  → ``gh pr update-branch --rebase``, then re-poll.
+ - Unresolved threads → resolve via GraphQL, then re-poll.
+ - All non-advisory checks green + CLEAN → ``gh pr merge --squash --admin``.
+ - Advisory checks (Sourcery, greetings, apply-area-labels) are ignored.
+
+ Examples:
+
+     onmc land run 123
+
+     onmc land run 456 --json
+
+     onmc land run 789 --max-wait 3600 --only-if-contention-le 5
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to land. [required]                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                  Emit a JSON envelope {"kind":        │
+│                                         "land_result", ...} on completion.   │
+│ --max-wait                     SECONDS  Maximum seconds to wait for checks   │
+│                                         to go green (default: 1800).         │
+│                                         [default: 1800]                      │
+│ --poll-interval                SECONDS  Seconds between status polls         │
+│                                         (default: 30).                       │
+│                                         [default: 30]                        │
+│ --only-if-contention-le        N        Defer without action if the repo has │
+│                                         more than N concurrent CI runs (as   │
+│                                         reported in PR state).  Omit to      │
+│                                         disable.                             │
+│ --help                                  Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc land status`
+
+```text
+Usage: onmc land status [OPTIONS] PR
+
+ Show what the lander would do for this PR — read-only, no mutations.
+
+ Fetches current PR state via ``gh`` and runs the planner to determine
+ the next action.  Nothing is changed.
+
+ Examples:
+
+     onmc land status 123
+
+     onmc land status 456 --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to query. [required]                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a JSON status envelope {"kind": "land_status", ...}.    │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
