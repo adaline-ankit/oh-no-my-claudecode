@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.93.0] — 2026-07-06
+
+### Added
+
+Dogfood-infra wave — the tooling onmc uses to ship onmc, built + landed by an onmc swarm:
+
+- **`onmc refinery`** — Bors-style serialized merge queue (rebase → wait green → merge → pop; kicks failures back), gating quality AND CodeQL. The principled fix for merge-race starvation. (#297)
+- **`onmc land <pr>`** — first-class safe PR lander: poll → rebase-if-behind → resolve threads → squash-merge with admin, contention-aware. Pure planner + injectable gh driver. (#299, fix #302)
+- **`onmc preflight --exact` / `--fix`** — mirrors the CI quality gate exactly (pinned ruff/typer) and auto-heals ruff + stale cli-reference before push, so agents self-heal instead of round-tripping CI. (#300)
+- **Live agent telemetry** — a `.onmc/live/events.jsonl` event bus (`telemetry` module), a PostToolUse/SubagentStop Claude Code hook that captures agent activity, `onmc live` / `onmc live tail`, and swarm state-transition emit. (#301)
+- **`onmc ui` Agents view + live feed** — see every swarm/unit/receipt and a live-updating activity feed (UI polls a new `/api/live` endpoint that tails the telemetry bus), plus orchestration actions (abort / land / mission). (#298, #303)
+
+### Fixed
+
+- **`onmc land`** — derive `merged` from PR `state` (the `gh pr view --json merged` field doesn't exist); surfaced by dogfooding the lander on a real PR. (#302)
+
 ## [0.92.0] — 2026-07-06
 
 ### Added
