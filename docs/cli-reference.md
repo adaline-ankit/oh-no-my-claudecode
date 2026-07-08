@@ -192,6 +192,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 tracks your green/red streak.                                │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
+│ crews           Optional CrewAI interop: export an onmc plan as a crew spec  │
+│                 (pure, no extras needed) or run a crew spec under an onmc    │
+│                 receipt (requires the  extra).                               │
 │ crossrepo       Cross-repo brain: impact map + federated memory recall       │
 │                 across sibling repos.                                        │
 │ daily           Don't-break-the-chain calendar streak. Tracks which calendar │
@@ -1755,6 +1758,89 @@ Usage: onmc coverage [OPTIONS]
 │                    already exist. Implies --suggest. Idempotent: re-running  │
 │                    skips stubs that already exist.                           │
 │ --help             Show this message and exit.                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crews`
+
+```text
+Usage: onmc crews [OPTIONS] COMMAND [ARGS]...
+
+ Optional CrewAI interop: export an onmc plan as a crew spec (pure, no extras
+ needed) or run a crew spec under an onmc receipt (requires the  extra).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ export  Export an onmc plan or swarm manifest as a CrewAI crew               │
+│         specification.                                                       │
+│ run     Run a crew specification using the crewai backend under an onmc      │
+│         receipt.                                                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crews export`
+
+```text
+Usage: onmc crews export [OPTIONS] PLAN
+
+ Export an onmc plan or swarm manifest as a CrewAI crew specification.
+
+ Pure operation — no crewai installation required.  The output is a
+ portable JSON dict describing agents and tasks that can be passed to
+ ``onmc crews run`` or used directly with the crewai library.
+
+ Examples:
+
+     onmc crews export mission_plan.json
+
+     onmc crews export swarm_manifest.json --out crew.json
+
+     onmc crews export plan.json --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    PLAN      PATH  Path to an onmc mission-plan JSON file                  │
+│                      (MissionPlan.to_dict() shape) or a swarm manifest.      │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         FILE  Write the crew spec to FILE instead of stdout.           │
+│ --json              Wrap the crew spec in an onmc JSON envelope {"kind":     │
+│                     "crews_export", "spec": {...}} for pipeline composition. │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc crews run`
+
+```text
+Usage: onmc crews run [OPTIONS] SPEC
+
+ Run a crew specification using the crewai backend under an onmc receipt.
+
+ Requires the ```` optional extra::
+
+     pip install "oh-no-my-claudecode"
+
+ The run result is wrapped in an onmc accountability receipt (goal,
+ outcome, agent count, timestamps, onmc version).
+
+ Examples:
+
+     onmc crews run crew.json
+
+     onmc crews run crew.json --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    SPEC      PATH  Path to a crew specification JSON file (output of 'onmc │
+│                      crews export').                                         │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the run receipt as JSON instead of a human-readable     │
+│                 summary.                                                     │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

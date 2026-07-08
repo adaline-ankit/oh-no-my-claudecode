@@ -77,6 +77,11 @@ mem0 = [
 supermemory = [
   "supermemory>=0.1",
 ]
+# Optional CrewAI interop.  Absent by default — ``onmc crews export`` is pure
+# and always works; ``onmc crews run`` requires this extra to execute a crew.
+crewai = [
+  "crewai>=0.80",
+]
 # Optional Microsoft AutoGen / AG2 backend.  Absent by default — ``onmc teams
 # export`` works without it (pure); ``onmc teams run`` requires it.
 autogen = [
@@ -153,6 +158,11 @@ ignore_missing_imports = true
 # Optional fastembed ONNX embedder — no type stubs bundled.
 [[tool.mypy.overrides]]
 module = ["fastembed"]
+ignore_missing_imports = true
+
+# Optional CrewAI interop backend — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["crewai"]
 ignore_missing_imports = true
 
 # Optional AutoGen / AG2 backends — no type stubs bundled.
