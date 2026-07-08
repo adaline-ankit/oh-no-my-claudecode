@@ -231,6 +231,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 provider.                                                    │
 │ quest           Gamified RPG backlog: XP from verified runs, levels, bosses, │
 │                 loot.                                                        │
+│ refinery        Bors-style serialised merge queue: enqueue PRs, process one  │
+│                 at a time.                                                   │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
@@ -5078,6 +5080,138 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery`
+
+```text
+Usage: onmc refinery [OPTIONS] COMMAND [ARGS]...
+
+ Bors-style serialised merge queue: enqueue PRs, process one at a time.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add     Enqueue a PR (or update its priority if already present).            │
+│ status  Show the current merge queue.                                        │
+│ run     Process the merge queue head(s).                                     │
+│ drop    Remove a PR from the queue (any state).                              │
+│ clear   Flush the entire merge queue.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery add`
+
+```text
+Usage: onmc refinery add [OPTIONS] PR
+
+ Enqueue a PR (or update its priority if already present).
+
+ The queue is persisted to ``.onmc/refinery/queue.json``.
+
+ Examples:
+
+     onmc refinery add 123
+
+     onmc refinery add 456 --priority 10
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to enqueue. [required]                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --priority        INTEGER  Queue priority (higher = processed first).        │
+│                            Default 0.                                        │
+│                            [default: 0]                                      │
+│ --json                     Emit result as a JSON object.                     │
+│ --help                     Show this message and exit.                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery clear`
+
+```text
+Usage: onmc refinery clear [OPTIONS]
+
+ Flush the entire merge queue.
+
+ Examples:
+
+ onmc refinery clear
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit result as a JSON object.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery drop`
+
+```text
+Usage: onmc refinery drop [OPTIONS] PR
+
+ Remove a PR from the queue (any state).
+
+ Examples:
+
+ onmc refinery drop 123
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to remove from the queue. [required]         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit result as a JSON object.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery run`
+
+```text
+Usage: onmc refinery run [OPTIONS]
+
+ Process the merge queue head(s).
+
+ For each head PR: rebase onto main, wait for CI green (quality + CodeQL),
+ then merge. Failed or conflicting PRs are kicked back with a reason and
+ the next entry is processed.
+
+ Examples:
+
+     onmc refinery run
+
+     onmc refinery run --max 3
+
+     onmc refinery run --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --max         INTEGER  Maximum number of PRs to process (default: 1).        │
+│                        [default: 1]                                          │
+│ --json                 Emit results as a JSON object.                        │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery status`
+
+```text
+Usage: onmc refinery status [OPTIONS]
+
+ Show the current merge queue.
+
+ Displays each entry with its position, PR number, state, and kick reason
+ (if applicable).
+
+ Examples:
+
+     onmc refinery status
+
+     onmc refinery status --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the queue as a JSON object.                             │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
