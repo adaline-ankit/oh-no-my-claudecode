@@ -3,7 +3,7 @@
 const WELCOME_KEY = "onmc_welcome_dismissed_v1";
 const WELCOME_FRESH_THRESHOLD = 20;
 
-const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmScope: "repo", swarmSearch: "", autoRefresh: true, lastUpdated: null, renderedSwarms: [], seenVerified: null };
+const state = { data: null, view: "overview", search: "", kind: "", swarmFilter: "all", swarmScope: "repo", swarmSearch: "", autoRefresh: true, lastUpdated: null, renderedSwarms: [], seenVerified: null, liveSince: 0, liveActive: [], liveEvents: [] };
 const THEME_KEY = "onmc_theme";
 
 function applyTheme(theme) {
@@ -938,6 +938,77 @@ function formatBytes(value) { const bytes = Number(value || 0); return bytes < 1
 function truncate(value, max) { const text = String(value); return text.length > max ? `${text.slice(0, max - 1)}…` : text; }
 function showToast(message) { const toast = byId("toast"); toast.textContent = message; toast.hidden = false; clearTimeout(showToast.timer); showToast.timer = setTimeout(() => { toast.hidden = true; }, 1800); }
 
+// Returns a relative-time string from a Unix timestamp (float seconds).
+function formatElapsed(ts) {
+  if (!ts) return "—";
+  const sec = Math.round(Date.now() / 1000 - Number(ts));
+  if (sec < 5) return "just now";
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  return `${Math.floor(sec / 3600)}h ago`;
+}
+
+// Render the Live Activity panel inside the Agents view.
+function renderLiveFeed() {
+  const activeEl = byId("agents-active-list");
+  const feedEl = byId("agents-live-feed");
+  const subEl = byId("agents-live-sub");
+  if (!activeEl || !feedEl) return;
+
+  const active = state.liveActive || [];
+  const events = state.liveEvents || [];
+
+  if (subEl) {
+    subEl.textContent = active.length
+      ? `${active.length} active · polling`
+      : "idle · polling every 2s";
+  }
+
+  if (active.length === 0) {
+    activeEl.innerHTML = '<div class="agents-live-idle">No agents running.</div>';
+  } else {
+    activeEl.innerHTML = active.map((a) => `
+      <div class="agents-live-agent-row">
+        <span class="live-dot"></span>
+        <span class="agents-live-agent-unit" title="${escapeHtml(String(a.unit || ""))}">${escapeHtml(String(a.unit || "—"))}</span>
+        ${a.agent ? `<span class="agents-live-agent-id">${escapeHtml(String(a.agent))}</span>` : ""}
+        <span class="agents-live-agent-since">${formatElapsed(a.since_ts)}</span>
+      </div>`).join("");
+  }
+
+  if (events.length === 0) {
+    feedEl.innerHTML = '<div class="agents-live-idle">No events yet.</div>';
+  } else {
+    feedEl.innerHTML = events.map((e) => `
+      <div class="agents-live-event-row">
+        <span class="agents-live-event-kind">${escapeHtml(formatKind(String(e.kind || "")))}</span>
+        <span class="agents-live-event-agent">${escapeHtml(String(e.agent || e.unit || ""))}</span>
+        ${e.tool ? `<span class="agents-live-event-tool">${escapeHtml(String(e.tool))}</span>` : ""}
+        <span class="agents-live-event-ts">${formatElapsed(e.ts)}</span>
+      </div>`).join("");
+  }
+}
+
+// Poll /api/live every 2s and update the Agents live feed. Skipped for static
+// exports (embedded data) and while the tab is hidden.
+const LIVE_POLL_MS = 2000;
+async function pollLiveFeed() {
+  if (byId("onmc-dashboard-data") || document.hidden) return;
+  try {
+    const resp = await fetch(`/api/live?since=${state.liveSince}`, { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (typeof data.max_ts === "number" && data.max_ts > state.liveSince) {
+      state.liveSince = data.max_ts;
+    }
+    state.liveActive = Array.isArray(data.active) ? data.active : [];
+    // Prepend newest events and cap the feed at 50 entries.
+    const incoming = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+    state.liveEvents = [...incoming, ...state.liveEvents].slice(0, 50);
+    renderLiveFeed();
+  } catch { /* keep last good data until next tick */ }
+}
+
 document.addEventListener("click", (event) => {
   const viewButton = event.target.closest("[data-view]");
   if (viewButton) switchView(viewButton.dataset.view);
@@ -1084,4 +1155,6 @@ renderDashboard();
 if (!byId("onmc-dashboard-data")) {
   setInterval(refreshSilently, LIVE_REFRESH_MS);
   setInterval(renderLiveStatus, 1000);
+  setInterval(pollLiveFeed, LIVE_POLL_MS);
+  pollLiveFeed(); // initial fetch, don't wait for first 2s tick
 }

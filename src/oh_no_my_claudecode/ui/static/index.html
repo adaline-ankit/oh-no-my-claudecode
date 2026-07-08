@@ -198,6 +198,22 @@
               <div id="agents-swarm-list" class="swarm-list agents-swarm-list"></div>
               <div id="agents-empty" class="empty-state" hidden>No swarms yet — run <code>onmc swarm plan</code> to launch agents.</div>
             </section>
+            <section class="panel agents-live-panel" aria-labelledby="agents-live-title">
+              <div class="panel-heading">
+                <h3 id="agents-live-title">Live Activity</h3>
+                <span id="agents-live-sub" class="agents-live-sub">–</span>
+              </div>
+              <div class="agents-live-body">
+                <div class="agents-live-col">
+                  <div class="agents-live-colhead">Active agents</div>
+                  <div id="agents-active-list" class="agents-active-list"></div>
+                </div>
+                <div class="agents-live-col agents-live-col-feed">
+                  <div class="agents-live-colhead">Recent events</div>
+                  <div id="agents-live-feed" class="agents-live-feed"></div>
+                </div>
+              </div>
+            </section>
           </section>
 
           <section id="view-performance" class="view" data-view-panel="performance" aria-labelledby="perf-title" hidden>
