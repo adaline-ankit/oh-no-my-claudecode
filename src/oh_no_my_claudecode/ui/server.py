@@ -189,17 +189,79 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
     }
 
 
+def _is_authorized(auth_header: str | None, token: str | None) -> bool:
+    """Return True if the request passes bearer-token auth.
+
+    Auth is only enforced when *token* is non-empty.  When *token* is None or
+    empty every request is allowed.  A missing or malformed Authorization header
+    fails when *token* is set.
+    """
+    if not token:
+        return True
+    if auth_header is None:
+        return False
+    scheme, _, value = auth_header.partition(" ")
+    return scheme.lower() == "bearer" and value == token
+
+
+def _ingest_events(raw: bytes, live_dir: Path) -> tuple[dict[str, Any], int]:
+    """Parse raw request body and append event(s) to live_dir/events.jsonl.
+
+    Accepts a single Event JSON object or a JSON array of objects.
+    Returns ``(response_dict, http_status_code)`` — 200 on success, 400 on
+    parse failure.  Individual items that cannot be coerced to Event are silently
+    skipped so one malformed entry in a batch does not abort the rest.
+    """
+    from oh_no_my_claudecode import telemetry  # local import avoids circular deps
+
+    try:
+        data: object = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"ok": False, "error": "invalid JSON"}, 400
+
+    if isinstance(data, dict):
+        items: list[object] = [data]
+    elif isinstance(data, list):
+        items = list(data)
+    else:
+        return {"ok": False, "error": "expected object or array"}, 400
+
+    accepted = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            ev = telemetry.Event(
+                ts=float(item.get("ts", 0.0)),
+                kind=str(item.get("kind", "")),
+                swarm_id=item.get("swarm_id") or None,
+                unit=item.get("unit") or None,
+                agent=item.get("agent") or None,
+                tool=item.get("tool") or None,
+                detail=item.get("detail") or None,
+                session_id=item.get("session_id") or None,
+            )
+            telemetry.emit(ev, live_dir=live_dir)
+            accepted += 1
+        except (TypeError, ValueError):
+            continue
+
+    return {"ok": True, "accepted": accepted}, 200
+
+
 def create_ui_server(
     service: OnmcService,
     *,
     host: str = "127.0.0.1",
     port: int = 8765,
     command_runner: CommandRunner | None = None,
+    token: str | None = None,
+    live_dir: Path | None = None,
 ) -> ThreadingHTTPServer:
     runner: CommandRunner = (
         command_runner if command_runner is not None else _default_command_runner
     )
-    handler = _handler_factory(service, command_runner=runner)
+    handler = _handler_factory(service, command_runner=runner, token=token, live_dir=live_dir)
     return ThreadingHTTPServer((host, port), handler)
 
 
@@ -240,8 +302,9 @@ def serve_dashboard(
     host: str = "127.0.0.1",
     port: int = 8765,
     open_browser: bool = True,
+    token: str | None = None,
 ) -> None:
-    server = create_ui_server(service, host=host, port=port)
+    server = create_ui_server(service, host=host, port=port, token=token)
     raw_host, bound_port = server.server_address[:2]
     bound_host = bytes(raw_host).decode() if isinstance(raw_host, (bytes, bytearray)) else raw_host
     browser_host = "127.0.0.1" if ip_address(bound_host).is_unspecified else bound_host
@@ -262,9 +325,20 @@ def _handler_factory(
     service: OnmcService,
     *,
     command_runner: CommandRunner,
+    token: str | None = None,
+    live_dir: Path | None = None,
 ) -> type[BaseHTTPRequestHandler]:
+    def _resolve_live_dir() -> Path:
+        """Return the live-events directory, injected or derived from service."""
+        if live_dir is not None:
+            return live_dir
+        return Path(service.status()["repo_root"]) / ".onmc" / "live"
+
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
+            if not _is_authorized(self.headers.get("Authorization"), token):
+                self.send_error(HTTPStatus.UNAUTHORIZED)
+                return
             path = urlsplit(self.path).path
             if path == "/api/dashboard":
                 self._send_json(build_dashboard_payload(service))
@@ -277,8 +351,7 @@ def _handler_factory(
                     since_arg: float | None = since_f if since_f > 0.0 else None
                 except ValueError:
                     since_arg = None
-                live_dir = Path(service.status()["repo_root"]) / ".onmc" / "live"
-                self._send_json(build_live_payload(live_dir, since=since_arg))
+                self._send_json(build_live_payload(_resolve_live_dir(), since=since_arg))
                 return
             asset = _asset_for_path(path)
             if asset is None or not asset.is_file():
@@ -294,6 +367,9 @@ def _handler_factory(
             self.wfile.write(body)
 
         def do_POST(self) -> None:  # noqa: N802
+            if not _is_authorized(self.headers.get("Authorization"), token):
+                self.send_error(HTTPStatus.UNAUTHORIZED)
+                return
             path = urlsplit(self.path).path
             if path == "/api/agents/action":
                 length = int(self.headers.get("Content-Length", "0"))
@@ -304,6 +380,15 @@ def _handler_factory(
                     self.send_error(HTTPStatus.BAD_REQUEST)
                     return
                 self._send_json(_handle_agents_action(data, command_runner))
+                return
+            if path == "/api/live/ingest":
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length)
+                result, status_code = _ingest_events(raw, _resolve_live_dir())
+                if status_code != 200:  # noqa: PLR2004
+                    self.send_error(HTTPStatus.BAD_REQUEST)
+                    return
+                self._send_json(result)
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 

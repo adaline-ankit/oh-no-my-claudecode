@@ -7131,17 +7131,50 @@ Usage: onmc ui [OPTIONS]
 
  Open the local read-only ONMC visual dashboard.
 
+ By default binds 127.0.0.1 (localhost only, no auth).
+
+ With ``--serve`` the dashboard is intended for shared access: combine with
+ ``--host 0.0.0.0`` to expose it on the network and ``--token SECRET`` (or
+ set ONMC_UI_TOKEN) to require bearer-token auth on every request.
+
+ Remote agents push telemetry via ``POST /api/live/ingest``.  The Agents view
+ aggregates events from every source, giving a central view of all running
+ swarms regardless of which machine they are on.
+
+ Model: remote onmc instances PUSH events to ``/api/live/ingest``; this
+ dashboard AGGREGATES them.  The remote-push client side is a follow-on;
+ ship the server ingest + serve here.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --host                   TEXT                      Dashboard bind address.   │
+│ --host                    TEXT                     Dashboard bind address.   │
 │                                                    [default: 127.0.0.1]      │
-│ --port                   INTEGER RANGE             Dashboard TCP port.       │
-│                          [0<=x<=65535]             [default: 8765]           │
+│ --port                    INTEGER RANGE            Dashboard TCP port.       │
+│                           [0<=x<=65535]            [default: 8765]           │
 │ --open      --no-open                              Open the dashboard in a   │
 │                                                    browser.                  │
 │                                                    [default: open]           │
-│ --export                 PATH                      Write a standalone HTML   │
+│ --export                  PATH                     Write a standalone HTML   │
 │                                                    snapshot instead of       │
 │                                                    serving.                  │
+│ --serve     --no-serve                             Shared-dashboard mode:    │
+│                                                    bind beyond localhost and │
+│                                                    enable the POST           │
+│                                                    /api/live/ingest          │
+│                                                    event-ingest endpoint so  │
+│                                                    remote onmc instances can │
+│                                                    push telemetry to this    │
+│                                                    central dashboard.        │
+│                                                    [default: no-serve]       │
+│ --token                   TEXT                     Bearer token for          │
+│                                                    dashboard auth. When set  │
+│                                                    (or via ONMC_UI_TOKEN env │
+│                                                    var), every request must  │
+│                                                    supply 'Authorization:    │
+│                                                    Bearer <token>';          │
+│                                                    unauthenticated requests  │
+│                                                    receive 401. Not set by   │
+│                                                    default.                  │
+│                                                    [env var: ONMC_UI_TOKEN]  │
 │ --help                                             Show this message and     │
 │                                                    exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
