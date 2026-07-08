@@ -1,4 +1,6 @@
 from oh_no_my_claudecode.ui.server import (
+    CommandRunner,
+    build_agents_payload,
     build_dashboard_payload,
     create_ui_server,
     export_dashboard_snapshot,
@@ -6,6 +8,8 @@ from oh_no_my_claudecode.ui.server import (
 )
 
 __all__ = [
+    "CommandRunner",
+    "build_agents_payload",
     "build_dashboard_payload",
     "create_ui_server",
     "export_dashboard_snapshot",

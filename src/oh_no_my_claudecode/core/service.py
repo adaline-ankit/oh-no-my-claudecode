@@ -40,8 +40,13 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.pack import ContextPack
-    from oh_no_my_claudecode.preflight.runner import Executor as PreflightExecutor
-    from oh_no_my_claudecode.preflight.runner import PreflightReport
+    from oh_no_my_claudecode.preflight.runner import (
+        ExactReport,
+        PreflightReport,
+    )
+    from oh_no_my_claudecode.preflight.runner import (
+        Executor as PreflightExecutor,
+    )
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
     from oh_no_my_claudecode.release import ReleaseDraft
@@ -3586,6 +3591,47 @@ class OnmcService:
         return run_preflight(
             repo_root, steps=steps, executor=executor, provision=provision
         )
+
+    def preflight_exact(
+        self,
+        *,
+        steps: Sequence[str] | None = None,
+        repo_root: Path | None = None,
+        executor: PreflightExecutor | None = None,
+    ) -> PreflightReport:
+        """Run the exact CI quality gate and return the report.
+
+        Mirrors ``.github/workflows/ci.yml`` verbatim, including the full pytest
+        coverage gate (``--cov-fail-under=80``) and the ``typer<1.0`` pin for
+        cli-reference.  Thin wrapper over :func:`run_preflight_exact`.
+        """
+        from oh_no_my_claudecode.preflight import run_preflight_exact
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return run_preflight_exact(repo_root, steps=steps, executor=executor)
+
+    def preflight_fix(
+        self,
+        *,
+        repo_root: Path | None = None,
+        executor: PreflightExecutor | None = None,
+    ) -> ExactReport:
+        """Auto-fix ruff violations + cli-reference drift, then re-run exact gate.
+
+        Thin wrapper over :func:`run_preflight_fix`.
+        """
+        from oh_no_my_claudecode.preflight import run_preflight_fix
+
+        if repo_root is None:
+            try:
+                repo_root = discover_repo_root(self.cwd)
+            except (FileNotFoundError, RepoDiscoveryError):
+                repo_root = self.cwd
+        return run_preflight_fix(repo_root, executor=executor)
 
     def fleet_status(self, *, swarm_id: str | None = None) -> FleetStatus:
         """Summarise local swarm/claim/receipt state."""

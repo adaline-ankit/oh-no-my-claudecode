@@ -205,6 +205,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
+│ land            Safe PR lander: poll checks, rebase if behind, squash-merge  │
+│                 when green.                                                  │
 │ leash           Guardrails-as-game: define session rules, check compliance,  │
 │                 and score the agent.                                         │
 │ membudget       Memory-budget guard: report store size, flag over-budget,    │
@@ -229,6 +231,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 provider.                                                    │
 │ quest           Gamified RPG backlog: XP from verified runs, levels, bosses, │
 │                 loot.                                                        │
+│ refinery        Bors-style serialised merge queue: enqueue PRs, process one  │
+│                 at a time.                                                   │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
@@ -2997,6 +3001,96 @@ Usage: onmc init [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc land`
+
+```text
+Usage: onmc land [OPTIONS] COMMAND [ARGS]...
+
+ Safe PR lander: poll checks, rebase if behind, squash-merge when green.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ run     Land PR safely: poll checks, rebase if behind, squash-merge when     │
+│         green.                                                               │
+│ status  Show what the lander would do for this PR — read-only, no mutations. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc land run`
+
+```text
+Usage: onmc land run [OPTIONS] PR
+
+ Land PR safely: poll checks, rebase if behind, squash-merge when green.
+
+ Polls ``gh pr view`` on a cadence, applies the landing planner, and takes
+ the appropriate action (rebase, resolve threads, or merge) until the PR
+ lands or the deadline is reached.
+
+ Gate logic:
+
+ \b
+ - CodeQL FAILURE → abort immediately (exit 1).
+ - Branch BEHIND  → ``gh pr update-branch --rebase``, then re-poll.
+ - Unresolved threads → resolve via GraphQL, then re-poll.
+ - All non-advisory checks green + CLEAN → ``gh pr merge --squash --admin``.
+ - Advisory checks (Sourcery, greetings, apply-area-labels) are ignored.
+
+ Examples:
+
+     onmc land run 123
+
+     onmc land run 456 --json
+
+     onmc land run 789 --max-wait 3600 --only-if-contention-le 5
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to land. [required]                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                  Emit a JSON envelope {"kind":        │
+│                                         "land_result", ...} on completion.   │
+│ --max-wait                     SECONDS  Maximum seconds to wait for checks   │
+│                                         to go green (default: 1800).         │
+│                                         [default: 1800]                      │
+│ --poll-interval                SECONDS  Seconds between status polls         │
+│                                         (default: 30).                       │
+│                                         [default: 30]                        │
+│ --only-if-contention-le        N        Defer without action if the repo has │
+│                                         more than N concurrent CI runs (as   │
+│                                         reported in PR state).  Omit to      │
+│                                         disable.                             │
+│ --help                                  Show this message and exit.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc land status`
+
+```text
+Usage: onmc land status [OPTIONS] PR
+
+ Show what the lander would do for this PR — read-only, no mutations.
+
+ Fetches current PR state via ``gh`` and runs the planner to determine
+ the next action.  Nothing is changed.
+
+ Examples:
+
+     onmc land status 123
+
+     onmc land status 456 --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to query. [required]                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a JSON status envelope {"kind": "land_status", ...}.    │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc leash`
 
 ```text
@@ -4755,6 +4849,12 @@ Usage: onmc preflight [OPTIONS]
  Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only
  mypy``.
 
+ Use ``--exact`` to match CI precisely (full coverage flags, typer pin).
+
+ Use ``--fix`` to auto-heal ruff violations + cli-reference drift before
+ re-running the exact gate — useful for a swarm agent self-healing before
+ opening a PR.
+
  Exit codes:
 
  - 0 — every step that ran passed (matches the CI gate)
@@ -4770,6 +4870,14 @@ Usage: onmc preflight [OPTIONS]
 │                          worktree (no dev deps installed) resolves           │
 │                          ruff/mypy/pytest on demand, and pin typer<1.0 for   │
 │                          the cli-reference step to match CI.                 │
+│ --exact                  Mirror the CI quality gate exactly: uses the full   │
+│                          pytest coverage flags (--cov-fail-under=80) and     │
+│                          always pins typer<1.0 for the cli-reference step.   │
+│                          Provisions via uv when available.                   │
+│ --fix                    Auto-fix ruff violations (ruff check --fix) and     │
+│                          regenerate docs/cli-reference.md with pinned        │
+│                          typer<1.0, then re-run the exact CI gate and report │
+│                          the result.  Implies --exact.                       │
 │ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -5083,6 +5191,138 @@ Usage: onmc recall [OPTIONS] [QUERY]
 │ --terse                              Emit compact terse output (overrides    │
 │                                      ONMC_TERSE env var).                    │
 │ --help                               Show this message and exit.             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery`
+
+```text
+Usage: onmc refinery [OPTIONS] COMMAND [ARGS]...
+
+ Bors-style serialised merge queue: enqueue PRs, process one at a time.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ add     Enqueue a PR (or update its priority if already present).            │
+│ status  Show the current merge queue.                                        │
+│ run     Process the merge queue head(s).                                     │
+│ drop    Remove a PR from the queue (any state).                              │
+│ clear   Flush the entire merge queue.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery add`
+
+```text
+Usage: onmc refinery add [OPTIONS] PR
+
+ Enqueue a PR (or update its priority if already present).
+
+ The queue is persisted to ``.onmc/refinery/queue.json``.
+
+ Examples:
+
+     onmc refinery add 123
+
+     onmc refinery add 456 --priority 10
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to enqueue. [required]                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --priority        INTEGER  Queue priority (higher = processed first).        │
+│                            Default 0.                                        │
+│                            [default: 0]                                      │
+│ --json                     Emit result as a JSON object.                     │
+│ --help                     Show this message and exit.                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery clear`
+
+```text
+Usage: onmc refinery clear [OPTIONS]
+
+ Flush the entire merge queue.
+
+ Examples:
+
+ onmc refinery clear
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit result as a JSON object.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery drop`
+
+```text
+Usage: onmc refinery drop [OPTIONS] PR
+
+ Remove a PR from the queue (any state).
+
+ Examples:
+
+ onmc refinery drop 123
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    pr      INTEGER  PR number to remove from the queue. [required]         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit result as a JSON object.                                │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery run`
+
+```text
+Usage: onmc refinery run [OPTIONS]
+
+ Process the merge queue head(s).
+
+ For each head PR: rebase onto main, wait for CI green (quality + CodeQL),
+ then merge. Failed or conflicting PRs are kicked back with a reason and
+ the next entry is processed.
+
+ Examples:
+
+     onmc refinery run
+
+     onmc refinery run --max 3
+
+     onmc refinery run --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --max         INTEGER  Maximum number of PRs to process (default: 1).        │
+│                        [default: 1]                                          │
+│ --json                 Emit results as a JSON object.                        │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc refinery status`
+
+```text
+Usage: onmc refinery status [OPTIONS]
+
+ Show the current merge queue.
+
+ Displays each entry with its position, PR number, state, and kick reason
+ (if applicable).
+
+ Examples:
+
+     onmc refinery status
+
+     onmc refinery status --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the queue as a JSON object.                             │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -12,16 +12,24 @@ from __future__ import annotations
 
 from oh_no_my_claudecode.preflight.runner import (
     PREFLIGHT_STEPS,
+    ExactReport,
     Executor,
+    FixStep,
     PreflightReport,
     StepResult,
     run_preflight,
+    run_preflight_exact,
+    run_preflight_fix,
 )
 
 __all__ = [
     "PREFLIGHT_STEPS",
     "Executor",
+    "ExactReport",
+    "FixStep",
     "PreflightReport",
     "StepResult",
     "run_preflight",
+    "run_preflight_exact",
+    "run_preflight_fix",
 ]

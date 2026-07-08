@@ -34,6 +34,26 @@ mechanisms keep the gate honest:
   check whether it is importable.  A missing tool yields a clear, honest
   :class:`StepResult` ("ruff not installed — run ``pip install -e .[dev]`` or
   re-run with ``--provision``") instead of a confusing crash.
+
+``--exact`` mode
+----------------
+:func:`run_preflight_exact` mirrors the CI quality gate with the **exact**
+commands from ``.github/workflows/ci.yml``, including the full pytest coverage
+flags (``--cov-fail-under=80``) and the typer<1.0 pin for cli-reference.  It
+always provisions via ``uv run --with`` when ``uv`` is available so a fresh
+worktree produces the same verdict as CI.
+
+``--fix`` mode
+--------------
+:func:`run_preflight_fix` auto-heals common drift before pushing:
+
+1. ``ruff check --fix .`` — auto-fix lint violations (never ``ruff format``).
+2. Regenerate ``docs/cli-reference.md`` with pinned ``typer<1.0``.
+3. Re-run the exact gate and report the updated result.
+
+An :class:`ExactReport` bundles the fix-step outcomes with the final gate
+result so callers can distinguish "fixed + gate passed" from "fix applied but
+gate still fails".
 """
 
 from __future__ import annotations
@@ -338,3 +358,276 @@ def run_preflight(
 
     overall = all(step.ok for step in results)
     return PreflightReport(steps=results, ok=overall)
+
+
+# ---------------------------------------------------------------------------
+# Exact-CI mode: commands that match ci.yml verbatim
+# ---------------------------------------------------------------------------
+
+# Exact pytest command from the CI quality job (includes coverage gate).
+_EXACT_PYTEST_ARGS: tuple[str, ...] = (
+    "--cov=oh_no_my_claudecode",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+    "--cov-fail-under=80",
+    "tests/",
+)
+
+# Package name for pytest-cov, needed alongside pytest for the coverage flags.
+_PYTEST_COV_PACKAGE: str = "pytest-cov"
+
+
+def _exact_command_for(step_id: str) -> list[str]:
+    """Return the *unprovisioned* exact-CI argv for ``step_id``.
+
+    These commands match ``.github/workflows/ci.yml`` verbatim:
+
+    * ``ruff check .``
+    * ``mypy --strict src/oh_no_my_claudecode``
+    * ``pytest --cov=... --cov-fail-under=80 tests/``  (full coverage gate)
+    * ``python scripts/generate-cli-reference.py --check``
+    """
+    if step_id == "ruff":
+        return ["ruff", "check", "."]
+    if step_id == "mypy":
+        return ["mypy", "--strict", "src/oh_no_my_claudecode"]
+    if step_id == "cliref":
+        return ["python", "scripts/generate-cli-reference.py", "--check"]
+    if step_id == "pytest":
+        return ["pytest", *_EXACT_PYTEST_ARGS]
+    msg = f"unknown preflight step: {step_id!r}"
+    raise ValueError(msg)
+
+
+def _provisioned_exact_command_for(step_id: str) -> list[str]:
+    """Return the ``uv run --with ...`` form of the exact-CI command.
+
+    pytest is provisioned with both ``pytest`` *and* ``pytest-cov`` so the
+    ``--cov-fail-under`` flag works in a fresh worktree.  The cli-reference
+    step pins ``typer<1.0`` (and forces an upgrade) so the generated reference
+    is byte-identical to CI's.
+    """
+    base = _exact_command_for(step_id)
+    if step_id in ("ruff", "mypy"):
+        pkg = _STEP_TOOL_PACKAGE[step_id]
+        return ["uv", "run", "--with", pkg, *base]
+    if step_id == "pytest":
+        return [
+            "uv",
+            "run",
+            "--with",
+            _STEP_TOOL_PACKAGE["pytest"],
+            "--with",
+            _PYTEST_COV_PACKAGE,
+            *base,
+        ]
+    if step_id == "cliref":
+        return [
+            "uv",
+            "run",
+            "--with",
+            _TYPER_PIN,
+            "--upgrade-package",
+            "typer",
+            *base,
+        ]
+    return base  # pragma: no cover
+
+
+def run_preflight_exact(
+    repo_root: Path,
+    *,
+    steps: Sequence[str] | None = None,
+    executor: Executor | None = None,
+) -> PreflightReport:
+    """Run the exact CI quality gate and return a :class:`PreflightReport`.
+
+    Like :func:`run_preflight` but uses commands that match
+    ``.github/workflows/ci.yml`` verbatim, including:
+
+    * ``pytest --cov=oh_no_my_claudecode --cov-fail-under=80`` (coverage gate)
+    * cli-reference ``--check`` with pinned ``typer<1.0``
+
+    When ``uv`` is available, each tool is provisioned on demand (``uv run
+    --with <pkg>``) so a fresh worktree produces the same verdict as CI.  If
+    ``uv`` is absent the exact plain commands run instead, relying on the
+    caller's environment.
+
+    Parameters
+    ----------
+    repo_root:
+        Directory the commands run in.
+    steps:
+        Subset of :data:`STEP_IDS` to run.  ``None`` runs all in CI order.
+    executor:
+        Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to
+        a subprocess runner.  Tests inject a fake for offline, deterministic
+        runs.
+    """
+    run = executor if executor is not None else _default_executor(repo_root)
+
+    if steps is None:
+        selected = list(STEP_IDS)
+    else:
+        requested = set(steps)
+        selected = [step_id for step_id in STEP_IDS if step_id in requested]
+
+    if not selected:
+        placeholder = StepResult(
+            name="(none)",
+            ok=False,
+            summary="no matching preflight steps selected",
+        )
+        return PreflightReport(steps=[placeholder], ok=False)
+
+    use_uv = _uv_available()
+
+    results: list[StepResult] = []
+    for step_id in selected:
+        cmd = _provisioned_exact_command_for(step_id) if use_uv else _exact_command_for(step_id)
+        returncode, output = run(cmd)
+        results.append(
+            StepResult(
+                name=step_id,
+                ok=returncode == 0,
+                summary=_summarize(step_id, returncode, output),
+            )
+        )
+
+    overall = all(step.ok for step in results)
+    return PreflightReport(steps=results, ok=overall)
+
+
+# ---------------------------------------------------------------------------
+# Fix mode: auto-heal ruff violations + cli-reference drift
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FixStep:
+    """Outcome of a single auto-fix action in :func:`run_preflight_fix`.
+
+    Parameters
+    ----------
+    name:
+        Stable identifier for the fix action (e.g. ``"ruff-fix"``).
+    ok:
+        ``True`` when the fix command exited zero.
+    summary:
+        One-line human summary.
+    cmd:
+        The exact command that was run (for test assertions).
+    """
+
+    name: str
+    ok: bool
+    summary: str
+    cmd: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ExactReport:
+    """Result of a ``--fix`` + ``--exact`` preflight run.
+
+    Bundles the outcomes of the auto-fix actions with the final exact gate
+    result so callers can distinguish "fixed + gate passed" from "fix applied
+    but gate still fails".
+
+    Parameters
+    ----------
+    gate:
+        The :class:`PreflightReport` from the exact gate re-run after fixes.
+    fix_steps:
+        One :class:`FixStep` per auto-fix action (ruff-fix, cliref-regen).
+    """
+
+    gate: PreflightReport
+    fix_steps: list[FixStep] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        """``True`` when every fix action AND the gate passed."""
+        return all(f.ok for f in self.fix_steps) and self.gate.ok
+
+
+# Canonical fix-action identifiers.
+FIX_STEP_IDS: tuple[str, ...] = ("ruff-fix", "cliref-regen")
+
+
+def _fix_command_for(fix_id: str, *, use_uv: bool = False) -> list[str]:
+    """Return the argv for a fix action.
+
+    ``ruff-fix`` runs ``ruff check --fix .`` (never ``ruff format``).
+    ``cliref-regen`` regenerates ``docs/cli-reference.md`` without ``--check``,
+    pinning ``typer<1.0`` so the output matches CI.
+    """
+    if fix_id == "ruff-fix":
+        base = ["ruff", "check", "--fix", "."]
+        if use_uv:
+            return ["uv", "run", "--with", "ruff", *base]
+        return base
+    if fix_id == "cliref-regen":
+        base = ["python", "scripts/generate-cli-reference.py"]
+        if use_uv:
+            return [
+                "uv",
+                "run",
+                "--with",
+                _TYPER_PIN,
+                "--upgrade-package",
+                "typer",
+                *base,
+            ]
+        return base
+    msg = f"unknown fix step: {fix_id!r}"  # pragma: no cover
+    raise ValueError(msg)
+
+
+def run_preflight_fix(
+    repo_root: Path,
+    *,
+    executor: Executor | None = None,
+) -> ExactReport:
+    """Auto-fix ruff violations + cli-reference drift, then re-run the exact gate.
+
+    Runs in three phases:
+
+    1. ``ruff check --fix .`` — auto-fix lint violations (never ``ruff format``).
+    2. Regenerate ``docs/cli-reference.md`` with pinned ``typer<1.0``.
+    3. Re-run :func:`run_preflight_exact` and bundle the result.
+
+    The injected ``executor`` (if any) receives ALL commands — fix actions and
+    exact gate commands — so tests can assert every invocation without running
+    real subprocesses.
+
+    Parameters
+    ----------
+    repo_root:
+        Directory the commands run in.
+    executor:
+        Injectable ``(cmd) -> (returncode, output)`` callable.  Defaults to a
+        subprocess runner.  Tests inject a fake for offline, deterministic runs.
+    """
+    run = executor if executor is not None else _default_executor(repo_root)
+    use_uv = _uv_available()
+
+    fix_steps: list[FixStep] = []
+    for fix_id in FIX_STEP_IDS:
+        cmd = _fix_command_for(fix_id, use_uv=use_uv)
+        returncode, output = run(cmd)
+        if returncode == 0:
+            summary = "applied" if fix_id == "ruff-fix" else "regenerated"
+        else:
+            tail = next(
+                (line.strip() for line in reversed(output.splitlines()) if line.strip()),
+                "",
+            )
+            if tail:
+                summary = f"failed (exit {returncode}): {tail}"
+            else:
+                summary = f"failed (exit {returncode})"
+        fix_steps.append(
+            FixStep(name=fix_id, ok=returncode == 0, summary=summary, cmd=list(cmd))
+        )
+
+    gate = run_preflight_exact(repo_root, executor=executor)
+    return ExactReport(gate=gate, fix_steps=fix_steps)
