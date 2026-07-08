@@ -45,7 +45,7 @@ class _RealGhClient:
     """
 
     def pr_state(self, pr: int) -> dict[str, Any]:
-        """Fetch PR state via ``gh pr view --json``."""
+        """Fetch PR state via ``gh pr view --json`` and threads via GraphQL."""
         result = subprocess.run(  # noqa: S603
             [
                 "gh",
@@ -53,7 +53,7 @@ class _RealGhClient:
                 "view",
                 str(pr),
                 "--json",
-                "mergeStateStatus,state,statusCheckRollup,reviewThreads",
+                "mergeStateStatus,state,statusCheckRollup",
             ],
             capture_output=True,
             text=True,
@@ -74,16 +74,79 @@ class _RealGhClient:
                 }
             )
 
-        threads: list[dict[str, Any]] = data.get("reviewThreads") or []
-        unresolved = [t for t in threads if not t.get("isResolved", True)]
+        unresolved_count, unresolved_ids = self._fetch_review_threads(pr)
 
         return {
             "merged": str(data.get("state", "")).upper() == "MERGED",
             "mergeStateStatus": str(data.get("mergeStateStatus", "UNKNOWN")),
             "checks": checks,
-            "unresolved_threads": len(unresolved),
-            "unresolved_thread_ids": [t["id"] for t in unresolved if "id" in t],
+            "unresolved_threads": unresolved_count,
+            "unresolved_thread_ids": unresolved_ids,
         }
+
+    def _fetch_review_threads(self, pr: int) -> tuple[int, list[str]]:
+        """Fetch unresolved review threads via ``gh api graphql``.
+
+        Returns ``(unresolved_count, unresolved_ids)``.  On any failure degrades
+        gracefully to ``(0, [])`` — the ``--admin`` merge path bypasses the thread gate.
+        """
+        # Step 1: resolve repo owner + name from the local git context.
+        repo_run = subprocess.run(  # noqa: S603
+            ["gh", "repo", "view", "--json", "owner,name"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if repo_run.returncode != 0:
+            return 0, []
+        try:
+            repo_data: dict[str, Any] = json.loads(repo_run.stdout)
+            owner: str = repo_data["owner"]["login"]
+            repo_name: str = repo_data["name"]
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return 0, []
+
+        # Step 2: fetch unresolved threads via GraphQL.
+        query = (
+            "query($owner:String!,$name:String!,$number:Int!)"
+            "{repository(owner:$owner,name:$name)"
+            "{pullRequest(number:$number)"
+            "{reviewThreads(first:100){nodes{id isResolved}}}}}"
+        )
+        gql_run = subprocess.run(  # noqa: S603
+            [
+                "gh",
+                "api",
+                "graphql",
+                "-f",
+                f"query={query}",
+                "-f",
+                f"owner={owner}",
+                "-f",
+                f"name={repo_name}",
+                "-F",
+                f"number={pr}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if gql_run.returncode != 0:
+            return 0, []
+        try:
+            gql_data: dict[str, Any] = json.loads(gql_run.stdout)
+            nodes: list[dict[str, Any]] = (
+                gql_data.get("data", {})
+                .get("repository", {})
+                .get("pullRequest", {})
+                .get("reviewThreads", {})
+                .get("nodes")
+                or []
+            )
+            unresolved = [n for n in nodes if not n.get("isResolved", True)]
+            return len(unresolved), [n["id"] for n in unresolved if "id" in n]
+        except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
+            return 0, []
 
     def update_branch(self, pr: int) -> None:
         """Rebase the PR branch onto the current target."""

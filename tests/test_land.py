@@ -532,18 +532,155 @@ class TestRealGhClientMergedField:
         assert lc._RealGhClient().pr_state(1)["merged"] is False
 
     def test_json_query_requests_state_not_merged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Regression: ``gh pr view --json`` must use ``state`` not ``merged``."""
         import oh_no_my_claudecode.land.commands as lc
 
-        seen: dict[str, str] = {}
+        pr_view_fields: list[str] = []
 
         def _capture(cmd, capture_output=True, text=True, check=False):  # noqa: ANN001,ANN202
             import subprocess
 
-            seen["fields"] = cmd[cmd.index("--json") + 1]
-            out = json.dumps({"state": "OPEN"})
-            return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+            # Only capture fields from the gh pr view call; other calls return
+            # an empty object so _fetch_review_threads degrades gracefully.
+            if list(cmd[:3]) == ["gh", "pr", "view"] and "--json" in cmd:
+                pr_view_fields.append(cmd[cmd.index("--json") + 1])
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=json.dumps({"state": "OPEN"}), stderr=""
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="{}", stderr="")
 
         monkeypatch.setattr(lc.subprocess, "run", _capture)
         lc._RealGhClient().pr_state(1)
-        assert "state" in seen["fields"]
-        assert "merged" not in seen["fields"].split(",")
+        assert len(pr_view_fields) == 1
+        fields = pr_view_fields[0]
+        assert "state" in fields
+        assert "merged" not in fields.split(",")
+
+
+# ---------------------------------------------------------------------------
+# 17–20: Review-threads-via-GraphQL regression + coverage
+# ---------------------------------------------------------------------------
+
+
+class TestRealGhClientReviewThreadsGraphql:
+    """``reviewThreads`` must come from GraphQL, not from ``gh pr view --json``."""
+
+    def _make_run(
+        self,
+        pr_view_payload: dict[str, Any],
+        repo_payload: dict[str, Any] | None = None,
+        graphql_payload: dict[str, Any] | None = None,
+        graphql_returncode: int = 0,
+        repo_returncode: int = 0,
+    ):
+        """Return a fake subprocess.run that dispatches by command prefix."""
+        import subprocess
+
+        _default_repo = {"owner": {"login": "testowner"}, "name": "testrepo"}
+
+        def _fake_run(cmd, capture_output=True, text=True, check=False):  # noqa: ANN001,ANN202
+            if list(cmd[:3]) == ["gh", "pr", "view"]:
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=json.dumps(pr_view_payload), stderr=""
+                )
+            if list(cmd[:3]) == ["gh", "repo", "view"]:
+                rp = repo_payload if repo_payload is not None else _default_repo
+                return subprocess.CompletedProcess(
+                    cmd, repo_returncode, stdout=json.dumps(rp), stderr=""
+                )
+            # gh api graphql
+            gql_out = json.dumps(graphql_payload) if graphql_payload is not None else "{}"
+            return subprocess.CompletedProcess(
+                cmd, graphql_returncode, stdout=gql_out, stderr="graphql error"
+            )
+
+        return _fake_run
+
+    def test_pr_view_json_omits_review_threads(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: ``gh pr view --json`` field list must NOT contain ``reviewThreads``."""
+        import oh_no_my_claudecode.land.commands as lc
+
+        pr_view_fields: list[str] = []
+
+        def _capture(cmd, capture_output=True, text=True, check=False):  # noqa: ANN001,ANN202
+            import subprocess
+
+            if list(cmd[:3]) == ["gh", "pr", "view"] and "--json" in cmd:
+                pr_view_fields.append(cmd[cmd.index("--json") + 1])
+            return subprocess.CompletedProcess(cmd, 0, stdout="{}", stderr="")
+
+        monkeypatch.setattr(lc.subprocess, "run", _capture)
+        lc._RealGhClient().pr_state(1)
+        assert len(pr_view_fields) == 1, "gh pr view must be called exactly once"
+        assert "reviewThreads" not in pr_view_fields[0].split(",")
+
+    def test_graphql_threads_fetched_unresolved_count_and_ids(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GraphQL response with 2 unresolved + 1 resolved → count=2, correct ids."""
+        import oh_no_my_claudecode.land.commands as lc
+
+        graphql_payload = {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "reviewThreads": {
+                            "nodes": [
+                                {"id": "RT_1", "isResolved": False},
+                                {"id": "RT_2", "isResolved": False},
+                                {"id": "RT_3", "isResolved": True},
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+        monkeypatch.setattr(
+            lc.subprocess,
+            "run",
+            self._make_run(
+                pr_view_payload={"state": "OPEN", "mergeStateStatus": "CLEAN"},
+                graphql_payload=graphql_payload,
+            ),
+        )
+        state = lc._RealGhClient().pr_state(1)
+        assert state["unresolved_threads"] == 2
+        assert set(state["unresolved_thread_ids"]) == {"RT_1", "RT_2"}
+
+    def test_graphql_failure_degrades_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If ``gh api graphql`` exits non-zero, pr_state returns unresolved_threads=0."""
+        import oh_no_my_claudecode.land.commands as lc
+
+        monkeypatch.setattr(
+            lc.subprocess,
+            "run",
+            self._make_run(
+                pr_view_payload={"state": "OPEN", "mergeStateStatus": "CLEAN"},
+                graphql_returncode=1,
+            ),
+        )
+        state = lc._RealGhClient().pr_state(1)
+        assert state["unresolved_threads"] == 0
+        assert state["unresolved_thread_ids"] == []
+
+    def test_repo_view_failure_degrades_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """If ``gh repo view`` exits non-zero, pr_state returns unresolved_threads=0."""
+        import oh_no_my_claudecode.land.commands as lc
+
+        monkeypatch.setattr(
+            lc.subprocess,
+            "run",
+            self._make_run(
+                pr_view_payload={"state": "OPEN", "mergeStateStatus": "CLEAN"},
+                repo_returncode=1,
+            ),
+        )
+        state = lc._RealGhClient().pr_state(1)
+        assert state["unresolved_threads"] == 0
+        assert state["unresolved_thread_ids"] == []
