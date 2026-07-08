@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.92.0] — 2026-07-06
+
+### Added
+
+Agent-ecosystem interop — onmc as the accountability/memory layer over other agent runtimes. All three are optional, import-guarded extras with graceful fallback; built in parallel by an onmc swarm, each its own PR:
+
+- **Optional LangChain document-loader importer (`[langchain]`)** — `run_import(storage, "langchain", loader=…)` ingests any LangChain-compatible source (PDFs, web, notebooks, directories) into onmc memory candidates via LangChain loaders + splitters. Absent extra → reports unavailable; existing importers unchanged. (#293)
+- **`onmc crews` — optional CrewAI interop (`[crewai]`)** — `crews export` converts an onmc mission/swarm plan into a portable CrewAI crew spec (pure, always works); `crews run` executes a crew under an onmc accountability receipt via an injectable runner (requires the extra; exits cleanly if absent). (#295)
+- **`onmc teams` — optional AutoGen interop (`[autogen]`)** — the same pattern for Microsoft AutoGen / AG2 teams: `teams export` (pure) + `teams run` under an onmc receipt. (#294)
+
+All offline-tested (import-guarded, injected fake runners/loaders — no network, no real LLM calls).
+
 ## [0.91.0] — 2026-07-06
 
 ### Added
