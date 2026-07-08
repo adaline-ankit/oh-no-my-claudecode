@@ -238,6 +238,20 @@ def test_install_sh_setup_fallback_uses_yes_flag() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 6b. Day-1 banner mirrors the `onmc quickstart` ready card
+# ---------------------------------------------------------------------------
+
+
+def test_install_sh_banner_leads_with_onmc_slash_command() -> None:
+    """The closing day-1 banner must lead with /onmc, matching the quickstart card."""
+    text = script_text()
+    banner = text[text.find("Day-1 commands") :]
+    assert "/onmc" in banner, "install.sh day-1 banner must mention /onmc"
+    for cmd in ("onmc autopilot", "onmc brief", "onmc ui"):
+        assert cmd in banner, f"install.sh day-1 banner must mention {cmd}"
+
+
+# ---------------------------------------------------------------------------
 # 7. shellcheck (skipped if not installed)
 # ---------------------------------------------------------------------------
 
