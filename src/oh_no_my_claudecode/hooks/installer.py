@@ -14,6 +14,9 @@ LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
 # ``onmc wrap`` layer — make onmc the default layer for Claude Code.
 TASK_INTERCEPT_COMMAND = "onmc hooks task-intercept"
 PROMPT_ROUTER_COMMAND = "onmc hooks prompt-router"
+# Telemetry live event capture — PostToolUse + SubagentStop/Stop.
+POST_TOOL_USE_COMMAND = "onmc hooks post-tool-use"
+SUBAGENT_STOP_COMMAND = "onmc hooks subagent-stop"
 MCP_SERVER_NAME = "onmc"
 
 # Matcher for PreToolUse: fires on file-editing tools only.
@@ -39,6 +42,8 @@ _ONMC_COMMANDS = frozenset(
         LEGACY_POST_COMPACT_COMMAND,
         TASK_INTERCEPT_COMMAND,
         PROMPT_ROUTER_COMMAND,
+        POST_TOOL_USE_COMMAND,
+        SUBAGENT_STOP_COMMAND,
     }
 )
 # "PostCompact" is not a real Claude Code event; earlier onmc versions registered it.
@@ -46,9 +51,12 @@ _HOOK_EVENTS = (
     "PreCompact",
     "PostCompact",
     "PreToolUse",
+    "PostToolUse",
     "SessionStart",
     "SessionEnd",
     "UserPromptSubmit",
+    "SubagentStop",
+    "Stop",
 )
 
 
@@ -160,6 +168,24 @@ def install_claude_hooks(
         event_name="PreToolUse",
         matcher=_PRE_TOOL_USE_MATCHER,
         command=PRE_TOOL_USE_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="PostToolUse",
+        matcher="",
+        command=POST_TOOL_USE_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="SubagentStop",
+        matcher="",
+        command=SUBAGENT_STOP_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="Stop",
+        matcher="",
+        command=SUBAGENT_STOP_COMMAND,
     )
     _write_json(settings_path, settings)
     if register_mcp:
@@ -341,6 +367,18 @@ def hooks_installed(*, settings_path: Path) -> bool:
             event_name="PreToolUse",
             matcher=_PRE_TOOL_USE_MATCHER,
             command=PRE_TOOL_USE_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="PostToolUse",
+            matcher="",
+            command=POST_TOOL_USE_COMMAND,
+        )
+        and _has_command_hook(
+            hooks,
+            event_name="SubagentStop",
+            matcher="",
+            command=SUBAGENT_STOP_COMMAND,
         )
     )
 

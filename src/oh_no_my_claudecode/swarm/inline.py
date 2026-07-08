@@ -153,6 +153,38 @@ def plan_inline_swarm(
     with contextlib.suppress(OSError):
         (_swarm_dir(repo_root, sid) / "ACTIVE").write_text(started_at, encoding="utf-8")
 
+    # Telemetry: emit swarm_planned + per-unit unit_queued events.
+    # Best-effort — emit failures must never break swarm planning.
+    with contextlib.suppress(Exception):
+        import time as _time
+
+        from oh_no_my_claudecode.telemetry.bus import Event as _Event
+        from oh_no_my_claudecode.telemetry.bus import emit as _emit
+
+        _live_dir = repo_root / ".onmc" / "live"
+        _now_ts = _time.time()
+        _emit(
+            _Event(
+                ts=_now_ts,
+                kind="swarm_planned",
+                swarm_id=sid,
+                agent=agent,
+                detail=f"{len(units)} units",
+            ),
+            live_dir=_live_dir,
+        )
+        for _u in units:
+            _emit(
+                _Event(
+                    ts=_now_ts,
+                    kind="unit_queued",
+                    swarm_id=sid,
+                    unit=_u["id"],
+                    agent=agent,
+                ),
+                live_dir=_live_dir,
+            )
+
     return {
         "swarm_id": sid,
         "mode": "inline",
@@ -280,6 +312,28 @@ def record_inline_unit(
         receipt_path=receipt_path,
         error=None if status != "failed" else (summary[:300] or "subagent did not verify"),
     )
+
+    # Telemetry: emit unit completion event.  Best-effort — never break recording.
+    with contextlib.suppress(Exception):
+        import time as _time
+
+        from oh_no_my_claudecode.telemetry.bus import Event as _Event
+        from oh_no_my_claudecode.telemetry.bus import emit as _emit
+
+        _ev_kind = (
+            "unit_done" if status == "done" else ("unit_aborted" if aborted else "unit_failed")
+        )
+        _emit(
+            _Event(
+                ts=_time.time(),
+                kind=_ev_kind,
+                swarm_id=swarm_id,
+                unit=unit_id,
+                agent=agent,
+                detail=(summary[:120] if summary else None),
+            ),
+            live_dir=repo_root / ".onmc" / "live",
+        )
 
     return {
         "unit_id": unit_id,
