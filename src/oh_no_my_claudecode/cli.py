@@ -103,10 +103,18 @@ from oh_no_my_claudecode.wiki.foam import build_foam_vault
 from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 from oh_no_my_claudecode.wiki.site import build_site
 
+_ROOT_EPILOG = (
+    "\n137 commands total — run [bold]onmc commands[/bold] to explore by category, "
+    "or [bold]onmc quickstart[/bold] to get started.\n\n"
+    "[bold]Core commands:[/bold]  "
+    "setup  wrap  autopilot  brief  recall  ui  init"
+)
+
 app = typer.Typer(
     help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
     no_args_is_help=True,
     rich_markup_mode="rich",
+    epilog=_ROOT_EPILOG,
 )
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 spec_app = typer.Typer(

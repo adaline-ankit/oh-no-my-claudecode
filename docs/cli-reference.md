@@ -94,6 +94,7 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ bottleneck      Find what's slowing your agents down.                        │
+│ commands        Browse all onmc commands grouped by category.                │
 │ compare         Side-by-side, read-only comparison of two swarm runs.        │
 │ cost            Spend breakdown and forecast from run receipts.              │
 │ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
@@ -261,6 +262,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ wrap            Make onmc the default layer for Claude Code; manage the      │
 │                 session switch.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
+
+ 137 commands total — run onmc commands to explore by category, or onmc
+ quickstart to get started.
+ Core commands:  setup  wrap  autopilot  brief  recall  ui  init
 ```
 
 ## `onmc achievements`
@@ -1586,6 +1591,39 @@ Usage: onmc codegraph summary [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc commands`
+
+```text
+Usage: onmc commands [OPTIONS]
+
+ Browse all onmc commands grouped by category.
+
+ Default shows Core commands and a one-line summary per category.
+ Use --all to expand every category,
+ --category NAME to filter to one, or
+ --json for machine-readable output.
+
+ Examples:
+
+     onmc commands
+
+     onmc commands --all
+
+     onmc commands --category Memory
+
+     onmc commands --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --all                   List every command under each category (not just     │
+│                         Core).                                               │
+│ --category        NAME  Show only commands in CATEGORY (one of: Core,        │
+│                         Orchestrate, Memory, Trust, Fun, Integrations,       │
+│                         Other).                                              │
+│ --json                  Output as a JSON envelope for pipeline composition.  │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
