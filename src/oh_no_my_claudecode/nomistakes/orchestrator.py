@@ -19,7 +19,7 @@ from oh_no_my_claudecode.nomistakes.models import (
 
 if TYPE_CHECKING:
     from oh_no_my_claudecode.core.service import OnmcService
-    from oh_no_my_claudecode.loop.models import AgentRunner, VerifyRunner
+    from oh_no_my_claudecode.loop.models import AgentRunner, ChangeProbe, VerifyRunner
 
 _AUDIT_ORDER: list[AuditSeverity] = ["critical", "high", "medium", "low", "info"]
 _AUTONOMY_LEVELS: set[str] = {"L0", "L1", "L2", "L3", "L4"}
@@ -45,6 +45,7 @@ def run_nomistakes(
     agent_runner: AgentRunner | None = None,
     verify_runner: VerifyRunner | None = None,
     plan_runner: AgentRunner | None = None,
+    change_probe: ChangeProbe | None = None,
 ) -> NoMistakesResult:
     """Run a PR-ready No-Mistakes gate.
 
@@ -123,6 +124,7 @@ def run_nomistakes(
         execute_model=execute_model,
         plan_runner=plan_runner,
         isolate=isolate,
+        change_probe=change_probe,
     )
     verified = isinstance(autopilot_result, AutopilotResult) and autopilot_result.verified
     gates.append(

@@ -45,6 +45,22 @@ def _verify(passes: bool) -> object:
     return _runner
 
 
+def _changing_probe() -> object:
+    """ChangeProbe reporting a fresh signature each call (agent changed the tree).
+
+    Fake agent runners don't touch real git, so without this the vacuous-pass
+    gate would (correctly, for a true no-op) refuse the win.  These gate tests
+    intend the agent to have made changes, so we simulate that here.
+    """
+    counter = [0]
+
+    def _probe() -> str | None:
+        counter[0] += 1
+        return f"sig-{counter[0]}"
+
+    return _probe
+
+
 def test_nomistakes_approves_only_verified_receipt(sample_repo: Path) -> None:
     svc = _init_service(sample_repo)
 
@@ -53,6 +69,7 @@ def test_nomistakes_approves_only_verified_receipt(sample_repo: Path) -> None:
         "fix cache bug",
         agent_runner=_agent(),
         verify_runner=_verify(True),
+        change_probe=_changing_probe(),
         isolate=False,
         audit_fail_on="high",
     )
@@ -92,6 +109,7 @@ def test_nomistakes_blocks_on_audit_even_if_verify_passes(sample_repo: Path) -> 
         "fix cache bug",
         agent_runner=_agent(),
         verify_runner=_verify(True),
+        change_probe=_changing_probe(),
         isolate=False,
         audit_fail_on="high",
     )
