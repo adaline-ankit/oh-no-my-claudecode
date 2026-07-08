@@ -2700,6 +2700,28 @@ def preflight_command(
             ),
         ),
     ] = False,
+    exact: Annotated[
+        bool,
+        typer.Option(
+            "--exact",
+            help=(
+                "Mirror the CI quality gate exactly: uses the full pytest coverage "
+                "flags (--cov-fail-under=80) and always pins typer<1.0 for the "
+                "cli-reference step.  Provisions via uv when available."
+            ),
+        ),
+    ] = False,
+    fix: Annotated[
+        bool,
+        typer.Option(
+            "--fix",
+            help=(
+                "Auto-fix ruff violations (ruff check --fix) and regenerate "
+                "docs/cli-reference.md with pinned typer<1.0, then re-run the "
+                "exact CI gate and report the result.  Implies --exact."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Run the exact CI quality gate locally, in the same order CI runs it.
 
@@ -2711,6 +2733,12 @@ def preflight_command(
     4. ``pytest tests/``
 
     Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only mypy``.
+
+    Use ``--exact`` to match CI precisely (full coverage flags, typer pin).
+
+    Use ``--fix`` to auto-heal ruff violations + cli-reference drift before
+    re-running the exact gate — useful for a swarm agent self-healing before
+    opening a PR.
 
     Exit codes:
 
@@ -2731,7 +2759,31 @@ def preflight_command(
             raise typer.Exit(code=_fatal(msg))
         steps = only
 
-    report = _service().preflight(steps=steps, provision=provision)
+    if fix:
+        # --fix implies --exact: auto-heal then re-run the exact gate.
+        exact_report = _service().preflight_fix()
+        if as_json:
+            import dataclasses
+
+            payload = {
+                "ok": exact_report.ok,
+                "fix_steps": [dataclasses.asdict(fs) for fs in exact_report.fix_steps],
+                "gate": {
+                    "ok": exact_report.gate.ok,
+                    "steps": [dataclasses.asdict(s) for s in exact_report.gate.steps],
+                },
+            }
+            sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+        else:
+            render_preflight_report(exact_report.gate)
+        if not exact_report.ok:
+            raise typer.Exit(code=1)
+        return
+
+    if exact:
+        report = _service().preflight_exact(steps=steps)
+    else:
+        report = _service().preflight(steps=steps, provision=provision)
 
     if as_json:
         import dataclasses

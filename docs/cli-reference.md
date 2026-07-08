@@ -4752,6 +4752,12 @@ Usage: onmc preflight [OPTIONS]
  Use ``--only`` to run a subset, e.g. ``onmc preflight --only ruff --only
  mypy``.
 
+ Use ``--exact`` to match CI precisely (full coverage flags, typer pin).
+
+ Use ``--fix`` to auto-heal ruff violations + cli-reference drift before
+ re-running the exact gate — useful for a swarm agent self-healing before
+ opening a PR.
+
  Exit codes:
 
  - 0 — every step that ran passed (matches the CI gate)
@@ -4767,6 +4773,14 @@ Usage: onmc preflight [OPTIONS]
 │                          worktree (no dev deps installed) resolves           │
 │                          ruff/mypy/pytest on demand, and pin typer<1.0 for   │
 │                          the cli-reference step to match CI.                 │
+│ --exact                  Mirror the CI quality gate exactly: uses the full   │
+│                          pytest coverage flags (--cov-fail-under=80) and     │
+│                          always pins typer<1.0 for the cli-reference step.   │
+│                          Provisions via uv when available.                   │
+│ --fix                    Auto-fix ruff violations (ruff check --fix) and     │
+│                          regenerate docs/cli-reference.md with pinned        │
+│                          typer<1.0, then re-run the exact CI gate and report │
+│                          the result.  Implies --exact.                       │
 │ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
