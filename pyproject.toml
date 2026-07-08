@@ -77,6 +77,11 @@ mem0 = [
 supermemory = [
   "supermemory>=0.1",
 ]
+# Optional Microsoft AutoGen / AG2 backend.  Absent by default — ``onmc teams
+# export`` works without it (pure); ``onmc teams run`` requires it.
+autogen = [
+  "pyautogen>=0.2",
+]
 # Optional LangChain document loaders.  Absent by default — the langchain
 # importer reports itself unavailable gracefully until this extra is installed.
 langchain = [
@@ -148,6 +153,11 @@ ignore_missing_imports = true
 # Optional fastembed ONNX embedder — no type stubs bundled.
 [[tool.mypy.overrides]]
 module = ["fastembed"]
+ignore_missing_imports = true
+
+# Optional AutoGen / AG2 backends — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["autogen", "ag2"]
 ignore_missing_imports = true
 
 # Optional LangChain document loaders — no type stubs bundled.
