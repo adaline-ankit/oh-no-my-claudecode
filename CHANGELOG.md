@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.95.0] — 2026-07-06
+
+### Added
+
+- **`onmc ui --serve`** — shared dashboard: bind beyond localhost with optional bearer-token auth (`--token` / `ONMC_UI_TOKEN`) and a `POST /api/live/ingest` endpoint so a remote onmc can push telemetry events to one central dashboard. Default localhost/no-auth behavior unchanged. (#308)
+- **`onmc wrap --managed`** — org hard-lock: install the onmc hooks into Claude Code's managed-settings path (per-OS default + `--managed-path` override) so users cannot disable the wrap — making `/onmc` mandatory org-wide. Merge preserves other managed keys; `onmc unwrap --managed` removes only onmc's; graceful (prints manual JSON) when the path isn't writable. `onmc wrap status` reports managed enforcement. (#309)
+
+### Fixed
+
+- **`onmc land`** — fetch unresolved review threads via `gh api graphql` instead of the invalid `gh pr view --json reviewThreads` field (the 2nd bug dogfooding the lander surfaced); `land status`/`run` now query PR state without erroring. (#307)
+
 ## [0.94.0] — 2026-07-06
 
 ### Added
