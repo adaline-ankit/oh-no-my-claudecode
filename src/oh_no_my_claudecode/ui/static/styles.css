@@ -813,6 +813,31 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
   #swarm-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* Live Activity panel (Agents view) */
+.agents-live-panel { margin-top: 16px; }
+.agents-live-sub { color: var(--muted); font-size: 11px; }
+.agents-live-body { display: grid; grid-template-columns: 1fr 2fr; gap: 0; }
+.agents-live-col { padding: 10px 14px 14px; }
+.agents-live-col + .agents-live-col { border-left: 1px solid var(--line); }
+.agents-live-colhead { font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.agents-active-list, .agents-live-feed { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.agents-live-idle { color: var(--muted); font-size: 12px; padding: 4px 0; }
+.agents-live-agent-row { display: flex; align-items: center; gap: 7px; padding: 5px 8px; background: var(--surface-alt); border-radius: var(--radius); }
+.agents-live-agent-unit { flex: 1; min-width: 0; font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agents-live-agent-id { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+.agents-live-agent-since { flex: none; color: var(--blue); font-size: 10px; font-variant-numeric: tabular-nums; }
+.agents-live-event-row { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 2px; border-bottom: 1px solid var(--line); }
+.agents-live-event-row:last-child { border-bottom: 0; }
+.agents-live-event-kind { flex: none; font-weight: 600; color: var(--ink); min-width: 90px; }
+.agents-live-event-agent { flex: 1; min-width: 0; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agents-live-event-tool { flex: none; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--blue); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agents-live-event-ts { flex: none; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 720px) {
+  .agents-live-body { grid-template-columns: 1fr; }
+  .agents-live-col + .agents-live-col { border-left: 0; border-top: 1px solid var(--line); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }

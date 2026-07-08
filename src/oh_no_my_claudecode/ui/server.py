@@ -14,7 +14,7 @@ from importlib.resources import files
 from ipaddress import ip_address
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from oh_no_my_claudecode.core.repo import path_bucket
 from oh_no_my_claudecode.core.service import OnmcService
@@ -53,6 +53,42 @@ def build_agents_payload(repo_root: Path) -> dict[str, Any]:
     return {
         "local": _swarms_payload(repo_root),
         "global": _global_swarms_payload(),
+    }
+
+
+def build_live_payload(live_dir: Path, *, since: float | None = None) -> dict[str, Any]:
+    """Active-agent + event-feed payload from the telemetry bus.
+
+    Pure given a fixed filesystem state — call it in tests by seeding
+    ``<live_dir>/events.jsonl`` with fixture event lines.  Graceful when
+    ``live_dir`` is absent or empty (returns zeroed response, no error).
+
+    Parameters
+    ----------
+    live_dir:
+        Directory containing ``events.jsonl`` (e.g. ``<repo>/.onmc/live/``).
+    since:
+        Unix timestamp (float).  Only events with ``ts > since`` appear in the
+        returned ``events`` list.  ``active`` is always derived from the full
+        history so start/stop pairing is correct across restarts.
+
+    Returns
+    -------
+    dict with keys ``active`` (list of active-agent dicts), ``events``
+    (serialised Event dicts filtered by ``since``), and ``max_ts`` (float).
+    """
+    from oh_no_my_claudecode import telemetry  # local import avoids circular deps
+
+    all_events = telemetry.read_events(live_dir)
+    filtered = (
+        telemetry.read_events(live_dir, since_ts=since) if since is not None else all_events
+    )
+    active = telemetry.active_agents(all_events)
+    max_ts = max((ev.ts for ev in all_events), default=0.0)
+    return {
+        "active": active,
+        "events": [dataclasses.asdict(ev) for ev in filtered],
+        "max_ts": max_ts,
     }
 
 
@@ -232,6 +268,17 @@ def _handler_factory(
             path = urlsplit(self.path).path
             if path == "/api/dashboard":
                 self._send_json(build_dashboard_payload(service))
+                return
+            if path == "/api/live":
+                params = parse_qs(urlsplit(self.path).query)
+                raw_since = params.get("since", ["0"])[0]
+                try:
+                    since_f = float(raw_since)
+                    since_arg: float | None = since_f if since_f > 0.0 else None
+                except ValueError:
+                    since_arg = None
+                live_dir = Path(service.status()["repo_root"]) / ".onmc" / "live"
+                self._send_json(build_live_payload(live_dir, since=since_arg))
                 return
             asset = _asset_for_path(path)
             if asset is None or not asset.is_file():
