@@ -294,7 +294,7 @@ def _build_config_hash(config: LoopConfig) -> str:
 
         max_iterations|budget_tokens|max_cost_usd|max_wall_seconds|
         verify_command|escalation_threshold|no_progress_window|
-        duplicate_action_limit|repeated_error_limit
+        duplicate_action_limit|repeated_error_limit|no_change_limit
 
     Any change to any of these knobs produces a different hash, enabling
     reproducibility checks between runs.
@@ -310,6 +310,7 @@ def _build_config_hash(config: LoopConfig) -> str:
             str(config.no_progress_window),
             str(config.duplicate_action_limit),
             str(config.repeated_error_limit),
+            str(config.no_change_limit),
         ]
     )
     return _sha256_hex(parts)

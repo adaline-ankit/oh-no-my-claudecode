@@ -82,6 +82,37 @@ def _fake_verify(*, passes: bool, output: str = "") -> object:
     return _runner
 
 
+def _changing_probe() -> object:
+    """Return a ChangeProbe that reports a NEW signature every call.
+
+    Fake agent runners don't actually touch the git working tree, so the real
+    git-backed probe would see a clean tree and (correctly, for a no-op) refuse
+    the win — breaking loop-control tests that only exercise fake runners.  This
+    fake reports a distinct signature each call so ``pre_sig != post_sig``,
+    i.e. "the agent changed something", which is what these tests intend.
+    """
+    counter = {"n": 0}
+
+    def _probe() -> str | None:
+        counter["n"] += 1
+        return f"sig-{counter['n']}"
+
+    return _probe
+
+
+def _static_probe() -> object:
+    """Return a ChangeProbe that reports the SAME signature every call.
+
+    Models "the agent changed nothing" — used to exercise the vacuous-pass gate
+    deterministically without a real git repo.
+    """
+
+    def _probe() -> str | None:
+        return "unchanged"
+
+    return _probe
+
+
 # ---------------------------------------------------------------------------
 # Service fixture backed by sample_repo
 # ---------------------------------------------------------------------------
@@ -120,6 +151,7 @@ def test_win_run_records_success_memory(sample_repo: Path) -> None:
         "fix the broken import",
         agent_runner=_fake_agent("patched import", tokens=200),
         verify_runner=_fake_verify(passes=True, output="1 passed"),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
 
@@ -217,6 +249,7 @@ def test_verified_only_when_converged_and_verify_passed(sample_repo: Path) -> No
         "check verify flag",
         agent_runner=_fake_agent("done"),
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
     assert result.verified is True
@@ -249,6 +282,7 @@ def test_receipt_path_surfaced_on_real_run(sample_repo: Path) -> None:
         "fix the cache module",
         agent_runner=_fake_agent("fixed cache", tokens=150),
         verify_runner=_fake_verify(passes=True, output="ok"),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
 
@@ -272,6 +306,7 @@ def test_service_loop_with_injected_runners(sample_repo: Path) -> None:
         "injected runner test",
         agent_runner=_fake_agent("done", tokens=42),
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
     )
 
     assert isinstance(loop_result, LoopResult)
@@ -307,6 +342,7 @@ def test_brain_delta_positive_on_win(sample_repo: Path) -> None:
         "add rate limiting",
         agent_runner=_fake_agent("added rate limit"),
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
 
@@ -399,6 +435,7 @@ def test_plan_step_invokes_plan_runner_and_injects_plan(sample_repo: Path) -> No
         execute_model="claude-haiku-fake",
         agent_runner=_fake_act_runner,
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
 
@@ -451,6 +488,7 @@ def test_no_plan_flags_unchanged_behavior(sample_repo: Path) -> None:
         "fix the import",
         agent_runner=_fake_agent("done"),
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
         # plan_runner is NOT wired up via plan_model; we pass it directly to
         # confirm it's ignored when plan_model is None.
         now=_FIXED_NOW,
@@ -484,6 +522,7 @@ def test_plan_step_failure_falls_back_gracefully(sample_repo: Path) -> None:
         plan_model="expensive-model",
         agent_runner=_fake_agent("fixed it"),
         verify_runner=_fake_verify(passes=True),
+        change_probe=_changing_probe(),
         now=_FIXED_NOW,
     )
 

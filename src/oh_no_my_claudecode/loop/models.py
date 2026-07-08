@@ -64,6 +64,15 @@ class LoopConfig:
     """Stop with stop_reason='repeated-error' when the verify-output head is
     identical for this many *consecutive* losses in a row.  Default 0 = disabled
     (opt-in).  A value of 3 is a good starting point."""
+    no_change_limit: int = 2
+    """Stop with stop_reason='no-changes' after this many *consecutive* iterations
+    where the verify command passed but the agent made NO file changes to the
+    working tree.  Such a pass is vacuous — it reflects pre-existing state, not
+    that the goal was addressed — so it can NEVER be counted as a convergence
+    win.  Guards against the false-green failure mode where an agent's edits are
+    blocked (e.g. pending permission approval) yet a lenient verifier still exits
+    0.  Default 2 (allow one retry, e.g. after escalation).  0 disables the
+    dedicated breaker, but a vacuous pass is still refused a win regardless."""
     isolate: bool = False
     """When True, run the loop agent inside a fresh ``git worktree add`` so all
     file changes are isolated from the caller's working tree.  On success
@@ -111,6 +120,25 @@ class VerifyRunner(Protocol):
 
     def __call__(self, command: str) -> VerifyOutcome:
         """Run verify command and return outcome."""
+        ...
+
+
+class ChangeProbe(Protocol):
+    """Injectable working-tree change probe.
+
+    Returns an opaque signature of the working tree's current state (e.g. the
+    output of ``git status --porcelain``).  The engine captures the signature
+    before and after each agent invocation; if it is unchanged AND the verify
+    command passed, the pass is *vacuous* (the agent did no work) and is refused
+    a convergence win.
+
+    Returns ``None`` when the state cannot be determined (git unavailable or the
+    path is not a git repository); the engine then skips the vacuous-pass gate
+    and preserves legacy behaviour.
+    """
+
+    def __call__(self) -> str | None:
+        """Return a working-tree signature, or ``None`` when undeterminable."""
         ...
 
 

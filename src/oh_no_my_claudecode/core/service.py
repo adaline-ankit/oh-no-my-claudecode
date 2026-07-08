@@ -36,7 +36,12 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.integrations.gh_aw import GhAwInitResult
     from oh_no_my_claudecode.integrations.plug import PlugResult
     from oh_no_my_claudecode.ledger.accounting import LedgerSummary
-    from oh_no_my_claudecode.loop.models import AgentRunner, LoopResult, VerifyRunner
+    from oh_no_my_claudecode.loop.models import (
+        AgentRunner,
+        ChangeProbe,
+        LoopResult,
+        VerifyRunner,
+    )
     from oh_no_my_claudecode.mcp_trust.gateway import Decision as McpDecision
     from oh_no_my_claudecode.mcp_trust.gateway import ToolCall as McpToolCall
     from oh_no_my_claudecode.pack import ContextPack
@@ -648,6 +653,7 @@ class OnmcService:
         verify_runner: VerifyRunner | None = None,
         isolate: bool = False,
         resume: bool = False,
+        change_probe: ChangeProbe | None = None,
     ) -> tuple[LoopResult, Path | None]:
         """Run a memory-grounded autonomous loop against *goal*.
 
@@ -819,6 +825,7 @@ class OnmcService:
             verify_runner=resolved_verify_runner,
             checkpoint_store=checkpoint_store,
             resume=resume,
+            change_probe=change_probe,
         )
 
         wall_seconds = _time.monotonic() - wall_start
@@ -859,6 +866,7 @@ class OnmcService:
         execute_model: str | None = None,
         plan_runner: AgentRunner | None = None,
         isolate: bool = False,
+        change_probe: ChangeProbe | None = None,
     ) -> AutopilotResult:
         """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle against *goal*.
 
@@ -919,6 +927,7 @@ class OnmcService:
             execute_model=execute_model,
             plan_runner=plan_runner,
             isolate=isolate,
+            change_probe=change_probe,
         )
 
     def latest_compaction_snapshot(self) -> CompactionSnapshotRecord | None:

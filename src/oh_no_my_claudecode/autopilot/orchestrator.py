@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.loop.models import (
         AgentRunner,
         AgentRunResult,
+        ChangeProbe,
         LoopResult,
         VerifyRunner,
     )
@@ -232,6 +233,7 @@ def run_autopilot(
     execute_model: str | None = None,
     plan_runner: AgentRunner | None = None,
     isolate: bool = False,
+    change_probe: ChangeProbe | None = None,
     now: datetime | None = None,  # injectable for tests
 ) -> AutopilotResult:
     """Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle.
@@ -383,6 +385,7 @@ def run_autopilot(
         agent_runner=resolved_agent_runner,
         verify_runner=verify_runner,
         isolate=isolate,
+        change_probe=change_probe,
     )
 
     # ── PROVE ─────────────────────────────────────────────────────────────────

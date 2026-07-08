@@ -423,3 +423,143 @@ def test_agent_error_does_not_burn_remaining_iterations(tmp_path: Path) -> None:
 
     assert result.stop_reason == "agent-error"
     assert len(result.iterations) == 1  # stopped immediately
+
+
+# ---------------------------------------------------------------------------
+# Vacuous-pass gate — a verify pass with zero file changes is NOT a win
+# (regression for the autopilot false-green bug: an agent whose edits are
+# blocked produces no diff, yet a lenient verifier still exits 0)
+# ---------------------------------------------------------------------------
+
+
+def _changing_probe() -> object:
+    """ChangeProbe that reports a NEW signature each call (agent changed the tree)."""
+    counter = [0]
+
+    def _probe() -> str | None:
+        counter[0] += 1
+        return f"sig-{counter[0]}"
+
+    return _probe
+
+
+def _static_probe(signature: str | None = "unchanged") -> object:
+    """ChangeProbe that reports the SAME signature each call (no change), or None."""
+
+    def _probe() -> str | None:
+        return signature
+
+    return _probe
+
+
+def test_vacuous_pass_is_not_a_win(tmp_path: Path) -> None:
+    """Verify passes but the working tree did not change → NOT converged."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="add a division function")
+    # no_change_limit high so the run exhausts iterations rather than early-stop,
+    # letting us inspect the per-iteration verdict.
+    config = LoopConfig(max_iterations=1)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("claims it added divide()"),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_static_probe(),  # tree never changes
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False, "a no-op verify pass must not converge"
+    assert len(result.iterations) == 1
+    it = result.iterations[0]
+    assert it.outcome == "loss"
+    assert it.verify_passed is False
+    assert "[no-op]" in it.verify_output
+
+
+def test_real_change_pass_converges(tmp_path: Path) -> None:
+    """Verify passes AND the tree changed → converged (the healthy path)."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="add a division function")
+    config = LoopConfig(max_iterations=5)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("wrote divide() + tests", files=["hello.py"]),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_changing_probe(),  # tree changes each iteration
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is True
+    assert result.stop_reason == "converged"
+    assert result.iterations[-1].outcome == "win"
+
+
+def test_undeterminable_probe_preserves_legacy_win(tmp_path: Path) -> None:
+    """A probe that returns None (git unavailable) disables the gate → legacy win."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="fix the flaky test")
+    config = LoopConfig(max_iterations=5)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("did something"),
+        verify_runner=_fake_verify(passes=True, output="ok"),
+        change_probe=_static_probe(None),  # cannot determine → skip gate
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is True
+    assert result.iterations[-1].outcome == "win"
+
+
+def test_default_probe_outside_git_repo_preserves_win(tmp_path: Path) -> None:
+    """With no injected probe in a non-git tmp dir, the default git probe returns
+    None, so behaviour is unchanged (converges)."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="tidy imports")
+    config = LoopConfig(max_iterations=5)
+
+    result = run_loop(
+        storage,
+        tmp_path,  # not a git repo
+        spec,
+        config,
+        agent_runner=_fake_agent("tidied"),
+        verify_runner=_fake_verify(passes=True, output="ok"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is True
+
+
+def test_no_change_breaker_stops_after_limit(tmp_path: Path) -> None:
+    """Consecutive vacuous passes trip the dedicated 'no-changes' breaker."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="build an ecommerce platform")
+    config = LoopConfig(max_iterations=10, no_change_limit=2)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("declared victory, changed nothing"),
+        verify_runner=_fake_verify(passes=True, output="1 passed"),
+        change_probe=_static_probe(),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "no-changes"
+    assert len(result.iterations) == 2  # stopped at the limit, no cost beyond it
+    assert all(it.outcome == "loss" for it in result.iterations)

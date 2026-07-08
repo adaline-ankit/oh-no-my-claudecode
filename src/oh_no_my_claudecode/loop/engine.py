@@ -29,6 +29,7 @@ from oh_no_my_claudecode.loop.checkpoint import (
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
     AgentRunResult,
+    ChangeProbe,
     IsolationProvider,
     IterationContract,
     LoopConfig,
@@ -44,6 +45,37 @@ from oh_no_my_claudecode.utils.time import utc_now
 
 _VERIFY_TIMEOUT = 120  # seconds; subprocess guard
 _MAX_VERIFY_OUTPUT = 2000  # chars stored per contract
+_CHANGE_PROBE_TIMEOUT = 15  # seconds; git status guard
+
+
+def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
+    """Build the default working-tree change probe backed by ``git status``.
+
+    Uses ``git status --porcelain`` (NOT ``git diff``) so that *untracked* new
+    files created by the agent count as changes — a plain ``git diff`` would miss
+    a freshly-written new file and wrongly flag a legitimate run as a no-op.
+
+    Returns ``None`` when git is unavailable or the path is not a repository, so
+    the engine cleanly skips the vacuous-pass gate in non-git environments
+    (e.g. unit tests running in a bare tmp dir).
+    """
+
+    def _probe() -> str | None:
+        try:
+            result = subprocess.run(  # noqa: S603
+                ["git", "-C", str(repo_root), "status", "--porcelain"],  # noqa: S607
+                capture_output=True,
+                text=True,
+                timeout=_CHANGE_PROBE_TIMEOUT,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout
+
+    return _probe
 
 
 def _default_verify_runner(command: str) -> VerifyOutcome:
@@ -248,6 +280,7 @@ def run_loop(
     checkpoint_store: CheckpointStore | None = None,
     resume: bool = False,
     should_continue: Callable[[], bool] | None = None,
+    change_probe: ChangeProbe | None = None,
 ) -> LoopResult:
     """Run a memory-grounded loop until convergence, budget, or max iterations.
 
@@ -303,14 +336,24 @@ def run_loop(
         loop stops immediately with ``stop_reason="aborted"`` without running
         the agent or verify for that iteration.  ``None`` (default) means no
         external abort signal — existing behaviour is unchanged.
+    change_probe:
+        Optional injectable :class:`~oh_no_my_claudecode.loop.models.ChangeProbe`
+        used to detect whether the agent actually modified the working tree each
+        iteration.  When ``None`` (default), a git-``status``-backed probe over
+        the effective repo root is used.  When the probe reports NO change and
+        the verify command nonetheless passed, that pass is *vacuous* and is
+        refused a convergence win (guards the false-green failure mode where an
+        agent's edits are blocked yet a lenient verifier exits 0).  A probe that
+        returns ``None`` (git unavailable / not a repo) disables the gate.
+        Tests inject a fake for deterministic behaviour.
 
     Returns
     -------
     LoopResult
         stop_reason is one of:
         'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
-        'wall-time' | 'duplicate-action' | 'repeated-error' | 'aborted' |
-        'agent-error'.
+        'wall-time' | 'duplicate-action' | 'repeated-error' | 'no-changes' |
+        'aborted' | 'agent-error'.
     """
     import logging as _logging
 
@@ -345,6 +388,14 @@ def run_loop(
                 "worktree isolation: setup failed — running in-place (no isolation)"
             )
 
+    # --- Working-tree change probe ---
+    # Detects whether the agent actually modified files each iteration.  A
+    # verify pass with zero changes is vacuous and never counts as a win.
+    _probe: ChangeProbe = (
+        change_probe if change_probe is not None
+        else _make_git_change_probe(_effective_repo_root)
+    )
+
     # --- Checkpoint / resume setup ---
     _ckpt_sha8: str | None = None
     if checkpoint_store is not None:
@@ -361,6 +412,8 @@ def run_loop(
     # Circuit-breaker state.
     consecutive_same_error: int = 0
     last_error_head: str | None = None
+    # Consecutive iterations that passed verify but changed nothing (vacuous).
+    consecutive_noops: int = 0
 
     # Restore prior state when resuming from checkpoint.
     _resume_from: int = 1  # first iteration index to execute (1 = start fresh)
@@ -479,6 +532,10 @@ def run_loop(
             + brief
         )
 
+        # Capture the working-tree signature BEFORE the agent acts, so we can
+        # tell whether this iteration actually changed anything.
+        pre_sig = _probe()
+
         # Agent acts.
         agent_result: AgentRunResult = agent_runner(prompt, escalation_level=escalation_level)
         if agent_result.tokens is not None:
@@ -511,15 +568,42 @@ def run_loop(
 
         # Verify.
         verify_outcome: VerifyOutcome = verify_runner(config.verify_command)
-        outcome: str = "win" if verify_outcome.passed else "loss"
+
+        # --- Vacuous-pass gate ---
+        # Determine whether the agent actually changed the working tree.  A
+        # verify pass with zero changes is vacuous: the verifier only exercised
+        # pre-existing state, so it proves nothing about the goal.  This closes
+        # the false-green hole where an agent's edits are blocked (e.g. pending
+        # permission approval) yet a lenient verifier still exits 0 and the loop
+        # stamps a "verified / converged" receipt.
+        post_sig = _probe()
+        if pre_sig is None or post_sig is None:
+            made_changes: bool | None = None  # undeterminable (not a git repo)
+        else:
+            made_changes = post_sig != pre_sig
+
+        vacuous_pass = verify_outcome.passed and made_changes is False
+        if vacuous_pass:
+            verify_passed = False
+            outcome: str = "loss"
+            verify_output_text = (
+                "[no-op] agent produced no file changes this iteration; the "
+                "verify command passed but the result is vacuous — it reflects "
+                "pre-existing state, not that the goal was addressed.\n\n"
+                + verify_outcome.output
+            )
+        else:
+            verify_passed = verify_outcome.passed
+            outcome = "win" if verify_outcome.passed else "loss"
+            verify_output_text = verify_outcome.output
 
         contract = IterationContract(
             iteration=i,
             prediction=agent_result.prediction,
             action_summary=agent_result.output[:400],
             files_touched=list(agent_result.files_touched),
-            verify_passed=verify_outcome.passed,
-            verify_output=verify_outcome.output[:_MAX_VERIFY_OUTPUT],
+            verify_passed=verify_passed,
+            verify_output=verify_output_text[:_MAX_VERIFY_OUTPUT],
             outcome=outcome,  # type: ignore[arg-type]
             tokens=agent_result.tokens,
         )
@@ -529,6 +613,7 @@ def run_loop(
             # WIN: record success memory first, then persist checkpoint (with
             # win contract) so a crash after memory write but before return
             # can be detected.  _make_result will clear the checkpoint.
+            consecutive_noops = 0
             mid = _record_win(storage, spec.goal, contract, ref_now)
             recorded_memory_ids.append(mid)
             _save_checkpoint()
@@ -544,6 +629,22 @@ def run_loop(
             if consecutive_losses >= config.escalation_threshold:
                 escalation_level += 1
                 consecutive_losses = 0
+
+            # --- Circuit breaker 0: no-changes (vacuous pass) ---
+            # A verify that passed while the agent changed nothing means the
+            # agent is stuck (blocked edits, no-op output).  Stop loudly after
+            # a bounded number of consecutive no-ops so we never burn cost on a
+            # loop that cannot make progress and never mistake it for success.
+            if vacuous_pass:
+                consecutive_noops += 1
+                if (
+                    config.no_change_limit > 0
+                    and consecutive_noops >= config.no_change_limit
+                ):
+                    _save_checkpoint()
+                    return _make_result(False, "no-changes")
+            else:
+                consecutive_noops = 0
 
             sig = _iteration_signature(contract)
 
