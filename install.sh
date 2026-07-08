@@ -146,7 +146,8 @@ else
     SETUP_CMD="onmc setup --yes"
   fi
 
-  # shellcheck disable=SC2086 — intentional word-splitting for SETUP_CMD arguments
+  # Intentional word-splitting for SETUP_CMD arguments.
+  # shellcheck disable=SC2086
   if ! (cd "${INTEGRATE_DIR}" && ${SETUP_CMD}) </dev/null; then
     warn "Integration step ('${SETUP_CMD}') exited non-zero."
     warn "Run it manually later: onmc setup"
