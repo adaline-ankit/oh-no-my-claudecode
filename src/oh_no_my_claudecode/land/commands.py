@@ -53,7 +53,7 @@ class _RealGhClient:
                 "view",
                 str(pr),
                 "--json",
-                "mergeStateStatus,merged,statusCheckRollup,reviewThreads",
+                "mergeStateStatus,state,statusCheckRollup,reviewThreads",
             ],
             capture_output=True,
             text=True,
@@ -78,7 +78,7 @@ class _RealGhClient:
         unresolved = [t for t in threads if not t.get("isResolved", True)]
 
         return {
-            "merged": bool(data.get("merged", False)),
+            "merged": str(data.get("state", "")).upper() == "MERGED",
             "mergeStateStatus": str(data.get("mergeStateStatus", "UNKNOWN")),
             "checks": checks,
             "unresolved_threads": len(unresolved),

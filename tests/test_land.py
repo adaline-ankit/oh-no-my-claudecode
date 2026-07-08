@@ -501,3 +501,49 @@ class TestLandCliRun:
         monkeypatch.setattr(lc, "_build_gh_client", _fake_build_gh)
         result = runner.invoke(app, ["land", "run", "11"])
         assert result.exit_code != 0
+
+
+class TestRealGhClientMergedField:
+    """Regression: pr_state must derive `merged` from `state`, not a
+    nonexistent `gh pr view --json merged` field (which errors out)."""
+
+    def _run_factory(self, payload: dict[str, Any]):
+        import subprocess
+
+        def _fake_run(cmd, capture_output=True, text=True, check=False):  # noqa: ANN001,ANN202
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(payload), stderr="")
+
+        return _fake_run
+
+    def test_state_merged_maps_to_merged_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import oh_no_my_claudecode.land.commands as lc
+
+        monkeypatch.setattr(lc.subprocess, "run", self._run_factory({"state": "MERGED"}))
+        assert lc._RealGhClient().pr_state(1)["merged"] is True
+
+    def test_open_state_maps_to_merged_false(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import oh_no_my_claudecode.land.commands as lc
+
+        monkeypatch.setattr(
+            lc.subprocess,
+            "run",
+            self._run_factory({"state": "OPEN", "mergeStateStatus": "CLEAN"}),
+        )
+        assert lc._RealGhClient().pr_state(1)["merged"] is False
+
+    def test_json_query_requests_state_not_merged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import oh_no_my_claudecode.land.commands as lc
+
+        seen: dict[str, str] = {}
+
+        def _capture(cmd, capture_output=True, text=True, check=False):  # noqa: ANN001,ANN202
+            import subprocess
+
+            seen["fields"] = cmd[cmd.index("--json") + 1]
+            out = json.dumps({"state": "OPEN"})
+            return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
+
+        monkeypatch.setattr(lc.subprocess, "run", _capture)
+        lc._RealGhClient().pr_state(1)
+        assert "state" in seen["fields"]
+        assert "merged" not in seen["fields"].split(",")
