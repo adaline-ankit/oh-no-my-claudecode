@@ -116,6 +116,30 @@ app = typer.Typer(
     rich_markup_mode="rich",
     epilog=_ROOT_EPILOG,
 )
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        from oh_no_my_claudecode import __version__
+
+        console.print(f"onmc {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the onmc version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Memory-grounded autonomous coding loops for Claude Code and Codex."""
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 spec_app = typer.Typer(
     help="Inspect and validate the Agent Memory open spec.", no_args_is_help=True
