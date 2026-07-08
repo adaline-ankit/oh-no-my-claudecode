@@ -75,16 +75,16 @@ INSTALL_CMD=""
 
 if command -v uv >/dev/null 2>&1; then
   INSTALLER="uv"
-  INSTALL_CMD="uv tool install oh-no-my-claudecode"
+  INSTALL_CMD="uv tool install --force oh-no-my-claudecode"
 elif command -v pipx >/dev/null 2>&1; then
   INSTALLER="pipx"
-  INSTALL_CMD="pipx install oh-no-my-claudecode"
+  INSTALL_CMD="pipx install --force oh-no-my-claudecode"
 elif command -v pip >/dev/null 2>&1; then
   INSTALLER="pip"
-  INSTALL_CMD="pip install --user oh-no-my-claudecode"
+  INSTALL_CMD="pip install --user --upgrade oh-no-my-claudecode"
 elif command -v pip3 >/dev/null 2>&1; then
   INSTALLER="pip3"
-  INSTALL_CMD="pip3 install --user oh-no-my-claudecode"
+  INSTALL_CMD="pip3 install --user --upgrade oh-no-my-claudecode"
 else
   fatal "No Python package manager found (tried: uv, pipx, pip, pip3).
 Install one of:
@@ -137,14 +137,18 @@ else
 
   info "Running integration in: ${INTEGRATE_DIR}"
 
-  # Try `onmc quickstart --yes` first (newer versions); fall back to `onmc setup`
+  # Try `onmc quickstart --yes` first (newer versions); fall back to `onmc setup --yes`.
+  # Both run with stdin redirected from /dev/null so a curl|bash pipe cannot feed
+  # the setup wizard (which would loop forever consuming the script text as answers).
   if onmc quickstart --help >/dev/null 2>&1; then
     SETUP_CMD="onmc quickstart --yes"
   else
-    SETUP_CMD="onmc setup"
+    SETUP_CMD="onmc setup --yes"
   fi
 
-  if ! (cd "${INTEGRATE_DIR}" && ${SETUP_CMD}); then
+  # Intentional word-splitting for SETUP_CMD arguments.
+  # shellcheck disable=SC2086
+  if ! (cd "${INTEGRATE_DIR}" && ${SETUP_CMD}) </dev/null; then
     warn "Integration step ('${SETUP_CMD}') exited non-zero."
     warn "Run it manually later: onmc setup"
   else

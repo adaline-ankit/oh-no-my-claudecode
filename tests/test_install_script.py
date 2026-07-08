@@ -68,35 +68,35 @@ def test_install_sh_no_sudo() -> None:
 
 
 def test_install_sh_uv_install_present() -> None:
-    """install.sh must attempt 'uv tool install oh-no-my-claudecode'."""
+    """install.sh must attempt 'uv tool install --force oh-no-my-claudecode'."""
     text = script_text()
-    assert "uv tool install oh-no-my-claudecode" in text, (
-        "uv install command not found in install.sh"
+    assert "uv tool install --force oh-no-my-claudecode" in text, (
+        "uv install command not found in install.sh (expected --force flag)"
     )
 
 
 def test_install_sh_pipx_install_present() -> None:
-    """install.sh must attempt 'pipx install oh-no-my-claudecode'."""
+    """install.sh must attempt 'pipx install --force oh-no-my-claudecode'."""
     text = script_text()
-    assert "pipx install oh-no-my-claudecode" in text, (
-        "pipx install command not found in install.sh"
+    assert "pipx install --force oh-no-my-claudecode" in text, (
+        "pipx install command not found in install.sh (expected --force flag)"
     )
 
 
 def test_install_sh_pip_install_present() -> None:
-    """install.sh must attempt 'pip install --user oh-no-my-claudecode'."""
+    """install.sh must attempt 'pip install --user --upgrade oh-no-my-claudecode'."""
     text = script_text()
-    assert "pip install --user oh-no-my-claudecode" in text, (
-        "pip install --user command not found in install.sh"
+    assert "pip install --user --upgrade oh-no-my-claudecode" in text, (
+        "pip install --user --upgrade command not found in install.sh"
     )
 
 
 def test_install_sh_fallback_order() -> None:
     """uv must appear before pipx which must appear before pip in the script."""
     text = script_text()
-    uv_pos = text.find("uv tool install oh-no-my-claudecode")
-    pipx_pos = text.find("pipx install oh-no-my-claudecode")
-    pip_pos = text.find("pip install --user oh-no-my-claudecode")
+    uv_pos = text.find("uv tool install --force oh-no-my-claudecode")
+    pipx_pos = text.find("pipx install --force oh-no-my-claudecode")
+    pip_pos = text.find("pip install --user --upgrade oh-no-my-claudecode")
     assert uv_pos != -1, "uv install not found"
     assert pipx_pos != -1, "pipx install not found"
     assert pip_pos != -1, "pip install not found"
@@ -167,6 +167,74 @@ def test_install_sh_help_flag_present() -> None:
     """Script must handle --help / -h flags."""
     text = script_text()
     assert "--help" in text, "install.sh must support --help"
+
+
+# ---------------------------------------------------------------------------
+# 8. Force-upgrade: existing installs must actually update to latest
+# ---------------------------------------------------------------------------
+
+
+def test_install_sh_uv_force_upgrade() -> None:
+    """uv branch must pass --force so an existing install is replaced."""
+    text = script_text()
+    assert "uv tool install --force oh-no-my-claudecode" in text, (
+        "uv branch must use '--force' to upgrade existing installs"
+    )
+
+
+def test_install_sh_pipx_force_upgrade() -> None:
+    """pipx branch must pass --force so an existing install is replaced."""
+    text = script_text()
+    assert "pipx install --force oh-no-my-claudecode" in text, (
+        "pipx branch must use '--force' to upgrade existing installs"
+    )
+
+
+def test_install_sh_pip_upgrade_flag() -> None:
+    """pip and pip3 branches must pass --upgrade so the package is updated."""
+    text = script_text()
+    assert "pip install --user --upgrade oh-no-my-claudecode" in text, (
+        "pip branch must use '--upgrade' to update existing installs"
+    )
+    assert "pip3 install --user --upgrade oh-no-my-claudecode" in text, (
+        "pip3 branch must use '--upgrade' to update existing installs"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 9. Integration stdin isolation (curl|bash safety)
+# ---------------------------------------------------------------------------
+
+
+def test_install_sh_integration_stdin_devnull() -> None:
+    """Integration subshell must redirect stdin from /dev/null.
+
+    Without this, curl|bash pipes the installer script text into the setup
+    wizard as stdin, which causes infinite loops on y/n confirms.
+    """
+    text = script_text()
+    assert "</dev/null" in text, (
+        "install.sh must redirect stdin from /dev/null for the integration step "
+        "so curl|bash pipes cannot feed the setup wizard"
+    )
+
+
+def test_install_sh_setup_fallback_uses_yes_flag() -> None:
+    """Fallback 'onmc setup' must include --yes to avoid interactive prompts."""
+    text = script_text()
+    assert "onmc setup --yes" in text, (
+        "install.sh fallback must use 'onmc setup --yes', not bare 'onmc setup'"
+    )
+    # Verify bare 'onmc setup' (without --yes) is not used as the actual command
+    # (it can appear in warning messages, but the SETUP_CMD assignment must be --yes)
+    import re
+
+    bare_setup_assignments = re.findall(
+        r'SETUP_CMD=["\']onmc setup["\']', text
+    )
+    assert bare_setup_assignments == [], (
+        f"SETUP_CMD must not be set to bare 'onmc setup': {bare_setup_assignments}"
+    )
 
 
 # ---------------------------------------------------------------------------

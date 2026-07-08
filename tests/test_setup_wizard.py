@@ -288,8 +288,77 @@ def test_should_seed_interactively_false_when_yes() -> None:
     assert should_seed_interactively(1, yes=True) is False
 
 
-def test_should_seed_interactively_true_when_sparse_and_interactive() -> None:
-    """Interactive mode with <5 memories should offer seeding."""
-    assert should_seed_interactively(0, yes=False) is True
-    assert should_seed_interactively(4, yes=False) is True
-    assert should_seed_interactively(5, yes=False) is False
+def test_should_seed_interactively_true_when_sparse_and_interactive(
+    monkeypatch: object,
+) -> None:
+    """Interactive TTY mode with <5 memories should offer seeding."""
+    import sys as _sys
+
+    import oh_no_my_claudecode.setup.wizard as _wiz
+
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: True)
+    assert _wiz.should_seed_interactively(0, yes=False) is True
+    assert _wiz.should_seed_interactively(4, yes=False) is True
+    assert _wiz.should_seed_interactively(5, yes=False) is False
+
+
+def test_should_seed_interactively_false_when_no_tty(monkeypatch: object) -> None:
+    """Non-TTY stdin (piped install) must never trigger interactive seeding."""
+    import sys as _sys
+
+    import oh_no_my_claudecode.setup.wizard as _wiz
+
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+    assert _wiz.should_seed_interactively(0, yes=False) is False
+    assert _wiz.should_seed_interactively(4, yes=False) is False
+
+
+def test_setup_non_tty_no_prompts(sample_repo: object, monkeypatch: object) -> None:
+    """run_setup_wizard with non-TTY stdin and yes=False must not call any prompt.
+
+    This simulates the curl|bash scenario where stdin is a pipe and --yes is
+    not explicitly passed.  All prompts must auto-use their defaults.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    monkeypatch.chdir(sample_repo)
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.detector.user_settings_path",
+        lambda: _Path(str(sample_repo)) / ".missing" / "settings.json",
+    )
+    # Simulate a non-TTY stdin (pipe)
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+
+    def _bomb(*args: object, **kwargs: object) -> object:
+        raise AssertionError(f"wizard prompted under non-TTY stdin: {args}")
+
+    monkeypatch.setattr("oh_no_my_claudecode.setup.wizard.Prompt.ask", _bomb)
+    monkeypatch.setattr("oh_no_my_claudecode.setup.wizard.Confirm.ask", _bomb)
+
+    # Must complete without raising (uses all defaults: generate CLAUDE.md, skip hooks)
+    result = run_setup_wizard(cwd=_Path(str(sample_repo)), yes=False, no_llm=True)
+
+    assert result.claude_md_generated is True
+
+
+def test_ui_handoff_non_tty_no_prompts_or_spawns(monkeypatch: object) -> None:
+    """_ui_handoff with non-TTY stdin must not prompt and not call Popen."""
+    import sys as _sys
+
+    import oh_no_my_claudecode.setup.wizard as _wiz
+
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+    launched: list[object] = []
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.subprocess.Popen",
+        lambda *a, **kw: launched.append(a),
+    )
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.Confirm.ask",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("should not prompt under non-TTY")),
+    )
+
+    _wiz._ui_handoff(yes=False)  # noqa: SLF001
+
+    assert launched == []

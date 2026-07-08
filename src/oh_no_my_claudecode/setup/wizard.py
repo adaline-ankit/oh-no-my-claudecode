@@ -25,6 +25,16 @@ from oh_no_my_claudecode.setup.detector import EnvironmentDetection, detect_envi
 
 DEFAULT_MODEL = "claude-sonnet-4-5"
 
+
+def _is_interactive(yes: bool) -> bool:
+    """Return True only when we have a real TTY and --yes was not passed.
+
+    Prevents the wizard from blocking on prompts when stdin is a pipe (e.g.
+    ``curl ... | bash``) or when the caller passed ``--yes`` / ``-y``.
+    """
+    return not yes and sys.stdin.isatty()
+
+
 # ---------------------------------------------------------------------------
 # Step tracker — define the ordered wizard steps once
 # ---------------------------------------------------------------------------
@@ -230,21 +240,23 @@ def _provider_phase(service: OnmcService, *, yes: bool) -> tuple[str | None, str
             border_style="cyan",
         )
     )
-    provider = "skip" if not yes else "anthropic"
-    if not yes:
+    interactive = _is_interactive(yes)
+    if interactive:
         provider = Prompt.ask(
             "Provider?",
             choices=["anthropic", "openai", "skip"],
             default="anthropic",
         )
+    else:
+        provider = "anthropic"
     if provider == "skip":
         console.print("  [dim]Skipping LLM setup. Continuing with heuristic-only mode.[/dim]")
         return None, None
     model = DEFAULT_MODEL if provider == "anthropic" else "gpt-4.1-mini"
-    if not yes:
+    if interactive:
         model = Prompt.ask("Model?", default=model)
     api_key_env_var = "ANTHROPIC_API_KEY" if provider == "anthropic" else "OPENAI_API_KEY"
-    if not yes:
+    if interactive:
         api_key_env_var = _prompt_api_key_env_var_name(default=api_key_env_var)
     _, settings = service.configure_llm(
         provider=LLMProviderType(provider),
@@ -355,7 +367,7 @@ def _scan_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> IngestResul
 
 def should_seed_interactively(memory_count: int, *, yes: bool) -> bool:
     """Return whether the setup wizard should offer manual memory seeding."""
-    return not yes and memory_count < 5
+    return _is_interactive(yes) and memory_count < 5
 
 
 def interactive_seed(console: Console, service: OnmcService) -> int:
@@ -425,7 +437,9 @@ def interactive_seed(console: Console, service: OnmcService) -> int:
 
 
 def _claude_md_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> bool:
-    generate = yes or Confirm.ask("Generate CLAUDE.md from extracted memory?", default=True)
+    generate = not _is_interactive(yes) or Confirm.ask(
+        "Generate CLAUDE.md from extracted memory?", default=True
+    )
     if not generate:
         return False
     markdown = service.generate_claude_md(no_llm=no_llm)
@@ -462,15 +476,16 @@ def _integration_phase(
         )
         return hooks_installed, mcp_registered, auto_sync_enabled
     console.print("  [green]✓[/green] Claude Code detected on this machine.")
-    if yes or Confirm.ask("Install compaction hooks for this repo?", default=True):
+    interactive = _is_interactive(yes)
+    if not interactive or Confirm.ask("Install compaction hooks for this repo?", default=True):
         service.install_hooks(add_mcp_server=False)
         console.print("  [green]✓[/green] Hooks installed → .claude/settings.json")
         hooks_installed = True
-    if yes or Confirm.ask("Register ONMC as a project MCP server?", default=True):
+    if not interactive or Confirm.ask("Register ONMC as a project MCP server?", default=True):
         service.install_hooks(add_mcp_server=True)
         console.print("  [green]✓[/green] MCP server registered → .mcp.json")
         mcp_registered = True
-    if yes or Confirm.ask("Install auto-sync on commit?", default=True):
+    if not interactive or Confirm.ask("Install auto-sync on commit?", default=True):
         service.install_ingest_hook()
         console.print("  [green]✓[/green] Post-commit hook installed → .git/hooks/post-commit")
         auto_sync_enabled = True
@@ -629,8 +644,8 @@ def _ui_handoff(*, yes: bool) -> None:
     In interactive mode (yes=False): prompt and launch non-blocking if agreed.
     In non-interactive / yes=True / CI mode: print a tip only, never launch.
     """
-    if yes:
-        # Non-interactive path — never prompt, never spawn a server
+    if not _is_interactive(yes):
+        # Non-interactive path (--yes or no TTY) — never prompt, never spawn a server.
         console.print(
             "\n  [dim]Tip: run [bold]onmc ui[/bold] to open your visual memory dashboard.[/dim]"
         )
