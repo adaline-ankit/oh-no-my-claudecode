@@ -116,6 +116,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ postmortem      LLM-free structured narrative recap of a completed swarm     │
 │                 run.                                                         │
 │ prbadge         Post a "verified-work" onmc badge comment on a GitHub PR.    │
+│ quickstart      Zero-config onboarding: init memory, integrate Claude Code,  │
+│                 activate control plane.                                      │
 │ race            Offline model/strategy tournament over recorded run          │
 │                 receipts.                                                    │
 │ registry-demo   Proof-of-concept command registered with zero edits to       │
@@ -5175,6 +5177,44 @@ Usage: onmc quest stats [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit stats as JSON.                                          │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc quickstart`
+
+```text
+Usage: onmc quickstart [OPTIONS]
+
+ Zero-config onboarding: init memory, integrate Claude Code, activate control
+ plane.
+
+ Composes three steps in one idempotent command:
+
+ 1. **init**   — initialise the repo memory store (same as ``onmc setup``).
+ 2. **plug**   — install Claude Code hooks, MCP server, and /onmc slash
+ commands
+                (same as ``onmc plug claude-code``).
+ 3. **wrap**   — install the deep-wrap control plane with default-active
+ enabled
+                (same as ``onmc wrap --default-active``).
+
+ Safe to re-run: each step reports ``already configured`` when already done.
+
+ Examples:
+
+     onmc quickstart              # run all three steps, show ready card
+
+     onmc quickstart --yes        # non-interactive / CI
+
+     onmc quickstart --json       # machine-readable output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --yes   -y  --no-yes      Non-interactive mode — skip any prompts (CI-safe). │
+│                           [default: no-yes]                                  │
+│ --json                    Emit a machine-readable JSON envelope {"kind":     │
+│                           "quickstart", "steps": [...], "day1_commands":     │
+│                           [...]} for pipeline composition.                   │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
