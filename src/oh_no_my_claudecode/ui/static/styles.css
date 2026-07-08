@@ -608,6 +608,15 @@ body.theme-dark .drawer-error pre { color: var(--ink); }
 body.theme-dark .drawer-error pre { color: #e79b8e; }
 body.theme-dark .brand-mark { background: #d9f26a; color: #152018; }
 
+/* Agents / orchestration view */
+.agents-orch-panel { }
+.agents-actions { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.agents-action-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.agents-text-input { flex: 1; min-width: 180px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-alt); color: var(--ink); font-size: 12px; outline: 0; }
+.agents-text-input:focus { border-color: var(--green); }
+.agents-swarm-list { padding: 12px 16px; }
+.agents-card-actions { display: flex; align-items: center; gap: 8px; }
+
 /* Integration (Claude Code) view */
 .nav-integ-dot { width: 7px; height: 7px; margin-left: auto; border-radius: 50%; background: #d99a3a; }
 .integ-banner { padding: 0; overflow: hidden; }

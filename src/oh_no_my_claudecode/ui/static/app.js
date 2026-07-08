@@ -55,6 +55,7 @@ function hydrateDashboard() {
   renderHomeLive();
   renderActivity();
   renderSwarms();
+  renderAgents();
   renderPerformance();
   renderScorecard();
   renderTimeline();
@@ -267,6 +268,69 @@ function renderSwarms() {
   state.renderedSwarms = shown;
   byId("swarm-empty").hidden = shown.length > 0;
   byId("swarm-list").innerHTML = shown.map((sc, i) => renderSwarmCard(sc, i)).join("");
+}
+
+function renderAgents() {
+  const sw = (state.data && state.data.swarms) || { summary: {}, swarms: [] };
+  const s = sw.summary || {};
+  const liveN = s.live || 0;
+  const metrics = [
+    ["Swarms", String(s.swarms || 0), "this repo"],
+    ["Live", String(liveN), "active now"],
+    ["Running units", String(s.running_units || 0), "in-flight agents"],
+    ["Verified", String(s.verified_units || 0), `of ${formatNumber(s.total_units || 0)}`],
+    ["Fleet cost", `$${Number(s.total_cost_usd || 0).toFixed(2)}`, "recorded"],
+  ];
+  byId("agents-metric-grid").innerHTML = metrics.map(([label, value, detail]) => `
+    <div class="metric"><span class="metric-label">${escapeHtml(label)}</span><strong class="metric-value">${escapeHtml(value)}</strong><span class="metric-detail">${escapeHtml(detail)}</span></div>
+  `).join("");
+  const chip = byId("agents-live-chip");
+  chip.className = `status-chip ${liveN > 0 ? "ready" : ""}`;
+  chip.textContent = liveN > 0 ? `${liveN} live` : "idle";
+  const dot = byId("nav-agents-dot");
+  if (dot) dot.hidden = !liveN;
+  const swarms = sw.swarms || [];
+  byId("agents-empty").hidden = swarms.length > 0;
+  byId("agents-swarms-sub").textContent = `${swarms.length} swarm(s)`;
+  byId("agents-swarm-list").innerHTML = swarms.map((sc) => renderAgentSwarmCard(sc)).join("");
+}
+
+function renderAgentSwarmCard(sc) {
+  const counts = sc.state_counts || {};
+  const pills = SWARM_STATE_ORDER.filter((st) => counts[st]).map((st) => swarmStatePill(st, counts[st])).join("");
+  const cost = sc.cost_usd ? Number(sc.cost_usd).toFixed(2) : null;
+  const abortBtn = sc.aborted
+    ? `<span class="swarm-aborted">ABORTED</span>`
+    : `<button class="button button-outline agents-abort-btn" data-swarm-id="${escapeHtml(sc.swarm_id)}" type="button">Abort</button>`;
+  return `<article class="swarm-card ${sc.live ? "is-live" : ""}">
+    <header class="swarm-card-head">
+      <div class="swarm-title">
+        <code title="${escapeHtml(sc.swarm_id)}">${escapeHtml(String(sc.swarm_id).slice(0, 10))}</code>
+        <span class="swarm-label">${escapeHtml(truncate(sc.label || "swarm", 66))}</span>
+      </div>
+      <div class="swarm-meta agents-card-actions">${abortBtn}</div>
+    </header>
+    <div class="swarm-stats">${pills}
+      <span class="swarm-verified">${formatNumber(sc.verified_count || 0)}/${formatNumber(sc.total || 0)} verified</span>
+      ${cost ? `<span class="swarm-cost">$${cost}</span>` : ""}
+    </div>
+  </article>`;
+}
+
+async function agentAction(payload) {
+  try {
+    const resp = await fetch("/api/agents/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    showToast(data.ok ? "Done" : `Failed: ${String(data.output || "error").slice(0, 60)}`);
+    return data;
+  } catch {
+    showToast("Action request failed");
+    return { ok: false, returncode: 1, output: "request error" };
+  }
 }
 
 function openUnitDrawer(cardIndex, unitIndex) {
@@ -919,6 +983,34 @@ document.querySelectorAll("[data-swarm-filter]").forEach((btn) => btn.addEventLi
   document.querySelectorAll("[data-swarm-filter]").forEach((b) => b.classList.toggle("is-active", b === btn));
   renderSwarms();
 }));
+// Agents orchestration: abort per-swarm, start mission, land PR.
+byId("agents-swarm-list").addEventListener("click", async (event) => {
+  const btn = event.target.closest(".agents-abort-btn");
+  if (!btn) return;
+  const swarmId = btn.dataset.swarmId || "";
+  if (!swarmId) return;
+  btn.disabled = true;
+  await agentAction({ action: "abort", swarm_id: swarmId });
+  btn.disabled = false;
+});
+byId("agents-mission-btn").addEventListener("click", async () => {
+  const input = byId("agents-mission-input");
+  const goal = (input.value || "").trim();
+  if (!goal) { showToast("Enter a mission goal first"); return; }
+  byId("agents-mission-btn").disabled = true;
+  await agentAction({ action: "mission", goal });
+  byId("agents-mission-btn").disabled = false;
+  input.value = "";
+});
+byId("agents-land-btn").addEventListener("click", async () => {
+  const input = byId("agents-land-input");
+  const pr_url = (input.value || "").trim();
+  if (!pr_url) { showToast("Enter a PR URL first"); return; }
+  byId("agents-land-btn").disabled = true;
+  await agentAction({ action: "land", pr_url });
+  byId("agents-land-btn").disabled = false;
+  input.value = "";
+});
 byId("autorefresh-toggle").addEventListener("change", (event) => {
   state.autoRefresh = event.target.checked;
   renderLiveStatus();

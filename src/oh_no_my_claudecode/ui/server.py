@@ -3,8 +3,10 @@ from __future__ import annotations
 import dataclasses
 import json
 import mimetypes
+import subprocess
 import webbrowser
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,10 +21,75 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.missioncontrol import build_dashboard, list_swarm_ids
 from oh_no_my_claudecode.models import FileStat, RepoFileRecord, TaskStatus
 
+# Callable that runs a shell command and returns (returncode, combined output).
+CommandRunner = Callable[[list[str]], tuple[int, str]]
+
 # Unit lifecycle states that mean "an agent is working right now".
 _LIVE_UNIT_STATES = frozenset({"pending", "queued", "running"})
 
 STATIC_ROOT = files("oh_no_my_claudecode.ui").joinpath("static")
+
+
+def _default_command_runner(cmd: list[str]) -> tuple[int, str]:
+    """Shell out and return ``(returncode, combined stdout+stderr)``.
+
+    Capped at 60 s; any exception returns returncode=1 + error text.
+    """
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)  # noqa: S603
+        return result.returncode, (result.stdout + result.stderr).strip()
+    except Exception as exc:  # noqa: BLE001
+        return 1, str(exc)
+
+
+def build_agents_payload(repo_root: Path) -> dict[str, Any]:
+    """Agents view payload: local swarms + global summary.
+
+    Delegates to the same ``_swarms_payload`` / ``_global_swarms_payload``
+    helpers used by the main dashboard so there is no duplication.
+    This function is *pure* given a fixed filesystem state — call it in tests
+    by seeding swarm manifests under ``repo_root/.onmc/swarm/``.
+    """
+    return {
+        "local": _swarms_payload(repo_root),
+        "global": _global_swarms_payload(),
+    }
+
+
+def _handle_agents_action(
+    data: dict[str, Any],
+    runner: CommandRunner,
+) -> dict[str, Any]:
+    """Dispatch an agents-action request to the injectable ``runner``.
+
+    Returns ``{"ok": bool, "returncode": int, "output": str}``.
+    Supported actions:
+
+    - ``abort`` — ``onmc swarm abort <swarm_id>``
+    - ``land``  — ``gh pr merge <pr_url> --squash``
+    - ``mission`` — ``onmc mission <goal>``
+    """
+    action = str(data.get("action", ""))
+    if action == "abort":
+        swarm_id = str(data.get("swarm_id", "")).strip()
+        if not swarm_id:
+            return {"ok": False, "returncode": 1, "output": "swarm_id required"}
+        cmd: list[str] = ["onmc", "swarm", "abort", swarm_id]
+    elif action == "land":
+        pr_url = str(data.get("pr_url", "")).strip()
+        if not pr_url:
+            return {"ok": False, "returncode": 1, "output": "pr_url required"}
+        cmd = ["gh", "pr", "merge", pr_url, "--squash"]
+    elif action == "mission":
+        goal = str(data.get("goal", "")).strip()
+        if not goal:
+            return {"ok": False, "returncode": 1, "output": "goal required"}
+        cmd = ["onmc", "mission", goal]
+    else:
+        return {"ok": False, "returncode": 1, "output": f"unknown action: {action!r}"}
+
+    returncode, output = runner(cmd)
+    return {"ok": returncode == 0, "returncode": returncode, "output": output}
 
 
 def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
@@ -91,8 +158,12 @@ def create_ui_server(
     *,
     host: str = "127.0.0.1",
     port: int = 8765,
+    command_runner: CommandRunner | None = None,
 ) -> ThreadingHTTPServer:
-    handler = _handler_factory(service)
+    runner: CommandRunner = (
+        command_runner if command_runner is not None else _default_command_runner
+    )
+    handler = _handler_factory(service, command_runner=runner)
     return ThreadingHTTPServer((host, port), handler)
 
 
@@ -151,7 +222,11 @@ def serve_dashboard(
         server.server_close()
 
 
-def _handler_factory(service: OnmcService) -> type[BaseHTTPRequestHandler]:
+def _handler_factory(
+    service: OnmcService,
+    *,
+    command_runner: CommandRunner,
+) -> type[BaseHTTPRequestHandler]:
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             path = urlsplit(self.path).path
@@ -170,6 +245,20 @@ def _handler_factory(service: OnmcService) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             self.wfile.write(body)
+
+        def do_POST(self) -> None:  # noqa: N802
+            path = urlsplit(self.path).path
+            if path == "/api/agents/action":
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length)
+                try:
+                    data: dict[str, Any] = json.loads(raw)
+                except json.JSONDecodeError:
+                    self.send_error(HTTPStatus.BAD_REQUEST)
+                    return
+                self._send_json(_handle_agents_action(data, command_runner))
+                return
+            self.send_error(HTTPStatus.NOT_FOUND)
 
         def _send_json(self, payload: dict[str, Any]) -> None:
             body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
