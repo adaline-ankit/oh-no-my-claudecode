@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.99.0] — 2026-07-08
+
+### Added
+
+Agent-experience commands — planned with `onmc mission`, built as self-registering subpackages (zero `cli.py` edits):
+
+- **`onmc doctor`** — one-command integration health check that diagnoses whether onmc is wired into Claude Code: onmc initialized, version, on PATH, hooks installed, MCP registered, `/onmc` wrap command present + active — each with an actionable fix. Folds in the existing repo/memory/provider/sync health report as a superset. `--json` envelope (`integration` + `repo_health` + `summary`); exit 1 on any failure. Directly addresses the onboarding confusion where a stale/uninitialized setup gave no way to self-diagnose. (#323)
+- **`onmc explain [receipt]`** — plain-English verdict of a run receipt (latest by default, or by path/short-hash). Explains *why* a run did or did not verify, with a dedicated explanation for every stop reason — including the `no-changes` vacuous pass (verify passed but the agent changed nothing, e.g. blocked edits), so a false-green is legible at a glance. `--json`. (#321)
+- **`onmc context <file>`** — one-shot context for a file: codegraph blast radius (dependents / imports / tests) plus relevant memory entries, reusing the existing codegraph and memory APIs. `--json`, `--limit`. A better codegraph integration for agents about to edit a file. (#322)
+
 ## [0.98.0] — 2026-07-08
 
 ### Fixed
