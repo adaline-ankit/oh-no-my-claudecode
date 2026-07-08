@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.97.0] — 2026-07-08
+
+### Fixed
+
+- **`curl | bash` onboarding now works non-interactively** (surfaced by real-world testing): the installer force-upgrades an existing install (`uv tool install --force` / `pipx install --force` / `pip install --user --upgrade`) instead of no-op'ing on a stale version; the integration step runs with stdin from `/dev/null` and falls back to `onmc setup --yes` so it can't consume the piped script or loop on a prompt. `onmc setup` now auto-uses defaults (never prompts/loops) under `--yes` or when stdin is not a TTY. (#315)
+
 ## [0.96.0] — 2026-07-06
 
 ### Added
