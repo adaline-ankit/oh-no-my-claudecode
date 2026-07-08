@@ -238,6 +238,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 skill store without your sign-off.                           │
 │ soundboard      Fun inline terminal reactions for session events (emoji /    │
 │                 ASCII / optional terminal bell).                             │
+│ teams           AutoGen / AG2 interop — export onmc plans as team specs and  │
+│                 run them under onmc receipts.  The ``export`` command is     │
+│                 always available; ``run`` requires the ```` extra.           │
 │ twin            Rehearse a code change offline: predict blast radius,        │
 │                 surface covering tests, flag high-risk touches. Analysis     │
 │                 only — never runs or edits code.                             │
@@ -6531,6 +6534,88 @@ Usage: onmc teach [OPTIONS]
 │    --no-llm                   Use heuristic fallback instead of the          │
 │                               configured LLM.                                │
 │    --help                     Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc teams`
+
+```text
+Usage: onmc teams [OPTIONS] COMMAND [ARGS]...
+
+ AutoGen / AG2 interop — export onmc plans as team specs and run them under
+ onmc receipts.  The ``export`` command is always available; ``run`` requires
+ the ```` extra.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ export  Convert an onmc plan to an AutoGen team/GroupChat specification.     │
+│ run     Run an AutoGen team spec under an onmc receipt.                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc teams export`
+
+```text
+Usage: onmc teams export [OPTIONS] PLAN
+
+ Convert an onmc plan to an AutoGen team/GroupChat specification.
+
+ Reads a JSON plan produced by ``onmc mission --json`` (or any swarm plan)
+ and emits a portable AutoGen GroupChat spec.  Pure — no autogen installation
+ needed.
+
+ Examples:
+
+     onmc teams export mission.json
+
+     onmc teams export mission.json --json
+
+     onmc teams export mission.json --out team.json
+
+     onmc mission --json | onmc teams export -
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    PLAN      TEXT  Path to an onmc mission/swarm plan JSON file, or ``-``  │
+│                      to read from stdin.                                     │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --out         FILE  Write the team spec to FILE instead of stdout.           │
+│ --json              Wrap in an onmc envelope {"kind": "autogen-team",        │
+│                     "spec": {...}} for pipeline composition.                 │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc teams run`
+
+```text
+Usage: onmc teams run [OPTIONS] SPEC
+
+ Run an AutoGen team spec under an onmc receipt.
+
+ Executes the team described in SPEC using pyautogen / ag2 and records a
+ tamper-evident onmc receipt.  Requires the ```` optional extra:
+
+     pip install 'oh-no-my-claudecode'
+
+ Examples:
+
+     onmc teams run team.json
+
+     onmc teams run team.json --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    SPEC      PATH  Path to an AutoGen team spec JSON file (from ``onmc     │
+│                      teams export``).                                        │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit a JSON receipt envelope instead of a human-readable     │
+│                 summary.                                                     │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

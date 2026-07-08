@@ -10,6 +10,12 @@ Sources supported
     Nous hermes-agent context files (``MEMORY.md``, ``USER.md``).  Imported as
     :class:`~oh_no_my_claudecode.models.MemoryEntry` records tagged ``imported:hermes``.
 
+``langchain``
+    LangChain document loaders (PDFs, web pages, notebooks, directories).
+    Imported as :class:`~oh_no_my_claudecode.models.MemoryEntry` records tagged
+    ``imported:langchain``.  Requires the ``langchain`` optional extra; reports
+    unavailable gracefully when absent.
+
 ``<path>``
     Generic ``.md`` file or directory.  Imported as skills (default) or memories
     (``as_kind="memory"``), tagged ``imported:md``.
@@ -23,11 +29,13 @@ Public API
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from oh_no_my_claudecode.importers.base import ImportResult
 from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
 
 from . import hermes as _hermes
+from . import langchain_loader as _langchain
 from . import markdown as _markdown
 from . import omc as _omc
 
@@ -42,6 +50,8 @@ def run_import(
     dry_run: bool = False,
     as_kind: str = "skill",
     cwd: Path | None = None,
+    loader: Any = None,
+    splitter: Any = None,
 ) -> ImportResult:
     """Import external tool knowledge into *storage*.
 
@@ -50,7 +60,8 @@ def run_import(
     storage:
         Initialised :class:`~oh_no_my_claudecode.storage.sqlite.SQLiteStorage` instance.
     source:
-        Source selector: ``"omc"``, ``"hermes"``, or a filesystem path string.
+        Source selector: ``"omc"``, ``"hermes"``, ``"langchain"``, or a
+        filesystem path string.
     path:
         Optional explicit path override.  When *None* the importer auto-detects
         default locations.
@@ -58,10 +69,16 @@ def run_import(
         When *True*, parse and report without writing anything to the store.
     as_kind:
         ``"skill"`` or ``"memory"`` — controls how generic markdown paths are
-        imported.  For ``omc`` this is always ``"skill"``; for ``hermes`` always
-        ``"memory"``.
+        imported.  For ``omc`` this is always ``"skill"``; for ``hermes`` and
+        ``langchain`` always ``"memory"``.
     cwd:
         Working directory override (defaults to :func:`Path.cwd`).
+    loader:
+        LangChain document loader instance.  Required when *source* is
+        ``"langchain"``; ignored for all other sources.
+    splitter:
+        LangChain text splitter instance.  Optional when *source* is
+        ``"langchain"``; defaults to ``RecursiveCharacterTextSplitter``.
 
     Returns
     -------
@@ -73,7 +90,8 @@ def run_import(
     FileNotFoundError
         When no importable content is found at the expected location(s).
     ValueError
-        When *as_kind* is not ``"skill"`` or ``"memory"``.
+        When *as_kind* is not ``"skill"`` or ``"memory"``, or when
+        *source* is ``"langchain"`` but the extra is unavailable.
     """
     if as_kind not in ("skill", "memory"):
         msg = f"as_kind must be 'skill' or 'memory', got: {as_kind!r}"
@@ -86,6 +104,14 @@ def run_import(
 
     if source == "hermes":
         return _run_hermes_import(storage, path, dry_run=dry_run, cwd=base_cwd)
+
+    if source == "langchain":
+        return _run_langchain_import(
+            storage,
+            loader=loader,
+            splitter=splitter,
+            dry_run=dry_run,
+        )
 
     # Generic markdown path: source IS the path string.
     md_path = path if path is not None else Path(source)
@@ -177,6 +203,65 @@ def _run_hermes_import(
 
     return ImportResult(
         source="hermes",
+        as_kind="memory",
+        imported=imported,
+        skipped=skipped,
+        dry_run=False,
+        items=item_names,
+    )
+
+
+def _run_langchain_import(
+    storage: SQLiteStorage,
+    *,
+    loader: Any,
+    splitter: Any,
+    dry_run: bool,
+) -> ImportResult:
+    if not _langchain.available():
+        msg = (
+            "The 'langchain' extra is required for source='langchain'. "
+            "Install it with: pip install 'oh-no-my-claudecode[langchain]'"
+        )
+        raise ValueError(msg)
+
+    if loader is None:
+        msg = "A 'loader' must be provided when source='langchain'."
+        raise ValueError(msg)
+
+    source_ref = getattr(loader, "file_path", None) or "langchain"
+    if not isinstance(source_ref, str):
+        source_ref = str(source_ref)
+
+    memories = _langchain.parse_with_loader(loader, splitter=splitter, source_ref=source_ref)
+
+    imported = 0
+    skipped = 0
+    item_names: list[str] = []
+
+    for memory in memories:
+        item_names.append(memory.title)
+        if dry_run:
+            continue
+        existing = storage.get_memory(memory.id)
+        if existing is not None:
+            skipped += 1
+        else:
+            storage.upsert_memories([memory])
+            imported += 1
+
+    if dry_run:
+        return ImportResult(
+            source="langchain",
+            as_kind="memory",
+            imported=0,
+            skipped=0,
+            dry_run=True,
+            items=item_names,
+        )
+
+    return ImportResult(
+        source="langchain",
         as_kind="memory",
         imported=imported,
         skipped=skipped,

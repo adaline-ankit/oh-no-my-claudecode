@@ -82,6 +82,17 @@ supermemory = [
 crewai = [
   "crewai>=0.80",
 ]
+# Optional Microsoft AutoGen / AG2 backend.  Absent by default — ``onmc teams
+# export`` works without it (pure); ``onmc teams run`` requires it.
+autogen = [
+  "pyautogen>=0.2",
+]
+# Optional LangChain document loaders.  Absent by default — the langchain
+# importer reports itself unavailable gracefully until this extra is installed.
+langchain = [
+  "langchain-community>=0.3",
+  "langchain-text-splitters>=0.3",
+]
 dev = [
   "build>=1.2.2",
   "mypy>=1.11,<3.0",
@@ -152,4 +163,14 @@ ignore_missing_imports = true
 # Optional CrewAI interop backend — no type stubs bundled.
 [[tool.mypy.overrides]]
 module = ["crewai"]
+ignore_missing_imports = true
+
+# Optional AutoGen / AG2 backends — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["autogen", "ag2"]
+ignore_missing_imports = true
+
+# Optional LangChain document loaders — no type stubs bundled.
+[[tool.mypy.overrides]]
+module = ["langchain_community", "langchain_community.*", "langchain_text_splitters", "langchain_text_splitters.*"]
 ignore_missing_imports = true
