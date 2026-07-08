@@ -7192,12 +7192,25 @@ Usage: onmc unwrap [OPTIONS]
  all CLAUDE.md content is left untouched.  The settings.json backup is
  kept as a safety artifact.
 
+ Use ``--managed`` to remove only the onmc entries from the OS-level
+ managed-settings.json (requires admin/root for the default system path).
+ The project-level install is not touched.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --global    --project      Remove from the user-level                        │
-│                            ~/.claude/settings.json. Default: project-scoped  │
-│                            .claude/settings.json.                            │
-│                            [default: project]                                │
-│ --help                     Show this message and exit.                       │
+│ --global          --project             Remove from the user-level           │
+│                                         ~/.claude/settings.json. Default:    │
+│                                         project-scoped                       │
+│                                         .claude/settings.json.               │
+│                                         [default: project]                   │
+│ --managed         --no-managed          Remove onmc entries from the         │
+│                                         OS-level managed-settings.json only, │
+│                                         leaving the project-level install    │
+│                                         untouched. Requires admin/root for   │
+│                                         the default system path.             │
+│                                         [default: no-managed]                │
+│ --managed-path                    PATH  Override the managed-settings.json   │
+│                                         path used by --managed.              │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7777,25 +7790,46 @@ Usage: onmc wrap [OPTIONS] COMMAND [ARGS]...
  Sub-commands: on / off / toggle / status
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --strict            --soft                   strict: deny native Task spawns │
-│                                              and redirect to `onmc swarm`.   │
-│                                              soft: allow them with a nudge   │
-│                                              toward `onmc swarm`. Default:   │
-│                                              strict.                         │
-│                                              [default: strict]               │
-│ --global            --project                Install into the user-level     │
-│                                              ~/.claude/settings.json.        │
-│                                              Default: project-scoped         │
-│                                              .claude/settings.json.          │
-│                                              [default: project]              │
-│ --default-active    --no-default-active      Auto-activate the session       │
-│                                              switch on every SessionStart so │
-│                                              hooks engage immediately        │
-│                                              without an explicit `onmc wrap  │
-│                                              on` or /onmc. Default: off      │
-│                                              (explicit toggle required).     │
-│                                              [default: no-default-active]    │
-│ --help                                       Show this message and exit.     │
+│ --strict            --soft                       strict: deny native Task    │
+│                                                  spawns and redirect to      │
+│                                                  `onmc swarm`. soft: allow   │
+│                                                  them with a nudge toward    │
+│                                                  `onmc swarm`. Default:      │
+│                                                  strict.                     │
+│                                                  [default: strict]           │
+│ --global            --project                    Install into the user-level │
+│                                                  ~/.claude/settings.json.    │
+│                                                  Default: project-scoped     │
+│                                                  .claude/settings.json.      │
+│                                                  [default: project]          │
+│ --default-active    --no-default-active          Auto-activate the session   │
+│                                                  switch on every             │
+│                                                  SessionStart so hooks       │
+│                                                  engage immediately without  │
+│                                                  an explicit `onmc wrap on`  │
+│                                                  or /onmc. Default: off      │
+│                                                  (explicit toggle required). │
+│                                                  [default:                   │
+│                                                  no-default-active]          │
+│ --managed           --no-managed                 Install hooks into the      │
+│                                                  OS-level Claude Code        │
+│                                                  managed-settings.json so    │
+│                                                  users cannot override or    │
+│                                                  disable them (org           │
+│                                                  hard-lock). Requires        │
+│                                                  admin/root for the default  │
+│                                                  system path. When the path  │
+│                                                  is not writable, prints the │
+│                                                  exact JSON to install       │
+│                                                  manually — no sudo is       │
+│                                                  attempted.                  │
+│                                                  [default: no-managed]       │
+│ --managed-path                             PATH  Override the                │
+│                                                  managed-settings.json path  │
+│                                                  used by --managed. Defaults │
+│                                                  to the OS-appropriate       │
+│                                                  system path.                │
+│ --help                                           Show this message and exit. │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ on      Activate the onmc deep-wrap session switch.                          │
@@ -7843,8 +7877,10 @@ Usage: onmc wrap status [OPTIONS]
  Show the current onmc wrap installation and session status.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json          Output status as JSON.                                       │
-│ --help          Show this message and exit.                                  │
+│ --json                      Output status as JSON.                           │
+│ --managed-path        PATH  Override the managed-settings.json path to       │
+│                             check.                                           │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
