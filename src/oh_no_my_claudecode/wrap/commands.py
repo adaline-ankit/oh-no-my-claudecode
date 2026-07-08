@@ -12,6 +12,12 @@ The ``wrap`` group has two layers:
   writes the wrap-state file, injects the CLAUDE.md policy stanza, and
   drops the ``/onmc`` Claude Code slash command.
 
+  ``onmc wrap --managed [--managed-path PATH]``
+  installs the same hooks into the OS-level managed-settings.json so users
+  cannot override or disable them.  Requires admin/root for the default system
+  path; when the path is not writable, prints the exact JSON to install manually
+  (no sudo attempted).
+
 **Session sub-commands (switch layer)**
   ``onmc wrap on`` / ``off`` / ``toggle`` / ``status [--json]``
   control whether the deep-wrap lifecycle hooks engage for the current session
@@ -21,6 +27,8 @@ The ``wrap`` group has two layers:
 ``unwrap`` is the perfect inverse of the install: it removes exactly what
 ``wrap`` added (hooks, state file, CLAUDE.md stanza, ``/onmc`` command),
 leaving every other hook byte-for-byte intact.
+``onmc unwrap --managed`` removes only the onmc entries from managed-settings
+without touching the project-level install.
 """
 
 from __future__ import annotations
@@ -37,6 +45,15 @@ from oh_no_my_claudecode.hooks.installer import (
     project_settings_backup_path,
     project_settings_path,
     uninstall_wrap_hooks,
+)
+from oh_no_my_claudecode.wrap.managed import (
+    default_managed_path,
+    load_managed_settings,
+    managed_hooks_present,
+    manual_install_json,
+    merge_managed_hooks,
+    strip_managed_hooks,
+    write_managed_settings,
 )
 from oh_no_my_claudecode.wrap.session import is_active, read_default_active, set_active
 from oh_no_my_claudecode.wrap.state import (
@@ -114,8 +131,8 @@ def _remove_slash_command(repo_root: Path) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _echo(message: str) -> None:
-    typer.echo(message)
+def _echo(message: str, *, err: bool = False) -> None:
+    typer.echo(message, err=err)
 
 
 def _discover_root() -> Path:
@@ -125,6 +142,74 @@ def _discover_root() -> Path:
     except RepoDiscoveryError as exc:
         typer.echo(f"onmc: not a git repository: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+
+
+# ---------------------------------------------------------------------------
+# Managed-settings install / uninstall helpers
+# ---------------------------------------------------------------------------
+
+
+def _do_managed_install(*, managed_path: Path | None) -> None:
+    """Write onmc wrap hooks to the managed-settings.json.
+
+    Gracefully handles a non-writable path by printing the exact JSON to
+    install manually — never attempts sudo.
+    """
+    mp = managed_path or default_managed_path()
+    existing = load_managed_settings(mp)
+    merged = merge_managed_hooks(existing)
+    try:
+        write_managed_settings(mp, merged)
+    except PermissionError:
+        _echo(
+            f"onmc: cannot write to {mp} (Permission denied).",
+            err=True,
+        )
+        _echo(
+            "  Managed-settings requires admin/root for the system path.",
+            err=True,
+        )
+        _echo("  Install manually (run as admin/root):", err=True)
+        _echo(f"    sudo mkdir -p {mp.parent}", err=True)
+        _echo(
+            f"  Then create/merge {mp} with the following content:",
+            err=True,
+        )
+        typer.echo(manual_install_json())
+        raise typer.Exit(code=1) from None
+    _echo(f"onmc managed enforcement installed: {mp}")
+    _echo("  - Task intercept (PreToolUse/Task) added to managed-settings.")
+    _echo("  - Prompt router (UserPromptSubmit) added to managed-settings.")
+    _echo("  Users cannot override or disable these hooks.")
+    _echo("  Remove anytime with: onmc unwrap --managed")
+
+
+def _do_managed_uninstall(*, managed_path: Path | None) -> None:
+    """Remove onmc wrap hooks from the managed-settings.json.
+
+    Gracefully handles a non-writable path by printing instructions —
+    never attempts sudo.
+    """
+    mp = managed_path or default_managed_path()
+    existing = load_managed_settings(mp)
+    stripped = strip_managed_hooks(existing)
+    try:
+        write_managed_settings(mp, stripped)
+    except PermissionError:
+        _echo(
+            f"onmc: cannot write to {mp} (Permission denied).",
+            err=True,
+        )
+        _echo("  Remove manually (run as admin/root):", err=True)
+        _echo(
+            f"  Edit {mp} and remove the onmc PreToolUse/Task "
+            "and UserPromptSubmit hook entries.",
+            err=True,
+        )
+        raise typer.Exit(code=1) from None
+    _echo(f"onmc managed enforcement removed: {mp}")
+    _echo("  - onmc hooks removed from managed-settings.")
+    _echo("  Project-level install (if any) is unchanged.")
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +272,30 @@ def register(app: typer.Typer) -> None:
                 ),
             ),
         ] = False,
+        managed: Annotated[
+            bool,
+            typer.Option(
+                "--managed/--no-managed",
+                help=(
+                    "Install hooks into the OS-level Claude Code managed-settings.json "
+                    "so users cannot override or disable them (org hard-lock). "
+                    "Requires admin/root for the default system path. "
+                    "When the path is not writable, prints the exact JSON to install "
+                    "manually — no sudo is attempted."
+                ),
+            ),
+        ] = False,
+        managed_path: Annotated[
+            Path | None,
+            typer.Option(
+                "--managed-path",
+                help=(
+                    "Override the managed-settings.json path used by --managed. "
+                    "Defaults to the OS-appropriate system path."
+                ),
+                metavar="PATH",
+            ),
+        ] = None,
     ) -> None:
         """Make onmc the default layer for Claude Code in this repo.
 
@@ -196,6 +305,11 @@ def register(app: typer.Typer) -> None:
         ``/onmc`` Claude Code slash command that toggles the deep-wrap session
         switch without leaving the editor.
 
+        Use ``--managed`` to write the same hooks into the OS-level
+        managed-settings.json for org-wide hard-lock enforcement (users cannot
+        override).  Requires admin/root; if the path is not writable, the exact
+        JSON to install manually is printed instead.
+
         Use the session sub-commands to activate/deactivate hooks:
 
             onmc wrap on        # activate for this session
@@ -204,10 +318,15 @@ def register(app: typer.Typer) -> None:
             onmc wrap status    # show current state
 
         Reverse the install at any time with ``onmc unwrap``.
+        ``onmc unwrap --managed`` removes only the managed-settings entries.
         """
         if ctx.invoked_subcommand is not None:
             # A sub-command (on/off/toggle/status) was invoked; the callback
             # must not run the install logic — return immediately.
+            return
+
+        if managed:
+            _do_managed_install(managed_path=managed_path)
             return
 
         repo_root = _discover_root()
@@ -311,6 +430,14 @@ def register(app: typer.Typer) -> None:
             bool,
             typer.Option("--json", help="Output status as JSON."),
         ] = False,
+        managed_path: Annotated[
+            Path | None,
+            typer.Option(
+                "--managed-path",
+                help="Override the managed-settings.json path to check.",
+                metavar="PATH",
+            ),
+        ] = None,
     ) -> None:
         """Show the current onmc wrap installation and session status."""
         from oh_no_my_claudecode.hooks.installer import (
@@ -333,6 +460,11 @@ def register(app: typer.Typer) -> None:
         mode = "strict" if read_wrap_strict(repo_root) else "soft"
         slash_cmd = _slash_command_path(repo_root).is_file()
 
+        # Managed-settings check.
+        mp = managed_path or default_managed_path()
+        managed_settings = load_managed_settings(mp)
+        m_present = managed_hooks_present(managed_settings)
+
         if as_json:
             data = {
                 "wrap_installed": wrap_installed,
@@ -342,6 +474,8 @@ def register(app: typer.Typer) -> None:
                 "default_active": default_on,
                 "mode": mode,
                 "slash_command": slash_cmd,
+                "managed_enforcement": m_present,
+                "managed_path": str(mp),
             }
             _echo(json.dumps(data, indent=2))
             return
@@ -354,6 +488,8 @@ def register(app: typer.Typer) -> None:
         _echo(f"  default active:    {'yes' if default_on else 'no'}")
         _echo(f"  mode:              {mode}")
         _echo(f"  /onmc command:     {'installed' if slash_cmd else 'not installed'}")
+        managed_label = f"YES — {mp}" if m_present else f"no  ({mp})"
+        _echo(f"  managed lock:      {managed_label}")
 
     # ------------------------------------------------------------------ #
     # Register the sub-app and the unwrap command on the root app         #
@@ -373,6 +509,25 @@ def register(app: typer.Typer) -> None:
                 ),
             ),
         ] = False,
+        managed: Annotated[
+            bool,
+            typer.Option(
+                "--managed/--no-managed",
+                help=(
+                    "Remove onmc entries from the OS-level managed-settings.json only, "
+                    "leaving the project-level install untouched. "
+                    "Requires admin/root for the default system path."
+                ),
+            ),
+        ] = False,
+        managed_path: Annotated[
+            Path | None,
+            typer.Option(
+                "--managed-path",
+                help="Override the managed-settings.json path used by --managed.",
+                metavar="PATH",
+            ),
+        ] = None,
     ) -> None:
         """Remove the onmc wrap layer — the perfect inverse of ``onmc wrap``.
 
@@ -380,7 +535,15 @@ def register(app: typer.Typer) -> None:
         policy stanza, and the ``/onmc`` slash command.  Every other hook and
         all CLAUDE.md content is left untouched.  The settings.json backup is
         kept as a safety artifact.
+
+        Use ``--managed`` to remove only the onmc entries from the OS-level
+        managed-settings.json (requires admin/root for the default system path).
+        The project-level install is not touched.
         """
+        if managed:
+            _do_managed_uninstall(managed_path=managed_path)
+            return
+
         try:
             repo_root = discover_repo_root(Path.cwd())
         except RepoDiscoveryError as exc:
