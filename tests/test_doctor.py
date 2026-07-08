@@ -1,419 +1,494 @@
+"""Tests for ``onmc doctor`` — superset integration health check.
+
+The new ``onmc doctor`` combines two check layers:
+- **Integration checks**: six CC-integration diagnostics from doctor/checks.py.
+- **Repo health**: legacy OnmcService.doctor() report.
+
+Coverage (≥6 deterministic offline tests)
+-----------------------------------------
+1.  check_initialized() → ok when .onmc/memory.db present.
+2.  check_initialized() → fail when .onmc/memory.db absent.
+3.  check_initialized() → fail when repo_root is None.
+4.  check_version() → ok with injectable version function.
+5.  check_version() → fail when PackageNotFoundError is raised.
+6.  check_on_path() → ok when which_fn returns a path.
+7.  check_on_path() → warn when which_fn returns None.
+8.  check_hooks() → ok when settings.json has all hooks (via install + check).
+9.  check_hooks() → warn when settings.json absent (optional integration).
+10. check_mcp() → ok when .mcp.json registers onmc MCP server.
+11. check_mcp() → warn when .mcp.json absent (optional integration).
+12. check_wrap() → ok with installed slash command + active state detail.
+13. check_wrap() → warn when .claude/commands/onmc.md absent (optional).
+14. run_all_checks() → returns exactly 6 results with expected names.
+15. ``onmc doctor --json`` emits {"kind","integration","repo_health","summary"}.
+16. Exit code 1 on any integration fail (repo_health unavailable → OK).
+17. Exit code 0 when all checks warn-only AND repo_health unavailable.
+18. Exit code 1 when repo_health ok=False (even if integration all-ok).
+19. Exit code 0 when repo_health ok=True AND integration all-ok.
+20. _run_repo_health() returns (None, None) when service raises.
+21. JSON includes non-null repo_health when service.doctor() succeeds.
+22. Human output contains integration table header.
+"""
+
 from __future__ import annotations
 
+import importlib.metadata
 import json
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
-from oh_no_my_claudecode.core.service import (
-    OnmcService,
-    _check_onmc_path_health,
-    _detect_leaked_keys,
-    _probe_path_onmc,
-    _read_mcp_command,
+from oh_no_my_claudecode.doctor.checks import (
+    CheckResult,
+    check_hooks,
+    check_initialized,
+    check_mcp,
+    check_on_path,
+    check_version,
+    check_wrap,
+    run_all_checks,
 )
-from oh_no_my_claudecode.models import LLMProviderType
+from oh_no_my_claudecode.doctor.commands import _run_repo_health
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def test_doctor_exit_code_zero_when_checks_pass(
-    sample_repo: Path,
-    monkeypatch: object,
-) -> None:
-    runner = CliRunner()
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.ingest()
-    service.generate_claude_md(no_llm=True)
-    service.sync_commit()
-    service.install_sync_hook()
-
-    result = runner.invoke(app, ["doctor"])
-
-    assert result.exit_code == 0
-    assert "ONMC Health Check" in result.stdout
+def _make_repo(tmp_path: Path) -> Path:
+    """Return a minimal fake repo root with a .git sentinel directory."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    return repo
 
 
-def test_doctor_exit_code_zero_when_provider_env_var_is_missing(
-    sample_repo: Path,
-    monkeypatch: object,
-) -> None:
-    runner = CliRunner()
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.ingest()
-    service.configure_llm(
-        provider=LLMProviderType.ANTHROPIC,
-        model="claude-sonnet-4-5",
-        api_key_env_var="ANTHROPIC_API_KEY",
-        temperature=0.0,
-        max_tokens=1200,
+def _cli_runner() -> CliRunner:
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        return CliRunner()
+
+
+def _all_ok_checks() -> list[CheckResult]:
+    return [
+        CheckResult(name=n, status="ok", detail="fine", fix=None)
+        for n in ("initialized", "version", "on_path", "hooks", "mcp", "wrap")
+    ]
+
+
+def _all_warn_checks() -> list[CheckResult]:
+    return [
+        CheckResult(name=n, status="warn", detail="advisory", fix="do something")
+        for n in ("initialized", "version", "on_path", "hooks", "mcp", "wrap")
+    ]
+
+
+def _with_fail_checks() -> list[CheckResult]:
+    return [
+        CheckResult(name="initialized", status="fail", detail="not found", fix="run onmc init"),
+        *[
+            CheckResult(name=n, status="ok", detail="fine", fix=None)
+            for n in ("version", "on_path", "hooks", "mcp", "wrap")
+        ],
+    ]
+
+
+# ---------------------------------------------------------------------------
+# check_initialized (tests 1–3)
+# ---------------------------------------------------------------------------
+
+
+def test_check_initialized_ok(tmp_path: Path) -> None:
+    """check_initialized returns ok when .onmc/memory.db exists."""
+    repo = _make_repo(tmp_path)
+    db = repo / ".onmc" / "memory.db"
+    db.parent.mkdir(parents=True)
+    db.touch()
+
+    result = check_initialized(repo)
+
+    assert result.status == "ok"
+    assert result.fix is None
+    assert "memory.db" in result.detail
+
+
+def test_check_initialized_fail_missing_db(tmp_path: Path) -> None:
+    """check_initialized returns fail when .onmc/memory.db is absent."""
+    repo = _make_repo(tmp_path)
+
+    result = check_initialized(repo)
+
+    assert result.status == "fail"
+    assert result.fix is not None
+    assert "onmc init" in result.fix
+
+
+def test_check_initialized_fail_no_repo() -> None:
+    """check_initialized returns fail when repo_root is None."""
+    result = check_initialized(None)
+
+    assert result.status == "fail"
+    assert result.fix is not None
+
+
+# ---------------------------------------------------------------------------
+# check_version (tests 4–5)
+# ---------------------------------------------------------------------------
+
+
+def test_check_version_ok() -> None:
+    """check_version returns ok with injectable version function."""
+    result = check_version(version_fn=lambda: "1.2.3")
+
+    assert result.status == "ok"
+    assert "1.2.3" in result.detail
+    assert result.fix is None
+
+
+def test_check_version_fail_not_found() -> None:
+    """check_version returns fail when PackageNotFoundError is raised."""
+
+    def _missing() -> str:
+        raise importlib.metadata.PackageNotFoundError("oh-no-my-claudecode")
+
+    result = check_version(version_fn=_missing)
+
+    assert result.status == "fail"
+    assert result.fix is not None
+
+
+# ---------------------------------------------------------------------------
+# check_on_path (tests 6–7)
+# ---------------------------------------------------------------------------
+
+
+def test_check_on_path_ok() -> None:
+    """check_on_path returns ok when which_fn finds the binary."""
+    result = check_on_path(which_fn=lambda _: "/usr/local/bin/onmc")
+
+    assert result.status == "ok"
+    assert result.fix is None
+    assert "/usr/local/bin/onmc" in result.detail
+
+
+def test_check_on_path_warn() -> None:
+    """check_on_path returns warn (not fail) when which_fn returns None."""
+    result = check_on_path(which_fn=lambda _: None)
+
+    assert result.status == "warn"
+    assert result.fix is not None
+
+
+# ---------------------------------------------------------------------------
+# check_hooks (tests 8–9)
+# ---------------------------------------------------------------------------
+
+
+def test_check_hooks_ok(tmp_path: Path) -> None:
+    """check_hooks returns ok after install_claude_hooks writes settings.json."""
+    from oh_no_my_claudecode.hooks.installer import install_claude_hooks
+
+    repo = _make_repo(tmp_path)
+    mcp_path = repo / ".mcp.json"
+    install_claude_hooks(repo_root=repo, mcp_path=mcp_path)
+
+    result = check_hooks(repo)
+
+    assert result.status == "ok"
+    assert result.fix is None
+
+
+def test_check_hooks_warn_absent(tmp_path: Path) -> None:
+    """check_hooks returns warn (not fail) when .claude/settings.json does not exist."""
+    repo = _make_repo(tmp_path)
+
+    result = check_hooks(repo)
+
+    assert result.status == "warn"
+    assert result.fix is not None
+    assert "quickstart" in result.fix
+
+
+# ---------------------------------------------------------------------------
+# check_mcp (tests 10–11)
+# ---------------------------------------------------------------------------
+
+
+def test_check_mcp_ok(tmp_path: Path) -> None:
+    """check_mcp returns ok after install_claude_hooks registers MCP server."""
+    from oh_no_my_claudecode.hooks.installer import install_claude_hooks
+
+    repo = _make_repo(tmp_path)
+    mcp_path = repo / ".mcp.json"
+    install_claude_hooks(repo_root=repo, register_mcp=True, mcp_path=mcp_path)
+
+    result = check_mcp(repo)
+
+    assert result.status == "ok"
+    assert result.fix is None
+
+
+def test_check_mcp_warn_absent(tmp_path: Path) -> None:
+    """check_mcp returns warn (not fail) when .mcp.json does not exist."""
+    repo = _make_repo(tmp_path)
+
+    result = check_mcp(repo)
+
+    assert result.status == "warn"
+    assert result.fix is not None
+    assert "plug claude-code" in result.fix
+
+
+# ---------------------------------------------------------------------------
+# check_wrap (tests 12–13)
+# ---------------------------------------------------------------------------
+
+
+def test_check_wrap_ok(tmp_path: Path) -> None:
+    """check_wrap returns ok when .claude/commands/onmc.md is present."""
+    repo = _make_repo(tmp_path)
+    cmd_file = repo / ".claude" / "commands" / "onmc.md"
+    cmd_file.parent.mkdir(parents=True)
+    cmd_file.write_text("<!-- onmc wrap -->\n", encoding="utf-8")
+
+    result = check_wrap(repo)
+
+    assert result.status == "ok"
+    assert result.fix is None
+    assert "deep-wrap" in result.detail
+
+
+def test_check_wrap_warn_absent(tmp_path: Path) -> None:
+    """check_wrap returns warn (not fail) when .claude/commands/onmc.md is absent."""
+    repo = _make_repo(tmp_path)
+
+    result = check_wrap(repo)
+
+    assert result.status == "warn"
+    assert result.fix is not None
+    assert "onmc wrap" in result.fix
+
+
+# ---------------------------------------------------------------------------
+# run_all_checks (test 14)
+# ---------------------------------------------------------------------------
+
+
+def test_run_all_checks_returns_six_results(tmp_path: Path) -> None:
+    """run_all_checks returns exactly 6 CheckResult objects with expected names."""
+    repo = _make_repo(tmp_path)
+    results = run_all_checks(
+        repo,
+        version_fn=lambda: "0.0.0",
+        which_fn=lambda _: None,
     )
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    result = runner.invoke(app, ["doctor"])
+    assert len(results) == 6  # noqa: PLR2004
+    names = [r.name for r in results]
+    assert names == ["initialized", "version", "on_path", "hooks", "mcp", "wrap"]
+    for r in results:
+        assert isinstance(r, CheckResult)
+        assert r.status in ("ok", "warn", "fail")
 
-    assert result.exit_code == 0
-    assert "ANTHROPIC_API_KEY not set in current environment" in result.stdout
+
+# ---------------------------------------------------------------------------
+# CLI: --json envelope shape (test 15)
+# ---------------------------------------------------------------------------
 
 
-def test_doctor_exit_code_one_when_provider_key_is_invalid(
-    sample_repo: Path,
-    monkeypatch: object,
+def test_doctor_json_envelope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``onmc doctor --json`` emits expected keys: kind, integration, repo_health, summary."""
+    repo = _make_repo(tmp_path)
+    monkeypatch.chdir(repo)
+
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor", "--json"])
+
+    # Output must be valid JSON regardless of exit code.
+    payload = json.loads(result.output)
+    assert payload["kind"] == "doctor"
+    # integration replaces the old "checks" key
+    assert "integration" in payload
+    assert isinstance(payload["integration"], list)
+    assert len(payload["integration"]) == 6  # noqa: PLR2004
+    # repo_health may be None (repo not init'd) but the key must exist
+    assert "repo_health" in payload
+    assert set(payload["summary"].keys()) == {"ok", "warn", "fail"}
+    for check in payload["integration"]:
+        assert "name" in check
+        assert "status" in check
+        assert "detail" in check
+        assert "fix" in check  # value may be None
+
+
+# ---------------------------------------------------------------------------
+# CLI: exit codes (tests 16–19)
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_exit_code_one_on_integration_fail(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.ingest()
-    service.configure_llm(
-        provider=LLMProviderType.ANTHROPIC,
-        model="claude-sonnet-4-5",
-        api_key_env_var="ANTHROPIC_API_KEY",
-        temperature=0.0,
-        max_tokens=1200,
-    )
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-invalid-test-key")
-    monkeypatch.setattr(
-        "oh_no_my_claudecode.core.service.validate_provider_api_key",
-        lambda provider, api_key: (False, "invalid credentials"),
-    )
+    """Exit code 1 when any integration check fails (repo_health unavailable)."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
 
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _with_fail_checks())
+    monkeypatch.setattr(cmd_mod, "_run_repo_health", lambda *a, **kw: (None, None))
+
+    runner = _cli_runner()
     result = runner.invoke(app, ["doctor"])
-
     assert result.exit_code == 1
-    assert "anthropic key is invalid" in result.stdout.lower()
 
 
-def test_detect_leaked_keys_finds_provider_secret_patterns(tmp_path: Path) -> None:
-    onmc_dir = tmp_path / ".onmc"
-    logs_dir = onmc_dir / "logs"
-    logs_dir.mkdir(parents=True)
-    leak_path = logs_dir / "llm-calls.jsonl"
-    leak_path.write_text(
-        "sk-ant-api03-this-value-should-trigger-a-doctor-warning-1234567890",
-        encoding="utf-8",
-    )
-
-    warnings = _detect_leaked_keys(onmc_dir)
-
-    assert len(warnings) == 1
-    assert leak_path.as_posix() in warnings[0]
-
-
-def test_doctor_warns_when_legacy_global_hooks_remain(
-    sample_repo: Path,
-    monkeypatch: object,
-    tmp_path: Path,
+def test_doctor_exit_code_zero_on_warns_only_no_repo_health(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    fake_home = tmp_path / "home"
-    global_settings = fake_home / ".claude" / "settings.json"
-    global_settings.parent.mkdir(parents=True, exist_ok=True)
-    global_settings.write_text(
-        json.dumps(
-            {
-                "hooks": {
-                    "PostCompact": [
-                        {
-                            "matcher": "",
-                            "hooks": [
-                                {"type": "command", "command": "onmc hooks post-compact"}
-                            ],
-                        }
-                    ]
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr("oh_no_my_claudecode.hooks.installer.Path.home", lambda: fake_home)
+    """Exit code 0 when all checks warn-only and repo_health unavailable (None)."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
 
-    ok, report = service.doctor()
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _all_warn_checks())
+    monkeypatch.setattr(cmd_mod, "_run_repo_health", lambda *a, **kw: (None, None))
 
-    assert ok is True
-    assert any("Legacy onmc hooks" in warning for warning in report["warnings"])
-    assert any("MCP server not registered" in line for line in report["claude"])
-
-
-def test_report_prints_shareable_agent_readiness_markdown(
-    sample_repo: Path,
-    monkeypatch: object,
-) -> None:
-    runner = CliRunner()
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.ingest()
-    task = service.start_task(
-        title="Improve orchestration handoff",
-        description="Track the agent handoff report feature.",
-        labels=["oss"],
-    )
-
-    result = runner.invoke(app, ["report"])
-
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0
-    assert "# ONMC Agent Readiness Report" in result.stdout
-    assert "Agent readiness:" in result.stdout
-    assert f"Active tasks: 1 (`{task.task_id}`)" in result.stdout
-    assert "Generated by `onmc report`" in result.stdout
 
 
-def test_report_writes_output_file(
-    sample_repo: Path,
-    monkeypatch: object,
-    tmp_path: Path,
+def test_doctor_exit_code_one_when_repo_health_false(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    runner = CliRunner()
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.ingest()
-    output_path = tmp_path / "readiness.md"
+    """Exit code 1 when integration all-ok but repo_health ok=False."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
 
-    result = runner.invoke(app, ["report", "--output", output_path.as_posix()])
+    fake_report: dict[str, list[str]] = {
+        "repo": [],
+        "memory": [],
+        "provider": [],
+        "claude": [],
+        "sync": [],
+        "errors": ["provider key is invalid"],
+        "warnings": [],
+    }
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _all_ok_checks())
+    monkeypatch.setattr(
+        cmd_mod, "_run_repo_health", lambda *a, **kw: (False, fake_report)
+    )
 
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 1
+
+
+def test_doctor_exit_code_zero_when_all_ok_and_repo_health_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exit code 0 when all integration checks ok AND repo_health ok=True."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
+
+    fake_report: dict[str, list[str]] = {
+        "repo": ["Git repo detected"],
+        "memory": ["5 memory records"],
+        "provider": [],
+        "claude": [],
+        "sync": [],
+        "errors": [],
+        "warnings": [],
+    }
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _all_ok_checks())
+    monkeypatch.setattr(
+        cmd_mod, "_run_repo_health", lambda *a, **kw: (True, fake_report)
+    )
+
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 0
-    assert f"Wrote report: {output_path}" in result.stdout
-    assert output_path.exists()
-    report = output_path.read_text(encoding="utf-8")
-    assert "# ONMC Agent Readiness Report" in report
-    assert "Memory records:" in report
-    assert "ONMC-ready repo:" in report
-    assert "Generated by `onmc report`" in report
+
 
 # ---------------------------------------------------------------------------
-# PATH onmc health checks
+# _run_repo_health defensive behaviour (test 20)
 # ---------------------------------------------------------------------------
 
 
-def test_check_onmc_path_health_ok_when_binary_matches_installed(
-    monkeypatch: pytest.MonkeyPatch,
+def test_run_repo_health_returns_none_on_uninitialised_repo(tmp_path: Path) -> None:
+    """_run_repo_health returns (None, None) when service raises (no .onmc/memory.db)."""
+    repo = _make_repo(tmp_path)
+    # repo has no .onmc/memory.db so service._load_context() raises FileNotFoundError.
+    ok, report = _run_repo_health(repo)
+    assert ok is None
+    assert report is None
+
+
+def test_run_repo_health_returns_none_on_arbitrary_exception(
+    tmp_path: Path,
 ) -> None:
-    """When PATH binary reports same version as installed package → ok status."""
-    mock_result = MagicMock()
-    mock_result.stdout = "onmc 0.10.0\n"
-    mock_result.stderr = ""
-
-    with (
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value="/usr/local/bin/onmc"),
-        patch(
-            "oh_no_my_claudecode.core.service.subprocess.run",
-            return_value=mock_result,
-        ),
-        patch(
-            "oh_no_my_claudecode.core.service._installed_onmc_version",
-            return_value="0.10.0",
-        ),
-    ):
-        results = _check_onmc_path_health()
-
-    assert len(results) == 1
-    severity, message = results[0]
-    assert severity == "ok"
-    assert "0.10.0" in message
-    assert "/usr/local/bin/onmc" in message
-
-
-def test_check_onmc_path_health_warns_on_version_mismatch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When PATH binary version != installed package version → warn."""
-    mock_result = MagicMock()
-    mock_result.stdout = "onmc 0.9.0\n"
-    mock_result.stderr = ""
-
-    with (
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value="/usr/local/bin/onmc"),
-        patch(
-            "oh_no_my_claudecode.core.service.subprocess.run",
-            return_value=mock_result,
-        ),
-        patch(
-            "oh_no_my_claudecode.core.service._installed_onmc_version",
-            return_value="0.10.0",
-        ),
-    ):
-        results = _check_onmc_path_health()
-
-    assert len(results) == 1
-    severity, message = results[0]
-    assert severity == "warn"
-    assert "stale shadow" in message
-    assert "0.9.0" in message
-    assert "0.10.0" in message
-
-
-def test_check_onmc_path_health_warns_when_not_on_path() -> None:
-    """When onmc is absent from PATH → warn with install hint."""
-    with patch("oh_no_my_claudecode.core.service.shutil.which", return_value=None):
-        results = _check_onmc_path_health()
-
-    assert len(results) == 1
-    severity, message = results[0]
-    assert severity == "warn"
-    assert "not found on PATH" in message
-
-
-def test_check_onmc_path_health_warns_when_binary_broken() -> None:
-    """When binary is on PATH but subprocess raises OSError → warn (broken binary)."""
-    with (
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value="/stale/onmc"),
-        patch(
-            "oh_no_my_claudecode.core.service.subprocess.run",
-            side_effect=OSError("exec format error"),
-        ),
-    ):
-        results = _check_onmc_path_health()
-
-    assert len(results) == 1
-    severity, message = results[0]
-    assert severity == "warn"
-    assert "broken" in message or "failed to report" in message
-
-
-def test_check_onmc_path_health_warns_on_timeout() -> None:
-    """When binary hangs and times out → warn, never crash doctor."""
-    with (
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value="/slow/onmc"),
-        patch(
-            "oh_no_my_claudecode.core.service.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd=["onmc", "--version"], timeout=5),
-        ),
-    ):
-        results = _check_onmc_path_health()
-
-    assert len(results) == 1
-    severity, message = results[0]
-    assert severity == "warn"
-    # Should still surface the binary path in the message
-    assert "/slow/onmc" in message or "broken" in message or "failed to report" in message
-
-
-def test_doctor_warns_when_hooks_installed_but_onmc_missing_from_path(
-    sample_repo: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """If hooks are installed but onmc is absent from PATH, doctor warns."""
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.install_sync_hook()
-    service.install_hooks()
-
-    path_check_result = [("warn", "onmc not found on PATH")]
-    with patch(
-        "oh_no_my_claudecode.core.service._check_onmc_path_health",
-        return_value=path_check_result,
-    ):
-        ok, report = service.doctor()
-
-    assert ok is True  # only warnings, not errors
-    assert any("not found on PATH" in w for w in report["warnings"])
-
-
-def test_doctor_warns_when_hooks_installed_but_onmc_unresolvable(
-    sample_repo: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """hooks installed + onmc not resolvable → warn about hooks silently failing."""
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.install_sync_hook()
-    service.install_hooks()
+    """_run_repo_health catches any exception and degrades gracefully."""
+    repo = _make_repo(tmp_path)
 
     with patch(
-        "oh_no_my_claudecode.core.service._check_onmc_path_health",
-        return_value=[("warn", "onmc not found on PATH")],
+        "oh_no_my_claudecode.core.service.OnmcService",
+        side_effect=RuntimeError("unexpected failure"),
     ):
-        ok, report = service.doctor()
+        ok, report = _run_repo_health(repo)
 
-    assert ok is True
-    hook_warning = any(
-        "Hooks are installed" in w and "silently fail" in w for w in report["warnings"]
-    )
-    assert hook_warning
+    assert ok is None
+    assert report is None
 
 
-def test_probe_path_onmc_returns_none_when_not_found() -> None:
-    """When shutil.which returns None, probe returns (None, None)."""
-    with patch("oh_no_my_claudecode.core.service.shutil.which", return_value=None):
-        binary, ver = _probe_path_onmc()
-    assert binary is None
-    assert ver is None
+# ---------------------------------------------------------------------------
+# JSON: repo_health present when service succeeds (test 21)
+# ---------------------------------------------------------------------------
 
 
-def test_probe_path_onmc_extracts_semver_from_output() -> None:
-    """Probe correctly extracts semver from `onmc --version` output."""
-    mock_result = MagicMock()
-    mock_result.stdout = "oh-no-my-claudecode 0.10.0"
-    mock_result.stderr = ""
-
-    with (
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value="/bin/onmc"),
-        patch("oh_no_my_claudecode.core.service.subprocess.run", return_value=mock_result),
-    ):
-        binary, ver = _probe_path_onmc()
-
-    assert binary == "/bin/onmc"
-    assert ver == "0.10.0"
-
-
-def test_read_mcp_command_returns_none_when_file_missing(tmp_path: Path) -> None:
-    assert _read_mcp_command(tmp_path / "nonexistent.json") is None
-
-
-def test_read_mcp_command_returns_command_field(tmp_path: Path) -> None:
-    mcp_json = tmp_path / ".mcp.json"
-    mcp_json.write_text(
-        json.dumps({
-            "mcpServers": {
-                "onmc": {"command": "onmc", "args": ["mcp-server"]},
-            }
-        }),
-        encoding="utf-8",
-    )
-    assert _read_mcp_command(mcp_json) == "onmc"
-
-
-def test_doctor_mcp_command_not_resolvable_is_warned(
-    sample_repo: Path,
+def test_doctor_json_includes_repo_health_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """If MCP is registered but its command is not on PATH → warn."""
-    monkeypatch.chdir(sample_repo)
-    service = OnmcService(sample_repo)
-    service.init_project()
-    service.install_hooks()
+    """When service.doctor() succeeds, repo_health in --json is non-null."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
 
-    # Write a .mcp.json with onmc registered using a nonexistent command
-    mcp_path = sample_repo / ".mcp.json"
-    mcp_path.write_text(
-        json.dumps({
-            "mcpServers": {
-                "onmc": {"command": "onmc-does-not-exist", "args": ["mcp-server"]},
-            }
-        }),
-        encoding="utf-8",
+    fake_report: dict[str, list[str]] = {
+        "repo": ["Git repo detected"],
+        "memory": ["5 memory records"],
+        "provider": [],
+        "claude": [],
+        "sync": [],
+        "errors": [],
+        "warnings": [],
+    }
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _all_ok_checks())
+    monkeypatch.setattr(
+        cmd_mod, "_run_repo_health", lambda *a, **kw: (True, fake_report)
     )
 
-    with (
-        patch(
-            "oh_no_my_claudecode.core.service._check_onmc_path_health",
-            return_value=[("ok", "onmc 0.10.0 on PATH (/usr/bin/onmc)")],
-        ),
-        patch("oh_no_my_claudecode.core.service.shutil.which", return_value=None),
-    ):
-        ok, report = service.doctor()
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor", "--json"])
+    payload = json.loads(result.output)
 
-    assert ok is True
-    assert any("MCP server is registered but" in w for w in report["warnings"])
+    assert payload["repo_health"] is not None
+    assert payload["repo_health"]["ok"] is True
+    assert "repo" in payload["repo_health"]
+
+
+# ---------------------------------------------------------------------------
+# Human output: integration table visible (test 22)
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_human_output_shows_integration_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Human-readable output includes integration-check table content."""
+    import oh_no_my_claudecode.doctor.commands as cmd_mod
+
+    monkeypatch.setattr(cmd_mod, "run_all_checks", lambda *a, **kw: _all_ok_checks())
+    monkeypatch.setattr(cmd_mod, "_run_repo_health", lambda *a, **kw: (None, None))
+
+    runner = _cli_runner()
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    # Rich strips markup in CliRunner — check for non-markup content.
+    assert "integration" in result.output.lower() or "onmc doctor" in result.output.lower()
