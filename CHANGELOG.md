@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.94.0] — 2026-07-06
+
+### Added
+
+- **`/onmc` session switch + deep-wrap control plane** — onmc becomes a toggleable control plane over Claude Code. `onmc wrap` installs the hooks plus a `/onmc` Claude Code slash command (`.claude/commands/onmc.md`, body runs `onmc wrap toggle`); `onmc wrap on|off|toggle|status` control it, and `--default-active` auto-engages on every SessionStart. When **active**, onmc owns the full Claude Code lifecycle: SessionStart memory-grounding, per-prompt recall + dead-ends + route/guard, PreToolUse gate + native-Task→`onmc swarm` redirect, PostToolUse/SubagentStop live telemetry, Stop receipt, PreCompact flush. When **off**, every hook no-ops (exit 0) — Claude Code runs stock. Type `/onmc` mid-session to flip it, exactly like `/caveman`. (#305)
+
 ## [0.93.0] — 2026-07-06
 
 ### Added
