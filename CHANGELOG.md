@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.96.0] — 2026-07-06
+
+### Added
+
+Frictionless onboarding — get from zero to integrated in one line, oh-my-zsh style:
+
+- **One-line installer** — `curl -fsSL https://raw.githubusercontent.com/adaline-ankit/oh-no-my-claudecode/main/install.sh | bash` detects uv/pipx/pip, installs onmc, runs `onmc quickstart`, prints a day-1 banner. README updated with the one-liner up top. (#311)
+- **`onmc quickstart`** — one idempotent, zero-config command that composes memory init + `plug claude-code` (hooks + MCP + `/onmc` slash command) + `wrap --default-active`, then prints a "you're ready" card with the day-1 commands. (#312)
+- **Tiered help** — `onmc --help` no longer dumps 136 commands: the root help surfaces ~8 **Core** commands and points to `onmc commands`, which groups everything into Core / Orchestrate / Memory / Trust / Fun / Integrations / Other (`--all`, `--category`, `--json`). (#313)
+
 ## [0.95.0] — 2026-07-06
 
 ### Added
