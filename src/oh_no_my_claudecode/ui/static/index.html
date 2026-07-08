@@ -23,6 +23,10 @@
             <span class="nav-icon" aria-hidden="true">⚡</span><span>Swarms</span>
             <span id="nav-live-dot" class="nav-live-dot" aria-hidden="true" hidden></span>
           </button>
+          <button class="nav-item" data-view="agents">
+            <span class="nav-icon" aria-hidden="true">⬡</span><span>Agents</span>
+            <span id="nav-agents-dot" class="nav-live-dot" aria-hidden="true" hidden></span>
+          </button>
           <button class="nav-item" data-view="performance">
             <span class="nav-icon" aria-hidden="true">▤</span><span>Performance</span>
           </button>
@@ -166,6 +170,34 @@
             </div>
             <div id="swarm-list" class="swarm-list"></div>
             <div id="swarm-empty" class="empty-state" hidden>No swarms match — run <code>onmc swarm plan</code> to launch a fleet of agents.</div>
+          </section>
+
+          <section id="view-agents" class="view" data-view-panel="agents" aria-labelledby="agents-title" hidden>
+            <div class="section-heading">
+              <div><span class="eyebrow">Orchestration</span><h2 id="agents-title">Agents</h2></div>
+              <span id="agents-live-chip" class="status-chip"></span>
+            </div>
+            <div id="agents-metric-grid" class="metric-grid"></div>
+            <section class="panel agents-orch-panel" aria-labelledby="agents-orch-title">
+              <div class="panel-heading"><h3 id="agents-orch-title">Orchestrate</h3><span>action buttons are best-effort</span></div>
+              <div id="agents-actions" class="agents-actions">
+                <div class="agents-action-row">
+                  <label class="sr-only" for="agents-mission-input">Mission goal</label>
+                  <input id="agents-mission-input" class="agents-text-input" type="text" placeholder="Mission goal…" autocomplete="off">
+                  <button id="agents-mission-btn" class="button" type="button">Start Mission</button>
+                </div>
+                <div class="agents-action-row">
+                  <label class="sr-only" for="agents-land-input">PR URL to land</label>
+                  <input id="agents-land-input" class="agents-text-input" type="text" placeholder="PR URL to land…" autocomplete="off">
+                  <button id="agents-land-btn" class="button" type="button">Land PR</button>
+                </div>
+              </div>
+            </section>
+            <section class="panel" aria-labelledby="agents-swarms-title">
+              <div class="panel-heading"><h3 id="agents-swarms-title">Swarms</h3><span id="agents-swarms-sub"></span></div>
+              <div id="agents-swarm-list" class="swarm-list agents-swarm-list"></div>
+              <div id="agents-empty" class="empty-state" hidden>No swarms yet — run <code>onmc swarm plan</code> to launch agents.</div>
+            </section>
           </section>
 
           <section id="view-performance" class="view" data-view-panel="performance" aria-labelledby="perf-title" hidden>
