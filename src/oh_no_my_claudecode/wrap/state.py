@@ -56,13 +56,36 @@ def wrap_state_path(repo_root: Path) -> Path:
     return repo_root / ".onmc" / "wrap.json"
 
 
-def write_wrap_state(repo_root: Path, *, strict: bool, now: datetime | None = None) -> Path:
-    """Write the wrap-state file recording the active mode. Returns its path."""
+def write_wrap_state(
+    repo_root: Path,
+    *,
+    strict: bool,
+    default_active: bool = False,
+    now: datetime | None = None,
+) -> Path:
+    """Write the wrap-state file recording the active mode. Returns its path.
+
+    Args:
+        repo_root: Absolute path to the git repository root.
+        strict: Whether task-intercept runs in strict (deny) or soft (nudge) mode.
+        default_active: When ``True``, SessionStart auto-activates the session
+            switch so hooks engage immediately on every new session without
+            requiring an explicit ``onmc wrap on`` / ``/onmc`` toggle.
+        now: Injectable timestamp for testing; defaults to ``datetime.now(UTC)``.
+    """
     path = wrap_state_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     moment = now if now is not None else datetime.now(UTC)
     path.write_text(
-        json.dumps({"strict": bool(strict), "wrapped_at": moment.isoformat()}, indent=2) + "\n",
+        json.dumps(
+            {
+                "strict": bool(strict),
+                "default_active": bool(default_active),
+                "wrapped_at": moment.isoformat(),
+            },
+            indent=2,
+        )
+        + "\n",
         encoding="utf-8",
     )
     return path

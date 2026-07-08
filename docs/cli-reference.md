@@ -135,7 +135,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
 │ timeline        Tell this repo's evolution story from its brain.             │
 │ watch           Auto-refreshing terminal live monitor of active swarms.      │
-│ wrap            Make onmc the default layer for Claude Code in this repo.    │
 │ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
 │                 wrap``.                                                      │
 │ memory          Inspect stored memory.                                       │
@@ -257,6 +256,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 server, no dep).                                             │
 │ whip            Steer a running agent and record reward signals (the reins + │
 │                 whip control surface).                                       │
+│ wrap            Make onmc the default layer for Claude Code; manage the      │
+│                 session switch.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7153,13 +7154,15 @@ Usage: onmc unwrap [OPTIONS]
 
  Remove the onmc wrap layer — the perfect inverse of ``onmc wrap``.
 
- Strips exactly the two wrap hooks, the wrap-state file, and the
- CLAUDE.md policy stanza. Every other hook and all CLAUDE.md content is
- left untouched. The settings.json backup is kept as a safety artifact.
+ Strips exactly the two wrap hooks, the wrap-state file, the CLAUDE.md
+ policy stanza, and the ``/onmc`` slash command.  Every other hook and
+ all CLAUDE.md content is left untouched.  The settings.json backup is
+ kept as a safety artifact.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --global    --project      Remove from the user-level                        │
-│                            ~/.claude/settings.json (default: project).       │
+│                            ~/.claude/settings.json. Default: project-scoped  │
+│                            .claude/settings.json.                            │
 │                            [default: project]                                │
 │ --help                     Show this message and exit.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -7733,23 +7736,96 @@ Usage: onmc wiki site [OPTIONS]
 ## `onmc wrap`
 
 ```text
-Usage: onmc wrap [OPTIONS]
+Usage: onmc wrap [OPTIONS] COMMAND [ARGS]...
 
- Make onmc the default layer for Claude Code in this repo.
+ Make onmc the default layer for Claude Code; manage the session switch.
 
- Installs a Task intercept (PreToolUse matcher ``Task``) that redirects
- native agent-spawning to ``onmc swarm``, plus a prompt router
- (UserPromptSubmit) that nudges toward onmc paths. Backs up
- settings.json before editing. Reverse with ``onmc unwrap``.
+ Called without a sub-command: installs hooks + /onmc slash command.
+ Sub-commands: on / off / toggle / status
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --strict    --soft         strict: deny native Task spawns and redirect to   │
-│                            `onmc swarm`. soft: allow them with a nudge.      │
-│                            Default: strict.                                  │
-│                            [default: strict]                                 │
-│ --global    --project      Install into the user-level                       │
-│                            ~/.claude/settings.json (default: project).       │
-│                            [default: project]                                │
-│ --help                     Show this message and exit.                       │
+│ --strict            --soft                   strict: deny native Task spawns │
+│                                              and redirect to `onmc swarm`.   │
+│                                              soft: allow them with a nudge   │
+│                                              toward `onmc swarm`. Default:   │
+│                                              strict.                         │
+│                                              [default: strict]               │
+│ --global            --project                Install into the user-level     │
+│                                              ~/.claude/settings.json.        │
+│                                              Default: project-scoped         │
+│                                              .claude/settings.json.          │
+│                                              [default: project]              │
+│ --default-active    --no-default-active      Auto-activate the session       │
+│                                              switch on every SessionStart so │
+│                                              hooks engage immediately        │
+│                                              without an explicit `onmc wrap  │
+│                                              on` or /onmc. Default: off      │
+│                                              (explicit toggle required).     │
+│                                              [default: no-default-active]    │
+│ --help                                       Show this message and exit.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ on      Activate the onmc deep-wrap session switch.                          │
+│ off     Deactivate the onmc deep-wrap session switch.                        │
+│ toggle  Toggle the onmc deep-wrap session switch.                            │
+│ status  Show the current onmc wrap installation and session status.          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wrap off`
+
+```text
+Usage: onmc wrap off [OPTIONS]
+
+ Deactivate the onmc deep-wrap session switch.
+
+ All lifecycle hooks become silent.  Claude Code behaves as if the
+ wrap layer was not installed.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wrap on`
+
+```text
+Usage: onmc wrap on [OPTIONS]
+
+ Activate the onmc deep-wrap session switch.
+
+ All lifecycle hooks engage immediately: memory-grounded prompts,
+ Task intercept, live telemetry, pre-compact snapshot.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wrap status`
+
+```text
+Usage: onmc wrap status [OPTIONS]
+
+ Show the current onmc wrap installation and session status.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Output status as JSON.                                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc wrap toggle`
+
+```text
+Usage: onmc wrap toggle [OPTIONS]
+
+ Toggle the onmc deep-wrap session switch.
+
+ Activates when currently inactive; deactivates when currently active.
+ This is the command invoked by the ``/onmc`` Claude Code slash command.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

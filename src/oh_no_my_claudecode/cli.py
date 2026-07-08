@@ -2069,11 +2069,42 @@ def _read_hook_payload() -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _wrap_active_for(payload: dict[str, object]) -> bool:
+    """Return whether the deep-wrap session is active for the repo in *payload*.
+
+    Extracts ``cwd`` from the hook payload, discovers the repo root, and calls
+    :func:`oh_no_my_claudecode.wrap.session.is_active`.  Returns ``True``
+    (active / proceed) on any error so that a gate failure never silently
+    breaks a Claude Code session — the hooks degrade to their normal behaviour
+    rather than becoming a silent no-op.
+
+    ``is_active`` itself returns ``True`` when the wrap layer is not installed
+    (``.onmc/wrap.json`` absent), so existing ``onmc hooks install`` users see
+    no behaviour change.
+    """
+    try:
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            from oh_no_my_claudecode.core.repo import discover_repo_root as _discover
+
+            _repo_root = _discover(cwd)
+        except Exception:  # noqa: BLE001
+            _repo_root = cwd
+        from oh_no_my_claudecode.wrap.session import is_active as _is_active
+
+        return _is_active(_repo_root)
+    except Exception:  # noqa: BLE001
+        return True  # fail open — never brick Claude Code
+
+
 @hooks_app.command("pre-compact")
 def hooks_pre_compact_command() -> None:
     """Capture a compaction snapshot before Claude Code compacts context."""
     try:
         payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
         raw_transcript = payload.get("transcript_path")
         transcript_path = (
             Path(raw_transcript) if isinstance(raw_transcript, str) and raw_transcript else None
@@ -2083,7 +2114,7 @@ def hooks_pre_compact_command() -> None:
         typer.echo(f"ONMC pre-compact warning: {exc}", err=True)
 
 
-def _run_session_start_hook() -> None:
+def _run_session_start_hook(payload: dict[str, object] | None = None) -> None:
     """Emit the SessionStart additionalContext JSON.
 
     Stdout must contain ONLY the hook JSON — Claude Code parses it verbatim to
@@ -2093,10 +2124,13 @@ def _run_session_start_hook() -> None:
     Branches on the ``source`` field from the stdin payload:
     - ``"compact"`` or absent/unknown: emit the continuation brief.
     - ``"startup"``, ``"resume"``, ``"clear"``: emit the boot digest.
+
+    *payload* is accepted so the session-start command can pass the already-read
+    payload (stdin can only be read once); when ``None``, reads from stdin.
     """
     try:
-        payload = _read_hook_payload()
-        source = payload.get("source", "")
+        p = payload if payload is not None else _read_hook_payload()
+        source = p.get("source", "")
         if isinstance(source, str) and source in {"startup", "resume", "clear"}:
             digest_md, _ = _service().boot_digest()
             if digest_md:
@@ -2112,7 +2146,27 @@ def _run_session_start_hook() -> None:
 @hooks_app.command("session-start")
 def hooks_session_start_command() -> None:
     """Inject context at session start: boot digest on startup, continuation brief after compaction."""  # noqa: E501
-    _run_session_start_hook()
+    payload = _read_hook_payload()
+    # Auto-activate the session switch if default_active is set in wrap state —
+    # this is how a repo that shipped default_active=True engages on first boot.
+    try:
+        raw_cwd = payload.get("cwd")
+        _cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            from oh_no_my_claudecode.core.repo import discover_repo_root as _dr
+
+            _rr = _dr(_cwd)
+        except Exception:  # noqa: BLE001
+            _rr = _cwd
+        from oh_no_my_claudecode.wrap.session import read_default_active, set_active
+
+        if read_default_active(_rr):
+            set_active(_rr, on=True)
+    except Exception:  # noqa: BLE001, S110 - auto-activate failure must never block the session.
+        pass
+    if not _wrap_active_for(payload):
+        return
+    _run_session_start_hook(payload)
 
 
 @hooks_app.command("post-compact", hidden=True, deprecated=True)
@@ -2132,6 +2186,8 @@ def hooks_prompt_recall_command() -> None:
     """
     try:
         payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
         raw_prompt = payload.get("prompt", "")
         prompt = raw_prompt if isinstance(raw_prompt, str) else ""
         if not prompt.strip():
@@ -2218,6 +2274,8 @@ def hooks_pre_tool_use_command() -> None:
     """
     try:
         payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
         tool_name = payload.get("tool_name", "")
         if not isinstance(tool_name, str) or tool_name not in _EDIT_TOOL_NAMES:
             return
@@ -2276,7 +2334,10 @@ def hooks_post_tool_use_command() -> None:
     try:
         from oh_no_my_claudecode.hooks.post_tool_use import handle_post_tool_use
 
-        handle_post_tool_use()
+        payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
+        handle_post_tool_use(payload)
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 
@@ -2297,7 +2358,10 @@ def hooks_subagent_stop_command() -> None:
     try:
         from oh_no_my_claudecode.hooks.post_tool_use import handle_subagent_stop
 
-        handle_subagent_stop()
+        payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
+        handle_subagent_stop(payload)
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 
@@ -2321,6 +2385,8 @@ def hooks_task_intercept_command() -> None:
         from oh_no_my_claudecode.wrap import compile_task_intercept, read_wrap_strict
 
         payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
         raw_cwd = payload.get("cwd")
         cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
         try:
@@ -2349,6 +2415,8 @@ def hooks_prompt_router_command() -> None:
         from oh_no_my_claudecode.wrap import compile_prompt_policy, read_wrap_strict
 
         payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
         raw_prompt = payload.get("prompt", "")
         prompt = raw_prompt if isinstance(raw_prompt, str) else ""
         if not prompt.strip():

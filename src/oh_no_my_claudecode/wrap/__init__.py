@@ -9,9 +9,19 @@ Wrapping installs two hooks into ``.claude/settings.json``:
   deterministic router + dead-end guard and injects a terse "prefer onmc
   paths" nudge.
 
+The session switch (``onmc wrap on/off/toggle``) controls whether the
+deep-wrap lifecycle hooks engage.  When off, all hooks exit 0 silently.
+When on (or ``default_active: true`` in the wrap state), the full control
+plane is active: memory-grounded prompts, task intercept, telemetry, and
+pre-compact snapshots.
+
+The ``/onmc`` Claude Code slash command is installed by ``onmc wrap`` and calls
+``onmc wrap toggle`` so the user can flip the control plane from within Claude
+Code with a single keystroke.
+
 ``onmc unwrap`` is the perfect inverse: it removes exactly what ``wrap`` added
-(reusing the shared installer's surgical strip) and restores the CLAUDE.md
-policy stanza, leaving every other hook untouched.
+(hooks, state file, CLAUDE.md stanza, and the /onmc slash command), leaving
+every other hook untouched.
 
 The decision logic lives in :mod:`oh_no_my_claudecode.wrap.logic` and is built
 to never raise — a wrapper that bricks Claude Code is unacceptable.
@@ -24,6 +34,12 @@ from oh_no_my_claudecode.wrap.logic import (
     compile_task_intercept,
     swarm_active,
 )
+from oh_no_my_claudecode.wrap.session import (
+    is_active,
+    read_default_active,
+    session_active_path,
+    set_active,
+)
 from oh_no_my_claudecode.wrap.state import (
     read_wrap_strict,
     remove_claude_md_stanza,
@@ -35,9 +51,13 @@ from oh_no_my_claudecode.wrap.state import (
 __all__ = [
     "compile_prompt_policy",
     "compile_task_intercept",
+    "is_active",
+    "read_default_active",
     "read_wrap_strict",
     "remove_claude_md_stanza",
     "remove_wrap_state",
+    "session_active_path",
+    "set_active",
     "swarm_active",
     "upsert_claude_md_stanza",
     "write_wrap_state",
