@@ -192,6 +192,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 findings/claims/warnings.                                    │
 │ bounty          Wager points on tasks — post bounties, claim payouts, track  │
 │                 balance.                                                     │
+│ budget          Token/cost guardian: enforce a hard spend cap across         │
+│                 sessions, warn early, and block new runs when over budget.   │
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
 │                 coding-session events with personality-driven quips and      │
 │                 tracks your green/red streak.                                │
@@ -1215,6 +1217,87 @@ Usage: onmc brief [OPTIONS]
 │                                                (overrides ONMC_TERSE env     │
 │                                                var).                         │
 │    --help                                      Show this message and exit.   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc budget`
+
+```text
+Usage: onmc budget [OPTIONS] COMMAND [ARGS]...
+
+ Token/cost guardian: enforce a hard spend cap across sessions, warn early, and
+ block new runs when over budget.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ status  Show current spend, cap, ratio, and budget state.                    │
+│ set     Set the hard cap, window, and early-warning ratio.                   │
+│ check   Gate a run against the budget — exits non-zero when blocked.         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc budget check`
+
+```text
+Usage: onmc budget check [OPTIONS]
+
+ Gate a run against the budget — exits non-zero when blocked.
+
+ Intended for a pre-run hook or CI step: when the state is ``blocked`` the
+ command exits 1 so the caller can refuse to start a new run. ``ok`` and
+ ``warn`` states exit 0. With ``--notify``, a warn or block alert is pushed
+ through the configured notify sink(s). When no cap is configured, the guard
+ is off and this always allows (exit 0).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json            Emit the decision as JSON.                                 │
+│ --notify          Push a warn/block alert via the notify sinks.              │
+│ --help            Show this message and exit.                                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc budget set`
+
+```text
+Usage: onmc budget set [OPTIONS]
+
+ Set the hard cap, window, and early-warning ratio.
+
+ Persists to ``.onmc/budget.json`` (creating ``.onmc/`` as needed). A
+ negative ``--cap-usd`` disables the guard (unlimited). Idempotent: setting
+ the same values twice yields an identical file.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --cap-usd           FLOAT  Hard spend cap in USD. Use a negative value to │
+│                               disable.                                       │
+│                               [required]                                     │
+│    --window            TEXT   Rolling window to sum spend over: day | week | │
+│                               all.                                           │
+│                               [default: day]                                 │
+│    --warn-ratio        FLOAT  Fraction of the cap at which to warn           │
+│                               (0.0-1.0). Default 0.8.                        │
+│                               [default: 0.8]                                 │
+│    --help                     Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc budget status`
+
+```text
+Usage: onmc budget status [OPTIONS]
+
+ Show current spend, cap, ratio, and budget state.
+
+ Reads ``.onmc/budget.json`` and the run receipts, sums spend over the
+ configured rolling window (reusing ``onmc cost``'s compiler), and prints the
+ state. Never changes the exit code — use ``onmc budget check`` to gate a
+ hook. When no cap is configured, reports an "unlimited" OK state.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the decision as JSON.                                   │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
