@@ -209,6 +209,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ drift           Enforce institutional memory — flag CANDIDATE code           │
 │                 violations of recorded decisions/invariants for review       │
 │                 (heuristic, not a proof).                                    │
+│ gateway         Accountable agent gateway: webhook -> mission-bridge ->      │
+│                 trust decision.                                              │
 │ handoff         Package / resume portable cross-session task context.        │
 │ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
 │                 + memory.                                                    │
@@ -2635,6 +2637,96 @@ Usage: onmc formats [OPTIONS]
 │ --schema        TEXT  Only emit one schema: 'receipt', 'attestation', or     │
 │                       'memory'. Default: all three.                          │
 │ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gateway`
+
+```text
+Usage: onmc gateway [OPTIONS] COMMAND [ARGS]...
+
+ Accountable agent gateway: webhook -> mission-bridge -> trust decision.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ serve     Start the gateway HTTP daemon.                                     │
+│ simulate  Run one message through the gateway pipeline and print the         │
+│           decision (JSON).                                                   │
+│ health    Print the health payload the daemon serves at ``GET /health``      │
+│           (JSON).                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gateway health`
+
+```text
+Usage: onmc gateway health [OPTIONS]
+
+ Print the health payload the daemon serves at ``GET /health`` (JSON).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gateway serve`
+
+```text
+Usage: onmc gateway serve [OPTIONS]
+
+ Start the gateway HTTP daemon.
+
+ Exposes two endpoints:
+
+ \b
+ POST /webhook   ← {channel, user_id, text} → mission-bridge decision
+ GET  /health    ← {ok, version}
+
+ A transport router (OpenClaw / Slack / Telegram / Claude Code Channels)
+ posts inbound chat here; the gateway authorizes the sender, parses the
+ message, and returns whether it was denied / an action / ignored / accepted.
+
+ Live swarm dispatch is an intentional follow-up: ``--dry`` (the default)
+ decides everything but spawns nothing, so simply serving the daemon can
+ never spend money or launch agents.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --host                TEXT     Bind address (use 0.0.0.0 to expose to the    │
+│                                network).                                     │
+│                                [default: 127.0.0.1]                          │
+│ --port                INTEGER  TCP port to listen on. [default: 8770]        │
+│ --dry     --no-dry             Dry mode: accept & decide but never spawn a   │
+│                                live swarm (default).                         │
+│                                [default: dry]                                │
+│ --help                         Show this message and exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc gateway simulate`
+
+```text
+Usage: onmc gateway simulate [OPTIONS] CHANNEL USER_ID TEXT
+
+ Run one message through the gateway pipeline and print the decision (JSON).
+
+ Offline-friendly: reads only the mission allowlist, spawns nothing. Exits 1
+ when the sender is denied so a script can branch on the outcome.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    channel      TEXT  Transport channel, e.g. slack / telegram / openclaw. │
+│                         [required]                                           │
+│ *    user_id      TEXT  The transport's raw user id (scoped with the         │
+│                         channel).                                            │
+│                         [required]                                           │
+│ *    text         TEXT  The inbound chat message to route through the        │
+│                         pipeline.                                            │
+│                         [required]                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --mention        TEXT  Bot handle to strip (e.g. @onmc). [default: @onmc]    │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
