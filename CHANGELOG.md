@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.102.0] — 2026-07-09
+
+### Added
+
+Completes the phone-driven accountable loop and plugs onmc into the async-agent ecosystem. Both built end-to-end with `onmc swarm` (two file-disjoint engineers, own PRs, fanned in). New self-registering subpackages (zero `cli.py` edits):
+
+- **`onmc connect openclaw|hermes`** — real bidirectional ecosystem adapter, making onmc the accountable reasoning layer under existing transports. **OpenClaw** (a 163k⭐ router that "never reasons, only routes"): `parse_openclaw_event` normalizes an OpenClaw webhook/WS envelope → the existing `gateway.pipeline.handle_inbound` (auth → approve → intake) → `to_openclaw_reply` mirrors the mission action-ids back as buttons. **Hermes** (self-improving memory): `sync_hermes` is a *continuous* mirror — reuses the existing one-shot hermes importer parser but diffs against a `.onmc/connect/hermes-state.json` watermark so re-runs import only the delta, idempotently. Adds `TelegramSink` (Bot API) + `OpenClawSink` composing the notify `Sink` ABC (injectable transport, exception-safe) so a trust card can actually reach a phone. `onmc connect {openclaw,hermes,test-sink}`. (#332)
+- **`onmc approve <swarm_id> <message>`** — closes the phone→merge loop: turns a parsed chat approval into a real merge. Pure `plan_approval(card, action)` (reuses `missionbridge.approve.parse_action` + `missionbridge.card.build_card`) decides which units are **eligible** (verified success only) vs **refused** with a reason (held / unverified / not-found / aborted); `execute_plan` merges eligible units via the existing `land` driver and **re-checks the verified gate at execution time**. A held/unverified/receipt-less unit can never merge (mirrors `swarm pr`'s refuse-unverified rule). **Dry-by-default** — real merges require explicit `--execute`. (#331)
+
+Together with mission-bridge (v0.100.0) and gateway/pulse/budget (v0.101.0), the full loop is now real: message a goal from OpenClaw/Telegram → gateway authorizes + plans → verified swarm runs → trust card to your phone → you approve → onmc merges the verified unit — every step receipted.
+
 ## [0.101.0] — 2026-07-09
 
 ### Added
