@@ -199,6 +199,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
 │                 coding-session events with personality-driven quips and      │
 │                 tracks your green/red streak.                                │
+│ connect         Bidirectional ecosystem adapter: OpenClaw transport + Hermes │
+│                 memory.                                                      │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
 │                 interface spec.                                              │
 │ crews           Optional CrewAI interop: export an onmc plan as a crew spec  │
@@ -1741,6 +1743,94 @@ Usage: onmc compare [OPTIONS] SWARM_ID_A [SWARM_ID_B]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured comparison as JSON.                      │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc connect`
+
+```text
+Usage: onmc connect [OPTIONS] COMMAND [ARGS]...
+
+ Bidirectional ecosystem adapter: OpenClaw transport + Hermes memory.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ openclaw   Route one OpenClaw event through the gateway and print the reply  │
+│            (JSON).                                                           │
+│ hermes     Run the continuous Hermes memory mirror and print the result      │
+│            (JSON).                                                           │
+│ test-sink  Format (and optionally send) a test message via a connect sink    │
+│            (JSON).                                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc connect hermes`
+
+```text
+Usage: onmc connect hermes [OPTIONS]
+
+ Run the continuous Hermes memory mirror and print the result (JSON).
+
+ Imports only entries new or changed since the last sync (tracked in
+ ``.onmc/connect/hermes-state.json``).  A missing source reports all zeros
+ rather than failing.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --from               PATH  Hermes MEMORY.md / USER.md file or directory   │
+│                               to mirror.                                     │
+│                               [required]                                     │
+│    --dry     --apply          Dry mode: report the delta without writing     │
+│                               (default). --apply writes.                     │
+│                               [default: dry]                                 │
+│    --help                     Show this message and exit.                    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc connect openclaw`
+
+```text
+Usage: onmc connect openclaw [OPTIONS]
+
+ Route one OpenClaw event through the gateway and print the reply (JSON).
+
+ Reads the event envelope from *file* (offline-friendly), translates it into a
+ gateway decision, and prints the OpenClaw-shaped reply.  Live swarm dispatch
+ is an intentional follow-up, so this always uses the dry dispatcher and never
+ spends money or launches agents.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --file                PATH  Path to a JSON file holding one OpenClaw      │
+│                                event envelope.                               │
+│                                [required]                                    │
+│    --dry     --no-dry          Dry mode: decide but never spawn a live swarm │
+│                                (default).                                    │
+│                                [default: dry]                                │
+│    --help                      Show this message and exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc connect test-sink`
+
+```text
+Usage: onmc connect test-sink [OPTIONS] KIND
+
+ Format (and optionally send) a test message via a connect sink (JSON).
+
+ With no ``--to`` this is a dry preview: it prints the endpoint + payload the
+ sink *would* POST, touching no network.  With ``--to`` it uses the real
+ stdlib transport (errors are swallowed by the sink, never raised).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    kind      TEXT  Which sink to test: 'telegram' or 'openclaw'.           │
+│                      [required]                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --to             TEXT  Destination URL. Omit for a dry preview of the        │
+│                        payload (no network).                                 │
+│ --message        TEXT  Test message body. [default: onmc connect test]       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
