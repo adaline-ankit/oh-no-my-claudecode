@@ -91,6 +91,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ achievements    Show your XP, level, streaks, and badges earned from         │
 │                 verified runs.                                               │
 │ context         Show codegraph blast radius and relevant memory for a file.  │
+│ approve         Turn an approved chat action into a real merge of verified   │
+│                 unit PR(s).                                                  │
 │ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
 │                 receipt.                                                     │
 │ bottleneck      Find what's slowing your agents down.                        │
@@ -296,6 +298,46 @@ Usage: onmc achievements [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the achievements report as JSON.                        │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc approve`
+
+```text
+Usage: onmc approve [OPTIONS] SWARM_ID MESSAGE
+
+ Turn an approved chat action into a real merge of verified unit PR(s).
+
+ Closes the phone-to-merge loop: parse the *message*, plan which units it
+ may merge (VERIFIED successes only — held / unverified / aborted units
+ are REFUSED and never merged), then act.
+
+ DRY by default — prints what WOULD merge and what is refused, changing
+ nothing.  Pass ``--execute`` (alias ``--yes``) to merge for real.
+
+ Exits non-zero when the action targeted a specific unit that was refused,
+ or when a real merge failed — so a gateway / automation can gate on it.
+
+
+ Examples
+ --------
+ onmc approve ab12cd34 "approve all"
+ onmc approve ab12cd34 "approve unit 2" --execute
+ onmc approve ab12cd34 "mission:approve:unit-0001" --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id      TEXT  Swarm id whose trust card the approval acts on.     │
+│                          [required]                                          │
+│ *    message       TEXT  Chat reply or button callback to act on (e.g.       │
+│                          "approve all", "approve unit 2",                    │
+│                          "mission:approve:unit-0001").                       │
+│                          [required]                                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --execute,--yes          Perform the real merge(s). Omit for a DRY plan (no  │
+│                          action taken).                                      │
+│ --json                   Emit a machine-readable JSON envelope.              │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
