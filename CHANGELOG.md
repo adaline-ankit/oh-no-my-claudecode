@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.100.0] — 2026-07-09
+
+### Added
+
+**Mission bridge** — the offline-testable chat brain that turns a *verified* onmc swarm run into a phone-approvable experience. Composes the existing engine (`mission` planner + `missioncontrol` dashboard reader + `swarm` + tamper-evident receipts) into the pieces a gateway (Claude Code Channels / Slack / Telegram) wires into — it does not rebuild the messaging layer. Built end-to-end with `onmc swarm` (four disjoint units fanned out in parallel worktrees, each self-verified, fanned into one PR). New self-registering `missionbridge` subpackage (zero `cli.py` edits):
+
+- **`onmc mission-bridge card <swarm_id>`** — build a swarm's channel-agnostic **trust card** and render it for Slack (Block Kit), Telegram (inline keyboard), or plain text. Reuses the read-only `missioncontrol` dashboard reader; marks each unit **✅ VERIFIED** or **⛔ HELD** (held = no tamper-evident receipt → intentionally *not shipped*), with honest per-unit cost (`n/a` when receipts carry none). Action ids (`mission:approve_all`, `mission:approve:<unit>`, `mission:show_diff:<unit>`, `mission:abort`) are mirrored across renderers.
+- **`onmc mission-bridge approve <message>`** — resolve a chat reply into a structured action, handling both button `callback_data` and natural language ("ship it", "approve unit 1", "diff unit 2", "abort").
+- **`onmc mission-bridge intake <message>`** — normalize an inbound chat message into a mission goal plus inline `--concurrency` / `--budget-usd` options; ignores mention-only/empty messages.
+- **`onmc mission-bridge allow <identity>`** — manage the **deny-by-default**, channel-scoped command allowlist (`slack:U123` ≠ `telegram:U123`); malformed-config hardened, never widens on error. `--list` / `--check` / `--remove`.
+
+Why it's differentiated: overnight PRs from Devin/Hermes/OpenClaw arrive cold, blind, and unverifiable — mission-bridge cards are verified (empty/fake diffs held back), receipted (tamper-evident, cost per unit), and approvable-from-phone with proof. (#325)
+
 ## [0.99.0] — 2026-07-08
 
 ### Added
