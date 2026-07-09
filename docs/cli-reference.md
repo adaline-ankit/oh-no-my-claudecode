@@ -225,6 +225,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ memstage        Write-approval staging queue: propose memory writes, review  │
 │                 diffs, then approve or reject — nothing lands in the store   │
 │                 without your sign-off.                                       │
+│ mission-bridge  Turn a verified swarm run into a chat experience (card /     │
+│                 intake / approve / allow).                                   │
 │ orggraph        Institutional-memory knowledge graph — entities, typed       │
 │                 edges, lineage.                                              │
 │ persona         Selectable agent personality presets. Pick a voice           │
@@ -4413,6 +4415,106 @@ Usage: onmc mission [OPTIONS] GOAL
 │ --json                                       Emit the mission plan as JSON   │
 │                                              instead of markdown.            │
 │ --help                                       Show this message and exit.     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission-bridge`
+
+```text
+Usage: onmc mission-bridge [OPTIONS] COMMAND [ARGS]...
+
+ Turn a verified swarm run into a chat experience (card / intake / approve /
+ allow).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ card     Build a swarm's channel-agnostic trust card and render it.          │
+│ intake   Parse a chat message into a mission goal + optional                 │
+│          concurrency/budget.                                                 │
+│ approve  Resolve a chat reply into a structured approve action (JSON).       │
+│ allow    Manage the deny-by-default mission command allowlist.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission-bridge allow`
+
+```text
+Usage: onmc mission-bridge allow [OPTIONS] [IDENTITY]
+
+ Manage the deny-by-default mission command allowlist.
+
+ Identities are channel-scoped (``slack:U123``), so the same raw id on a
+ different channel is a different principal.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [identity]      TEXT  Channel-scoped identity, e.g. slack:U123 or          │
+│                         telegram:456.                                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --remove              Remove the identity instead of adding it.              │
+│ --check         TEXT  Test an identity against the allowlist and exit.       │
+│ --list                List the current allowlist and exit.                   │
+│ --help                Show this message and exit.                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission-bridge approve`
+
+```text
+Usage: onmc mission-bridge approve [OPTIONS] MESSAGE
+
+ Resolve a chat reply into a structured approve action (JSON).
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    message      TEXT  Chat reply or button callback_data to resolve.       │
+│                         [required]                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission-bridge card`
+
+```text
+Usage: onmc mission-bridge card [OPTIONS] SWARM_ID
+
+ Build a swarm's channel-agnostic trust card and render it.
+
+ Reads the swarm manifest + tamper-evident receipts (read-only) and
+ emits a card marking each unit VERIFIED or HELD, with honest cost.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    swarm_id      TEXT  Swarm id to build the trust card for. [required]    │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --goal            TEXT  Optional mission goal for the card header.           │
+│ --format  -f      TEXT  Render format: slack | telegram | plain.             │
+│                         [default: plain]                                     │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc mission-bridge intake`
+
+```text
+Usage: onmc mission-bridge intake [OPTIONS] MESSAGE
+
+ Parse a chat message into a mission goal + optional concurrency/budget.
+
+ Emits JSON; exits 1 with ``{"task": null}`` when there is no goal (empty
+ or mention-only) so a gateway can ignore it.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    message      TEXT  Inbound chat message to normalize into a mission     │
+│                         request.                                             │
+│                         [required]                                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --mention        TEXT  Bot handle to strip (e.g. @onmc). [default: @onmc]    │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
