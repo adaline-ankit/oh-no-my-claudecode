@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.101.0] — 2026-07-09
+
+### Added
+
+The **phone-driven accountable agent runtime** arc — three features that turn onmc from a CLI into an always-on runtime you talk to from anywhere, each targeting a top Claude Code pain of 2026. Built by a parallel `onmc swarm` (three engineers, each owning a feature end-to-end with its own PR). All self-registering subpackages (zero `cli.py` edits):
+
+- **`onmc gateway`** (#327) — the accountable agent **gateway daemon**, the wrapper over all of onmc. An OpenClaw-compatible inbound webhook (`POST /webhook`, `GET /health`) lands a chat message → runs the `missionbridge` pipeline (authorize → approve/abort detection → intake) → returns a decision, with an injectable dispatcher (dry by default; live swarm spawn is the documented follow-up seam). OpenClaw explicitly "never performs reasoning; it only routes" — onmc is the reasoning + accountability brain behind it. Pure socket-free `route()` core + stdlib `http.server`; `onmc gateway {serve,simulate,health}`.
+- **`onmc pulse`** (#328) — a live **"is it stuck?" heartbeat** you can push to your phone, killing *Interactive Entropy* (the #1 CC UX complaint of 2026 — no way to tell if the agent is working, idle, or stuck). Reads live swarm state via the `missioncontrol` readers and emits a deterministic verdict (▶ working / ⏸ idle / ⚠️ stuck, naming the stuck unit + duration); `--notify` pushes it through the notify sinks (stuck → `failure` severity). Distinct from `onmc watch` (a terminal TUI) — pulse is a one-shot verdict + push. Text mode exits 2 on stuck for scriptability.
+- **`onmc budget`** (#329) — a cross-session token/cost **guardian** that kills the *"Tokenocalypse"*. Reads run receipts (reusing the `cost` spend compiler), tracks spend over a rolling window (day/week/all), enforces a hard cap that **blocks** new runs, and warns at a threshold (default 80%). Deny-nothing when unconfigured. `onmc budget {status,set,check}`; `check` exits nonzero when blocked so it can gate a pre-run hook / CI; `--notify` pushes the warn/block alert. Distinct from `onmc cost` (read-only breakdown) and `onmc membudget` (memory-store bytes).
+
 ## [0.100.0] — 2026-07-09
 
 ### Added
