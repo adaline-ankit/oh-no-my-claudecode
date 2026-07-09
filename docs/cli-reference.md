@@ -119,6 +119,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ postmortem      LLM-free structured narrative recap of a completed swarm     │
 │                 run.                                                         │
 │ prbadge         Post a "verified-work" onmc badge comment on a GitHub PR.    │
+│ pulse           Live "is it stuck?" heartbeat for your swarms — push it to   │
+│                 your phone.                                                  │
 │ quickstart      Zero-config onboarding: init memory, integrate Claude Code,  │
 │                 activate control plane.                                      │
 │ race            Offline model/strategy tournament over recorded run          │
@@ -5343,6 +5345,40 @@ Usage: onmc pull [OPTIONS] [SOURCE]
 │                        memories (--all only).                                │
 │ --json                 Emit a machine-readable JSON summary to stdout.       │
 │ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc pulse`
+
+```text
+Usage: onmc pulse [OPTIONS] [SWARM_ID]
+
+ Live "is it stuck?" heartbeat for your swarms — push it to your phone.
+
+ Reads the current swarm state and emits ONE compact liveness verdict:
+ ▶ working / ⏸ idle / ⚠️ possibly-stuck. Solves *Interactive Entropy* —
+ not knowing whether the agent is making progress, idle, or wedged.
+
+ With ``--notify`` the verdict is pushed to the configured notify
+ sink(s) (Slack / Discord / file) so you get "still working: 4m elapsed"
+ or "⚠️ no progress for 5m" on your phone. Unlike ``onmc watch`` (a
+ terminal-only auto-refresh monitor), pulse is a one-shot verdict + push.
+
+ Read-only: never mutates swarm state. Exits 0 with a friendly message
+ when there are no active swarms.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│   [swarm_id]      TEXT  Only pulse this swarm. Omit to pulse every active    │
+│                         swarm.                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                      Emit the pulse as machine-readable JSON.         │
+│ --notify                    Push the verdict via the configured notify       │
+│                             sink(s).                                         │
+│ --stuck-after        FLOAT  Seconds a running unit may make no progress      │
+│                             before it is flagged stuck.                      │
+│                             [default: 300.0]                                 │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
