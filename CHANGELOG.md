@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.103.0] — 2026-07-09
+
+### Added
+
+- **`onmc slash`** — surface onmc's commands as Claude Code slash commands. Claude Code's `/` menu is fed by command files / skills / MCP prompts, **not** by an external binary's subcommands, so `onmc why` never appeared as `/onmc-why` on its own. `onmc slash install` auto-generates a `.claude/commands/onmc-<cmd>.md` per top-level onmc command (discovered from the built Typer app, exactly like the cli-reference generator — so a new self-registering feature becomes a slash command automatically), making all onmc commands appear as `/onmc-<cmd>`. `install` / `list` / `uninstall`; `--user` (`~/.claude/commands`) or `--project` (`./.claude/commands`); `--dry-run`; `--json`. Only touches files carrying onmc's generated marker, so hand-authored commands are never clobbered (reported as `skipped`). Each file wraps the CLI call with `allowed-tools: Bash(onmc <cmd>:*)` scoping. Verified end-to-end on Claude Code (145 commands installed to user scope; wrapped bodies run against a live repo). (#335)
+
 ## [0.102.0] — 2026-07-09
 
 ### Added
