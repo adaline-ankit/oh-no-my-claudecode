@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.104.0] — 2026-07-09
+
+### Added
+
+- **MCP prompts** — the onmc MCP server now implements the `prompts` capability, so every top-level onmc command becomes an MCP prompt that Claude Code renders as a slash command **`/mcp__onmc__<cmd>`**. Complements `onmc slash` (v0.103.0, command-file route): anyone who already wired `onmc serve --mcp` gets onmc's whole toolbox in the `/` menu with **no file copying and no reload** — it's live the moment the server reconnects. Prompts are discovered from the same built Typer app as `onmc slash` and the cli-reference generator (one source of truth; new features become prompts automatically). `get_prompt` returns a message instructing `onmc <cmd> <args>`, with args passed through the prompt's `args` argument. (#337)
+
 ## [0.103.0] — 2026-07-09
 
 ### Added
