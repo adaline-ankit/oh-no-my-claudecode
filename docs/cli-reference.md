@@ -257,6 +257,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
 │                 review diffs, then approve or reject — nothing lands in the  │
 │                 skill store without your sign-off.                           │
+│ slash           Expose onmc's commands as Claude Code slash commands         │
+│                 (/onmc-*).                                                   │
 │ soundboard      Fun inline terminal reactions for session events (emoji /    │
 │                 ASCII / optional terminal bell).                             │
 │ teams           AutoGen / AG2 interop — export onmc plans as team specs and  │
@@ -6798,6 +6800,70 @@ Usage: onmc skillguard stage [OPTIONS]
 │    --reason              TEXT  Why this skill change is being proposed.      │
 │    --json                      Emit the staged proposal as JSON.             │
 │    --help                      Show this message and exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc slash`
+
+```text
+Usage: onmc slash [OPTIONS] COMMAND [ARGS]...
+
+ Expose onmc's commands as Claude Code slash commands (/onmc-*).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ install    Generate /onmc-* Claude Code command files (one per onmc          │
+│            command).                                                         │
+│ list       List onmc-generated slash command files.                          │
+│ uninstall  Remove onmc-generated slash command files (leaves hand-authored   │
+│            ones).                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc slash install`
+
+```text
+Usage: onmc slash install [OPTIONS]
+
+ Generate /onmc-* Claude Code command files (one per onmc command).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --user       --project      Install to ~/.claude or ./.claude.               │
+│                             [default: user]                                  │
+│ --dry-run                   Show what would be written without writing.      │
+│ --json                      Machine-readable output.                         │
+│ --help                      Show this message and exit.                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc slash list`
+
+```text
+Usage: onmc slash list [OPTIONS]
+
+ List onmc-generated slash command files.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --user    --project      [default: user]                                     │
+│ --json                                                                       │
+│ --help                   Show this message and exit.                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc slash uninstall`
+
+```text
+Usage: onmc slash uninstall [OPTIONS]
+
+ Remove onmc-generated slash command files (leaves hand-authored ones).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --user       --project      [default: user]                                  │
+│ --dry-run                                                                    │
+│ --json                                                                       │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
