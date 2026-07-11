@@ -8,9 +8,10 @@ from typing import Any, cast
 from mcp.server import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.stdio import stdio_server
-from mcp.types import Resource, ResourceTemplate, TextContent, Tool
+from mcp.types import GetPromptResult, Prompt, Resource, ResourceTemplate, TextContent, Tool
 from pydantic import AnyUrl
 
+from oh_no_my_claudecode.mcp_server.prompts import get_onmc_prompt, list_onmc_prompts
 from oh_no_my_claudecode.mcp_server.resources import (
     default_repo,
     list_onmc_resource_templates,
@@ -52,6 +53,14 @@ def build_mcp_server(path: Path | str = ".") -> Server:
     @app.call_tool()  # type: ignore[untyped-decorator]
     async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         return call_onmc_tool(repo, name, arguments)
+
+    @app.list_prompts()  # type: ignore[no-untyped-call,untyped-decorator]
+    async def list_prompts() -> list[Prompt]:
+        return list_onmc_prompts()
+
+    @app.get_prompt()  # type: ignore[no-untyped-call,untyped-decorator]
+    async def get_prompt(name: str, arguments: dict[str, str] | None) -> GetPromptResult:
+        return get_onmc_prompt(name, arguments)
 
     return app
 
