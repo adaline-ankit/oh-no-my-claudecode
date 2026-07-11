@@ -31,7 +31,11 @@ jobs:
       - name: Enable native auto-merge (squash)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Tolerate the not-yet-configured state: until "Allow auto-merge" + a
+        # branch ruleset with required checks are enabled (see .github/AGENTS.md),
+        # `gh pr merge --auto` errors. Don't let that fail the check — just note it.
         run: |
           gh pr merge --auto --squash --delete-branch \
             "${{ github.event.pull_request.number }}" \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" \
+          || echo "::notice::auto-merge not enabled yet — enable it in repo Settings (see .github/AGENTS.md)"
