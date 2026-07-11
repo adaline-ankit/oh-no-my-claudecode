@@ -1,0 +1,37 @@
+name: auto-merge
+
+# Enables GitHub's NATIVE auto-merge on qualifying PRs. GitHub then merges the
+# PR automatically the moment all required status checks pass and the branch
+# protection rules on `main` are satisfied — no polling, no merge-race scripts.
+#
+# One-time repo settings required (Settings → …), see .github/AGENTS.md:
+#   1. General → Pull Requests → "Allow auto-merge"  (ON)
+#   2. A branch ruleset / protection rule on `main` that REQUIRES the checks:
+#        quality (3.11), quality (3.12), quality (3.13), CodeQL
+#      (Without required checks, auto-merge would merge immediately.)
+#
+# Scope: only the repo owner's own PRs, or any PR labeled `automerge`.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.draft == false &&
+      (github.event.pull_request.author_association == 'OWNER' ||
+       contains(github.event.pull_request.labels.*.name, 'automerge'))
+    steps:
+      - name: Enable native auto-merge (squash)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge --auto --squash --delete-branch \
+            "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}"
