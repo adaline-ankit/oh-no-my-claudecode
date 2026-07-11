@@ -1,0 +1,51 @@
+# @claude — mention-triggered coding agent  (DISABLED until you enable it)
+#
+# This file ends in `.disabled` on purpose: GitHub only runs `.yml`/`.yaml`
+# workflows, so it is INERT until you activate it. To turn it on:
+#
+#   1. Add a repo secret ANTHROPIC_API_KEY  (Settings → Secrets and variables → Actions)
+#   2. Install the Claude GitHub App on this repo:  https://github.com/apps/claude
+#   3. Rename this file:  git mv .github/workflows/claude.yml.disabled .github/workflows/claude.yml
+#
+# Then, in any issue or PR comment, mention @claude:
+#     @claude implement `onmc <newcmd>` following the timeline/commands.py pattern
+# and Claude opens/updates a PR. Pairs with auto-merge: agent PR → checks green → self-merges.
+#
+# NOTE: confirm the action's exact version tag + input names against its README
+# (https://github.com/anthropics/claude-code-action) before enabling — the pin
+# below reflects the v1 interface.
+
+name: claude
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    if: >-
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # trigger_phrase: "@claude"   # default
