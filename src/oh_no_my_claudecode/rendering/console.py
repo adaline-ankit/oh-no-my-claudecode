@@ -1856,6 +1856,35 @@ def render_loop_result(result: LoopResult) -> None:
         )
     )
 
+    if result.stop_reason == "no-changes":
+        from rich.markup import escape as _escape
+
+        permission_blocked = any(
+            "[hint]" in c.verify_output for c in result.iterations
+        )
+        lines = [
+            "The verify command passed, but the agent changed NO files — a "
+            "vacuous pass. It only reflects pre-existing state, so the run is "
+            "scored a loss, not a win.",
+        ]
+        if permission_blocked:
+            lines.append(
+                "The agent's output suggests its file writes were blocked by "
+                "permission prompts, which a headless run cannot answer."
+            )
+        lines.append(
+            "Fix: pre-approve the tools the agent needs in the repo's "
+            '.claude/settings.json permissions allowlist — e.g. add "Edit", '
+            '"Write", and "Bash(pytest:*)" to permissions.allow — then re-run.'
+        )
+        console.print(
+            Panel.fit(
+                _escape("\n".join(lines)),
+                title="No changes — why this is not a win",
+                border_style="yellow",
+            )
+        )
+
 
 def render_loop_receipt_block(
     result: LoopResult,

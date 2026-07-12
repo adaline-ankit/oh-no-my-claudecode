@@ -39,6 +39,7 @@ from typing import Any
 
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
+    ChangeProbe,
     LoopResult,
     VerifyOutcome,
     VerifyRunner,
@@ -61,6 +62,10 @@ AgentRunnerFactory = Callable[[SwarmUnit, Path], AgentRunner]
 #: Factory that produces a VerifyRunner for a given unit/repo_root.
 #: Signature: (unit: SwarmUnit, repo_root: Path) -> VerifyRunner
 VerifyRunnerFactory = Callable[[SwarmUnit, Path], VerifyRunner]
+
+#: Factory that produces a ChangeProbe for a given unit/repo_root.
+#: Signature: (unit: SwarmUnit, repo_root: Path) -> ChangeProbe
+ChangeProbeFactory = Callable[[SwarmUnit, Path], ChangeProbe]
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +305,7 @@ def run_swarm(
     *,
     runner_factory: AgentRunnerFactory | None = None,
     verify_factory: VerifyRunnerFactory | None = None,
+    change_probe_factory: ChangeProbeFactory | None = None,
     executor: ThreadPoolExecutor | None = None,
     now: datetime | None = None,
 ) -> SwarmResult:
@@ -331,6 +337,14 @@ def run_swarm(
         ``unit.verify_command`` with the default subprocess runner in the
         unit's active repo/worktree root.
         Tests inject a fake.
+    change_probe_factory:
+        Injectable factory ``(unit, repo_root) -> ChangeProbe`` for the
+        vacuous-pass gate.  When ``None``, each unit's ``run_loop`` builds the
+        default git-``status``-backed probe over the unit's active
+        repo/worktree root — so a unit whose agent changed NOTHING can never
+        be scored "done" merely because a lenient verifier exited 0 (the
+        false-green failure mode, e.g. edits blocked pending permission
+        approval).  Tests inject a fake for deterministic behaviour.
     executor:
         Injectable ``ThreadPoolExecutor``.  When ``None``, creates one with
         ``max_workers=config.concurrency``.  Tests inject a fake or a
@@ -422,6 +436,13 @@ def run_swarm(
 
         agent_runner = resolved_runner_factory(unit, unit_root)
         verify_runner = resolved_verify_factory(unit, unit_root)
+        # None → run_loop builds the default git probe over unit_root, so the
+        # vacuous-pass gate is active in every real swarm run.
+        change_probe: ChangeProbe | None = (
+            change_probe_factory(unit, unit_root)
+            if change_probe_factory is not None
+            else None
+        )
 
         loop_spec = LoopSpec(goal=unit.goal)
         loop_config = LoopConfig(
@@ -447,6 +468,7 @@ def run_swarm(
                 isolation_provider=None,
                 now=started_at_dt,
                 should_continue=_should_continue,
+                change_probe=change_probe,
             )
         except Exception as exc:  # noqa: BLE001
             if isolation_provider is not None and worktree_path is not None:

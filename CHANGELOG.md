@@ -4,7 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [0.104.0] — 2026-07-09
+### Fixed
+
+- **Vacuous-pass gate hardening (loop + swarm)** — closes the remaining gaps in the false-green gate introduced in v0.98.0 (#318), where a headless agent whose file writes were blocked by permission prompts changed nothing yet a lenient verifier exited 0 and the run was stamped VERIFIED. (1) The default git change probe now folds the HEAD sha into its signature, so an agent that edits **and commits** within one iteration (clean tree before AND after — invisible to `git status --porcelain` alone) is no longer misclassified as a no-op loss. (2) `run_swarm` gains an injectable `change_probe_factory` and passes a per-unit probe into each `run_loop`, making the gate explicit and testable for `onmc swarm run`: a unit whose verify passes with zero tree changes is scored `failed` (stop_reason `no-changes`), never `done`. (3) When a vacuous pass's agent output carries a permission-block signature (e.g. "file writes are blocked pending your approval"), the iteration's verify output, the loss memory, and the `onmc loop` terminal panel now surface an actionable hint: pre-approve the needed tools in the repo's `.claude/settings.json` permissions allowlist. `onmc explain` says the same for `no-changes` receipts.
 
 ### Added
 

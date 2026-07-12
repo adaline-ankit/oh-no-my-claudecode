@@ -273,6 +273,80 @@ class TestRunSwarm:
         assert result.units_aborted == 0
         assert result.stop_reason == "completed"
 
+    def test_vacuous_unit_is_failed_not_done(self, tmp_path: Path) -> None:
+        """A unit whose verify passes but whose agent changed NOTHING must be
+        scored 'failed' (vacuous pass), never 'done' — the swarm-level port of
+        the loop's false-green gate."""
+        storage = _storage(tmp_path)
+        units = _make_units(3)
+        cfg = _make_config(concurrency=2)
+        af, vf = _fake_runner_factory()  # verify always passes
+
+        def _static_probe_factory(unit: SwarmUnit, repo_root: Path) -> Any:
+            del unit, repo_root
+
+            def _probe() -> str | None:
+                return "unchanged"  # tree never changes
+
+            return _probe
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            cfg,
+            runner_factory=af,
+            verify_factory=vf,
+            change_probe_factory=_static_probe_factory,
+            executor=ThreadPoolExecutor(max_workers=2),
+            now=_FIXED_NOW,
+        )
+
+        assert result.units_done == 0
+        assert result.units_failed == 3
+        for ur in result.unit_results:
+            assert ur.status == "failed"
+            assert ur.loop_result is not None
+            assert ur.loop_result.converged is False
+            assert ur.loop_result.stop_reason == "no-changes"
+
+    def test_changed_tree_unit_is_done(self, tmp_path: Path) -> None:
+        """With a probe that reports a new signature each call (agent changed
+        the tree), a passing verify converges the unit as before."""
+        storage = _storage(tmp_path)
+        units = _make_units(2)
+        cfg = _make_config(concurrency=2)
+        af, vf = _fake_runner_factory()
+
+        def _changing_probe_factory(unit: SwarmUnit, repo_root: Path) -> Any:
+            del unit, repo_root
+            counter = [0]
+
+            def _probe() -> str | None:
+                counter[0] += 1
+                return f"sig-{counter[0]}"
+
+            return _probe
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            cfg,
+            runner_factory=af,
+            verify_factory=vf,
+            change_probe_factory=_changing_probe_factory,
+            executor=ThreadPoolExecutor(max_workers=2),
+            now=_FIXED_NOW,
+        )
+
+        assert result.units_done == 2
+        assert result.units_failed == 0
+        for ur in result.unit_results:
+            assert ur.status == "done"
+            assert ur.loop_result is not None
+            assert ur.loop_result.converged is True
+
     def test_bounded_concurrency(self, tmp_path: Path) -> None:
         """Max concurrent workers must never exceed config.concurrency."""
         storage = _storage(tmp_path)
