@@ -1661,6 +1661,7 @@ Usage: onmc codegraph [OPTIONS] COMMAND [ARGS]...
 │ neighbors  Show the blast radius (importers + dependents + tests) of a file  │
 │            or symbol.                                                        │
 │ context    Select a small, bounded set of files relevant to a goal.          │
+│ coverage   Show code graph coverage: indexed vs. discoverable source files.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1693,6 +1694,34 @@ Usage: onmc codegraph context [OPTIONS] GOAL
 │                                       [default: 8]                           │
 │ --json                                Emit the selection as JSON.            │
 │ --help                                Show this message and exit.            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codegraph coverage`
+
+```text
+Usage: onmc codegraph coverage [OPTIONS]
+
+ Show code graph coverage: indexed vs. discoverable source files.
+
+ Walks the filesystem to count every source file the graph *could* index
+ (``*.py`` plus tree-sitter languages when the extra is installed) and
+ compares that against what was actually indexed.  Highlights any
+ languages present in the repo that are being silently skipped because
+ the ``tree-sitter`` extra is absent.
+
+ Always exits 0 — this command is purely informational.
+
+ Examples:
+
+     onmc codegraph coverage
+
+     onmc codegraph coverage --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit the coverage report as JSON.                        │
+│ --repo        PATH  Repository root (defaults to the current git repo root). │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
