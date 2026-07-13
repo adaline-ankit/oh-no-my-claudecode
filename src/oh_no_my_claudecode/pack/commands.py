@@ -17,6 +17,7 @@ import typer
 
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.pack.builder import DEFAULT_BUDGET, build_pack, render_pack_markdown
+from oh_no_my_claudecode.pack.readiness import brain_readiness_warnings
 
 
 def register(app: typer.Typer) -> None:
@@ -40,12 +41,27 @@ def register(app: typer.Typer) -> None:
             bool,
             typer.Option("--json", help="Emit the pack as JSON instead of markdown."),
         ] = False,
+        strict: Annotated[
+            bool,
+            typer.Option(
+                "--strict",
+                help=(
+                    "Refuse to build the pack when the brain is unready "
+                    "(never ingested or repo-file index empty). "
+                    "Without --strict a warning is printed to stderr and the "
+                    "pack proceeds (possibly unreliable)."
+                ),
+            ),
+        ] = False,
     ) -> None:
         """Build a per-task context pack: dead-ends, decisions, reuse, files.
 
         Composes recorded dead-ends + decisions with a tiny code-graph slice and
         reuse hints into a terse, deterministic, offline markdown brief for a
         spawned agent.
+
+        Explicit file paths named in the goal are force-included first so the
+        agent always starts with the exact files it was told to edit.
         """
         service = OnmcService(Path.cwd())
         try:
@@ -53,6 +69,20 @@ def register(app: typer.Typer) -> None:
         except FileNotFoundError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
+
+        warnings = brain_readiness_warnings(storage)
+        if warnings:
+            typer.echo(
+                "WARNING: brain may be unready — context pack could be unreliable.", err=True
+            )
+            for w in warnings:
+                typer.echo(f"  • {w}", err=True)
+            if strict:
+                typer.echo(
+                    "Refusing to build pack (--strict). Run `onmc ingest` then retry.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
 
         pack = build_pack(storage, repo_root, goal, budget=budget)
 
