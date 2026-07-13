@@ -229,6 +229,8 @@ def test_cli_build_json_shape(sample_repo: Path, monkeypatch: object) -> None:
     _init(sample_repo)
     result = runner.invoke(app, ["codegraph", "build", "--json"])
     assert result.exit_code == 0
+    # result.stdout is pure stdout (CliRunner keeps stderr separate); the
+    # coverage summary from service.codegraph_build goes to stderr only.
     payload = json.loads(result.stdout)
     assert "nodes" in payload
     assert "dependents" in payload

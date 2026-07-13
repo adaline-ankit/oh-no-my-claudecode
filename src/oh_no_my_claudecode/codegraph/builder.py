@@ -72,7 +72,7 @@ def build_codegraph(
     repo_root: Path,
     *,
     max_files: int = _MAX_FILES,
-    _warn: bool = True,
+    _warn: bool = False,
 ) -> CodeGraph:
     """Build a :class:`CodeGraph` for the source files under *repo_root*.
 
@@ -81,11 +81,12 @@ def build_codegraph(
     when it is not, only ``*.py`` files are discovered — identical to the
     original pure-Python behaviour.
 
-    After building, a one-line coverage summary is printed to *stderr* and a
-    prominent warning is emitted when a meaningful number of files could not be
-    indexed because the ``tree-sitter`` extra is absent.  Pass
-    ``_warn=False`` to suppress this output (used in tests and library contexts
-    that capture output themselves).
+    **Coverage warning (opt-in only).**  When ``_warn=True``, a one-line
+    coverage summary is printed to *stderr* and a prominent warning is emitted
+    when a meaningful number of files could not be indexed because the
+    ``tree-sitter`` extra is absent.  The default is ``False`` so internal
+    callers (``pack``, ``context``, ``mission``, …) stay silent — only the
+    user-facing ``onmc codegraph build`` command opts in.
 
     Pure read — walks the filesystem, never writes.  Deterministic: the same
     tree always yields the same graph (sorted traversal, sorted edges).
@@ -97,8 +98,9 @@ def build_codegraph(
     max_files:
         Hard cap on the number of source files indexed (defaults to 5000).
     _warn:
-        When ``True`` (default), print a coverage summary and a warning to
-        *stderr* if non-Python files are present but not indexed.
+        When ``True``, print a coverage summary and a warning to *stderr* if
+        non-Python files are present but not indexed.  Defaults to ``False``
+        so library/internal callers produce no output.
     """
     repo_root = repo_root.resolve()
     source_files = _discover_source_files(repo_root, max_files=max_files)
