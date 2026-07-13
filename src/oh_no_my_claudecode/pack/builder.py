@@ -14,6 +14,8 @@ network):
   existing symbols that may already implement the thing (DRY).
 - **context files** — :func:`oh_no_my_claudecode.codegraph.builder.context_files`
   over a freshly built code graph gives a tiny, relevant file/symbol slice.
+  Explicit file paths mentioned in the goal are **force-included first** so the
+  agent always has the files it was told to edit.
 
 The result is rendered to terse markdown bounded by ``budget`` characters. Every
 input compiler degrades gracefully to empty on a fresh brain or empty repo, so
@@ -27,6 +29,7 @@ markdown.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -47,6 +50,59 @@ _DECISION_KIND = "decision"
 """``MemoryKind.DECISION`` value — the recall kind we keep for the pack."""
 
 _HEADER = "# Context Pack"
+
+# Cap on context files the builder returns (force-included goal paths count
+# toward this; codegraph fills the remainder).
+_CONTEXT_FILE_BUDGET = 8
+
+# Regex that extracts path-like tokens from free text.  A token qualifies when
+# it contains at least one ``/`` separator — that rules out bare filenames like
+# "cache.py" while still catching "src/cache.py" and deep nested paths.
+_PATH_TOKEN_RE = re.compile(r"[\w./-]*[\w-]/[\w./-]+")
+
+# Known source-file extensions for goal-path extraction.  Values are dotted
+# because membership is tested against ``Path(token).suffix``, which always
+# carries a leading dot (so "src/foo.ts" → ".ts").  Bare tokens like "ts" are
+# not treated as extensions here — they only match when they resolve to a real
+# on-disk file.  The set is intentionally broad — we want to cover any file a
+# user plausibly names in a goal.
+_SOURCE_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs",
+        ".mts",
+        ".cts",
+        ".go",
+        ".rs",
+        ".java",
+        ".rb",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".cs",
+        ".swift",
+        ".kt",
+        ".kts",
+        ".scala",
+        ".ex",
+        ".exs",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".json",
+        ".md",
+        ".mdx",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +178,9 @@ def build_pack(
     Composes the four reused compilers, degrading each to empty on missing data.
     The returned pack is bounded only by the per-section item caps here; the
     *budget* governs the rendered markdown length in :func:`render_pack_markdown`.
+
+    Explicit file paths found in *goal* are force-included at the front of the
+    context files list (highest-signal input always wins).
 
     Parameters
     ----------
@@ -202,15 +261,96 @@ def _collect_reuse(repo_root: Path, goal: str) -> list[ReuseHint]:
     ]
 
 
+def extract_goal_paths(goal: str, repo_root: Path) -> list[str]:
+    """Extract explicit file paths from *goal* that exist under *repo_root*.
+
+    Scans *goal* for path-like tokens (contain ``/``, optionally end in a known
+    source extension).  Returns the repo-relative path strings for any token
+    that resolves to a real file on disk.  Order is stable (first-seen wins for
+    duplicates).  Never raises.
+
+    This is the "fix B" hook: callers treat the returned paths as the strongest
+    possible context signal and include them before any code-graph ranking.
+    """
+    seen: set[str] = set()
+    found: list[str] = []
+    for match in _PATH_TOKEN_RE.finditer(goal):
+        token = match.group(0).strip("/")
+        if not token or token in seen:
+            continue
+        seen.add(token)
+        # Accept tokens that end in a known source extension OR that resolve as
+        # a file on disk regardless of extension.
+        suffix = Path(token).suffix.lower()
+        if suffix and suffix not in _SOURCE_EXTENSIONS:
+            # Has a suffix but it's not a source extension — skip.
+            continue
+        candidate = repo_root / token
+        try:
+            if candidate.is_file():
+                found.append(token)
+        except OSError:
+            pass
+    return found
+
+
 def _collect_context_files(repo_root: Path, goal: str) -> list[str]:
+    """Collect context files for *goal*, with explicit goal paths ranked first.
+
+    1. Extract any file paths explicitly named in the goal that exist on disk.
+       These are force-included at position 0 — they represent the strongest
+       possible signal (the user literally named them).
+    2. Build the code graph and use ``context_files`` for relevance scoring.
+       For each force-included file, also pull in its 1-hop graph neighbors
+       (imports and dependents) if the graph has them.
+    3. Fill remaining budget slots with code-graph ranked files.
+    4. Dedup (first-seen wins) and cap at ``_CONTEXT_FILE_BUDGET``.
+    """
     if not goal:
         return []
+
+    # Step 1: explicit goal paths (highest signal).
+    goal_paths = extract_goal_paths(goal, repo_root)
+
+    # Step 2: build codegraph (needed for scoring + neighbors).
+    graph = None
     try:
         graph = build_codegraph(repo_root)
-        selection = context_files(graph, goal, budget=8)
-    except Exception:  # noqa: BLE001 - graceful empty on empty/unreadable repo
-        return []
-    return list(selection.files)
+    except Exception:  # noqa: BLE001, S110, SIM105 - graceful degradation
+        graph = None
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def _add(path: str) -> None:
+        if path not in seen:
+            seen.add(path)
+            ordered.append(path)
+
+    # Force-include goal paths first.
+    for gp in goal_paths:
+        _add(gp)
+        # Pull in 1-hop neighbors from the graph if available.
+        if graph is not None:
+            node = graph.nodes.get(gp)
+            if node is not None:
+                for imp in node.imports:
+                    _add(imp)
+                for dep in graph.dependents.get(gp, []):
+                    _add(dep)
+
+    # Fill remaining budget with codegraph-ranked files.
+    if graph is not None:
+        try:
+            remaining = max(0, _CONTEXT_FILE_BUDGET - len(ordered))
+            if remaining > 0:
+                selection = context_files(graph, goal, budget=_CONTEXT_FILE_BUDGET)
+                for path in selection.files:
+                    _add(path)
+        except Exception:  # noqa: BLE001, S110, SIM105 - graceful: empty graph leaves forced paths
+            ...
+
+    return ordered[:_CONTEXT_FILE_BUDGET]
 
 
 def render_pack_markdown(pack: ContextPack) -> str:

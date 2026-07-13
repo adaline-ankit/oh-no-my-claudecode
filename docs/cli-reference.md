@@ -4725,6 +4725,13 @@ Usage: onmc mission [OPTIONS] GOAL
 │                                              [default: 12000]                │
 │ --json                                       Emit the mission plan as JSON   │
 │                                              instead of markdown.            │
+│ --strict                                     Refuse to run the mission when  │
+│                                              the brain is unready (never     │
+│                                              ingested or repo-file index     │
+│                                              empty). Without --strict a      │
+│                                              warning is printed to stderr    │
+│                                              and the mission proceeds        │
+│                                              (possibly unreliable).          │
 │ --help                                       Show this message and exit.     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -5130,6 +5137,9 @@ Usage: onmc pack [OPTIONS] GOAL
  reuse hints into a terse, deterministic, offline markdown brief for a
  spawned agent.
 
+ Explicit file paths named in the goal are force-included first so the
+ agent always starts with the exact files it was told to edit.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    goal      TEXT  Goal or task description for the spawned agent.         │
 │                      [required]                                              │
@@ -5139,6 +5149,12 @@ Usage: onmc pack [OPTIONS] GOAL
 │                                         [default: 12000]                     │
 │ --json                                  Emit the pack as JSON instead of     │
 │                                         markdown.                            │
+│ --strict                                Refuse to build the pack when the    │
+│                                         brain is unready (never ingested or  │
+│                                         repo-file index empty). Without      │
+│                                         --strict a warning is printed to     │
+│                                         stderr and the pack proceeds         │
+│                                         (possibly unreliable).               │
 │ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
