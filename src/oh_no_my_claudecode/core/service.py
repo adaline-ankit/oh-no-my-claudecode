@@ -1285,11 +1285,17 @@ class OnmcService:
         no network), assembles symbols + import edges + blast-radius +
         test-mapping, and writes a deterministic JSON cache.  Returns the
         ``(cache_path, graph)`` pair.
+
+        This is the **user-facing** build — it opts in to ``_warn=True`` so
+        that ``onmc codegraph build`` always prints a coverage summary (and a
+        loud warning when tree-sitter is absent and non-Python files are
+        present).  Internal builders (``_load_or_build_codegraph``) use the
+        default ``_warn=False`` and stay silent.
         """
         from oh_no_my_claudecode.codegraph.builder import build_codegraph
 
         repo_root, config, _ = self._load_context()
-        graph = build_codegraph(repo_root)
+        graph = build_codegraph(repo_root, _warn=True)
         cache_path = self._codegraph_cache_path(config, repo_root)
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(

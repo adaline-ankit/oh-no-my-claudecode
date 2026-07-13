@@ -68,13 +68,25 @@ _MAX_FILES = 5000
 _DEFAULT_CONTEXT_BUDGET = 8
 
 
-def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGraph:
+def build_codegraph(
+    repo_root: Path,
+    *,
+    max_files: int = _MAX_FILES,
+    _warn: bool = False,
+) -> CodeGraph:
     """Build a :class:`CodeGraph` for the source files under *repo_root*.
 
     Always indexes ``*.py`` files via :mod:`ast`.  When the optional
     ``tree-sitter`` extra is installed, *also* indexes JS/TS/Go/Rust/Java files;
     when it is not, only ``*.py`` files are discovered — identical to the
     original pure-Python behaviour.
+
+    **Coverage warning (opt-in only).**  When ``_warn=True``, a one-line
+    coverage summary is printed to *stderr* and a prominent warning is emitted
+    when a meaningful number of files could not be indexed because the
+    ``tree-sitter`` extra is absent.  The default is ``False`` so internal
+    callers (``pack``, ``context``, ``mission``, …) stay silent — only the
+    user-facing ``onmc codegraph build`` command opts in.
 
     Pure read — walks the filesystem, never writes.  Deterministic: the same
     tree always yields the same graph (sorted traversal, sorted edges).
@@ -85,6 +97,10 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
         Absolute path to the repository root.
     max_files:
         Hard cap on the number of source files indexed (defaults to 5000).
+    _warn:
+        When ``True``, print a coverage summary and a warning to *stderr* if
+        non-Python files are present but not indexed.  Defaults to ``False``
+        so library/internal callers produce no output.
     """
     repo_root = repo_root.resolve()
     source_files = _discover_source_files(repo_root, max_files=max_files)
@@ -143,7 +159,7 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
             if symbol.file not in symbols_by_name[symbol.name]:
                 symbols_by_name[symbol.name].append(symbol.file)
 
-    return CodeGraph(
+    graph = CodeGraph(
         nodes=nodes,
         symbols=symbols,
         symbols_by_name=symbols_by_name,
@@ -151,6 +167,17 @@ def build_codegraph(repo_root: Path, *, max_files: int = _MAX_FILES) -> CodeGrap
         file_tests={path: sorted(tests) for path, tests in sorted(file_tests.items())},
         file_count=len(source_files),
     )
+
+    if _warn:
+        from oh_no_my_claudecode.codegraph.coverage import (  # noqa: PLC0415
+            codegraph_coverage,
+            emit_coverage_warning,
+        )
+
+        report = codegraph_coverage(repo_root, graph)
+        emit_coverage_warning(report)
+
+    return graph
 
 
 def neighbors(graph: CodeGraph, target: str) -> Neighbors:
