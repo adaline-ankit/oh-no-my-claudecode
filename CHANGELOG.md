@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.105.0] — 2026-07-09
+
+### Fixed
+
+Two bugs surfaced by dogfooding `onmc mission` on a TypeScript-majority repo, where it silently resolved context to the wrong (Python) subsystem. Root cause was **silent degradation**, not missing capability — the multi-language grammars exist but sat behind an uninstalled optional extra, and nothing guarded an unready brain. Built by a parallel `onmc swarm` (two file-disjoint engineers):
+
+- **`onmc codegraph` no longer degrades to Python-only in silence** (#341): the code graph parses non-Python languages (`.ts/.tsx/.js/...`) only when the optional `[treesitter]` extra is installed, but a plain install omits it — so on a TS repo the builder indexed Python only, with no warning, and `context`/`pack`/`mission` returned the nearest Python. `build_codegraph()` no longer prints on every internal call (default `_warn=False`); only the user-facing `onmc codegraph build` surfaces a coverage summary + a prominent warning naming the top unindexed languages and the exact install fix (`uv tool install "oh-no-my-claudecode[treesitter]"`). New `onmc codegraph coverage` command (`--json`) reports indexed-vs-discoverable files and languages present-but-unindexed. All output goes to stderr so machine-JSON on stdout is never polluted.
+- **`onmc pack` / `onmc mission` guard an unready brain and honor explicit goal paths** (#340): running before `onmc ingest` (or with a near-empty graph) previously emitted confident, wrong context with no warning — now a loud readiness warning names the missing step (`onmc ingest`, `onmc codegraph build`), with an opt-in `--strict` that refuses (nonzero exit). And path-like tokens in the goal (e.g. `apps/x/src/foo.ts`) that resolve to real files are force-included first plus their 1-hop neighbors, so an explicitly-named file wins even when the graph is weak or empty.
+
 ## [0.104.0] — 2026-07-09
 
 ### Added
