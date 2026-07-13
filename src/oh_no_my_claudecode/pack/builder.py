@@ -60,9 +60,11 @@ _CONTEXT_FILE_BUDGET = 8
 # "cache.py" while still catching "src/cache.py" and deep nested paths.
 _PATH_TOKEN_RE = re.compile(r"[\w./-]*[\w-]/[\w./-]+")
 
-# Known source-file extensions for goal-path extraction.  We match both with
-# and without a leading dot so that paths like "src/foo.ts" and suffix ".ts"
-# both resolve.  The set is intentionally broad — we want to cover any file a
+# Known source-file extensions for goal-path extraction.  Values are dotted
+# because membership is tested against ``Path(token).suffix``, which always
+# carries a leading dot (so "src/foo.ts" → ".ts").  Bare tokens like "ts" are
+# not treated as extensions here — they only match when they resolve to a real
+# on-disk file.  The set is intentionally broad — we want to cover any file a
 # user plausibly names in a goal.
 _SOURCE_EXTENSIONS: frozenset[str] = frozenset(
     {
