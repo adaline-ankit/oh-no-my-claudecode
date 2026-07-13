@@ -11,7 +11,7 @@ group is fully defined and the command injection is safe.
 
 ``onmc codegraph coverage`` reports the fraction of discoverable source files
 that are indexed in the structural code graph, broken down by language.  It
-exits 0 always (informational only).
+exits 0 with the report (or 1 when no git repository can be resolved).
 """
 
 from __future__ import annotations
@@ -63,7 +63,9 @@ def register(app: typer.Typer) -> None:  # noqa: ARG001 — app is unused; we ta
         languages present in the repo that are being silently skipped because
         the ``tree-sitter`` extra is absent.
 
-        Always exits 0 — this command is purely informational.
+        Purely informational: exits 0 with the coverage report. Exits 1 only
+        when no git repository can be resolved (run from inside your project
+        or pass ``--repo``).
 
         Examples:
 
