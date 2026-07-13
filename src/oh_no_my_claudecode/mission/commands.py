@@ -28,6 +28,7 @@ from oh_no_my_claudecode.mission.pipeline import (
     run_mission,
 )
 from oh_no_my_claudecode.pack.builder import DEFAULT_BUDGET
+from oh_no_my_claudecode.pack.readiness import brain_readiness_warnings
 
 
 def register(app: typer.Typer) -> None:
@@ -63,6 +64,18 @@ def register(app: typer.Typer) -> None:
             bool,
             typer.Option("--json", help="Emit the mission plan as JSON instead of markdown."),
         ] = False,
+        strict: Annotated[
+            bool,
+            typer.Option(
+                "--strict",
+                help=(
+                    "Refuse to run the mission when the brain is unready "
+                    "(never ingested or repo-file index empty). "
+                    "Without --strict a warning is printed to stderr and the "
+                    "mission proceeds (possibly unreliable)."
+                ),
+            ),
+        ] = False,
     ) -> None:
         """Run the engineering pipeline end-to-end into one mission plan.
 
@@ -77,6 +90,20 @@ def register(app: typer.Typer) -> None:
         except FileNotFoundError as exc:
             typer.echo(str(exc), err=True)
             raise typer.Exit(code=1) from exc
+
+        warnings = brain_readiness_warnings(storage)
+        if warnings:
+            typer.echo(
+                "WARNING: brain may be unready — mission context could be unreliable.", err=True
+            )
+            for w in warnings:
+                typer.echo(f"  • {w}", err=True)
+            if strict:
+                typer.echo(
+                    "Refusing to run mission (--strict). Run `onmc ingest` then retry.",
+                    err=True,
+                )
+                raise typer.Exit(code=1)
 
         plan = run_mission(
             storage,
