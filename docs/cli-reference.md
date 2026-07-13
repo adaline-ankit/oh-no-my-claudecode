@@ -1710,7 +1710,9 @@ Usage: onmc codegraph coverage [OPTIONS]
  languages present in the repo that are being silently skipped because
  the ``tree-sitter`` extra is absent.
 
- Always exits 0 — this command is purely informational.
+ Purely informational: exits 0 with the coverage report. Exits 1 only
+ when no git repository can be resolved (run from inside your project
+ or pass ``--repo``).
 
  Examples:
 
