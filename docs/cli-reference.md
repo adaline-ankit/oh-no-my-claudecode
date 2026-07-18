@@ -2472,11 +2472,12 @@ Usage: onmc eval [OPTIONS] COMMAND [ARGS]...
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ create   Create a new eval case and persist it to .onmc/evals/<id>.json.     │
-│ run      Run the eval suite and report memory recall quality.                │
-│ compare  Compare with-memory vs without-memory eval scores.                  │
-│ ab       Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude     │
-│          Code alone.                                                         │
+│ create      Create a new eval case and persist it to .onmc/evals/<id>.json.  │
+│ run         Run the eval suite and report memory recall quality.             │
+│ compare     Compare with-memory vs without-memory eval scores.               │
+│ ab          Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude  │
+│             Code alone.                                                      │
+│ continuity  Run the autonomous-continuity orchestration-safety SIM.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2559,6 +2560,40 @@ Usage: onmc eval compare [OPTIONS]
 │                                                  case.                       │
 │                                                  [default: 8]                │
 │ --help                                           Show this message and exit. │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval continuity`
+
+```text
+Usage: onmc eval continuity [OPTIONS]
+
+ Run the autonomous-continuity orchestration-safety SIM.
+
+ Measures where ONMC's policy beats naive orchestration over a long
+ unattended multi-task session — not per-task precision (the A/B eval
+ covers that) but SESSION-LEVEL SAFETY:
+
+
+   false-green rejection    — ONMC refuses no-diff ghost completions
+   cascade/poison prevention— ONMC isolates broken tasks; naive lets one
+                              broken task block all subsequent tasks
+   scope enforcement        — ONMC rejects edits to protected paths
+   transient-error survival — ONMC retries + skips without poisoning
+
+ This is a DETERMINISTIC POLICY SIMULATION (SIM): no LLM calls, no
+ subprocess, fully reproducible in CI.  Each task has a pre-assigned
+ outcome; both policies are applied to the same sequence.
+
+ Examples:
+
+   onmc eval continuity          # render comparison table
+
+   onmc eval continuity --json   # machine-readable output
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Output results as JSON.                                      │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

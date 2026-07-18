@@ -6245,6 +6245,64 @@ def eval_ab_command(
     )
 
 
+@eval_app.command("continuity")
+def eval_continuity_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output results as JSON."),
+    ] = False,
+) -> None:
+    """Run the autonomous-continuity orchestration-safety SIM.
+
+    Measures where ONMC's policy beats naive orchestration over a long
+    unattended multi-task session — not per-task precision (the A/B eval
+    covers that) but SESSION-LEVEL SAFETY:
+
+    \b
+      false-green rejection    — ONMC refuses no-diff ghost completions
+      cascade/poison prevention— ONMC isolates broken tasks; naive lets one
+                                 broken task block all subsequent tasks
+      scope enforcement        — ONMC rejects edits to protected paths
+      transient-error survival — ONMC retries + skips without poisoning
+
+    This is a DETERMINISTIC POLICY SIMULATION (SIM): no LLM calls, no
+    subprocess, fully reproducible in CI.  Each task has a pre-assigned
+    outcome; both policies are applied to the same sequence.
+
+    Examples:
+
+      onmc eval continuity          # render comparison table
+
+      onmc eval continuity --json   # machine-readable output
+    """
+    import json as _json
+
+    from oh_no_my_claudecode.evals.continuity.harness import run_continuity
+    from oh_no_my_claudecode.evals.continuity.suite import BUILTIN_TASKS
+
+    comparison = run_continuity(BUILTIN_TASKS)
+
+    if as_json:
+        console.print(_json.dumps(comparison.to_dict(), indent=2))
+        return
+
+    console.print(comparison.to_markdown())
+
+    n = comparison.naive
+    o = comparison.onmc
+    console.print(
+        f"\n[bold]Continuity SIM summary:[/bold] "
+        f"ONMC correctly completes {o.correctly_completed}/{o.total_tasks} tasks"
+        f" vs naive {n.correctly_completed}/{n.total_tasks}"
+        f" | ONMC false_completions={o.false_completions}"
+        f" naive={n.false_completions}"
+        f" | ONMC cascades={o.cascade_failures}"
+        f" naive={n.cascade_failures}"
+        f" | ONMC interventions={o.interventions_needed}"
+        f" naive={n.interventions_needed}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # onmc replay — Replay Lab
 # ---------------------------------------------------------------------------
