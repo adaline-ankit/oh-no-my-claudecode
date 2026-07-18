@@ -12,6 +12,7 @@ Each iteration:
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import subprocess
 import time
@@ -76,6 +77,62 @@ def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
         return result.stdout
 
     return _probe
+
+
+def _files_from_git_status(status_output: str | None) -> frozenset[str]:
+    """Parse ``git status --porcelain`` output into a set of file paths.
+
+    Handles the common status codes (M, A, D, R, ?, …) and rename entries
+    (``old -> new``) by keeping only the new path.  Returns an empty frozenset
+    when *status_output* is ``None`` or blank.
+    """
+    if not status_output:
+        return frozenset()
+    files: set[str] = set()
+    for line in status_output.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:].strip()
+        if " -> " in path:
+            # rename: "old -> new" — scope-check the destination
+            path = path.split(" -> ", 1)[1].strip()
+        if path:
+            files.add(path)
+    return frozenset(files)
+
+
+def _scope_violation(
+    changed_files: frozenset[str],
+    allowed_paths: list[str],
+    protected_paths: list[str],
+) -> str | None:
+    """Return a violation message when *changed_files* break the declared scope.
+
+    Two independent checks run in order:
+
+    1. **Protected check** — any file matching a pattern in *protected_paths*
+       was modified → violation (these files must NEVER be touched).
+    2. **Allowlist check** — when *allowed_paths* is non-empty, any file that
+       does NOT match at least one pattern → violation (the change went outside
+       the declared scope).
+
+    Returns ``None`` when no violation is found.  Returns a short human-readable
+    violation message otherwise; the engine prepends a ``[scope-violation]`` tag
+    before storing it in the :class:`IterationContract`.
+    """
+    violations: list[str] = []
+
+    if protected_paths:
+        for path in sorted(changed_files):
+            if any(fnmatch.fnmatch(path, pat) for pat in protected_paths):
+                violations.append(f"protected file modified: {path!r}")
+
+    if allowed_paths:
+        for path in sorted(changed_files):
+            if not any(fnmatch.fnmatch(path, pat) for pat in allowed_paths):
+                violations.append(f"out-of-scope file modified: {path!r} (not in allowed_paths)")
+
+    return "; ".join(violations) if violations else None
 
 
 def _default_verify_runner(command: str) -> VerifyOutcome:
@@ -597,6 +654,25 @@ def run_loop(
             outcome = "win" if verify_outcome.passed else "loss"
             verify_output_text = verify_outcome.output
 
+        # --- Scope gate ---
+        # Even when verify passes AND real changes were made, those changes must
+        # stay within the declared scope (allowed_paths) and must not touch any
+        # protected file (protected_paths).  A scope violation forces a loss and
+        # prepends a diagnostic message so the agent knows what to fix.
+        # The gate is skipped when both lists are empty (default) so backward
+        # compatibility is 100% preserved.
+        if outcome == "win" and (config.allowed_paths or config.protected_paths):
+            changed_files = _files_from_git_status(post_sig)
+            violation = _scope_violation(changed_files, config.allowed_paths, config.protected_paths)
+            if violation is not None:
+                verify_passed = False
+                outcome = "loss"
+                verify_output_text = (
+                    f"[scope-violation] {violation}. The verify command passed but "
+                    "the agent modified files outside the declared scope.\n\n"
+                    + verify_output_text
+                )
+
         contract = IterationContract(
             iteration=i,
             prediction=agent_result.prediction,
@@ -696,7 +772,9 @@ __all__ = [
     "_build_brief",
     "_default_agent_runner",
     "_default_verify_runner",
+    "_files_from_git_status",
     "_iteration_signature",
+    "_scope_violation",
     "_verify_output_head",
     "run_loop",
 ]

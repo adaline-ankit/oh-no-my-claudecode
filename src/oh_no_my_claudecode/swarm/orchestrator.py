@@ -433,6 +433,8 @@ def run_swarm(
             isolate=False,
             duplicate_action_limit=3,
             repeated_error_limit=3,
+            allowed_paths=list(unit.allowed_paths),
+            protected_paths=list(unit.protected_paths),
         )
 
         wall_start = time.monotonic()

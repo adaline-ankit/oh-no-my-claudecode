@@ -79,6 +79,23 @@ class LoopConfig:
     (converged + verified) the worktree path is preserved and reported.  On
     failure the worktree is removed and no changes leak.  Degrades gracefully
     to in-place execution when ``git worktree add`` fails."""
+    allowed_paths: list[str] = field(default_factory=list)
+    """Optional scope allowlist — ``fnmatch``-style patterns for file paths that
+    are permitted to be modified.  When non-empty, any file the agent modifies
+    that does NOT match at least one pattern causes the iteration to be counted
+    as a *loss* (even when the verify command exits 0).  Empty list (default)
+    means no restriction — all paths are allowed.
+
+    Examples: ``["src/**", "tests/**"]``, ``["*.py"]``.
+    """
+    protected_paths: list[str] = field(default_factory=list)
+    """Optional scope blocklist — ``fnmatch``-style patterns for file paths that
+    must NEVER be modified.  When non-empty, any match causes the iteration to
+    be counted as a *loss* regardless of the verify outcome.  Empty list
+    (default) means no files are protected.
+
+    Examples: ``[".env", "secrets/*", "CLAUDE.md"]``.
+    """
 
 
 @dataclass
