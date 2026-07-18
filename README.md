@@ -387,6 +387,34 @@ benchmark. The eval harness is shipped so the claim is always backed by reproduc
 asserted. (An earlier internal eval used a rigged baseline that auto-failed the cold condition; the
 A/B harness uses a real cold baseline instead.)
 
+### Autonomous continuity: where ONMC actually wins
+
+The per-task A/B ties because a capable model self-discovers what it needs on a single task. ONMC's
+real contribution is **safety across a long, unattended, multi-task run** — which a per-task metric
+can't see. `onmc eval continuity` measures it: a 10-task sequence containing the failure modes that
+break naive orchestration (a no-op that leaves tests green, a task that breaks the shared tree
+mid-run, a task that edits a protected file, a transient environment error), run under a naive
+orchestrator ("tests pass = done", shared tree) vs ONMC's (rich gate: green + real diff + in-scope;
+isolation + stash-on-fail; transient-survival).
+
+```bash
+onmc eval continuity
+```
+
+| Metric | Naive | ONMC | Delta |
+|---|:--:|:--:|:--:|
+| Correctly completed (↑) | 3/10 | **6/10** | +3 |
+| False completions accepted (↓) | 2 | **0** | −2 |
+| Cascade failures (↓) | 3 | **0** | −3 |
+| Human interventions needed (↓) | 3 | **0** | −3 |
+
+**Labelled SIM** (deterministic policy simulation, no LLM) — it measures the orchestration-*policy*
+delta, which is where the safety difference genuinely lives. The honest framing: ONMC does **not**
+make each task more precise; it makes a long unattended run **safe and complete** — it rejects
+false-greens, prevents one bad task from poisoning the rest, blocks scope violations, and survives
+transient errors, so fewer runs need a human to step in. (A careful hand-rolled orchestrator can
+match this — by re-implementing the same policies ONMC ships by default.)
+
 ## Local-first and safety boundaries
 
 - Core memory, brief, guard, audit, eval, replay, benchmark, and sync paths work without an LLM.
