@@ -6163,6 +6163,88 @@ def eval_compare_command(
         raise typer.Exit(code=1)
 
 
+@eval_app.command("ab")
+def eval_ab_command(
+    fixture: Annotated[
+        bool,
+        typer.Option(
+            "--fixture",
+            help=(
+                "Replay pre-recorded fixture results (CI-safe, no LLM, no API key needed). "
+                "Omit to run live — requires the claude CLI and ANTHROPIC_API_KEY."
+            ),
+        ),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output results as JSON."),
+    ] = False,
+    task: Annotated[
+        str,
+        typer.Option("--task", help="Run only the task with this id (for debugging)."),
+    ] = "",
+) -> None:
+    """Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude Code alone.
+
+    Measures whether ONMC memory context changes coding outcomes on objective
+    SWE-bench-style tasks (setup a buggy repo, run an agent, check a pytest gate).
+
+    Two conditions:
+
+    \b
+      cc_alone — bare Claude CLI, no ONMC context (real cold baseline, NOT auto-fail)
+      cc_onmc  — Claude CLI with ONMC memory hint prepended (dead-ends named, correct
+                 approach guided)
+
+    Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
+    Use live mode to collect fresh results: requires `claude` CLI + ANTHROPIC_API_KEY.
+
+    Honesty note: a positive ONMC delta only counts on tasks where the cc_alone
+    baseline can genuinely fail.  Tasks where both conditions pass ('tie-pass')
+    confirm ONMC does not regress on easy tasks but do not prove ONMC value.
+
+    Examples:
+
+      onmc eval ab --fixture            # CI-safe offline comparison
+
+      onmc eval ab --fixture --json     # machine-readable output
+
+      onmc eval ab --fixture --task list_slice_fix   # single task
+
+      onmc eval ab                      # live run (needs API key + claude CLI)
+    """
+    import json as _json
+
+    from oh_no_my_claudecode.evals.ab.runner import run_suite
+    from oh_no_my_claudecode.evals.ab.tasks import BUILTIN_TASKS
+
+    try:
+        report = run_suite(
+            BUILTIN_TASKS,
+            fixture=fixture,
+            task_filter=task or None,
+        )
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except RuntimeError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        console.print(_json.dumps(report.to_dict(), indent=2))
+        return
+
+    console.print(report.to_markdown())
+
+    # Exit summary line
+    mode = "FIXTURE" if report.fixture else "LIVE"
+    console.print(
+        f"\n[bold]A/B summary ({mode}):[/bold] "
+        f"ONMC wins {report.onmc_wins}/{report.total_tasks} tasks  "
+        f"| cc_alone pass {report.alone_pass_rate:.0%}  "
+        f"| cc_onmc pass {report.onmc_pass_rate:.0%}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # onmc replay — Replay Lab
 # ---------------------------------------------------------------------------
