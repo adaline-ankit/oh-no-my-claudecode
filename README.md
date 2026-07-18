@@ -359,6 +359,34 @@ wasted attempts, and `-97%` context-token proxy usage. These are synthetic harne
 claim about every production repository. Run `onmc benchmark` against your own brain for measured
 repo-specific numbers.
 
+### Outcome A/B: ONMC + Claude Code vs Claude Code alone
+
+The benchmarks above measure ONMC's *internal* primitives (recall, guard, context size). The harder,
+more honest question is whether ONMC changes the *outcome* of real coding tasks. `onmc eval ab` runs
+that comparison — SWE-bench-style tasks (revert a real bug-fix, keep its test), each solved twice:
+once by Claude Code alone, once by Claude Code + ONMC, scored by an objective gate.
+
+```bash
+onmc eval ab            # live: runs the agent in both conditions
+onmc eval ab --fixture  # deterministic replay for CI
+```
+
+**Honest results so far (live, n small):**
+
+| Regime | Task type | Claude Code alone | + ONMC | Delta |
+|---|---|:--:|:--:|:--:|
+| Easy bug-fix (cold repo) | localized fix, failing test | 3/3 solved | 3/3 solved | **parity** (+12% tool-calls) |
+| Convention memory (ONMC's designed sweet-spot) | add a fn respecting a repo `__all__` contract | 2/2 compliant | 2/2 compliant | **parity** |
+
+**We do not yet have a measured per-task win over Claude Code alone**, and we publish that plainly.
+On these tasks a capable model infers code-visible conventions and locates code itself, so ONMC's
+context/memory is redundant. ONMC's value must be *earned* on the regimes where the model can't
+shortcut: conventions **not visible in code** (tribal/external knowledge), **large unfamiliar repos**
+where finding code is the bottleneck, and **expensive multi-iteration dead-ends**. Those are the next
+benchmark. The eval harness is shipped so the claim is always backed by reproducible numbers — never
+asserted. (An earlier internal eval used a rigged baseline that auto-failed the cold condition; the
+A/B harness uses a real cold baseline instead.)
+
 ## Local-first and safety boundaries
 
 - Core memory, brief, guard, audit, eval, replay, benchmark, and sync paths work without an LLM.
