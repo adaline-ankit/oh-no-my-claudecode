@@ -217,18 +217,63 @@ def _record_win(
     return mid
 
 
+# Lowercase substrings that indicate a transient or environment failure rather than a
+# substantive approach/logic failure.  When any of these appear in the verify output or
+# agent action summary the loss is classified as "environment" and NOT written as a
+# FAILED_APPROACH dead-end — such entries would only pollute the guard with noise.
+_ENV_PATTERNS: tuple[str, ...] = (
+    "permission denied",
+    "permission approval",
+    "pending permission",
+    "file-write blocked",
+    "file-writes blocked",
+    "not granted",
+    "network error",
+    "network timeout",
+    "connection error",
+    "connection refused",
+    "connection reset",
+    "timed out",
+    "[verify timed out]",
+    "rate limit",
+    "rate-limit",
+    "429",
+    "out of memory",
+    " oom",
+    "[agent-error]",
+)
+
+
+def _classify_failure_cause(verify_output: str, action_summary: str) -> str:
+    """Return ``'environment'`` for transient/environment failures, ``'approach'`` otherwise.
+
+    Environment/transient signals include permission errors, network issues, rate limits,
+    OOM, and agent invocation errors.  These should NOT be stored as guarding dead-ends
+    because they are not indicative of a bad approach — they are noise from the environment.
+    """
+    text = (verify_output + " " + action_summary).lower()
+    return "environment" if any(pat in text for pat in _ENV_PATTERNS) else "approach"
+
+
 def _record_loss(
     storage: SQLiteStorage,
     goal: str,
     contract: IterationContract,
     now: datetime,
-) -> str:
+) -> str | None:
     """Record a failed approach as FAILED_APPROACH so next iteration's guard blocks it.
 
     This is the core of the don't-repeat property: every loss is immediately
     written to memory tagged loop-deadend, so compile_guard() retrieves it on
     the very next iteration brief.
+
+    Returns the memory id written, or ``None`` when the failure is classified as
+    transient/environment (permission denied, network error, rate limit, etc.).
+    Transient failures are NOT stored as dead-ends — they are environment noise,
+    not evidence of a bad approach, and should never surface in guard output.
     """
+    if _classify_failure_cause(contract.verify_output, contract.action_summary) == "environment":
+        return None
     summary = (
         f"Failed approach for goal: {goal[:120]}. "
         f"Tried: {contract.action_summary[:200]}. "
@@ -562,7 +607,8 @@ def run_loop(
             )
             iterations.append(error_contract)
             mid = _record_loss(storage, spec.goal, error_contract, ref_now)
-            recorded_memory_ids.append(mid)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
             _save_checkpoint()
             return _make_result(False, "agent-error")
 
@@ -620,8 +666,10 @@ def run_loop(
             return _make_result(True, "converged")
         else:
             # LOSS: record dead-end so next iteration's guard blocks it.
+            # Transient/environment failures are NOT recorded as dead-ends.
             mid = _record_loss(storage, spec.goal, contract, ref_now)
-            recorded_memory_ids.append(mid)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
             consecutive_losses += 1
             last_loss = contract
 
@@ -694,6 +742,7 @@ def run_loop(
 # Keep utc_now import for callers who might use it.
 __all__ = [
     "_build_brief",
+    "_classify_failure_cause",
     "_default_agent_runner",
     "_default_verify_runner",
     "_iteration_signature",
