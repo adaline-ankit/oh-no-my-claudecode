@@ -323,6 +323,9 @@ _ENV_PATTERNS: tuple[str, ...] = (
     "429 too many requests",
     "out of memory",
     " oom",
+    "command not found",
+    "env: pytest: no such file or directory",
+    "executable file not found",
     "[agent-error]",
     "[scope-unverifiable]",
 )

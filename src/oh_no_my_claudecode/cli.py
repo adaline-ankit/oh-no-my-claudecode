@@ -6430,6 +6430,21 @@ def swarm_run_command(
             help="Run each unit in an isolated git worktree (default: True).",
         ),
     ] = True,
+    agent_timeout_seconds: Annotated[
+        int,
+        typer.Option(
+            "--agent-timeout-seconds",
+            min=1,
+            help="Hard timeout for each agent CLI invocation.",
+        ),
+    ] = 1200,
+    preserve_failed_worktrees: Annotated[
+        bool,
+        typer.Option(
+            "--preserve-failed-worktrees/--discard-failed-worktrees",
+            help="Keep failed unit branches/worktrees for recovery.",
+        ),
+    ] = True,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit full SwarmResult as JSON to stdout."),
@@ -6484,6 +6499,8 @@ def swarm_run_command(
         max_cost_usd=None,  # per-unit cost cap (not set via CLI here)
         swarm_max_cost_usd=max_cost_usd,
         isolate=isolate,
+        agent_timeout_seconds=agent_timeout_seconds,
+        preserve_failed_worktrees=preserve_failed_worktrees,
     )
 
     units = [
@@ -6524,6 +6541,9 @@ def swarm_run_command(
                 "cost_usd": ur.cost_usd,
                 "receipt_path": str(ur.receipt_path) if ur.receipt_path else None,
                 "error": ur.error,
+                "worktree_path": str(ur.worktree_path) if ur.worktree_path else None,
+                "branch": ur.branch,
+                "verify_output": ur.verify_output,
                 "loop_result": (
                     {
                         "converged": ur.loop_result.converged,
@@ -6557,6 +6577,7 @@ def swarm_run_command(
     table.add_column("Status")
     table.add_column("Cost USD")
     table.add_column("Receipt")
+    table.add_column("Recovery")
 
     for ur in result.unit_results:
         status_style = {
@@ -6570,6 +6591,7 @@ def swarm_run_command(
             status_style,
             f"${ur.cost_usd:.4f}",
             receipt_short,
+            ur.branch or "[dim]—[/dim]",
         )
     console.print(table)
     console.print(

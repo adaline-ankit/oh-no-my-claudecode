@@ -81,6 +81,8 @@ def _fake_verify(*, passes: bool, output: str = ""):
         "rate limit exceeded — try again",
         "HTTP 429 Too Many Requests",
         "out of memory: killed",
+        "/bin/sh: python: command not found",
+        "env: pytest: no such file or directory",
         "[agent-error] Failed to authenticate. API Error: 401",
         "[scope-unverifiable] change probe unavailable",
     ],

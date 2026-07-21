@@ -7449,49 +7449,61 @@ Usage: onmc swarm run [OPTIONS]
  onmc swarm run --task "lint check" --agent codex --no-isolate --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --task                                TEXT                Goal text for one  │
-│                                                           swarm unit.        │
-│                                                           Repeat for         │
-│                                                           multiple tasks.    │
-│                                                           Mutually exclusive │
-│                                                           with --file.       │
-│ --file                                PATH                Path to a text     │
-│                                                           file where each    │
-│                                                           non-empty line is  │
-│                                                           one task goal.     │
-│                                                           Mutually exclusive │
-│                                                           with --task.       │
-│ --agent                               TEXT                Agent CLI: claude  │
-│                                                           (default), codex,  │
-│                                                           or opencode.       │
-│                                                           [default: claude]  │
-│ --concurrency                         INTEGER RANGE       Max parallel       │
-│                                       [x>=1]              workers.  Default  │
-│                                                           min(cpu_count-1,   │
-│                                                           8).  HONEST: this  │
-│                                                           is a bounded pool  │
-│                                                           — not unlimited    │
-│                                                           simultaneous       │
-│                                                           agents.            │
-│ --max-cost-usd                        FLOAT RANGE         Swarm-level total  │
-│                                       [x>=0.0]            cost ceiling in    │
-│                                                           USD.               │
-│ --per-unit-max-it…                    INTEGER RANGE       Per-unit max loop  │
-│                                       [x>=1]              iterations.        │
-│ --verify                              TEXT                Verify command     │
-│                                                           applied to all     │
-│                                                           units (default:    │
-│                                                           pytest).           │
-│ --isolate             --no-isolate                        Run each unit in   │
-│                                                           an isolated git    │
-│                                                           worktree (default: │
-│                                                           True).             │
-│                                                           [default: isolate] │
-│ --json                                                    Emit full          │
-│                                                           SwarmResult as     │
-│                                                           JSON to stdout.    │
-│ --help                                                    Show this message  │
-│                                                           and exit.          │
+│ --task                                   TEXT              Goal text for one │
+│                                                            swarm unit.       │
+│                                                            Repeat for        │
+│                                                            multiple tasks.   │
+│                                                            Mutually          │
+│                                                            exclusive with    │
+│                                                            --file.           │
+│ --file                                   PATH              Path to a text    │
+│                                                            file where each   │
+│                                                            non-empty line is │
+│                                                            one task goal.    │
+│                                                            Mutually          │
+│                                                            exclusive with    │
+│                                                            --task.           │
+│ --agent                                  TEXT              Agent CLI: claude │
+│                                                            (default), codex, │
+│                                                            or opencode.      │
+│                                                            [default: claude] │
+│ --concurrency                            INTEGER RANGE     Max parallel      │
+│                                          [x>=1]            workers.  Default │
+│                                                            min(cpu_count-1,  │
+│                                                            8).  HONEST: this │
+│                                                            is a bounded pool │
+│                                                            — not unlimited   │
+│                                                            simultaneous      │
+│                                                            agents.           │
+│ --max-cost-usd                           FLOAT RANGE       Swarm-level total │
+│                                          [x>=0.0]          cost ceiling in   │
+│                                                            USD.              │
+│ --per-unit-max-i…                        INTEGER RANGE     Per-unit max loop │
+│                                          [x>=1]            iterations.       │
+│ --verify                                 TEXT              Verify command    │
+│                                                            applied to all    │
+│                                                            units (default:   │
+│                                                            pytest).          │
+│ --isolate            --no-isolate                          Run each unit in  │
+│                                                            an isolated git   │
+│                                                            worktree          │
+│                                                            (default: True).  │
+│                                                            [default:         │
+│                                                            isolate]          │
+│ --agent-timeout-…                        INTEGER RANGE     Hard timeout for  │
+│                                          [x>=1]            each agent CLI    │
+│                                                            invocation.       │
+│                                                            [default: 1200]   │
+│ --preserve-faile…    --discard-faile…                      Keep failed unit  │
+│                                                            branches/worktre… │
+│                                                            for recovery.     │
+│                                                            [default:         │
+│                                                            preserve-failed-… │
+│ --json                                                     Emit full         │
+│                                                            SwarmResult as    │
+│                                                            JSON to stdout.   │
+│ --help                                                     Show this message │
+│                                                            and exit.         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

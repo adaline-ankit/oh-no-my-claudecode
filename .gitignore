@@ -1,5 +1,6 @@
 .DS_Store
 .onmc/
+.agent-memory/receipts/
 .venv/
 venv/
 __pycache__/

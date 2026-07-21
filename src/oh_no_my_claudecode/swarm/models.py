@@ -90,6 +90,11 @@ class SwarmConfig:
         When True, each unit runs in its own git worktree (default True).
         Set False to run all units against the same working tree (useful for
         read-only analysis tasks or when git worktree is unavailable).
+    agent_timeout_seconds:
+        Hard timeout for each agent CLI invocation. Default 1200 seconds.
+    preserve_failed_worktrees:
+        Keep failed unit worktrees and branches for recovery instead of deleting
+        partial work. Default True.
     """
 
     concurrency: int = field(default_factory=_default_concurrency)
@@ -100,6 +105,8 @@ class SwarmConfig:
     max_wall_seconds: int | None = None
     swarm_max_cost_usd: float | None = None
     isolate: bool = True
+    agent_timeout_seconds: int = 1200
+    preserve_failed_worktrees: bool = True
 
 
 @dataclass
@@ -111,19 +118,26 @@ class SwarmUnitResult:
     unit_id:
         Matches SwarmUnit.id.
     status:
-        "done" — loop converged or exhausted normally.
-        "failed" — loop raised an unhandled exception.
-        "aborted" — loop stopped due to external abort signal or swarm cost cap.
+        "done" — loop converged and verification passed.
+        "failed" — execution failed or loop stopped without convergence.
+        "aborted" — loop stopped due to an external abort signal or cost cap.
     loop_result:
         The LoopResult from run_loop.  None when status is "failed" due to an
         unhandled exception before run_loop returned.
     receipt_path:
-        Path to the tamper-evident receipt written after the run.  None for
-        aborted/failed units.
+        Path to the tamper-evident receipt written after the run, when receipt
+        construction succeeds.
     cost_usd:
         Total cost in USD for this unit.  0.0 when not available.
     error:
         Exception message when status is "failed", else None.
+    worktree_path:
+        Recoverable isolated worktree retained after success, or after failure
+        when ``preserve_failed_worktrees`` is enabled.
+    branch:
+        Git branch owning the isolated worktree.
+    verify_output:
+        Final verifier output excerpt for diagnosis.
     """
 
     unit_id: str
@@ -132,6 +146,9 @@ class SwarmUnitResult:
     receipt_path: Path | None
     cost_usd: float
     error: str | None = None
+    worktree_path: Path | None = None
+    branch: str | None = None
+    verify_output: str | None = None
 
 
 @dataclass
@@ -150,7 +167,8 @@ class SwarmResult:
         Sum of total_tokens across all units.
     stop_reason:
         Why the swarm stopped.
-        "completed" — all units ran.
+        "completed" — all units converged.
+        "failed" — at least one unit failed verification or execution.
         "aborted" — abort was requested externally.
         "cost-cap" — swarm_max_cost_usd reached.
     units_done:
@@ -165,7 +183,7 @@ class SwarmResult:
     unit_results: list[SwarmUnitResult] = field(default_factory=list)
     total_cost_usd: float = 0.0
     total_tokens: int = 0
-    stop_reason: str = "completed"  # "completed" | "aborted" | "cost-cap"
+    stop_reason: str = "completed"  # "completed" | "failed" | "aborted" | "cost-cap"
     units_done: int = 0
     units_failed: int = 0
     units_aborted: int = 0

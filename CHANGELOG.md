@@ -19,7 +19,12 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
-- Pin Typer to 0.26.8 so generated CLI help remains reproducible across supported CI runtimes.
+- Pin Typer to 0.26.8 inside preflight and CLI-reference generation so CI output remains
+  reproducible without narrowing the package's supported runtime dependency range.
+- **Recoverable swarm failures** — isolated swarm units now retain failed worktrees and branches by
+  default, expose recovery paths plus verifier output in JSON/manifests, support configurable agent
+  timeouts, distinguish failed swarms from completed ones, and run verifier commands without a
+  shell. Transient command-not-found failures no longer pollute durable strategy memory.
 
 ## [0.105.0] — 2026-07-09
 

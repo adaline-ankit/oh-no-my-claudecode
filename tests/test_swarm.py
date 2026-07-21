@@ -1,7 +1,7 @@
 """Tests for the onmc swarm orchestrator.
 
-ALL tests use INJECTED fake runners and a fake/inline executor.
-NO real agents, NO real subprocesses, NO real worktrees are created.
+Tests use injected fake agent runners. One isolation regression test creates a
+real disposable git worktree; no real coding-agent process is launched.
 
 Coverage:
 - run_loop should_continue=False → stop_reason "aborted" (abort hook unit test)
@@ -41,6 +41,7 @@ from oh_no_my_claudecode.loop.models import (
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.swarm.models import SwarmConfig, SwarmUnit
 from oh_no_my_claudecode.swarm.orchestrator import (
+    _run_verify_command,
     request_abort,
     run_swarm,
     swarm_state,
@@ -605,6 +606,124 @@ class TestRunSwarm:
         )
         shutil.rmtree(seen_roots[0].parent, ignore_errors=True)
 
+    def test_failed_unit_preserves_recoverable_worktree(self, tmp_path: Path) -> None:
+        """Failed agent work must survive with branch/path recovery metadata."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _init_git_repo(repo)
+        storage = _storage(tmp_path)
+        units = _make_units(1)
+        cfg = _make_config(
+            concurrency=1,
+            isolate=True,
+            max_iterations=1,
+            preserve_failed_worktrees=True,
+        )
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                (repo_root / "partial.txt").write_text("recover me\n", encoding="utf-8")
+                return AgentRunResult(
+                    output="partial work",
+                    prediction="tests still fail",
+                    files_touched=["partial.txt"],
+                    tokens=1,
+                )
+
+            return _agent
+
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
+            return _fake_verify(passes=False, output="still failing")
+
+        result = run_swarm(
+            storage,
+            repo,
+            units,
+            cfg,
+            runner_factory=_af,
+            verify_factory=_vf,
+            executor=ThreadPoolExecutor(max_workers=1),
+            now=_FIXED_NOW,
+        )
+
+        unit = result.unit_results[0]
+        assert unit.status == "failed"
+        assert unit.worktree_path is not None
+        assert unit.worktree_path.exists()
+        assert (unit.worktree_path / "partial.txt").read_text(encoding="utf-8") == "recover me\n"
+        assert unit.branch
+        manifest = swarm_state(repo, result.swarm_id)
+        assert manifest["agent_timeout_seconds"] == 1200
+        assert manifest["preserve_failed_worktrees"] is True
+        saved = manifest["units"][unit.unit_id]
+        assert saved["worktree_path"] == str(unit.worktree_path)
+        assert saved["branch"] == unit.branch
+        assert saved["verify_output"] == "still failing"
+
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(unit.worktree_path)],
+            cwd=repo,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        shutil.rmtree(unit.worktree_path.parent, ignore_errors=True)
+
+    def test_abort_requested_during_agent_failure_reports_aborted(self, tmp_path: Path) -> None:
+        """An agent terminated after ABORT must not be misreported as failed."""
+        storage = _storage(tmp_path)
+        units = _make_units(1)
+        cfg = _make_config(concurrency=1, isolate=False)
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                (repo_root / ".onmc" / "swarm" / "ABORT").write_text(
+                    "abort", encoding="utf-8"
+                )
+                return AgentRunResult(
+                    output="terminated",
+                    prediction="",
+                    files_touched=[],
+                    error="terminated by user",
+                )
+
+            return _agent
+
+        af, vf = _fake_runner_factory(agent_fn=None, verify_fn=_fake_verify(passes=False))
+        del af
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            cfg,
+            runner_factory=_af,
+            verify_factory=vf,
+            executor=ThreadPoolExecutor(max_workers=1),
+            now=_FIXED_NOW,
+        )
+
+        assert result.unit_results[0].status == "aborted"
+        assert result.units_aborted == 1
+        assert result.units_failed == 0
+
+
+def test_verify_command_does_not_execute_shell_operators(tmp_path: Path) -> None:
+    marker = tmp_path / "owned"
+    outcome = _run_verify_command(
+        f"python3 -c 'print(1)' && touch {marker}",
+        tmp_path,
+    )
+
+    assert outcome.passed is False
+    assert not marker.exists()
+
 
 # ---------------------------------------------------------------------------
 # CLI tests
@@ -695,6 +814,21 @@ class TestSwarmCLI:
         assert result.exit_code != 0
         assert "no such option" not in _strip_ansi(result.output).lower()
 
+    def test_swarm_run_accepts_recovery_flags(self) -> None:
+        """Timeout and recovery controls must be real CLI options."""
+        result = _cli_runner().invoke(
+            app,
+            [
+                "swarm",
+                "run",
+                "--agent-timeout-seconds",
+                "30",
+                "--discard-failed-worktrees",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "no such option" not in _strip_ansi(result.output).lower()
+
 
 class TestSwarmHonestStatus:
     """A unit is 'done' only when its loop actually converged."""
@@ -721,6 +855,7 @@ class TestSwarmHonestStatus:
 
         assert result.units_done == 0
         assert result.units_failed == 2
+        assert result.stop_reason == "failed"
         for ur in result.unit_results:
             assert ur.status == "failed"
             assert ur.error is not None

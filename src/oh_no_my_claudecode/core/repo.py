@@ -130,9 +130,9 @@ class WorktreeIsolationProvider:
     """Real git-worktree-backed isolation provider.
 
     Creates a linked worktree in a temporary directory so the loop's agent
-    works on an isolated copy of the repo.  On success the worktree persists
-    (caller can inspect the changes); on failure the worktree is fully removed
-    so no partial changes leak into the caller's working tree.
+    works on an isolated copy of the repo.  The caller chooses whether teardown
+    keeps the worktree for inspection/recovery or removes it with its temporary
+    branch.
 
     Implements the ``IsolationProvider`` protocol from
     ``oh_no_my_claudecode.loop.models``.
@@ -176,12 +176,16 @@ class WorktreeIsolationProvider:
         self._worktree_path = worktree_path
         return worktree_path
 
+    @property
+    def branch_name(self) -> str | None:
+        """Return recovery branch for current isolated worktree."""
+        return self._branch_name
+
     def teardown(self, worktree_path: Path, *, keep: bool) -> None:
         """Remove the worktree.
 
-        When *keep* is ``True`` (converged) we leave the files in place but
-        remove the git worktree registration.  When *keep* is ``False``
-        (failure/rollback) we remove the directory entirely.
+        When *keep* is ``True`` we leave the worktree and branch registered for
+        inspection or recovery.  When *keep* is ``False`` we remove both.
         """
         repo_root = self._repo_root
         branch = self._branch_name
