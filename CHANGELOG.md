@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.106.0] — 2026-07-22
+
 ### Added
 
 - **Pinned public-repository A/B evidence** — `onmc eval ab --public-repo` now checks out a full
