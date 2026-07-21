@@ -359,6 +359,39 @@ wasted attempts, and `-97%` context-token proxy usage. These are synthetic harne
 claim about every production repository. Run `onmc benchmark` against your own brain for measured
 repo-specific numbers.
 
+### Outcome A/B: ONMC + Claude Code vs Claude Code alone
+
+The benchmarks above measure ONMC's *internal* primitives (recall, guard, context size). The harder,
+more honest question is whether ONMC changes the *outcome* of real coding tasks. `onmc eval ab` runs
+that comparison — SWE-bench-style tasks (revert a real bug-fix, keep its test), each solved twice:
+once by Claude Code alone, once by Claude Code + ONMC, scored by an objective gate.
+
+```bash
+onmc eval ab --public-repo  # live: pinned public repo, identical Claude settings
+onmc eval ab --fixture      # deterministic harness regression only; not product evidence
+```
+
+**Latest public-repository smoke result (2026-07-18, one paired run):**
+
+| Task | Result | Tokens | Turns | Reported cost | Wall time |
+|---|---|---:|---:|---:|---:|
+| Claude Code alone | pass | 4,628 | 23 | $0.473 | 111.6s |
+| Claude Code + ONMC recall | pass | 2,679 | 13 | $0.233 | 57.5s |
+| ONMC reduction | same correct outcome | **42.1%** | **43.5%** | **50.8%** | **48.4%** |
+
+Method: both conditions used Claude Code Sonnet with medium effort, a $1 per-condition cap, fresh
+clones of `encode/httpx` at pre-fix commit `df5345140e09ac6c2de0d9589bcd6f3e31c6aa3f`, and the same
+task. The harness applied only the upstream regression test from fix `6d852d319acd`; the production
+fix was absent. Both agents changed only `httpx/_client.py` (`+10/-0`) and passed the two fail-to-pass
+cases plus six stable preservation cases. ONMC's extra context was a repository lesson seeded into
+an isolated SQLite brain and retrieved through the production recall compiler.
+The harness rejects any condition that modifies the protected upstream regression-test file.
+
+This is an **efficiency win, not a solve-rate claim**. One paired run is a smoke result, not a
+statistically stable benchmark. The harness reports correctness, regressions, tokens, turns, cost,
+time, diff scope, prompt hash, and pinned-repository provenance so repeated trials can establish or
+refute the claim. Fixture results remain labelled and are never counted as live evidence.
+
 ## Local-first and safety boundaries
 
 - Core memory, brief, guard, audit, eval, replay, benchmark, and sync paths work without an LLM.

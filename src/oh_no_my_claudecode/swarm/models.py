@@ -37,11 +37,19 @@ class SwarmUnit:
         Shell command run after each iteration.  When ``None``, no verification
         is run (the verify runner always returns passed=False, which means the
         loop runs to max_iterations unless it converges on other grounds).
+    allowed_paths:
+        Optional scope allowlist forwarded to :class:`~oh_no_my_claudecode.loop.models.LoopConfig`.
+        ``fnmatch``-style patterns; empty list (default) disables the check.
+    protected_paths:
+        Optional scope blocklist forwarded to :class:`~oh_no_my_claudecode.loop.models.LoopConfig`.
+        ``fnmatch``-style patterns; empty list (default) disables the check.
     """
 
     id: str
     goal: str
     verify_command: str | None = None
+    allowed_paths: list[str] = field(default_factory=list)
+    protected_paths: list[str] = field(default_factory=list)
 
 
 @dataclass

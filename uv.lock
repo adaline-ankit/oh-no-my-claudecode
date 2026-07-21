@@ -2878,7 +2878,7 @@ requires-dist = [
     { name = "tree-sitter", marker = "extra == 'treesitter'", specifier = ">=0.23,<1.0" },
     { name = "tree-sitter-language-pack", marker = "extra == 'treesitter'", specifier = ">=0.7" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=5.1,<7.0" },
-    { name = "typer", specifier = ">=0.12,<1.0" },
+    { name = "typer", specifier = "==0.26.8" },
     { name = "watchdog", specifier = ">=3.0.0" },
 ]
 provides-extras = ["treesitter", "sqlitevec", "fastembed", "litellm", "mem0", "supermemory", "crewai", "autogen", "langchain", "dev"]

@@ -2475,6 +2475,72 @@ Usage: onmc eval [OPTIONS] COMMAND [ARGS]...
 │ create   Create a new eval case and persist it to .onmc/evals/<id>.json.     │
 │ run      Run the eval suite and report memory recall quality.                │
 │ compare  Compare with-memory vs without-memory eval scores.                  │
+│ ab       Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude     │
+│          Code alone.                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval ab`
+
+```text
+Usage: onmc eval ab [OPTIONS]
+
+ Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude Code alone.
+
+ Measures whether ONMC memory context changes coding outcomes on objective
+ SWE-bench-style tasks (setup a buggy repo, run an agent, check a pytest gate).
+
+ Two conditions:
+
+
+   cc_alone — bare Claude CLI, no ONMC context (real cold baseline, NOT
+ auto-fail)
+   cc_onmc  — the same Claude CLI invocation with context retrieved through
+              ONMC's production recall compiler
+
+ Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
+ Use live mode to collect fresh results with the Claude CLI's configured auth.
+ Use --public-repo for pinned third-party commits and upstream regression
+ tests.
+
+ Honesty note: a positive ONMC delta only counts on tasks where the cc_alone
+ baseline can genuinely fail.  Tasks where both conditions pass ('tie-pass')
+ confirm ONMC does not regress on easy tasks but do not prove ONMC value.
+
+ Examples:
+
+   onmc eval ab --fixture            # CI-safe offline comparison
+
+   onmc eval ab --fixture --json     # machine-readable output
+
+   onmc eval ab --fixture --task list_slice_fix   # single task
+
+   onmc eval ab --public-repo        # live public-repo evidence
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --fixture                                   Replay pre-recorded fixture      │
+│                                             results (CI-safe, no LLM or      │
+│                                             Claude auth needed). Omit to run │
+│                                             live with the Claude CLI's       │
+│                                             configured authentication.       │
+│ --json                                      Output results as JSON.          │
+│ --task               TEXT                   Run only the task with this id   │
+│                                             (for debugging).                 │
+│ --public-repo                               Run pinned third-party           │
+│                                             repository tasks instead of      │
+│                                             synthetic mini-repos.            │
+│ --model              TEXT                   Claude model alias or full model │
+│                                             id for both conditions.          │
+│                                             [default: sonnet]                │
+│ --effort             TEXT                   Claude effort level for both     │
+│                                             conditions.                      │
+│                                             [default: medium]                │
+│ --budget-usd         FLOAT RANGE [x>=0.01]  Maximum spend per condition.     │
+│                                             [default: 1.0]                   │
+│ --timeout            INTEGER RANGE [x>=1]   Maximum seconds per Claude       │
+│                                             invocation.                      │
+│                                             [default: 120]                   │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

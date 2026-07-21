@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Pinned public-repository A/B evidence** — `onmc eval ab --public-repo` now checks out a full
+  third-party pre-fix commit, applies only its upstream regression test, runs Claude Code alone and
+  Claude Code + ONMC recall with identical model/effort/budget controls, and verifies fail-to-pass
+  plus stable pass-to-pass tests. Reports include repository provenance, prompt hash, diff scope,
+  tokens, turns, reported cost, wall time, and efficiency reductions. Subscription-authenticated
+  Claude CLI sessions work without a separate API key. Modifying protected benchmark tests forces
+  a failed result even when the test command exits successfully.
+- **Precision memory hygiene and rich loop gates** — transient environment failures are excluded
+  from durable dead-end memory, while successful lessons retain evidence; loop verification can
+  require non-vacuous diffs and enforce allowed/frozen-file scope.
+
+### Fixed
+
+- Pin Typer to 0.26.8 so generated CLI help remains reproducible across supported CI runtimes.
+
 ## [0.105.0] — 2026-07-09
 
 ### Fixed

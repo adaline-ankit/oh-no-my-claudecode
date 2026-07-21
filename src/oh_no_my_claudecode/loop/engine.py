@@ -12,6 +12,7 @@ Each iteration:
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import subprocess
 import time
@@ -76,6 +77,62 @@ def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
         return result.stdout
 
     return _probe
+
+
+def _files_from_git_status(status_output: str | None) -> frozenset[str]:
+    """Parse ``git status --porcelain`` output into a set of file paths.
+
+    Handles the common status codes (M, A, D, R, ?, …) and rename entries
+    (``old -> new``) by keeping only the new path.  Returns an empty frozenset
+    when *status_output* is ``None`` or blank.
+    """
+    if not status_output:
+        return frozenset()
+    files: set[str] = set()
+    for line in status_output.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:].strip()
+        if " -> " in path:
+            # rename: "old -> new" — scope-check the destination
+            path = path.split(" -> ", 1)[1].strip()
+        if path:
+            files.add(path)
+    return frozenset(files)
+
+
+def _scope_violation(
+    changed_files: frozenset[str],
+    allowed_paths: list[str],
+    protected_paths: list[str],
+) -> str | None:
+    """Return a violation message when *changed_files* break the declared scope.
+
+    Two independent checks run in order:
+
+    1. **Protected check** — any file matching a pattern in *protected_paths*
+       was modified → violation (these files must NEVER be touched).
+    2. **Allowlist check** — when *allowed_paths* is non-empty, any file that
+       does NOT match at least one pattern → violation (the change went outside
+       the declared scope).
+
+    Returns ``None`` when no violation is found.  Returns a short human-readable
+    violation message otherwise; the engine prepends a ``[scope-violation]`` tag
+    before storing it in the :class:`IterationContract`.
+    """
+    violations: list[str] = []
+
+    if protected_paths:
+        for path in sorted(changed_files):
+            if any(fnmatch.fnmatch(path, pat) for pat in protected_paths):
+                violations.append(f"protected file modified: {path!r}")
+
+    if allowed_paths:
+        for path in sorted(changed_files):
+            if not any(fnmatch.fnmatch(path, pat) for pat in allowed_paths):
+                violations.append(f"out-of-scope file modified: {path!r} (not in allowed_paths)")
+
+    return "; ".join(violations) if violations else None
 
 
 def _default_verify_runner(command: str) -> VerifyOutcome:
@@ -187,8 +244,7 @@ def _record_win(
 ) -> str:
     """Record a successful approach as a DECISION memory; return its id."""
     summary = (
-        f"Approach that worked for goal: {goal[:120]}. "
-        f"Action: {contract.action_summary[:200]}."
+        f"Approach that worked for goal: {goal[:120]}. Action: {contract.action_summary[:200]}."
     )
     mid = stable_id(
         MemoryKind.DECISION.value,
@@ -203,8 +259,7 @@ def _record_win(
         title=f"Loop win: {goal[:80]}",
         summary=summary,
         details=(
-            f"Prediction: {contract.prediction}\n"
-            f"Files touched: {', '.join(contract.files_touched)}"
+            f"Prediction: {contract.prediction}\nFiles touched: {', '.join(contract.files_touched)}"
         ),
         source_type=SourceType.SESSION,
         source_ref="loop:engine",
@@ -217,18 +272,63 @@ def _record_win(
     return mid
 
 
+# Lowercase substrings that indicate a transient or environment failure rather than a
+# substantive approach/logic failure.  When any of these appear in the verify output or
+# agent action summary the loss is classified as "environment" and NOT written as a
+# FAILED_APPROACH dead-end — such entries would only pollute the guard with noise.
+_ENV_PATTERNS: tuple[str, ...] = (
+    "permission denied",
+    "permission approval",
+    "pending permission",
+    "file-write blocked",
+    "file-writes blocked",
+    "not granted",
+    "network error",
+    "network timeout",
+    "connection error",
+    "connection refused",
+    "connection reset",
+    "timed out",
+    "[verify timed out]",
+    "rate limit",
+    "rate-limit",
+    "429",
+    "out of memory",
+    " oom",
+    "[agent-error]",
+)
+
+
+def _classify_failure_cause(verify_output: str, action_summary: str) -> str:
+    """Return ``'environment'`` for transient/environment failures, ``'approach'`` otherwise.
+
+    Environment/transient signals include permission errors, network issues, rate limits,
+    OOM, and agent invocation errors.  These should NOT be stored as guarding dead-ends
+    because they are not indicative of a bad approach — they are noise from the environment.
+    """
+    text = (verify_output + " " + action_summary).lower()
+    return "environment" if any(pat in text for pat in _ENV_PATTERNS) else "approach"
+
+
 def _record_loss(
     storage: SQLiteStorage,
     goal: str,
     contract: IterationContract,
     now: datetime,
-) -> str:
+) -> str | None:
     """Record a failed approach as FAILED_APPROACH so next iteration's guard blocks it.
 
     This is the core of the don't-repeat property: every loss is immediately
     written to memory tagged loop-deadend, so compile_guard() retrieves it on
     the very next iteration brief.
+
+    Returns the memory id written, or ``None`` when the failure is classified as
+    transient/environment (permission denied, network error, rate limit, etc.).
+    Transient failures are NOT stored as dead-ends — they are environment noise,
+    not evidence of a bad approach, and should never surface in guard output.
     """
+    if _classify_failure_cause(contract.verify_output, contract.action_summary) == "environment":
+        return None
     summary = (
         f"Failed approach for goal: {goal[:120]}. "
         f"Tried: {contract.action_summary[:200]}. "
@@ -384,16 +484,13 @@ def run_loop(
             _effective_repo_root = wt
             _log.debug("worktree isolation: using worktree at %s", wt)
         else:
-            _log.warning(
-                "worktree isolation: setup failed — running in-place (no isolation)"
-            )
+            _log.warning("worktree isolation: setup failed — running in-place (no isolation)")
 
     # --- Working-tree change probe ---
     # Detects whether the agent actually modified files each iteration.  A
     # verify pass with zero changes is vacuous and never counts as a win.
     _probe: ChangeProbe = (
-        change_probe if change_probe is not None
-        else _make_git_change_probe(_effective_repo_root)
+        change_probe if change_probe is not None else _make_git_change_probe(_effective_repo_root)
     )
 
     # --- Checkpoint / resume setup ---
@@ -562,7 +659,8 @@ def run_loop(
             )
             iterations.append(error_contract)
             mid = _record_loss(storage, spec.goal, error_contract, ref_now)
-            recorded_memory_ids.append(mid)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
             _save_checkpoint()
             return _make_result(False, "agent-error")
 
@@ -589,13 +687,34 @@ def run_loop(
             verify_output_text = (
                 "[no-op] agent produced no file changes this iteration; the "
                 "verify command passed but the result is vacuous — it reflects "
-                "pre-existing state, not that the goal was addressed.\n\n"
-                + verify_outcome.output
+                "pre-existing state, not that the goal was addressed.\n\n" + verify_outcome.output
             )
         else:
             verify_passed = verify_outcome.passed
             outcome = "win" if verify_outcome.passed else "loss"
             verify_output_text = verify_outcome.output
+
+        # --- Scope gate ---
+        # Even when verify passes AND real changes were made, those changes must
+        # stay within the declared scope (allowed_paths) and must not touch any
+        # protected file (protected_paths).  A scope violation forces a loss and
+        # prepends a diagnostic message so the agent knows what to fix.
+        # The gate is skipped when both lists are empty (default) so backward
+        # compatibility is 100% preserved.
+        if outcome == "win" and (config.allowed_paths or config.protected_paths):
+            changed_files = _files_from_git_status(post_sig)
+            violation = _scope_violation(
+                changed_files,
+                config.allowed_paths,
+                config.protected_paths,
+            )
+            if violation is not None:
+                verify_passed = False
+                outcome = "loss"
+                verify_output_text = (
+                    f"[scope-violation] {violation}. The verify command passed but "
+                    "the agent modified files outside the declared scope.\n\n" + verify_output_text
+                )
 
         contract = IterationContract(
             iteration=i,
@@ -620,8 +739,10 @@ def run_loop(
             return _make_result(True, "converged")
         else:
             # LOSS: record dead-end so next iteration's guard blocks it.
+            # Transient/environment failures are NOT recorded as dead-ends.
             mid = _record_loss(storage, spec.goal, contract, ref_now)
-            recorded_memory_ids.append(mid)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
             consecutive_losses += 1
             last_loss = contract
 
@@ -637,10 +758,7 @@ def run_loop(
             # loop that cannot make progress and never mistake it for success.
             if vacuous_pass:
                 consecutive_noops += 1
-                if (
-                    config.no_change_limit > 0
-                    and consecutive_noops >= config.no_change_limit
-                ):
+                if config.no_change_limit > 0 and consecutive_noops >= config.no_change_limit:
                     _save_checkpoint()
                     return _make_result(False, "no-changes")
             else:
@@ -694,9 +812,12 @@ def run_loop(
 # Keep utc_now import for callers who might use it.
 __all__ = [
     "_build_brief",
+    "_classify_failure_cause",
     "_default_agent_runner",
     "_default_verify_runner",
+    "_files_from_git_status",
     "_iteration_signature",
+    "_scope_violation",
     "_verify_output_head",
     "run_loop",
 ]

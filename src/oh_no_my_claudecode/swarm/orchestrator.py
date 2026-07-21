@@ -240,9 +240,7 @@ def swarm_state(repo_root: Path, swarm_id: str | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _default_agent_runner_factory(
-    unit: SwarmUnit, repo_root: Path
-) -> AgentRunner:
+def _default_agent_runner_factory(unit: SwarmUnit, repo_root: Path) -> AgentRunner:
     """Build a real agent runner using the configured adapter (default factory).
 
     The agent type is NOT known at this level — the caller (run_swarm) passes
@@ -433,6 +431,8 @@ def run_swarm(
             isolate=False,
             duplicate_action_limit=3,
             repeated_error_limit=3,
+            allowed_paths=list(unit.allowed_paths),
+            protected_paths=list(unit.protected_paths),
         )
 
         wall_start = time.monotonic()
