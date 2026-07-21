@@ -88,6 +88,7 @@ TASK_LIST_SLICE_FIX = ABTask(
         "which passes test_top_n_basic but fails test_top_n_exact.  The hint "
         "eliminates that dead-end."
     ),
+    protected_paths=("test_utils.py",),
 )
 
 
@@ -153,6 +154,7 @@ TASK_ACCUMULATOR_INIT = ABTask(
         "element tests pass but breaks multi-element ones.  The hint steers "
         "directly to `total = 0`."
     ),
+    protected_paths=("test_stats.py",),
 )
 
 
@@ -215,6 +217,7 @@ TASK_WORD_REVERSE = ABTask(
         "[::-1] — both fail.  The ONMC hint names both dead-ends and points "
         "directly to removing [1:]."
     ),
+    protected_paths=("test_text_utils.py",),
 )
 
 

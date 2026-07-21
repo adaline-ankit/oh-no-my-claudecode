@@ -101,6 +101,28 @@ def _files_from_git_status(status_output: str | None) -> frozenset[str]:
     return frozenset(files)
 
 
+def _changed_files_delta(
+    pre_status: str | None,
+    post_status: str | None,
+) -> frozenset[str]:
+    """Files changed *this iteration*: porcelain lines in *post* but not *pre*.
+
+    The scope gate must only judge files the current iteration touched.  Using
+    the full ``post`` status would flag files that were already dirty before the
+    agent ran (a user's unrelated uncommitted edit, or leftovers from an earlier
+    losing iteration) as out-of-scope, forcing a spurious loss on an otherwise
+    valid win.  Comparing verbatim porcelain lines isolates the per-iteration
+    delta: a file whose status line is identical before and after is excluded.
+
+    Returns an empty frozenset when *post_status* is ``None`` (git unavailable).
+    """
+    if not post_status:
+        return frozenset()
+    pre_lines = set((pre_status or "").splitlines())
+    delta = "\n".join(line for line in post_status.splitlines() if line not in pre_lines)
+    return _files_from_git_status(delta)
+
+
 def _scope_violation(
     changed_files: frozenset[str],
     allowed_paths: list[str],
@@ -292,7 +314,12 @@ _ENV_PATTERNS: tuple[str, ...] = (
     "[verify timed out]",
     "rate limit",
     "rate-limit",
-    "429",
+    "too many requests",
+    "http 429",
+    "status 429",
+    "status code 429",
+    "error 429",
+    "429 too many requests",
     "out of memory",
     " oom",
     "[agent-error]",
@@ -702,7 +729,7 @@ def run_loop(
         # The gate is skipped when both lists are empty (default) so backward
         # compatibility is 100% preserved.
         if outcome == "win" and (config.allowed_paths or config.protected_paths):
-            changed_files = _files_from_git_status(post_sig)
+            changed_files = _changed_files_delta(pre_sig, post_sig)
             violation = _scope_violation(
                 changed_files,
                 config.allowed_paths,
@@ -812,6 +839,7 @@ def run_loop(
 # Keep utc_now import for callers who might use it.
 __all__ = [
     "_build_brief",
+    "_changed_files_delta",
     "_classify_failure_cause",
     "_default_agent_runner",
     "_default_verify_runner",
