@@ -295,8 +295,8 @@ def _record_win(
 
 
 # Lowercase substrings that indicate a transient or environment failure rather than a
-# substantive approach/logic failure.  When any of these appear in the verify output or
-# agent action summary the loss is classified as "environment" and NOT written as a
+# substantive approach/logic failure.  When any of these appear in the harness-controlled
+# verify output the loss is classified as "environment" and NOT written as a
 # FAILED_APPROACH dead-end — such entries would only pollute the guard with noise.
 _ENV_PATTERNS: tuple[str, ...] = (
     "permission denied",
@@ -310,8 +310,9 @@ _ENV_PATTERNS: tuple[str, ...] = (
     "connection error",
     "connection refused",
     "connection reset",
-    "timed out",
-    "[verify timed out]",
+    "connection timed out",
+    "read timed out",
+    "request timed out",
     "rate limit",
     "rate-limit",
     "too many requests",
@@ -323,17 +324,24 @@ _ENV_PATTERNS: tuple[str, ...] = (
     "out of memory",
     " oom",
     "[agent-error]",
+    "[scope-unverifiable]",
 )
 
 
-def _classify_failure_cause(verify_output: str, action_summary: str) -> str:
+def _classify_failure_cause(verify_output: str) -> str:
     """Return ``'environment'`` for transient/environment failures, ``'approach'`` otherwise.
 
     Environment/transient signals include permission errors, network issues, rate limits,
     OOM, and agent invocation errors.  These should NOT be stored as guarding dead-ends
     because they are not indicative of a bad approach — they are noise from the environment.
+
+    Classification keys ONLY on the harness-controlled ``verify_output``.  The agent's
+    own action summary is untrusted input (CLAUDE.md): an agent that merely mentions
+    "rate limit" or "permission denied" in its narration must not be able to launder a
+    genuine bad-approach loss into an unrecorded "environment" failure and defeat the
+    don't-repeat guard.
     """
-    text = (verify_output + " " + action_summary).lower()
+    text = verify_output.lower()
     return "environment" if any(pat in text for pat in _ENV_PATTERNS) else "approach"
 
 
@@ -354,7 +362,7 @@ def _record_loss(
     Transient failures are NOT stored as dead-ends — they are environment noise,
     not evidence of a bad approach, and should never surface in guard output.
     """
-    if _classify_failure_cause(contract.verify_output, contract.action_summary) == "environment":
+    if _classify_failure_cause(contract.verify_output) == "environment":
         return None
     summary = (
         f"Failed approach for goal: {goal[:120]}. "
@@ -729,19 +737,35 @@ def run_loop(
         # The gate is skipped when both lists are empty (default) so backward
         # compatibility is 100% preserved.
         if outcome == "win" and (config.allowed_paths or config.protected_paths):
-            changed_files = _changed_files_delta(pre_sig, post_sig)
-            violation = _scope_violation(
-                changed_files,
-                config.allowed_paths,
-                config.protected_paths,
-            )
-            if violation is not None:
+            if pre_sig is None or post_sig is None:
+                # Scope constraints are declared but the working-tree change probe
+                # is unavailable (not a git repo / git failed), so we cannot confirm
+                # the change stayed inside allowed_paths and never touched a protected
+                # path.  protected_paths is a security "must NEVER touch" list, so an
+                # unverifiable win must fail safe (forced loss), not silently pass.
                 verify_passed = False
                 outcome = "loss"
                 verify_output_text = (
-                    f"[scope-violation] {violation}. The verify command passed but "
-                    "the agent modified files outside the declared scope.\n\n" + verify_output_text
+                    "[scope-unverifiable] scope constraints are declared "
+                    "(allowed_paths/protected_paths) but the working-tree change probe "
+                    "is unavailable, so the change set cannot be confirmed to stay in "
+                    "scope; failing safe.\n\n" + verify_output_text
                 )
+            else:
+                changed_files = _changed_files_delta(pre_sig, post_sig)
+                violation = _scope_violation(
+                    changed_files,
+                    config.allowed_paths,
+                    config.protected_paths,
+                )
+                if violation is not None:
+                    verify_passed = False
+                    outcome = "loss"
+                    verify_output_text = (
+                        f"[scope-violation] {violation}. The verify command passed but "
+                        "the agent modified files outside the declared scope.\n\n"
+                        + verify_output_text
+                    )
 
         contract = IterationContract(
             iteration=i,

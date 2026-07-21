@@ -452,21 +452,41 @@ class TestScopeGate:
         assert result.converged is False
         assert "[scope-violation]" in result.iterations[0].verify_output
 
-    def test_scope_gate_disabled_when_probe_returns_none(self, tmp_path: Path) -> None:
-        """When change probe is undeterminable, scope gate cannot fire (no file list)."""
+    def test_scope_gate_fails_safe_when_probe_returns_none(self, tmp_path: Path) -> None:
+        """When scope constraints are declared but the change probe is undeterminable,
+        the win cannot be confirmed to stay in scope, so it must fail SAFE (forced loss),
+        never silently pass — protected_paths is a security 'must NEVER touch' list."""
         storage = _storage(tmp_path)
-        # probe returns None → changed_files is empty → no scope violation
         result = run_loop(
             storage,
             tmp_path,
             LoopSpec(goal="task"),
-            LoopConfig(max_iterations=1, allowed_paths=["src/**"]),
+            LoopConfig(max_iterations=1, protected_paths=["secrets/**"]),
             agent_runner=_fake_agent("did something"),
             verify_runner=_fake_verify(passes=True, output="ok"),
             change_probe=_static_probe(None),  # undeterminable
             now=_FIXED_NOW,
         )
-        # Undeterminable probe → zero-diff gate skipped → verify pass accepted
+        assert result.converged is False, (
+            "An unverifiable win with declared scope constraints must fail safe, not pass."
+        )
+        assert result.iterations[0].outcome == "loss"
+        assert "[scope-unverifiable]" in result.iterations[0].verify_output
+
+    def test_no_scope_constraints_with_none_probe_still_converges(self, tmp_path: Path) -> None:
+        """Backward compat: with NO scope constraints, an undeterminable probe still
+        converges — the fail-safe only applies when scope constraints are declared."""
+        storage = _storage(tmp_path)
+        result = run_loop(
+            storage,
+            tmp_path,
+            LoopSpec(goal="task"),
+            LoopConfig(max_iterations=1),  # no allowed_paths / protected_paths
+            agent_runner=_fake_agent("did something"),
+            verify_runner=_fake_verify(passes=True, output="ok"),
+            change_probe=_static_probe(None),  # undeterminable
+            now=_FIXED_NOW,
+        )
         assert result.converged is True
 
     def test_multiple_iterations_scope_violation_then_fix(self, tmp_path: Path) -> None:

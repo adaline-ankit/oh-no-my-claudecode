@@ -67,47 +67,56 @@ def _fake_verify(*, passes: bool, output: str = ""):
 
 
 @pytest.mark.parametrize(
-    "verify_output,action_summary",
+    "verify_output",
     [
-        ("Error: permission denied when writing to src/foo.py", "tried to write file"),
-        ("file-writes blocked pending permission approval", "agent attempted edit"),
-        ("file-write blocked", ""),
-        ("not granted to perform action", "attempted shell exec"),
-        ("pending permission for file system access", "attempted edit"),
-        ("timed out after 30 seconds", "ran long command"),
-        ("[verify timed out]", ""),
-        ("network error: connection refused", "fetched url"),
-        ("connection reset by peer", "api call"),
-        ("rate limit exceeded — try again", "llm call"),
-        ("HTTP 429 Too Many Requests", ""),
-        ("out of memory: killed", "ran build"),
-        ("[agent-error] Failed to authenticate. API Error: 401", ""),
-        # Environment signal in action_summary even when verify_output is clean
-        ("FAILED: test assertion", "file-writes blocked pending permission"),
+        "Error: permission denied when writing to src/foo.py",
+        "file-writes blocked pending permission approval",
+        "file-write blocked",
+        "not granted to perform action",
+        "pending permission for file system access",
+        "connection timed out after 30 seconds",
+        "read timed out talking to the registry",
+        "network error: connection refused",
+        "connection reset by peer",
+        "rate limit exceeded — try again",
+        "HTTP 429 Too Many Requests",
+        "out of memory: killed",
+        "[agent-error] Failed to authenticate. API Error: 401",
+        "[scope-unverifiable] change probe unavailable",
     ],
 )
-def test_classifier_returns_environment_for_transient_signals(
-    verify_output: str, action_summary: str
-) -> None:
-    assert _classify_failure_cause(verify_output, action_summary) == "environment"
+def test_classifier_returns_environment_for_transient_signals(verify_output: str) -> None:
+    assert _classify_failure_cause(verify_output) == "environment"
 
 
 @pytest.mark.parametrize(
-    "verify_output,action_summary",
+    "verify_output",
     [
-        ("AssertionError: expected 42 got 0", "tried adding the +1 fix"),
-        ("FAILED test_foo.py::test_bar — AttributeError", "patched the class"),
-        ("query count still 5", "tried eager load"),
-        ("Build failed: undefined variable", "refactored imports"),
-        ("TypeError: unsupported operand type", "changed arithmetic"),
-        ("1 failed, 3 passed", "ran pytest"),
-        ("AssertionError: expected 429, got 430", "fixed pagination count"),
+        "AssertionError: expected 42 got 0",
+        "FAILED test_foo.py::test_bar — AttributeError",
+        "query count still 5",
+        "Build failed: undefined variable",
+        "TypeError: unsupported operand type",
+        "1 failed, 3 passed",
+        "AssertionError: expected 429, got 430",
+        # A verify-command timeout is the agent's own regression (an introduced
+        # hang / infinite loop), not a transient environment failure.
+        "[verify timed out]",
+        "test suite timed out after 120 seconds",
     ],
 )
-def test_classifier_returns_approach_for_real_failures(
-    verify_output: str, action_summary: str
-) -> None:
-    assert _classify_failure_cause(verify_output, action_summary) == "approach"
+def test_classifier_returns_approach_for_real_failures(verify_output: str) -> None:
+    assert _classify_failure_cause(verify_output) == "approach"
+
+
+def test_classifier_ignores_agent_controlled_narration() -> None:
+    """Agent output is untrusted: environment phrases in the agent's own narration
+    must NOT downgrade a genuine approach failure to an unrecorded 'environment' loss.
+
+    The classifier keys only on the harness-controlled verify output, so a real test
+    failure stays 'approach' even when the agent claims a permission/rate-limit problem.
+    """
+    assert _classify_failure_cause("AssertionError: expected 1 query, got 12") == "approach"
 
 
 # ---------------------------------------------------------------------------
@@ -197,10 +206,10 @@ def test_rate_limit_failure_not_stored_as_dead_end(tmp_path: Path) -> None:
     assert failed == [], "Rate-limit failure must not be stored as a dead-end"
 
 
-def test_timeout_failure_not_stored_as_dead_end(tmp_path: Path) -> None:
-    """Timeout failures must not be stored as dead-ends."""
+def test_network_timeout_failure_not_stored_as_dead_end(tmp_path: Path) -> None:
+    """Genuine transient network/API timeouts must not be stored as dead-ends."""
     storage = _storage(tmp_path)
-    spec = LoopSpec(goal="Run the full test suite")
+    spec = LoopSpec(goal="Fetch and index remote docs")
     config = LoopConfig(max_iterations=1)
 
     run_loop(
@@ -208,14 +217,37 @@ def test_timeout_failure_not_stored_as_dead_end(tmp_path: Path) -> None:
         tmp_path,
         spec,
         config,
-        agent_runner=_fake_agent("Starting tests", files=[]),
+        agent_runner=_fake_agent("Calling the API", files=[]),
+        verify_runner=_fake_verify(passes=False, output="connection timed out"),
+        now=_FIXED_NOW,
+    )
+
+    all_memories = storage.list_memories()
+    failed = [m for m in all_memories if m.kind == MemoryKind.FAILED_APPROACH]
+    assert failed == [], "Transient network timeout must not be stored as a dead-end"
+
+
+def test_verify_timeout_stored_as_dead_end(tmp_path: Path) -> None:
+    """A verify-command timeout is the agent's own regression (an introduced hang),
+    not a transient environment failure, so it MUST be recorded as a dead-end — else
+    the loop can repeat the hang-inducing approach every iteration."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="Speed up the report generator")
+    config = LoopConfig(max_iterations=1)
+
+    run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("Rewrote the loop", files=["report.py"]),
         verify_runner=_fake_verify(passes=False, output="[verify timed out]"),
         now=_FIXED_NOW,
     )
 
     all_memories = storage.list_memories()
     failed = [m for m in all_memories if m.kind == MemoryKind.FAILED_APPROACH]
-    assert failed == [], "Timeout failure must not be stored as a dead-end"
+    assert len(failed) >= 1, "A verify-command timeout must be recorded as a dead-end"
 
 
 def test_agent_error_not_stored_as_dead_end(tmp_path: Path) -> None:

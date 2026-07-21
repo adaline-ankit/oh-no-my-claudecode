@@ -576,6 +576,47 @@ def test_run_ab_rejects_protected_test_tampering(
     assert "protected benchmark file modified: test_target.py" in result.gate_output
 
 
+def test_run_ab_rejects_new_untracked_protected_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A NEW (untracked) file the agent creates must appear in the diff scope and be
+    caught by the protected-path guard — git diff alone never lists untracked files."""
+    task = ABTask(
+        id="protected-new-file",
+        description="Fix implementation.py without adding a conftest.",
+        setup_script=(
+            "from pathlib import Path\n"
+            "Path('implementation.py').write_text('VALUE = 0\\n')\n"
+            "Path('test_target.py').write_text('from implementation import VALUE\\n'"
+            " 'def test_value():\\n    assert VALUE == 1\\n')\n"
+        ),
+        gate_command="python -m pytest test_target.py -q",
+        onmc_hint="Prior lesson",
+        protected_paths=("conftest.py",),
+    )
+
+    def fix_and_plant_conftest(*args: object, **kwargs: object) -> _AgentOutcome:
+        repo_root = args[1]
+        assert isinstance(repo_root, Path)
+        (repo_root / "implementation.py").write_text("VALUE = 1\n")
+        # A brand-new untracked file matching a protected path.
+        (repo_root / "conftest.py").write_text("collect_ignore = ['test_target.py']\n")
+        return _AgentOutcome("done", 10, None, 1, 0.01, "sonnet")
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.evals.ab.runner._run_claude_agent",
+        fix_and_plant_conftest,
+    )
+
+    result = run_ab(task, "cc_alone", repo_root=tmp_path)
+
+    assert "conftest.py" in result.changed_files, (
+        "Untracked new files must be included in the reported diff scope"
+    )
+    assert result.passed is False
+    assert "protected benchmark file modified: conftest.py" in result.gate_output
+
+
 def test_onmc_prompt_uses_real_recall_pipeline() -> None:
     prompt = _build_prompt(TASK_HTTPX_DIRECT_REQUEST_TIMEOUT, "cc_onmc")
     assert "Relevant repo memory" in prompt

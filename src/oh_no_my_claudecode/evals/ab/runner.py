@@ -321,7 +321,17 @@ def _run_claude_agent(
 
 def _diff_metrics(repo_root: Path, baseline_sha: str) -> tuple[list[str], int, int]:
     names = _run_command(("git", "diff", "--name-only", baseline_sha), repo_root)
-    changed_files = [line for line in names.stdout.splitlines() if line]
+    tracked = [line for line in names.stdout.splitlines() if line]
+    # ``git diff`` never lists untracked/newly-created files.  An agent-created
+    # file (e.g. a new conftest.py / autouse fixture that shadows a failing test)
+    # would then be invisible both to the diff-scope provenance report and to the
+    # protected-path tamper guard.  Mirror the loop engine's probe and fold in
+    # untracked files so new files are counted and scope-checked.
+    others = _run_command(
+        ("git", "ls-files", "--others", "--exclude-standard"), repo_root
+    )
+    untracked = [line for line in others.stdout.splitlines() if line]
+    changed_files = sorted(set(tracked) | set(untracked))
     numstat = _run_command(("git", "diff", "--numstat", baseline_sha), repo_root)
     additions = 0
     deletions = 0
@@ -331,6 +341,12 @@ def _diff_metrics(repo_root: Path, baseline_sha: str) -> tuple[list[str], int, i
             additions += int(added)
         if deleted.isdigit():
             deletions += int(deleted)
+    for rel in untracked:
+        try:
+            content = (repo_root / rel).read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        additions += content.count("\n") + (1 if content and not content.endswith("\n") else 0)
     return changed_files, additions, deletions
 
 
