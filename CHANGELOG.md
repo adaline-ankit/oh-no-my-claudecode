@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Pinned public-repository A/B evidence** — `onmc eval ab --public-repo` now checks out a full
+  third-party pre-fix commit, applies only its upstream regression test, runs Claude Code alone and
+  Claude Code + ONMC recall with identical model/effort/budget controls, and verifies fail-to-pass
+  plus stable pass-to-pass tests. Reports include repository provenance, prompt hash, diff scope,
+  tokens, turns, reported cost, wall time, and efficiency reductions. Subscription-authenticated
+  Claude CLI sessions work without a separate API key. Modifying protected benchmark tests forces
+  a failed result even when the test command exits successfully.
+- **Precision memory hygiene and rich loop gates** — transient environment failures are excluded
+  from durable dead-end memory, while successful lessons retain evidence; loop verification can
+  require non-vacuous diffs and enforce allowed/frozen-file scope.
+
+### Fixed
+
+- Pin Typer to 0.26.8 inside preflight and CLI-reference generation so CI output remains
+  reproducible without narrowing the package's supported runtime dependency range.
+- **Recoverable swarm failures** — isolated swarm units now retain failed worktrees and branches by
+  default, expose recovery paths plus verifier output in JSON/manifests, support configurable agent
+  timeouts, distinguish failed swarms from completed ones, and run verifier commands without a
+  shell. Transient command-not-found failures no longer pollute durable strategy memory.
+
 ## [0.105.0] — 2026-07-09
 
 ### Fixed

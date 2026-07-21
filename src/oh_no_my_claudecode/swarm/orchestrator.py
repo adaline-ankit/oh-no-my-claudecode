@@ -28,6 +28,7 @@ from __future__ import annotations
 import contextlib
 import json
 import secrets
+import shlex
 import subprocess
 import threading
 import time
@@ -35,7 +36,7 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
@@ -105,6 +106,8 @@ def _write_manifest(
         "started_at": started_at,
         "agent": config.agent,
         "concurrency": config.concurrency,
+        "agent_timeout_seconds": config.agent_timeout_seconds,
+        "preserve_failed_worktrees": config.preserve_failed_worktrees,
         "swarm_max_cost_usd": config.swarm_max_cost_usd,
         "units": {
             u.id: {
@@ -113,6 +116,9 @@ def _write_manifest(
                 "cost_usd": 0.0,
                 "receipt_path": None,
                 "error": None,
+                "worktree_path": None,
+                "branch": None,
+                "verify_output": None,
             }
             for u in units
         },
@@ -144,6 +150,11 @@ def _update_manifest(
                 str(unit_result.receipt_path) if unit_result.receipt_path else None
             )
             manifest["units"][uid]["error"] = unit_result.error
+            manifest["units"][uid]["worktree_path"] = (
+                str(unit_result.worktree_path) if unit_result.worktree_path else None
+            )
+            manifest["units"][uid]["branch"] = unit_result.branch
+            manifest["units"][uid]["verify_output"] = unit_result.verify_output
         mpath.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False),
             encoding="utf-8",
@@ -240,9 +251,7 @@ def swarm_state(repo_root: Path, swarm_id: str | None = None) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _default_agent_runner_factory(
-    unit: SwarmUnit, repo_root: Path
-) -> AgentRunner:
+def _default_agent_runner_factory(unit: SwarmUnit, repo_root: Path) -> AgentRunner:
     """Build a real agent runner using the configured adapter (default factory).
 
     The agent type is NOT known at this level — the caller (run_swarm) passes
@@ -258,9 +267,21 @@ def _default_agent_runner_factory(
 def _run_verify_command(command: str, repo_root: Path) -> VerifyOutcome:
     """Run a verify command in a specific repo/worktree root."""
     try:
-        result = subprocess.run(  # noqa: S602, S603
-            command,
-            shell=True,
+        argv = shlex.split(command)
+        if not argv:
+            return VerifyOutcome(passed=False, output="[verify error: empty command]")
+        shell_operators = {"&&", "||", ";", "|", ">", ">>", "<", "2>", "2>&1"}
+        rejected = next((token for token in argv if token in shell_operators), None)
+        if rejected is not None:
+            return VerifyOutcome(
+                passed=False,
+                output=(
+                    f"[verify error: shell operator {rejected!r} is not supported; "
+                    "provide one structured command]"
+                ),
+            )
+        result = subprocess.run(  # noqa: S603
+            argv,
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -358,10 +379,16 @@ def run_swarm(
     _write_manifest(repo_root, swarm_id, units, config, started_at)
 
     # Build real runner factories when not injected.
-    _agent = config.agent
+    if config.agent not in {"claude", "codex", "opencode"}:
+        raise ValueError(f"unsupported swarm agent: {config.agent!r}")
+    _agent = cast(Literal["claude", "codex", "opencode"], config.agent)
 
     def _real_runner_factory(unit: SwarmUnit, rr: Path) -> AgentRunner:
-        return make_agent_runner(_agent, rr)  # type: ignore[arg-type]
+        return make_agent_runner(
+            _agent,
+            rr,
+            timeout=config.agent_timeout_seconds,
+        )
 
     resolved_runner_factory: AgentRunnerFactory = runner_factory or _real_runner_factory
 
@@ -409,6 +436,7 @@ def run_swarm(
         # caller's main worktree.
         isolation_provider = None
         worktree_path: Path | None = None
+        branch_name: str | None = None
         unit_root = repo_root
         if config.isolate:
             from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
@@ -419,6 +447,7 @@ def run_swarm(
             worktree_path = isolation_provider.setup(repo_root)
             if worktree_path is not None:
                 unit_root = worktree_path
+                branch_name = isolation_provider.branch_name
 
         agent_runner = resolved_runner_factory(unit, unit_root)
         verify_runner = resolved_verify_factory(unit, unit_root)
@@ -433,6 +462,8 @@ def run_swarm(
             isolate=False,
             duplicate_action_limit=3,
             repeated_error_limit=3,
+            allowed_paths=list(unit.allowed_paths),
+            protected_paths=list(unit.protected_paths),
         )
 
         wall_start = time.monotonic()
@@ -450,7 +481,10 @@ def run_swarm(
             )
         except Exception as exc:  # noqa: BLE001
             if isolation_provider is not None and worktree_path is not None:
-                isolation_provider.teardown(worktree_path, keep=False)
+                isolation_provider.teardown(
+                    worktree_path,
+                    keep=config.preserve_failed_worktrees,
+                )
             ur = SwarmUnitResult(
                 unit_id=unit.id,
                 status="failed",
@@ -458,6 +492,10 @@ def run_swarm(
                 receipt_path=None,
                 cost_usd=0.0,
                 error=str(exc),
+                worktree_path=(
+                    worktree_path if config.preserve_failed_worktrees else None
+                ),
+                branch=(branch_name if config.preserve_failed_worktrees else None),
             )
             _update_manifest(repo_root, swarm_id, ur, manifest_lock)
             return ur
@@ -483,8 +521,9 @@ def run_swarm(
             with contextlib.suppress(Exception):
                 receipt_path = write_receipt(repo_root, receipt)
 
+        preserve_worktree = result.converged or config.preserve_failed_worktrees
         if isolation_provider is not None and worktree_path is not None:
-            isolation_provider.teardown(worktree_path, keep=result.converged)
+            isolation_provider.teardown(worktree_path, keep=preserve_worktree)
 
         unit_cost = result.total_cost_usd or 0.0
         unit_tokens = result.total_tokens
@@ -503,7 +542,8 @@ def run_swarm(
         # converged (verified).  Any other terminal stop — agent-error,
         # max-iterations, cost, circuit-breaker — is a "failed" unit, never a
         # silent "done".  Abort stays distinct.
-        if result.stop_reason == "aborted":
+        abort_requested = _is_abort_requested(abort_path, global_abort_path)
+        if result.stop_reason == "aborted" or (abort_requested and not result.converged):
             status = "aborted"
         elif result.converged:
             status = "done"
@@ -517,6 +557,11 @@ def run_swarm(
             receipt_path=receipt_path,
             cost_usd=unit_cost,
             error=(f"loop stopped: {result.stop_reason}" if status == "failed" else None),
+            worktree_path=(worktree_path if preserve_worktree else None),
+            branch=(branch_name if preserve_worktree else None),
+            verify_output=(
+                result.iterations[-1].verify_output if result.iterations else None
+            ),
         )
         _update_manifest(repo_root, swarm_id, ur, manifest_lock)
         return ur
@@ -551,18 +596,20 @@ def run_swarm(
         if _own_executor:
             _pool.shutdown(wait=True)
 
+    done_count = sum(1 for r in unit_results if r.status == "done")
+    failed_count = sum(1 for r in unit_results if r.status == "failed")
+    aborted_count = sum(1 for r in unit_results if r.status == "aborted")
+
     # Determine swarm stop_reason.
     abort_requested = _is_abort_requested(abort_path, global_abort_path)
     if _cost_cap_reached[0]:
         stop_reason = "cost-cap"
     elif abort_requested:
         stop_reason = "aborted"
+    elif failed_count:
+        stop_reason = "failed"
     else:
         stop_reason = "completed"
-
-    done_count = sum(1 for r in unit_results if r.status == "done")
-    failed_count = sum(1 for r in unit_results if r.status == "failed")
-    aborted_count = sum(1 for r in unit_results if r.status == "aborted")
 
     _mark_manifest_done(repo_root, swarm_id, stop_reason)
 

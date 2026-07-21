@@ -2475,6 +2475,72 @@ Usage: onmc eval [OPTIONS] COMMAND [ARGS]...
 │ create   Create a new eval case and persist it to .onmc/evals/<id>.json.     │
 │ run      Run the eval suite and report memory recall quality.                │
 │ compare  Compare with-memory vs without-memory eval scores.                  │
+│ ab       Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude     │
+│          Code alone.                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc eval ab`
+
+```text
+Usage: onmc eval ab [OPTIONS]
+
+ Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude Code alone.
+
+ Measures whether ONMC memory context changes coding outcomes on objective
+ SWE-bench-style tasks (setup a buggy repo, run an agent, check a pytest gate).
+
+ Two conditions:
+
+
+   cc_alone — bare Claude CLI, no ONMC context (real cold baseline, NOT
+ auto-fail)
+   cc_onmc  — the same Claude CLI invocation with context retrieved through
+              ONMC's production recall compiler
+
+ Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
+ Use live mode to collect fresh results with the Claude CLI's configured auth.
+ Use --public-repo for pinned third-party commits and upstream regression
+ tests.
+
+ Honesty note: a positive ONMC delta only counts on tasks where the cc_alone
+ baseline can genuinely fail.  Tasks where both conditions pass ('tie-pass')
+ confirm ONMC does not regress on easy tasks but do not prove ONMC value.
+
+ Examples:
+
+   onmc eval ab --fixture            # CI-safe offline comparison
+
+   onmc eval ab --fixture --json     # machine-readable output
+
+   onmc eval ab --fixture --task list_slice_fix   # single task
+
+   onmc eval ab --public-repo        # live public-repo evidence
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --fixture                                   Replay pre-recorded fixture      │
+│                                             results (CI-safe, no LLM or      │
+│                                             Claude auth needed). Omit to run │
+│                                             live with the Claude CLI's       │
+│                                             configured authentication.       │
+│ --json                                      Output results as JSON.          │
+│ --task               TEXT                   Run only the task with this id   │
+│                                             (for debugging).                 │
+│ --public-repo                               Run pinned third-party           │
+│                                             repository tasks instead of      │
+│                                             synthetic mini-repos.            │
+│ --model              TEXT                   Claude model alias or full model │
+│                                             id for both conditions.          │
+│                                             [default: sonnet]                │
+│ --effort             TEXT                   Claude effort level for both     │
+│                                             conditions.                      │
+│                                             [default: medium]                │
+│ --budget-usd         FLOAT RANGE [x>=0.01]  Maximum spend per condition.     │
+│                                             [default: 1.0]                   │
+│ --timeout            INTEGER RANGE [x>=1]   Maximum seconds per Claude       │
+│                                             invocation.                      │
+│                                             [default: 120]                   │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5499,16 +5565,16 @@ Usage: onmc preflight [OPTIONS]
 │ --json                   Emit the PreflightReport as JSON to stdout.         │
 │ --provision              Run each tool via `uv run --with <tool>` so a fresh │
 │                          worktree (no dev deps installed) resolves           │
-│                          ruff/mypy/pytest on demand, and pin typer<1.0 for   │
-│                          the cli-reference step to match CI.                 │
+│                          ruff/mypy/pytest on demand, and pin typer==0.26.8   │
+│                          for the cli-reference step to match CI.             │
 │ --exact                  Mirror the CI quality gate exactly: uses the full   │
 │                          pytest coverage flags (--cov-fail-under=80) and     │
-│                          always pins typer<1.0 for the cli-reference step.   │
-│                          Provisions via uv when available.                   │
+│                          always pins typer==0.26.8 for the cli-reference     │
+│                          step.  Provisions via uv when available.            │
 │ --fix                    Auto-fix ruff violations (ruff check --fix) and     │
 │                          regenerate docs/cli-reference.md with pinned        │
-│                          typer<1.0, then re-run the exact CI gate and report │
-│                          the result.  Implies --exact.                       │
+│                          typer==0.26.8, then re-run the exact CI gate and    │
+│                          report the result.  Implies --exact.                │
 │ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -7383,49 +7449,61 @@ Usage: onmc swarm run [OPTIONS]
  onmc swarm run --task "lint check" --agent codex --no-isolate --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --task                                TEXT                Goal text for one  │
-│                                                           swarm unit.        │
-│                                                           Repeat for         │
-│                                                           multiple tasks.    │
-│                                                           Mutually exclusive │
-│                                                           with --file.       │
-│ --file                                PATH                Path to a text     │
-│                                                           file where each    │
-│                                                           non-empty line is  │
-│                                                           one task goal.     │
-│                                                           Mutually exclusive │
-│                                                           with --task.       │
-│ --agent                               TEXT                Agent CLI: claude  │
-│                                                           (default), codex,  │
-│                                                           or opencode.       │
-│                                                           [default: claude]  │
-│ --concurrency                         INTEGER RANGE       Max parallel       │
-│                                       [x>=1]              workers.  Default  │
-│                                                           min(cpu_count-1,   │
-│                                                           8).  HONEST: this  │
-│                                                           is a bounded pool  │
-│                                                           — not unlimited    │
-│                                                           simultaneous       │
-│                                                           agents.            │
-│ --max-cost-usd                        FLOAT RANGE         Swarm-level total  │
-│                                       [x>=0.0]            cost ceiling in    │
-│                                                           USD.               │
-│ --per-unit-max-it…                    INTEGER RANGE       Per-unit max loop  │
-│                                       [x>=1]              iterations.        │
-│ --verify                              TEXT                Verify command     │
-│                                                           applied to all     │
-│                                                           units (default:    │
-│                                                           pytest).           │
-│ --isolate             --no-isolate                        Run each unit in   │
-│                                                           an isolated git    │
-│                                                           worktree (default: │
-│                                                           True).             │
-│                                                           [default: isolate] │
-│ --json                                                    Emit full          │
-│                                                           SwarmResult as     │
-│                                                           JSON to stdout.    │
-│ --help                                                    Show this message  │
-│                                                           and exit.          │
+│ --task                                   TEXT              Goal text for one │
+│                                                            swarm unit.       │
+│                                                            Repeat for        │
+│                                                            multiple tasks.   │
+│                                                            Mutually          │
+│                                                            exclusive with    │
+│                                                            --file.           │
+│ --file                                   PATH              Path to a text    │
+│                                                            file where each   │
+│                                                            non-empty line is │
+│                                                            one task goal.    │
+│                                                            Mutually          │
+│                                                            exclusive with    │
+│                                                            --task.           │
+│ --agent                                  TEXT              Agent CLI: claude │
+│                                                            (default), codex, │
+│                                                            or opencode.      │
+│                                                            [default: claude] │
+│ --concurrency                            INTEGER RANGE     Max parallel      │
+│                                          [x>=1]            workers.  Default │
+│                                                            min(cpu_count-1,  │
+│                                                            8).  HONEST: this │
+│                                                            is a bounded pool │
+│                                                            — not unlimited   │
+│                                                            simultaneous      │
+│                                                            agents.           │
+│ --max-cost-usd                           FLOAT RANGE       Swarm-level total │
+│                                          [x>=0.0]          cost ceiling in   │
+│                                                            USD.              │
+│ --per-unit-max-i…                        INTEGER RANGE     Per-unit max loop │
+│                                          [x>=1]            iterations.       │
+│ --verify                                 TEXT              Verify command    │
+│                                                            applied to all    │
+│                                                            units (default:   │
+│                                                            pytest).          │
+│ --isolate            --no-isolate                          Run each unit in  │
+│                                                            an isolated git   │
+│                                                            worktree          │
+│                                                            (default: True).  │
+│                                                            [default:         │
+│                                                            isolate]          │
+│ --agent-timeout-…                        INTEGER RANGE     Hard timeout for  │
+│                                          [x>=1]            each agent CLI    │
+│                                                            invocation.       │
+│                                                            [default: 1200]   │
+│ --preserve-faile…    --discard-faile…                      Keep failed unit  │
+│                                                            branches/worktre… │
+│                                                            for recovery.     │
+│                                                            [default:         │
+│                                                            preserve-failed-… │
+│ --json                                                     Emit full         │
+│                                                            SwarmResult as    │
+│                                                            JSON to stdout.   │
+│ --help                                                     Show this message │
+│                                                            and exit.         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

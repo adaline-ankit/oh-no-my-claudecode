@@ -149,7 +149,7 @@ def test_provisioned_exact_cliref_pins_typer() -> None:
     cmd = _provisioned_exact_command_for("cliref")
     joined = " ".join(cmd)
     assert "uv run" in joined
-    assert "typer<1.0" in joined
+    assert "typer==0.26.8" in joined
     assert "--upgrade-package typer" in joined
     assert "--check" in joined
 
@@ -206,7 +206,7 @@ def test_fix_provisioned_cliref_regen_pins_typer(
     monkeypatch.setattr(runner_mod, "_uv_available", lambda: True)
     cmd = _fix_command_for("cliref-regen", use_uv=True)
     joined = " ".join(cmd)
-    assert "typer<1.0" in joined
+    assert "typer==0.26.8" in joined
     assert "--upgrade-package typer" in joined
     assert "--check" not in joined
 

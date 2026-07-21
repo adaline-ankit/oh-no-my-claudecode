@@ -139,6 +139,8 @@ def _root(
     ] = False,
 ) -> None:
     """Memory-grounded autonomous coding loops for Claude Code and Codex."""
+
+
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
 spec_app = typer.Typer(
     help="Inspect and validate the Agent Memory open spec.", no_args_is_help=True
@@ -340,7 +342,7 @@ def mcp_check_command(
         typer.Argument(
             help=(
                 "Path to a JSONL file of recorded tool calls.  "
-                "Each line: {\"server\": \"...\", \"tool\": \"...\", \"args\": {...}}.  "
+                'Each line: {"server": "...", "tool": "...", "args": {...}}.  '
                 "Omit or pass '-' to read from stdin."
             ),
         ),
@@ -1812,9 +1814,7 @@ def pull_command(
     # --all mode: pull all configured federation sources
     if pull_all:
         if source is not None:
-            raise typer.Exit(
-                code=_fatal("Pass either a SOURCE argument or --all, not both.")
-            )
+            raise typer.Exit(code=_fatal("Pass either a SOURCE argument or --all, not both."))
         try:
             _, results = _service().pull_all(dry_run=dry_run)
         except FileNotFoundError as exc:
@@ -1856,9 +1856,7 @@ def pull_command(
     # Single-source mode (original behaviour)
     if source is None:
         raise typer.Exit(
-            code=_fatal(
-                "Provide a SOURCE argument or use --all to pull all configured sources."
-            )
+            code=_fatal("Provide a SOURCE argument or use --all to pull all configured sources.")
         )
 
     if dry_run:
@@ -2819,10 +2817,7 @@ def audit_command(
 
         def _to_dict(obj: object) -> object:
             if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-                return {
-                    k: _to_dict(v)
-                    for k, v in dataclasses.asdict(obj).items()
-                }
+                return {k: _to_dict(v) for k, v in dataclasses.asdict(obj).items()}
             if isinstance(obj, set):
                 return sorted(obj)
             return obj
@@ -2869,7 +2864,7 @@ def preflight_command(
             help=(
                 "Run each tool via `uv run --with <tool>` so a fresh worktree "
                 "(no dev deps installed) resolves ruff/mypy/pytest on demand, "
-                "and pin typer<1.0 for the cli-reference step to match CI."
+                "and pin typer==0.26.8 for the cli-reference step to match CI."
             ),
         ),
     ] = False,
@@ -2879,7 +2874,7 @@ def preflight_command(
             "--exact",
             help=(
                 "Mirror the CI quality gate exactly: uses the full pytest coverage "
-                "flags (--cov-fail-under=80) and always pins typer<1.0 for the "
+                "flags (--cov-fail-under=80) and always pins typer==0.26.8 for the "
                 "cli-reference step.  Provisions via uv when available."
             ),
         ),
@@ -2890,7 +2885,7 @@ def preflight_command(
             "--fix",
             help=(
                 "Auto-fix ruff violations (ruff check --fix) and regenerate "
-                "docs/cli-reference.md with pinned typer<1.0, then re-run the "
+                "docs/cli-reference.md with pinned typer==0.26.8, then re-run the "
                 "exact CI gate and report the result.  Implies --exact."
             ),
         ),
@@ -2925,10 +2920,7 @@ def preflight_command(
     if only:
         invalid = [s for s in only if s not in STEP_IDS]
         if invalid:
-            msg = (
-                f"--only must be one of: {', '.join(STEP_IDS)} "
-                f"(got: {', '.join(invalid)})"
-            )
+            msg = f"--only must be one of: {', '.join(STEP_IDS)} (got: {', '.join(invalid)})"
             raise typer.Exit(code=_fatal(msg))
         steps = only
 
@@ -3098,10 +3090,7 @@ def wiki_logseq_command(
         Path | None,
         typer.Option(
             "--out",
-            help=(
-                "Directory to write Logseq pages into."
-                " Defaults to .onmc/logseq/ (gitignored)."
-            ),
+            help=("Directory to write Logseq pages into. Defaults to .onmc/logseq/ (gitignored)."),
         ),
     ] = None,
     as_json: Annotated[
@@ -3173,10 +3162,7 @@ def wiki_foam_command(
         Path | None,
         typer.Option(
             "--out",
-            help=(
-                "Directory to write Foam notes into."
-                " Defaults to .onmc/foam/ (gitignored)."
-            ),
+            help=("Directory to write Foam notes into. Defaults to .onmc/foam/ (gitignored)."),
         ),
     ] = None,
     as_json: Annotated[
@@ -3250,10 +3236,7 @@ def wiki_site_command(
         Path | None,
         typer.Option(
             "--out",
-            help=(
-                "Directory to write the HTML site into."
-                " Defaults to .onmc/site/ (gitignored)."
-            ),
+            help=("Directory to write the HTML site into. Defaults to .onmc/site/ (gitignored)."),
         ),
     ] = None,
     as_json: Annotated[
@@ -3893,10 +3876,7 @@ def skill_promote_command(
     if json_output:
         typer.echo(
             json.dumps(
-                [
-                    sk.model_dump(mode="json") if isinstance(sk, _Skill) else {}
-                    for sk in skills
-                ],
+                [sk.model_dump(mode="json") if isinstance(sk, _Skill) else {} for sk in skills],
                 indent=2,
             )
         )
@@ -4080,9 +4060,7 @@ def skill_export_command(
     onmc skill export --json
     """
     if scope not in ("project", "personal"):
-        raise typer.Exit(
-            code=_fatal(f"--scope must be 'project' or 'personal', got {scope!r}.")
-        )
+        raise typer.Exit(code=_fatal(f"--scope must be 'project' or 'personal', got {scope!r}."))
     try:
         written = _service().skill_export(out_dir=out_dir, scope=scope)
     except FileNotFoundError as exc:
@@ -4099,9 +4077,7 @@ def skill_export_command(
         return
 
     dest_dir = written[0].parent.parent if written else (out_dir or Path(".claude/skills"))
-    console.print(
-        f"[green]Exported {len(written)} skill(s)[/green] to [bold]{dest_dir}[/bold]"
-    )
+    console.print(f"[green]Exported {len(written)} skill(s)[/green] to [bold]{dest_dir}[/bold]")
     for path in written:
         console.print(f"  [dim]{path}[/dim]")
     console.print(
@@ -4178,9 +4154,7 @@ def profile_show_command(
     if json_out:
         import dataclasses
 
-        console.print(
-            json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2)
-        )
+        console.print(json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2))
         return
     render_user_profile(profile)
 
@@ -4201,9 +4175,7 @@ def profile_rebuild_command(
     if json_out:
         import dataclasses
 
-        console.print(
-            json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2)
-        )
+        console.print(json.dumps(dataclasses.asdict(profile), ensure_ascii=False, indent=2))
         return
     render_user_profile(profile)
 
@@ -4574,24 +4546,18 @@ def ledger_roi_command(
     saved = estimate.estimated_minutes_saved
     saved_color = "green" if saved > 0 else "yellow"
     console.print(
-        f"[bold cyan]onmc ledger ROI [dim](est)[/dim][/bold cyan]  "
-        f"over {summary.run_count} runs"
+        f"[bold cyan]onmc ledger ROI [dim](est)[/dim][/bold cyan]  over {summary.run_count} runs"
     )
-    console.print(
-        f"  Agent wall-time:     [bold]{estimate.agent_wall_minutes:g} min[/bold]"
-    )
+    console.print(f"  Agent wall-time:     [bold]{estimate.agent_wall_minutes:g} min[/bold]")
     console.print(
         f"  Est. human-time:     [bold]{estimate.estimated_human_minutes:g} min[/bold] "
         f"[dim]({estimate.assumed_human_minutes_per_run:g} min/run assumed)[/dim]"
     )
     console.print(
-        f"  Est. time saved:     [{saved_color}]{saved:g} min[/{saved_color}] "
-        "[dim](est)[/dim]"
+        f"  Est. time saved:     [{saved_color}]{saved:g} min[/{saved_color}] [dim](est)[/dim]"
     )
     if summary.total_cost_usd > 0:
-        console.print(
-            f"  Agent spend:         [bold]${summary.total_cost_usd:.4f}[/bold]"
-        )
+        console.print(f"  Agent spend:         [bold]${summary.total_cost_usd:.4f}[/bold]")
     console.print(f"  [dim]{estimate.assumption_note}[/dim]")
 
 
@@ -5047,14 +5013,10 @@ def import_command(
     render_import_summary(result)
 
     if dry_run:
-        console.print(
-            "[yellow]Dry run — no changes written. "
-            "Remove --dry-run to import.[/yellow]"
-        )
+        console.print("[yellow]Dry run — no changes written. Remove --dry-run to import.[/yellow]")
     elif result.imported > 0:
         console.print(
-            f"[green]Imported {result.imported} {result.as_kind}(s) "
-            f"from {result.source}.[/green]"
+            f"[green]Imported {result.imported} {result.as_kind}(s) from {result.source}.[/green]"
         )
     else:
         console.print(
@@ -5335,9 +5297,7 @@ def autopilot_command(
     ],
     agent: Annotated[
         str,
-        typer.Option(
-            "--agent", help="Agent CLI to use: claude (default), codex, or opencode."
-        ),
+        typer.Option("--agent", help="Agent CLI to use: claude (default), codex, or opencode."),
     ] = "claude",
     dry_run: Annotated[
         bool,
@@ -5447,9 +5407,7 @@ def autopilot_command(
 
     if agent not in {"claude", "codex", "opencode"}:
         raise typer.Exit(
-            code=_fatal(
-                f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
-            )
+            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
         )
 
     try:
@@ -5519,9 +5477,7 @@ def nomistakes_command(
     ],
     agent: Annotated[
         str,
-        typer.Option(
-            "--agent", help="Agent CLI to use: claude (default), codex, or opencode."
-        ),
+        typer.Option("--agent", help="Agent CLI to use: claude (default), codex, or opencode."),
     ] = "claude",
     autonomy: Annotated[
         str,
@@ -5615,17 +5571,13 @@ def nomistakes_command(
 
     if agent not in {"claude", "codex", "opencode"}:
         raise typer.Exit(
-            code=_fatal(
-                f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'."
-            )
+            code=_fatal(f"Unknown agent {agent!r}. Choose 'claude', 'codex', or 'opencode'.")
         )
     if autonomy not in {"L0", "L1", "L2", "L3", "L4"}:
         raise typer.Exit(code=_fatal("Unknown autonomy. Choose L0, L1, L2, L3, or L4."))
     if audit_fail_on not in {"critical", "high", "medium", "low", "info"}:
         raise typer.Exit(
-            code=_fatal(
-                "--audit-fail-on must be one of: critical, high, medium, low, info."
-            )
+            code=_fatal("--audit-fail-on must be one of: critical, high, medium, low, info.")
         )
 
     try:
@@ -5892,8 +5844,7 @@ def trace_report_command(
                     "memory_misses": report.memory_misses,
                     "memory_hit_rate": report.memory_hit_rate,
                     "repeated_file_reads": [
-                        {"target": r.target, "count": r.count}
-                        for r in report.repeated_file_reads
+                        {"target": r.target, "count": r.count} for r in report.repeated_file_reads
                     ],
                     "repeated_search_queries": [
                         {"target": r.target, "count": r.count}
@@ -5994,9 +5945,7 @@ def eval_create_command(
     if case.expected_files:
         console.print(f"  Expected files: {', '.join(case.expected_files[:5])}")
     if case.expected_deadend_substrings:
-        console.print(
-            f"  Expected deadends: {', '.join(case.expected_deadend_substrings[:3])}"
-        )
+        console.print(f"  Expected deadends: {', '.join(case.expected_deadend_substrings[:3])}")
 
 
 @eval_app.command("run")
@@ -6161,6 +6110,123 @@ def eval_compare_command(
 
     if baseline > 0 and comparison.score_delta < baseline:
         raise typer.Exit(code=1)
+
+
+@eval_app.command("ab")
+def eval_ab_command(
+    fixture: Annotated[
+        bool,
+        typer.Option(
+            "--fixture",
+            help=(
+                "Replay pre-recorded fixture results (CI-safe, no LLM or Claude auth needed). "
+                "Omit to run live with the Claude CLI's configured authentication."
+            ),
+        ),
+    ] = False,
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Output results as JSON."),
+    ] = False,
+    task: Annotated[
+        str,
+        typer.Option("--task", help="Run only the task with this id (for debugging)."),
+    ] = "",
+    public_repo: Annotated[
+        bool,
+        typer.Option(
+            "--public-repo",
+            help="Run pinned third-party repository tasks instead of synthetic mini-repos.",
+        ),
+    ] = False,
+    model: Annotated[
+        str,
+        typer.Option("--model", help="Claude model alias or full model id for both conditions."),
+    ] = "sonnet",
+    effort: Annotated[
+        str,
+        typer.Option("--effort", help="Claude effort level for both conditions."),
+    ] = "medium",
+    budget_usd: Annotated[
+        float,
+        typer.Option("--budget-usd", min=0.01, help="Maximum spend per condition."),
+    ] = 1.0,
+    timeout: Annotated[
+        int,
+        typer.Option("--timeout", min=1, help="Maximum seconds per Claude invocation."),
+    ] = 120,
+) -> None:
+    """Run the A/B outcome-level benchmark: ONMC+Claude Code vs Claude Code alone.
+
+    Measures whether ONMC memory context changes coding outcomes on objective
+    SWE-bench-style tasks (setup a buggy repo, run an agent, check a pytest gate).
+
+    Two conditions:
+
+    \b
+      cc_alone — bare Claude CLI, no ONMC context (real cold baseline, NOT auto-fail)
+      cc_onmc  — the same Claude CLI invocation with context retrieved through
+                 ONMC's production recall compiler
+
+    Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
+    Use live mode to collect fresh results with the Claude CLI's configured auth.
+    Use --public-repo for pinned third-party commits and upstream regression tests.
+
+    Honesty note: a positive ONMC delta only counts on tasks where the cc_alone
+    baseline can genuinely fail.  Tasks where both conditions pass ('tie-pass')
+    confirm ONMC does not regress on easy tasks but do not prove ONMC value.
+
+    Examples:
+
+      onmc eval ab --fixture            # CI-safe offline comparison
+
+      onmc eval ab --fixture --json     # machine-readable output
+
+      onmc eval ab --fixture --task list_slice_fix   # single task
+
+      onmc eval ab --public-repo        # live public-repo evidence
+    """
+    import json as _json
+
+    from oh_no_my_claudecode.evals.ab.runner import run_suite
+    from oh_no_my_claudecode.evals.ab.tasks import BUILTIN_TASKS, PUBLIC_REPO_TASKS
+
+    if fixture and public_repo:
+        raise typer.Exit(
+            code=_fatal("--fixture cannot be combined with --public-repo; public evidence is live")
+        )
+
+    tasks = PUBLIC_REPO_TASKS if public_repo else BUILTIN_TASKS
+
+    try:
+        report = run_suite(
+            tasks,
+            fixture=fixture,
+            task_filter=task or None,
+            timeout=timeout,
+            model=model,
+            effort=effort,
+            max_budget_usd=budget_usd,
+        )
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except RuntimeError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    if as_json:
+        typer.echo(_json.dumps(report.to_dict(), indent=2))
+        return
+
+    console.print(report.to_markdown())
+
+    # Exit summary line
+    mode = "FIXTURE" if report.fixture else "LIVE"
+    console.print(
+        f"\n[bold]A/B summary ({mode}):[/bold] "
+        f"ONMC wins {report.onmc_wins}/{report.total_tasks} tasks  "
+        f"| cc_alone pass {report.alone_pass_rate:.0%}  "
+        f"| cc_onmc pass {report.onmc_pass_rate:.0%}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -6364,6 +6430,21 @@ def swarm_run_command(
             help="Run each unit in an isolated git worktree (default: True).",
         ),
     ] = True,
+    agent_timeout_seconds: Annotated[
+        int,
+        typer.Option(
+            "--agent-timeout-seconds",
+            min=1,
+            help="Hard timeout for each agent CLI invocation.",
+        ),
+    ] = 1200,
+    preserve_failed_worktrees: Annotated[
+        bool,
+        typer.Option(
+            "--preserve-failed-worktrees/--discard-failed-worktrees",
+            help="Keep failed unit branches/worktrees for recovery.",
+        ),
+    ] = True,
     json_output: Annotated[
         bool,
         typer.Option("--json", help="Emit full SwarmResult as JSON to stdout."),
@@ -6418,6 +6499,8 @@ def swarm_run_command(
         max_cost_usd=None,  # per-unit cost cap (not set via CLI here)
         swarm_max_cost_usd=max_cost_usd,
         isolate=isolate,
+        agent_timeout_seconds=agent_timeout_seconds,
+        preserve_failed_worktrees=preserve_failed_worktrees,
     )
 
     units = [
@@ -6439,8 +6522,7 @@ def swarm_run_command(
         f"concurrency={cfg.concurrency}, agent={cfg.agent}"
     )
     console.print(
-        "[dim]Honest: tasks are queued; at most "
-        f"{cfg.concurrency} run simultaneously.[/dim]"
+        f"[dim]Honest: tasks are queued; at most {cfg.concurrency} run simultaneously.[/dim]"
     )
 
     result = run_swarm(storage, repo_root, units, cfg)
@@ -6459,6 +6541,9 @@ def swarm_run_command(
                 "cost_usd": ur.cost_usd,
                 "receipt_path": str(ur.receipt_path) if ur.receipt_path else None,
                 "error": ur.error,
+                "worktree_path": str(ur.worktree_path) if ur.worktree_path else None,
+                "branch": ur.branch,
+                "verify_output": ur.verify_output,
                 "loop_result": (
                     {
                         "converged": ur.loop_result.converged,
@@ -6492,6 +6577,7 @@ def swarm_run_command(
     table.add_column("Status")
     table.add_column("Cost USD")
     table.add_column("Receipt")
+    table.add_column("Recovery")
 
     for ur in result.unit_results:
         status_style = {
@@ -6499,14 +6585,13 @@ def swarm_run_command(
             "failed": "[red]failed[/red]",
             "aborted": "[yellow]aborted[/yellow]",
         }.get(ur.status, ur.status)
-        receipt_short = (
-            ur.receipt_path.name[:24] if ur.receipt_path else "[dim]—[/dim]"
-        )
+        receipt_short = ur.receipt_path.name[:24] if ur.receipt_path else "[dim]—[/dim]"
         table.add_row(
             ur.unit_id,
             status_style,
             f"${ur.cost_usd:.4f}",
             receipt_short,
+            ur.branch or "[dim]—[/dim]",
         )
     console.print(table)
     console.print(
@@ -6989,9 +7074,7 @@ def swarm_list_command(
 def swarm_abort_command(
     swarm_id: Annotated[
         str | None,
-        typer.Argument(
-            help="Swarm ID to abort.  Omit when using --all."
-        ),
+        typer.Argument(help="Swarm ID to abort.  Omit when using --all."),
     ] = None,
     all_swarms: Annotated[
         bool,
@@ -7029,9 +7112,7 @@ def swarm_abort_command(
     else:
         request_abort(repo_root, swarm_id=swarm_id)
         console.print(f"[yellow]ABORT written for swarm {swarm_id}.[/yellow]")
-    console.print(
-        "[dim]Running units finish their current iteration then stop gracefully.[/dim]"
-    )
+    console.print("[dim]Running units finish their current iteration then stop gracefully.[/dim]")
 
 
 # Additive command auto-discovery: features expose ``<feat>.commands.register(app)``
