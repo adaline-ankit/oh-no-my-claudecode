@@ -5565,16 +5565,16 @@ Usage: onmc preflight [OPTIONS]
 │ --json                   Emit the PreflightReport as JSON to stdout.         │
 │ --provision              Run each tool via `uv run --with <tool>` so a fresh │
 │                          worktree (no dev deps installed) resolves           │
-│                          ruff/mypy/pytest on demand, and pin typer<1.0 for   │
-│                          the cli-reference step to match CI.                 │
+│                          ruff/mypy/pytest on demand, and pin typer==0.26.8   │
+│                          for the cli-reference step to match CI.             │
 │ --exact                  Mirror the CI quality gate exactly: uses the full   │
 │                          pytest coverage flags (--cov-fail-under=80) and     │
-│                          always pins typer<1.0 for the cli-reference step.   │
-│                          Provisions via uv when available.                   │
+│                          always pins typer==0.26.8 for the cli-reference     │
+│                          step.  Provisions via uv when available.            │
 │ --fix                    Auto-fix ruff violations (ruff check --fix) and     │
 │                          regenerate docs/cli-reference.md with pinned        │
-│                          typer<1.0, then re-run the exact CI gate and report │
-│                          the result.  Implies --exact.                       │
+│                          typer==0.26.8, then re-run the exact CI gate and    │
+│                          report the result.  Implies --exact.                │
 │ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

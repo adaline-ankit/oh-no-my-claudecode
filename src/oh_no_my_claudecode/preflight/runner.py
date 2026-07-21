@@ -27,7 +27,7 @@ mechanisms keep the gate honest:
 * **Provisioning** (``provision=True``, the default for the swarm gate): each
   tool runs via ``uv run --with <tool> ...`` so a fresh worktree resolves the
   toolchain on demand.  The cli-reference step additionally pins
-  ``typer<1.0`` (``--upgrade-package typer``) so its generated output matches
+  ``typer==0.26.8`` (``--upgrade-package typer``) so its generated output matches
   CI's typer and never drifts.  If ``uv`` itself is missing, provisioning
   degrades gracefully to the plain command plus a clear message.
 * **Availability detection** (when NOT provisioning): before running a tool we
@@ -39,7 +39,7 @@ mechanisms keep the gate honest:
 ----------------
 :func:`run_preflight_exact` mirrors the CI quality gate with the **exact**
 commands from ``.github/workflows/ci.yml``, including the full pytest coverage
-flags (``--cov-fail-under=80``) and the typer<1.0 pin for cli-reference.  It
+flags (``--cov-fail-under=80``) and the typer==0.26.8 pin for cli-reference.  It
 always provisions via ``uv run --with`` when ``uv`` is available so a fresh
 worktree produces the same verdict as CI.
 
@@ -48,7 +48,7 @@ worktree produces the same verdict as CI.
 :func:`run_preflight_fix` auto-heals common drift before pushing:
 
 1. ``ruff check --fix .`` — auto-fix lint violations (never ``ruff format``).
-2. Regenerate ``docs/cli-reference.md`` with pinned ``typer<1.0``.
+2. Regenerate ``docs/cli-reference.md`` with pinned ``typer==0.26.8``.
 3. Re-run the exact gate and report the updated result.
 
 An :class:`ExactReport` bundles the fix-step outcomes with the final gate
@@ -102,9 +102,9 @@ _STEP_TOOL_PACKAGE: dict[str, str] = {
     "pytest": "pytest",
 }
 
-# typer pin for the cli-reference step.  CI runs typer <1.0; pinning here keeps
+# typer pin for the cli-reference step. CI runs this exact version; pinning keeps
 # the generated reference byte-identical to CI's so ``--check`` never drifts.
-_TYPER_PIN: str = "typer<1.0"
+_TYPER_PIN: str = "typer==0.26.8"
 
 
 @dataclass(frozen=True)
@@ -209,7 +209,7 @@ def _provisioned_command_for(step_id: str) -> list[str]:
 
     The tool is supplied to a fresh, on-demand environment so a clean worktree
     (no dev deps installed) resolves it without a prior ``pip install``.  The
-    ``cliref`` step additionally pins ``typer<1.0`` (and forces an upgrade to
+    ``cliref`` step additionally pins ``typer==0.26.8`` (and forces an upgrade to
     the newest matching release) so its generated output matches CI exactly.
     """
     base = _base_command_for(step_id)
@@ -292,7 +292,7 @@ def run_preflight(
     provision:
         When ``True`` each tool runs via ``uv run --with <tool>`` so a fresh
         worktree (no dev deps installed) resolves the toolchain on demand, and
-        the cli-reference step pins ``typer<1.0`` to match CI exactly.  If
+        the cli-reference step pins ``typer==0.26.8`` to match CI exactly.  If
         ``uv`` is not on ``PATH`` provisioning degrades to the plain command
         and the step is annotated.  When ``False`` (default, back-compatible
         with an already-provisioned env such as CI) a step whose tool is not
@@ -404,7 +404,7 @@ def _provisioned_exact_command_for(step_id: str) -> list[str]:
 
     pytest is provisioned with both ``pytest`` *and* ``pytest-cov`` so the
     ``--cov-fail-under`` flag works in a fresh worktree.  The cli-reference
-    step pins ``typer<1.0`` (and forces an upgrade) so the generated reference
+    step pins ``typer==0.26.8`` (and forces an upgrade) so the generated reference
     is byte-identical to CI's.
     """
     base = _exact_command_for(step_id)
@@ -446,7 +446,7 @@ def run_preflight_exact(
     ``.github/workflows/ci.yml`` verbatim, including:
 
     * ``pytest --cov=oh_no_my_claudecode --cov-fail-under=80`` (coverage gate)
-    * cli-reference ``--check`` with pinned ``typer<1.0``
+    * cli-reference ``--check`` with pinned ``typer==0.26.8``
 
     When ``uv`` is available, each tool is provisioned on demand (``uv run
     --with <pkg>``) so a fresh worktree produces the same verdict as CI.  If
@@ -558,7 +558,7 @@ def _fix_command_for(fix_id: str, *, use_uv: bool = False) -> list[str]:
 
     ``ruff-fix`` runs ``ruff check --fix .`` (never ``ruff format``).
     ``cliref-regen`` regenerates ``docs/cli-reference.md`` without ``--check``,
-    pinning ``typer<1.0`` so the output matches CI.
+    pinning ``typer==0.26.8`` so the output matches CI.
     """
     if fix_id == "ruff-fix":
         base = ["ruff", "check", "--fix", "."]
@@ -592,7 +592,7 @@ def run_preflight_fix(
     Runs in three phases:
 
     1. ``ruff check --fix .`` — auto-fix lint violations (never ``ruff format``).
-    2. Regenerate ``docs/cli-reference.md`` with pinned ``typer<1.0``.
+    2. Regenerate ``docs/cli-reference.md`` with pinned ``typer==0.26.8``.
     3. Re-run :func:`run_preflight_exact` and bundle the result.
 
     The injected ``executor`` (if any) receives ALL commands — fix actions and

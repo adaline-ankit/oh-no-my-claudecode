@@ -108,7 +108,7 @@ def verify_unit(
     provision:
         Default ``True``: the preflight gate runs each tool via
         ``uv run --with <tool>`` so a FRESH worktree (no dev deps installed)
-        resolves ruff/mypy/pytest on demand and pins ``typer<1.0`` for the
+        resolves ruff/mypy/pytest on demand and pins ``typer==0.26.8`` for the
         cli-reference step — without this the gate FALSE-FAILS in clean
         worktrees.  Pass ``False`` for an already-provisioned env.
 

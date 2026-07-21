@@ -3588,7 +3588,7 @@ class OnmcService:
         provision:
             When ``True`` each tool runs via ``uv run --with <tool>`` so a
             fresh worktree resolves the toolchain on demand (and the
-            cli-reference step pins ``typer<1.0`` to match CI).  Passed through
+            cli-reference step pins ``typer==0.26.8`` to match CI).  Passed through
             to :func:`run_preflight`.
 
         Returns
@@ -3617,7 +3617,7 @@ class OnmcService:
         """Run the exact CI quality gate and return the report.
 
         Mirrors ``.github/workflows/ci.yml`` verbatim, including the full pytest
-        coverage gate (``--cov-fail-under=80``) and the ``typer<1.0`` pin for
+        coverage gate (``--cov-fail-under=80``) and the ``typer==0.26.8`` pin for
         cli-reference.  Thin wrapper over :func:`run_preflight_exact`.
         """
         from oh_no_my_claudecode.preflight import run_preflight_exact

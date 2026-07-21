@@ -291,7 +291,7 @@ def test_provision_uses_uv_run_with_for_tools(
 
 
 def test_provision_cliref_pins_typer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The provisioned cli-reference step pins typer<1.0 to match CI."""
+    """The provisioned cli-reference step pins typer==0.26.8 to match CI."""
     monkeypatch.setattr(runner_mod, "_uv_available", lambda: True)
     seen: list[str] = []
     report = run_preflight(
@@ -304,7 +304,7 @@ def test_provision_cliref_pins_typer(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(seen) == 1
     cmd = seen[0]
     assert "uv run" in cmd
-    assert "--with typer<1.0" in cmd
+    assert "--with typer==0.26.8" in cmd
     assert "--upgrade-package typer" in cmd
     assert "scripts/generate-cli-reference.py --check" in cmd
 

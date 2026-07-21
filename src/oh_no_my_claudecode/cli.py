@@ -2864,7 +2864,7 @@ def preflight_command(
             help=(
                 "Run each tool via `uv run --with <tool>` so a fresh worktree "
                 "(no dev deps installed) resolves ruff/mypy/pytest on demand, "
-                "and pin typer<1.0 for the cli-reference step to match CI."
+                "and pin typer==0.26.8 for the cli-reference step to match CI."
             ),
         ),
     ] = False,
@@ -2874,7 +2874,7 @@ def preflight_command(
             "--exact",
             help=(
                 "Mirror the CI quality gate exactly: uses the full pytest coverage "
-                "flags (--cov-fail-under=80) and always pins typer<1.0 for the "
+                "flags (--cov-fail-under=80) and always pins typer==0.26.8 for the "
                 "cli-reference step.  Provisions via uv when available."
             ),
         ),
@@ -2885,7 +2885,7 @@ def preflight_command(
             "--fix",
             help=(
                 "Auto-fix ruff violations (ruff check --fix) and regenerate "
-                "docs/cli-reference.md with pinned typer<1.0, then re-run the "
+                "docs/cli-reference.md with pinned typer==0.26.8, then re-run the "
                 "exact CI gate and report the result.  Implies --exact."
             ),
         ),
