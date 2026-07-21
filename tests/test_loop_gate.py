@@ -504,3 +504,8 @@ class TestScopeGate:
         # First iteration: scope violation (external/lib.py not in src/**)
         assert result.iterations[0].outcome == "loss"
         assert "[scope-violation]" in result.iterations[0].verify_output
+        # The old dirty file remains in post-status, but only the new src change
+        # belongs to iteration 2 and should be scope-checked.
+        assert result.converged is True
+        assert result.iterations[1].outcome == "win"
+        assert "[scope-violation]" not in result.iterations[1].verify_output

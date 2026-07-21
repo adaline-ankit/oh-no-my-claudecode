@@ -101,6 +101,7 @@ def test_classifier_returns_environment_for_transient_signals(
         ("Build failed: undefined variable", "refactored imports"),
         ("TypeError: unsupported operand type", "changed arithmetic"),
         ("1 failed, 3 passed", "ran pytest"),
+        ("AssertionError: expected 429, got 430", "fixed pagination count"),
     ],
 )
 def test_classifier_returns_approach_for_real_failures(
