@@ -272,6 +272,11 @@ class TestCapabilityTokens:
         verifier_token = _token(broker, verifier)
         action = Action.command(("pytest", "-q"), verifier=True)
 
+        assert broker.decide(
+            Action.command(("pytest", "-q")),
+            tokens=[verifier_token],
+            subject="agent-1",
+        ).denied
         assert broker.decide(action, tokens=[plain_token], subject="agent-1").denied
         decision = broker.decide(action, tokens=[verifier_token], subject="agent-1")
         assert decision.allowed
