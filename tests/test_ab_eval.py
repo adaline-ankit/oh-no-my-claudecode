@@ -685,3 +685,204 @@ def test_fixture_has_at_least_one_non_auto_fail_baseline() -> None:
         "All cc_alone fixture results fail — this would be an auto-fail rigged baseline. "
         "At least one task should have cc_alone=pass to prove the baseline is real."
     )
+
+
+# ---------------------------------------------------------------------------
+# Private-knowledge task suite
+# ---------------------------------------------------------------------------
+
+
+from oh_no_my_claudecode.evals.ab.private_tasks import (  # noqa: E402
+    PRIVATE_KNOWLEDGE_TASKS,
+    TASK_HOUSE_ERROR_CODE_PREFIX,
+    TASK_IDEMPOTENCY_KEY_FORMAT,
+    TASK_MONEY_MINOR_UNITS,
+    TASK_RETRY_ONLY_503_INCIDENT,
+    TASK_TENANT_HEADER,
+)
+
+
+def test_private_tasks_count() -> None:
+    assert len(PRIVATE_KNOWLEDGE_TASKS) == 5
+
+
+def test_private_tasks_ids_unique() -> None:
+    ids = [t.id for t in PRIVATE_KNOWLEDGE_TASKS]
+    assert len(ids) == len(set(ids)), "Private task IDs must be unique"
+
+
+def test_private_tasks_no_overlap_with_builtin() -> None:
+    builtin_ids = {t.id for t in BUILTIN_TASKS}
+    private_ids = {t.id for t in PRIVATE_KNOWLEDGE_TASKS}
+    overlap = builtin_ids & private_ids
+    assert not overlap, f"Task IDs overlap between suites: {overlap}"
+
+
+def test_private_tasks_all_fields_non_empty() -> None:
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.id, f"Private task missing id: {task}"
+        assert task.setup_script, f"Private task {task.id} missing setup_script"
+        assert task.gate_command, f"Private task {task.id} missing gate_command"
+        assert task.onmc_hint, f"Private task {task.id} missing onmc_hint"
+        assert task.description, f"Private task {task.id} missing description"
+
+
+def test_private_task_house_error_code_prefix_fields() -> None:
+    task = TASK_HOUSE_ERROR_CODE_PREFIX
+    assert task.id == "house_error_code_prefix"
+    assert "ACME" in task.onmc_hint
+    assert "pytest" in task.gate_command
+    assert task.setup_script
+
+
+def test_private_task_tenant_header_fields() -> None:
+    task = TASK_TENANT_HEADER
+    assert task.id == "tenant_header"
+    assert "X-Acme-Workspace" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_retry_only_503_fields() -> None:
+    task = TASK_RETRY_ONLY_503_INCIDENT
+    assert task.id == "retry_only_503_incident"
+    assert "503" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_idempotency_key_fields() -> None:
+    task = TASK_IDEMPOTENCY_KEY_FORMAT
+    assert task.id == "idempotency_key_format"
+    assert ":" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_money_minor_units_fields() -> None:
+    task = TASK_MONEY_MINOR_UNITS
+    assert task.id == "money_minor_units"
+    assert "Decimal" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_fixture_has_all_tasks() -> None:
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert (task.id, "cc_alone") in fixtures, (
+            f"Missing private fixture for ({task.id}, cc_alone)"
+        )
+        assert (task.id, "cc_onmc") in fixtures, (
+            f"Missing private fixture for ({task.id}, cc_onmc)"
+        )
+
+
+def test_private_fixture_all_onmc_wins() -> None:
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        alone = fixtures[(task.id, "cc_alone")]
+        onmc = fixtures[(task.id, "cc_onmc")]
+        assert alone.passed is False, (
+            f"Fixture: cc_alone should fail on {task.id} (private-knowledge task)"
+        )
+        assert onmc.passed is True, (
+            f"Fixture: cc_onmc should pass on {task.id} (ONMC hint provides the private fact)"
+        )
+
+
+def test_run_suite_private_fixture_returns_report() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    assert isinstance(report, ABReport)
+    assert report.fixture is True
+    assert report.total_tasks == len(PRIVATE_KNOWLEDGE_TASKS)
+
+
+def test_run_suite_private_fixture_all_onmc_wins() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    assert report.onmc_wins == len(PRIVATE_KNOWLEDGE_TASKS), (
+        f"Expected all {len(PRIVATE_KNOWLEDGE_TASKS)} private tasks to be ONMC wins "
+        f"in fixture mode but got {report.onmc_wins}.  "
+        f"Comparisons: {[(c.task.id, c.alone.passed, c.onmc.passed) for c in report.comparisons]}"
+    )
+    assert report.alone_wins == 0, "No regressions expected in private fixture suite"
+
+
+def test_run_suite_private_ids_in_report() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    reported_ids = {c.task.id for c in report.comparisons}
+    expected_ids = {t.id for t in PRIVATE_KNOWLEDGE_TASKS}
+    assert reported_ids == expected_ids
+
+
+def test_private_gate_fails_on_buggy_code_house_error(tmp_path: Path) -> None:
+    """The buggy stub (kind.upper()) fails the gate."""
+    _run_setup(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
+
+
+def test_private_gate_passes_after_fix_house_error(tmp_path: Path) -> None:
+    """A correct ACME-code dict passes the gate."""
+    _run_setup(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    errors_path = tmp_path / "errors.py"
+    fixed = (
+        "def format_error(kind: str) -> str:\n"
+        "    _codes = {\n"
+        "        'not_found': 'ACME-4004',\n"
+        "        'unauthorized': 'ACME-4001',\n"
+        "        'rate_limited': 'ACME-4029',\n"
+        "    }\n"
+        "    return _codes[kind]\n"
+    )
+    errors_path.write_text(fixed)
+    passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    assert passed is True, f"Gate should PASS after fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_retry(tmp_path: Path) -> None:
+    """The buggy stub (retries all 5xx) fails the gate."""
+    _run_setup(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
+
+
+def test_private_gate_passes_after_fix_retry(tmp_path: Path) -> None:
+    """should_retry returning only True for 503 passes the gate."""
+    _run_setup(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    payment_path = tmp_path / "payment.py"
+    fixed = "def should_retry(status: int) -> bool:\n    return status == 503\n"
+    payment_path.write_text(fixed)
+    passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    assert passed is True, f"Gate should PASS after fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_money(tmp_path: Path) -> None:
+    """The buggy stub (float conversion) fails the gate on 2.30 -> 229 truncation."""
+    _run_setup(TASK_MONEY_MINOR_UNITS, tmp_path)
+    # Verify bug is present: int(float("2.30") * 100) must NOT equal 230
+    import subprocess  # noqa: E401
+    import sys
+    result = subprocess.run(
+        [sys.executable, "-c", "print(int(float('2.30') * 100))"],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip() == "230":
+        pytest.skip("float('2.30')*100 rounds to 230 on this platform — bug not reproducible")
+    passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy float conversion.\n{output}"
+
+
+def test_private_gate_passes_after_fix_money(tmp_path: Path) -> None:
+    """Decimal-based conversion passes the gate."""
+    _run_setup(TASK_MONEY_MINOR_UNITS, tmp_path)
+    money_path = tmp_path / "money.py"
+    fixed = (
+        "from decimal import Decimal\n\n"
+        "def to_paise(rupees: str) -> int:\n"
+        "    return int(Decimal(rupees) * 100)\n"
+    )
+    money_path.write_text(fixed)
+    passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
+    assert passed is True, f"Gate should PASS after Decimal fix.\n{output}"
