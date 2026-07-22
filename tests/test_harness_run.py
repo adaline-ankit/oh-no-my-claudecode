@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -195,12 +196,13 @@ def test_cli_json_and_help_expose_safe_execution_contract(
 ) -> None:
     runner = CliRunner()
     help_result = runner.invoke(app, ["run", "--help"])
+    compact_help = re.sub(r"\s+", "", re.sub(r"\x1b\[[0-9;]*m", "", help_result.stdout))
 
     assert help_result.exit_code == 0
-    assert "--plan-only" in help_result.stdout
-    assert "--execute" in help_result.stdout
-    assert "--agent" in help_result.stdout
-    assert "--context-budget" in help_result.stdout
+    assert "--plan-only" in compact_help
+    assert "--execute" in compact_help
+    assert "--agent" in compact_help
+    assert "--context-budget" in compact_help
 
     monkeypatch.setattr(
         "oh_no_my_claudecode.harness_run.commands.discover_repo_root",
