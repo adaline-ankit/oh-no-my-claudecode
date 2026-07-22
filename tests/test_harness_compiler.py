@@ -99,6 +99,12 @@ def test_compile_rejects_empty_task(task: str) -> None:
         compile_task(task)
 
 
+@pytest.mark.parametrize("risk", ["low", "HIGH", 3, 0.5, None, object()])
+def test_compile_rejects_non_risklevel_risk(risk: object) -> None:
+    with pytest.raises(ValueError, match="risk must be a RiskLevel"):
+        compile_task("Reject invalid risk", risk=risk)  # type: ignore[arg-type]
+
+
 def test_custom_config_populates_every_execution_policy_field() -> None:
     config = CompilerConfig(
         agent="claude",
@@ -278,6 +284,43 @@ def test_graph_validation_handles_deep_dag_without_recursion() -> None:
     )
 
     assert len(dag.topological_order()) == 1_100
+
+
+def test_topological_order_preserves_source_order_for_multiple_roots() -> None:
+    roots = tuple(
+        TaskNode(
+            node_id=f"root-{suffix}",
+            kind=NodeKind.EXECUTE,
+            objective=f"Root {suffix}",
+            dependencies=(),
+            policy=_policy(),
+        )
+        for suffix in ("a", "b", "c")
+    )
+    children = tuple(
+        TaskNode(
+            node_id=f"child-{index}",
+            kind=NodeKind.VERIFY,
+            objective=f"Child {index}",
+            dependencies=tuple(node.node_id for node in roots),
+            policy=_policy(),
+        )
+        for index in (1, 2)
+    )
+    dag = TaskDAG(
+        schema_version=SCHEMA_VERSION,
+        task="multiple roots",
+        risk=RiskLevel.LOW,
+        nodes=roots + children,
+    )
+
+    assert tuple(node.node_id for node in dag.topological_order()) == (
+        "root-a",
+        "root-b",
+        "root-c",
+        "child-1",
+        "child-2",
+    )
 
 
 def test_graph_rejects_duplicate_dependencies() -> None:
