@@ -102,6 +102,18 @@ def test_feature_plan_does_not_require_a_pre_fix_failure() -> None:
     assert graph.verifiers[0].dependencies == ()
 
 
+def test_duplicate_result_error_names_conflicting_identifier() -> None:
+    graph = _bugfix_graph()
+    results, evidence = _passing_results(graph)
+    duplicate = results + (results[0],)
+
+    with pytest.raises(
+        ValueError,
+        match=f"duplicate verifier result id: {results[0].verifier_id}",
+    ):
+        evaluate_proof(graph, duplicate, evidence)
+
+
 @pytest.mark.parametrize(
     ("risk", "expected"),
     [

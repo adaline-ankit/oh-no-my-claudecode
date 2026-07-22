@@ -15,9 +15,12 @@ from oh_no_my_claudecode.proof_graph.models import (
 
 
 def _unique_by_id(items: tuple[object, ...], attribute: str, label: str) -> None:
-    identifiers = [str(getattr(item, attribute)) for item in items]
-    if len(identifiers) != len(set(identifiers)):
-        raise ValueError(f"duplicate {label} id")
+    seen: set[str] = set()
+    for item in items:
+        identifier = str(getattr(item, attribute))
+        if identifier in seen:
+            raise ValueError(f"duplicate {label} id: {identifier}")
+        seen.add(identifier)
 
 
 def evaluate_proof(

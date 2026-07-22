@@ -186,5 +186,5 @@ def verify_receipt(serialized: str) -> bool:
         if not isinstance(claimed, str) or len(claimed) != 64:
             return False
         return _valid_envelope(raw) and _digest(raw) == claimed
-    except (TypeError, ValueError, KeyError):
+    except (TypeError, ValueError):
         return False
