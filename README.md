@@ -81,6 +81,24 @@ onmc ui
 
 ### 3. Run the full loop
 
+Preview ONMC's adaptive execution plan before spending tokens or changing files:
+
+```bash
+onmc run "fix checkout coupon failures" --json
+```
+
+The plan compiles a typed task DAG, retrieves minimal cited repo context, checks
+agent and verifier capabilities, declares proof requirements, and assigns durable
+state. Execute that exact controller explicitly:
+
+```bash
+onmc run "fix checkout coupon failures" --execute \
+  --agent codex \
+  --verifier "pytest -q tests/checkout" \
+  --max-cost-usd 2.00 \
+  --isolate
+```
+
 The simplest way — one command runs the complete KNOW→PLAN(opt)→ACT→PROVE→LEARN cycle:
 
 ```bash
@@ -174,10 +192,11 @@ git tree hash, diff SHA, loop spec, output digest, limits, and iteration chain w
 Receipts include a reproducibility envelope (model IDs, tool/prompt hashes, runtime) so runs can
 be reproduced. They are tamper-evident (not cryptographically signed).
 
-## What ships in v0.48
+## Current capabilities
 
 | Capability | Command | What it gives you |
 |---|---|---|
+| Adaptive execution harness | `onmc run "<task>"` | Safe plan-first task DAG, cited repo RAG, policy decisions, durable execution, verifier-backed proof graph, and resume |
 | No-Mistakes PR gate | `onmc nomistakes "<goal>"` | Audit + optional eval + isolated autopilot + verifier + receipt verdict; exits nonzero unless approved |
 | Full autopilot cycle | `onmc autopilot "<goal>"` | One-verb KNOW→(PLAN)→ACT→PROVE→LEARN; ends with "your brain grew" summary. Use `--plan-with <model> --execute-with <model>` for cost-split |
 | Compounding proof | `onmc evolution` | Shows agent getting cheaper/fewer-iterations across runs, receipt-backed trend |

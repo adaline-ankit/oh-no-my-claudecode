@@ -5,7 +5,7 @@ Three adapters are provided:
 - ``ClaudeCliAdapter`` — shells out to ``claude -p <prompt> --output-format json``
   and parses the structured JSON response to extract text, tokens, and cost.
 - ``CodexCliAdapter`` — shells out to
-  ``codex exec --sandbox workspace-write <prompt>`` (headless mode) and returns
+  ``codex exec --sandbox workspace-write [--model <model>] <prompt>`` (headless mode) and returns
   the raw stdout as output; token usage is not available from the Codex CLI in
   headless mode.
 - ``OpenCodeCliAdapter`` — shells out to
@@ -371,7 +371,7 @@ class ClaudeCliAdapter:
 class CodexCliAdapter:
     """Agent adapter that drives the Codex CLI in headless exec mode.
 
-    Calls ``codex exec --sandbox workspace-write <prompt>``.  Token usage is not
+    Calls ``codex exec --sandbox workspace-write [--model <model>] <prompt>``. Token usage is not
     available from the Codex CLI in headless mode; ``tokens`` is always ``None``.
 
     Codex CLI defaults to a read-only sandbox for non-interactive ``exec`` on
@@ -383,6 +383,8 @@ class CodexCliAdapter:
     ----------
     repo_root:
         Working directory for the subprocess (and for git status diffing).
+    model:
+        Optional Codex model selector.
     command_runner:
         Injectable subprocess boundary.  Tests inject a fake here.
     timeout:
@@ -393,10 +395,12 @@ class CodexCliAdapter:
         self,
         repo_root: Path,
         *,
+        model: str | None = None,
         command_runner: CommandRunner | None = None,
         timeout: int = 600,
     ) -> None:
         self._repo_root = str(repo_root)
+        self._model = model
         self._cmd_runner = command_runner or _default_command_runner
         self._timeout = timeout
 
@@ -407,7 +411,10 @@ class CodexCliAdapter:
         # Snapshot git status before running.
         before = _git_status_paths(self._cmd_runner, self._repo_root, 30)
 
-        cmd = ["codex", "exec", "--sandbox", "workspace-write", effective_prompt]
+        cmd = ["codex", "exec", "--sandbox", "workspace-write"]
+        if self._model is not None:
+            cmd.extend(["--model", self._model])
+        cmd.append(effective_prompt)
         proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
 
         # Snapshot git status after running.
@@ -654,7 +661,8 @@ def make_agent_runner(
     model:
         Optional model override.  For Claude, a model name
         (e.g. ``"claude-opus-4-5"``).  For OpenCode, a ``provider/model``
-        string (e.g. ``"anthropic/claude-opus-4-5"``).  Ignored for Codex.
+        string (e.g. ``"anthropic/claude-opus-4-5"``). For Codex, the model
+        is passed through ``--model``.
     command_runner:
         Injectable subprocess boundary for testing.  When ``None`` the
         real ``subprocess.run`` wrapper is used.
@@ -681,6 +689,7 @@ def make_agent_runner(
     if agent == "codex":
         return CodexCliAdapter(
             repo_root,
+            model=model,
             command_runner=command_runner,
             timeout=timeout,
         )

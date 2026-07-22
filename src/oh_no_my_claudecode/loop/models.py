@@ -39,6 +39,8 @@ class LoopResult:
     recorded_memory_ids: list[str] = field(default_factory=list)
     total_tokens: int = 0
     total_cost_usd: float | None = None
+    worktree_path: str | None = None
+    """Preserved isolated worktree containing a successful run, when applicable."""
 
 
 @dataclass
