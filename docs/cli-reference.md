@@ -2502,6 +2502,7 @@ Usage: onmc eval ab [OPTIONS]
 
  Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
  Use live mode to collect fresh results with the Claude CLI's configured auth.
+ Use --suite to select which task collection to run (builtin, private, or all).
  Use --public-repo for pinned third-party commits and upstream regression
  tests.
 
@@ -2511,13 +2512,18 @@ Usage: onmc eval ab [OPTIONS]
 
  Examples:
 
-   onmc eval ab --fixture            # CI-safe offline comparison
+   onmc eval ab --fixture                         # CI-safe offline comparison
+ (builtin suite)
 
-   onmc eval ab --fixture --json     # machine-readable output
+   onmc eval ab --fixture --suite private         # private-knowledge suite
+
+   onmc eval ab --fixture --suite all             # both suites combined
+
+   onmc eval ab --fixture --json                  # machine-readable output
 
    onmc eval ab --fixture --task list_slice_fix   # single task
 
-   onmc eval ab --public-repo        # live public-repo evidence
+   onmc eval ab --public-repo                     # live public-repo evidence
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --fixture                                   Replay pre-recorded fixture      │
@@ -2528,6 +2534,13 @@ Usage: onmc eval ab [OPTIONS]
 │ --json                                      Output results as JSON.          │
 │ --task               TEXT                   Run only the task with this id   │
 │                                             (for debugging).                 │
+│ --suite              TEXT                   Task suite to run: 'builtin'     │
+│                                             (synthetic mini-repo bugs,       │
+│                                             default), 'private'              │
+│                                             (private-knowledge tasks         │
+│                                             requiring repo-specific facts),  │
+│                                             or 'all' (both suites combined). │
+│                                             [default: builtin]               │
 │ --public-repo                               Run pinned third-party           │
 │                                             repository tasks instead of      │
 │                                             synthetic mini-repos.            │

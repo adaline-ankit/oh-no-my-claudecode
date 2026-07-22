@@ -1,8 +1,8 @@
 """Pre-recorded fixture results for the A/B eval harness.
 
-These fixtures represent a realistic run of the built-in task suite.
-They are NOT auto-generated failures — they were designed to reflect
-plausible agent behaviour on these tasks:
+These fixtures represent a realistic run of the built-in and private-knowledge
+task suites.  They are NOT auto-generated failures — they were designed to
+reflect plausible agent behaviour on these tasks:
 
 - cc_alone: the cold agent sees only the task description.  On tasks
   with a plausible "wrong fix" dead-end it may apply the wrong patch.
@@ -13,6 +13,16 @@ IMPORTANT: These results are PRE-RECORDED for CI reproducibility.  They
 do NOT prove that ONMC always wins on these tasks in a live run.  Live
 results vary by model, temperature, and prompt phrasing.  To collect live
 results, run without --fixture.
+
+Private-knowledge suite (``private_tasks.py``)
+----------------------------------------------
+All 5 private-knowledge tasks have cc_alone=fail / cc_onmc=pass in the
+fixture.  This reflects the honest hypothesis: a cold agent cannot know
+an arbitrary internal convention (ACME codes, X-Acme-Workspace, colon
+separator, 503-only retry rule, Decimal paise) and applies a reasonable
+but wrong default.  The ONMC condition receives the memory hint and applies
+the correct fix.  The fixture represents the pre-recorded hypothesis; a
+live run is the real test of it.
 
 How fixture results were designed
 -----------------------------------
@@ -342,6 +352,167 @@ _RAW: list[dict[str, object]] = [
             "ONMC context names appending 'Z' as the dead-end.  "
             "Using portable fix: replace Z with +00:00 then "
             "`replace(tzinfo=timezone.utc)` for naive datetimes."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # =======================================================================
+    # PRIVATE-KNOWLEDGE SUITE — all 5 tasks: cc_alone=fail, cc_onmc=pass
+    # The hypothesis: arbitrary house conventions are unknowable without memory.
+    # =======================================================================
+    # -----------------------------------------------------------------------
+    # house_error_code_prefix — ONMC-WIN: cc_alone uses generic string (NOT_FOUND)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "house_error_code_prefix",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 521,
+        "duration_s": 7.8,
+        "agent_output": (
+            "The function should return a standardised error code.  "
+            "Using uppercased kind strings: not_found -> NOT_FOUND, "
+            "unauthorized -> UNAUTHORIZED, rate_limited -> RATE_LIMITED.  "
+            "No information in the task about a specific prefix format."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "house_error_code_prefix",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 489,
+        "duration_s": 7.1,
+        "agent_output": (
+            "ONMC context provides the ACME-XXXX mapping: "
+            "not_found -> ACME-4004, unauthorized -> ACME-4001, "
+            "rate_limited -> ACME-4029.  Implemented as a dict lookup."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # tenant_header — ONMC-WIN: cc_alone uses X-Tenant-ID (plausible wrong name)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "tenant_header",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 498,
+        "duration_s": 7.4,
+        "agent_output": (
+            "Adding workspace routing header.  X-Tenant-ID is the standard "
+            "convention for tenant identification in REST APIs.  "
+            "Set Authorization: Bearer <token> and X-Tenant-ID: <workspace_id>."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "tenant_header",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 471,
+        "duration_s": 6.9,
+        "agent_output": (
+            "ONMC incident memory: X-Tenant-ID was the bug — gateway silently drops it.  "
+            "Correct header is X-Acme-Workspace.  "
+            "Setting Authorization and X-Acme-Workspace headers."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # retry_only_503_incident — ONMC-WIN: cc_alone retries all 5xx (standard practice)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "retry_only_503_incident",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 511,
+        "duration_s": 7.6,
+        "agent_output": (
+            "Retry on all 5xx server errors is standard practice for transient failures.  "
+            "Keeping `500 <= status < 600` — this handles all server-side errors "
+            "including 500, 502, 503, and 504."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "retry_only_503_incident",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 476,
+        "duration_s": 7.0,
+        "agent_output": (
+            "ONMC incident memory: retrying all 5xx caused double charges.  "
+            "Only 503 is safe to retry for this payment client.  "
+            "Changing to: return status == 503"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # idempotency_key_format — ONMC-WIN: cc_alone uses dash separator
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "idempotency_key_format",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 487,
+        "duration_s": 7.3,
+        "agent_output": (
+            "Building a deterministic idempotency key from the three parts.  "
+            "Using dash-separated format: f'{tenant}-{op}-{uid}'.  "
+            "This is deterministic and unique per operation."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "idempotency_key_format",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 458,
+        "duration_s": 6.7,
+        "agent_output": (
+            "ONMC context: dedup service splits on ':' — colon is mandatory.  "
+            "Format is tenant:op:uid.  "
+            "Implementing: return f'{tenant}:{op}:{uid}'"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # money_minor_units — ONMC-WIN: cc_alone uses float (truncates 1.10 to 109)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "money_minor_units",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 534,
+        "duration_s": 8.0,
+        "agent_output": (
+            "Converting rupee string to paise by multiplying by 100.  "
+            "Using int(float(rupees) * 100) — standard approach for "
+            "string-to-minor-unit conversion.  "
+            "float('2.30') * 100 gives 229.999... which int() truncates to 229."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "money_minor_units",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 503,
+        "duration_s": 7.5,
+        "agent_output": (
+            "ONMC incident memory: float truncates 1.10*100 to 109.  "
+            "Must use Decimal for monetary conversion: "
+            "int(Decimal(rupees) * 100).  Importing from decimal module."
         ),
         "error": None,
         "fixture": True,

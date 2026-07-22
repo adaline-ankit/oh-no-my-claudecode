@@ -121,3 +121,68 @@ def test_eval_ab_fixture_unknown_task_exits_nonzero() -> None:
         app, ["eval", "ab", "--fixture", "--task", "does_not_exist"]
     )
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# --suite selector tests
+# ---------------------------------------------------------------------------
+
+
+from oh_no_my_claudecode.evals.ab.private_tasks import PRIVATE_KNOWLEDGE_TASKS  # noqa: E402
+
+
+def test_eval_ab_suite_private_exits_zero() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "private"])
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}.\n{result.output}"
+
+
+def test_eval_ab_suite_private_report_contains_private_task_ids() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "private"])
+    assert result.exit_code == 0
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.id in result.output, (
+            f"Private task id {task.id!r} missing from --suite private output"
+        )
+
+
+def test_eval_ab_suite_private_task_count() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "private", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["total_tasks"] == len(PRIVATE_KNOWLEDGE_TASKS)
+
+
+def test_eval_ab_suite_private_all_onmc_wins() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "private", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["onmc_wins"] == len(PRIVATE_KNOWLEDGE_TASKS), (
+        f"Expected all private tasks to be ONMC wins but got {payload['onmc_wins']}"
+    )
+    assert payload["alone_wins"] == 0
+
+
+def test_eval_ab_suite_builtin_is_default() -> None:
+    """--suite builtin is the default — matches omitting --suite entirely."""
+    result_default = _runner.invoke(app, ["eval", "ab", "--fixture", "--json"])
+    result_explicit = _runner.invoke(
+        app, ["eval", "ab", "--fixture", "--suite", "builtin", "--json"]
+    )
+    assert result_default.exit_code == 0
+    assert result_explicit.exit_code == 0
+    default_payload = json.loads(result_default.output)
+    explicit_payload = json.loads(result_explicit.output)
+    assert default_payload["total_tasks"] == explicit_payload["total_tasks"]
+    assert default_payload["total_tasks"] == len(BUILTIN_TASKS)
+
+
+def test_eval_ab_suite_all_combines_both_suites() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "all", "--json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["total_tasks"] == len(BUILTIN_TASKS) + len(PRIVATE_KNOWLEDGE_TASKS)
+
+
+def test_eval_ab_suite_invalid_exits_nonzero() -> None:
+    result = _runner.invoke(app, ["eval", "ab", "--fixture", "--suite", "unknown"])
+    assert result.exit_code != 0
