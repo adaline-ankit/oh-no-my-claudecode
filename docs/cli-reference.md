@@ -107,6 +107,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
 │ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
+│ run             Plan safely by default, or execute ONMC's memory-grounded    │
+│                 loop.                                                        │
 │ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
 │                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
@@ -6393,6 +6395,56 @@ Usage: onmc route [OPTIONS] TASK
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the decision as JSON.                                   │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc run`
+
+```text
+Usage: onmc run [OPTIONS] TASK
+
+ Plan safely by default, or execute ONMC's memory-grounded loop.
+
+ Without ``--execute`` this command is plan-only and never launches an
+ agent or verifier subprocess. Execution is denied unless the tool broker
+ allows both declared capabilities. Durable state can be revisited with
+ ``--execute --resume RUN_ID``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    task      TEXT  Task for the execution harness. [required]              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --plan-only                                   Emit the deterministic plan    │
+│                                               without invoking an agent or   │
+│                                               verifier.                      │
+│ --execute                                     Explicitly allow the harness   │
+│                                               to invoke an agent and mutate  │
+│                                               the worktree.                  │
+│ --agent                 TEXT                  Agent CLI: claude, codex, or   │
+│                                               opencode.                      │
+│                                               [default: claude]              │
+│ --model                 TEXT                  Model selector passed to the   │
+│                                               chosen agent adapter.          │
+│                                               [default: default]             │
+│ --verifier              TEXT                  Verifier command run by the    │
+│                                               existing loop engine.          │
+│                                               [default: pytest]              │
+│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
+│                                               [default: 10]                  │
+│ --max-cost-usd          FLOAT RANGE [x>=0.0]  Optional agent cost ceiling in │
+│                                               USD.                           │
+│ --isolate                                     Run agent changes in the loop  │
+│                                               engine's worktree.             │
+│ --risk                  TEXT                  Execution risk: low, medium,   │
+│                                               high, or critical.             │
+│                                               [default: medium]              │
+│ --context-budget        INTEGER RANGE [x>=1]  Maximum context packet tokens. │
+│                                               [default: 4000]                │
+│ --resume                TEXT                  Resume or inspect the durable  │
+│                                               state for a run ID.            │
+│ --json                                        Emit the plan and result as    │
+│                                               canonical JSON.                │
+│ --help                                        Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
