@@ -139,6 +139,7 @@ class HarnessResult:
     proof_reasons: tuple[str, ...] = ()
     resumed: bool = False
     resume_run_id: str | None = None
+    worktree_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -150,6 +151,7 @@ class HarnessResult:
             "proof_reasons": list(self.proof_reasons),
             "resumed": self.resumed,
             "resume_run_id": self.resume_run_id,
+            "worktree_path": self.worktree_path,
         }
 
     def render_text(self) -> str:
@@ -174,6 +176,8 @@ class HarnessResult:
                 f"Outcome: loop_converged={self.loop_converged}, "
                 f"proof_complete={self.proof_complete}, stop={self.stop_reason}"
             )
+        if self.worktree_path is not None:
+            lines.append(f"Worktree: {self.worktree_path}")
         return "\n".join(lines)
 
 

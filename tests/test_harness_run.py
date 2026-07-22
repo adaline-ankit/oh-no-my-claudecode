@@ -7,16 +7,22 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+import oh_no_my_claudecode.harness_run.controller as harness_controller_module
 from oh_no_my_claudecode.cli import app
+from oh_no_my_claudecode.config import default_config, write_config
 from oh_no_my_claudecode.context_engine import ContextEngine
 from oh_no_my_claudecode.durable_runtime import NodeState, RunState, RuntimeStore
 from oh_no_my_claudecode.harness_run import (
     ControllerDependencies,
     HarnessController,
     HarnessStatus,
+    LoopInvocation,
     RunRequest,
 )
-from oh_no_my_claudecode.harness_run.controller import default_dependencies
+from oh_no_my_claudecode.harness_run.controller import (
+    _default_loop_executor,
+    default_dependencies,
+)
 from oh_no_my_claudecode.loop.adapters import CodexCliAdapter
 from oh_no_my_claudecode.loop.engine import _default_verify_runner
 from oh_no_my_claudecode.loop.models import IterationContract, LoopResult
@@ -269,3 +275,74 @@ def test_default_verify_runner_uses_argv_without_shell(
     assert command == ["pytest", "-q;", "touch", "owned"]
     assert "shell" not in kwargs
     assert result.passed is True
+
+
+def test_isolated_execution_binds_agent_and_verifier_to_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_config(default_config(tmp_path), tmp_path)
+    isolated = tmp_path / "isolated"
+    isolated.mkdir()
+    seen: dict[str, object] = {}
+
+    class FakeIsolation:
+        def __init__(self, *, branch_prefix: str) -> None:
+            seen["branch_prefix"] = branch_prefix
+
+        def setup(self, repo_root: Path) -> Path:
+            seen["setup_root"] = repo_root
+            return isolated
+
+        def teardown(self, worktree_path: Path, *, keep: bool) -> None:
+            seen["teardown"] = (worktree_path, keep)
+
+    def fake_agent_runner(agent: str, repo_root: Path, *, model: str | None = None) -> object:
+        seen["agent"] = (agent, repo_root, model)
+        return lambda prompt, escalation_level: None
+
+    def fake_run_loop(
+        storage: object,
+        repo_root: Path,
+        spec: object,
+        config: object,
+        **kwargs: object,
+    ) -> LoopResult:
+        del storage, spec
+        seen["loop_root"] = repo_root
+        seen["loop_isolate"] = config.isolate  # type: ignore[attr-defined]
+        seen["verify_runner"] = kwargs["verify_runner"]
+        return _loop_result(converged=True)
+
+    monkeypatch.setattr(harness_controller_module, "WorktreeIsolationProvider", FakeIsolation)
+    monkeypatch.setattr(harness_controller_module, "make_agent_runner", fake_agent_runner)
+    monkeypatch.setattr(harness_controller_module, "run_loop", fake_run_loop)
+    subprocess_calls: list[tuple[object, dict[str, object]]] = []
+
+    def fake_subprocess(command: object, **kwargs: object) -> object:
+        subprocess_calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout="passed", stderr="")
+
+    monkeypatch.setattr(harness_controller_module.subprocess, "run", fake_subprocess)
+    packet = HarnessController(tmp_path).plan(RunRequest(task="Fix isolation")).context_packet
+
+    result = _default_loop_executor(
+        LoopInvocation(
+            tmp_path,
+            RunRequest(task="Fix isolation", execute=True, isolation=True),
+            context_packet=packet,
+            resume=False,
+        )
+    )
+    verify_runner = seen["verify_runner"]
+    assert callable(verify_runner)
+    verify_runner("pytest -q")
+
+    assert seen["agent"] == ("claude", isolated, None)
+    assert seen["loop_root"] == isolated
+    assert seen["loop_isolate"] is False
+    assert seen["teardown"] == (isolated, True)
+    assert subprocess_calls[0][0] == ["pytest", "-q"]
+    assert subprocess_calls[0][1]["cwd"] == isolated
+    assert "shell" not in subprocess_calls[0][1]
+    assert result.worktree_path == str(isolated)

@@ -49,6 +49,10 @@ loop engine. Resume or inspect the same durable run with:
 onmc run "fix cache invalidation" --execute --resume RUN_ID
 ```
 
+With `--isolate`, ONMC creates the worktree before binding either the agent or
+verifier. Isolation fails closed instead of falling back to the caller's tree.
+Successful runs preserve and print the worktree path; failed runs remove it.
+
 A run is `completed` only when the existing loop converges and its final
 configured verifier supplies proof-graph evidence. Agent assertions alone do
 not satisfy proof requirements. Policy denial, loop exhaustion, agent errors,

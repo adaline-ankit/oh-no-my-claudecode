@@ -6,6 +6,7 @@ import hashlib
 import json
 import secrets
 import shlex
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -17,6 +18,7 @@ from oh_no_my_claudecode.context_engine import (
     PlannerConfig,
     RetrievalMode,
 )
+from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
 from oh_no_my_claudecode.durable_runtime import NodeState, RunSnapshot, RunState, RuntimeStore
 from oh_no_my_claudecode.harness import (
     CompilerConfig,
@@ -27,7 +29,7 @@ from oh_no_my_claudecode.harness import (
 )
 from oh_no_my_claudecode.loop import FileCheckpointStore, LoopConfig, LoopResult, LoopSpec, run_loop
 from oh_no_my_claudecode.loop.adapters import make_agent_runner
-from oh_no_my_claudecode.loop.engine import _default_verify_runner
+from oh_no_my_claudecode.loop.models import VerifyOutcome, VerifyRunner
 from oh_no_my_claudecode.proof_graph import (
     Claim,
     ClaimKind,
@@ -166,35 +168,83 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
     config = load_config(repo_root)
     storage = SQLiteStorage(database_path(config, repo_root))
     storage.initialize()
-    agent_runner = make_agent_runner(
-        request.agent,
-        repo_root,
-        model=None if request.model == "default" else request.model,
-    )
-    return run_loop(
-        storage,
-        repo_root,
-        LoopSpec(
-            goal=request.task,
-            success_criteria=(
-                "The configured verifier passes after a non-vacuous agent change, "
-                "and the memory-grounded loop converges.\n\n"
-                + _render_context(invocation.context_packet)
+    isolation_provider: WorktreeIsolationProvider | None = None
+    worktree_path: Path | None = None
+    execution_root = repo_root
+    if request.isolation:
+        isolation_provider = WorktreeIsolationProvider(branch_prefix="onmc-run")
+        worktree_path = isolation_provider.setup(repo_root)
+        if worktree_path is None:
+            raise RuntimeError("worktree isolation failed; refusing in-place execution")
+        execution_root = worktree_path
+
+    result: LoopResult | None = None
+    try:
+        agent_runner = make_agent_runner(
+            request.agent,
+            execution_root,
+            model=None if request.model == "default" else request.model,
+        )
+        result = run_loop(
+            storage,
+            execution_root,
+            LoopSpec(
+                goal=request.task,
+                success_criteria=(
+                    "The configured verifier passes after a non-vacuous agent change, "
+                    "and the memory-grounded loop converges.\n\n"
+                    + _render_context(invocation.context_packet)
+                ),
             ),
-        ),
-        LoopConfig(
-            max_iterations=request.max_iterations,
-            verify_command=request.verifier,
-            max_cost_usd=request.max_cost_usd,
-            isolate=request.isolation,
-            duplicate_action_limit=3,
-            repeated_error_limit=3,
-        ),
-        agent_runner=agent_runner,
-        verify_runner=_default_verify_runner,
-        checkpoint_store=FileCheckpointStore(repo_root),
-        resume=invocation.resume,
-    )
+            LoopConfig(
+                max_iterations=request.max_iterations,
+                verify_command=request.verifier,
+                max_cost_usd=request.max_cost_usd,
+                isolate=False,
+                duplicate_action_limit=3,
+                repeated_error_limit=3,
+            ),
+            agent_runner=agent_runner,
+            verify_runner=_verify_runner_for(execution_root),
+            checkpoint_store=FileCheckpointStore(repo_root),
+            resume=invocation.resume,
+        )
+        if result.converged and worktree_path is not None:
+            result.worktree_path = str(worktree_path)
+        return result
+    finally:
+        if isolation_provider is not None and worktree_path is not None:
+            isolation_provider.teardown(
+                worktree_path,
+                keep=result is not None and result.converged,
+            )
+
+
+def _verify_runner_for(repo_root: Path) -> VerifyRunner:
+    """Return an argv-only verifier bound to the execution worktree."""
+
+    def _run(command: str) -> VerifyOutcome:
+        try:
+            argv = shlex.split(command)
+            if not argv:
+                return VerifyOutcome(False, "[verify error: empty command]")
+            completed = subprocess.run(  # noqa: S603
+                argv,
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            return VerifyOutcome(
+                completed.returncode == 0,
+                (completed.stdout + completed.stderr)[:2000],
+            )
+        except subprocess.TimeoutExpired:
+            return VerifyOutcome(False, "[verify timed out]")
+        except (OSError, ValueError) as exc:
+            return VerifyOutcome(False, f"[verify error: {exc}]")
+
+    return _run
 
 
 def default_dependencies(repo_root: Path) -> ControllerDependencies:
@@ -325,6 +375,7 @@ class HarnessController:
                     stop_reason=f"resumed-{snapshot.state.value}",
                     resumed=True,
                     resume_run_id=plan.run_id,
+                    worktree_path=None,
                 )
             if snapshot.state is RunState.CREATED:
                 snapshot = store.start(plan.run_id, idempotency_key="harness:start")
@@ -338,6 +389,7 @@ class HarnessController:
                     proof_reasons=("run requires approval before it can resume",),
                     resumed=True,
                     resume_run_id=plan.run_id,
+                    worktree_path=None,
                 )
         else:
             store.create_run(
@@ -390,6 +442,7 @@ class HarnessController:
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
                     resume_run_id=plan.run_id,
+                    worktree_path=loop_result.worktree_path,
                 )
 
             snapshot = store.complete_node(
@@ -423,6 +476,7 @@ class HarnessController:
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
                     resume_run_id=plan.run_id,
+                    worktree_path=loop_result.worktree_path,
                 )
 
             for kind in (NodeKind.VERIFY, NodeKind.REPAIR, NodeKind.PROVE, NodeKind.LEARN):
@@ -436,6 +490,7 @@ class HarnessController:
                 stop_reason=loop_result.stop_reason,
                 resumed=resumed,
                 resume_run_id=plan.run_id,
+                worktree_path=loop_result.worktree_path,
             )
         except Exception as exc:
             current = store.load(plan.run_id)
