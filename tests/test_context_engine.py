@@ -2,14 +2,33 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from oh_no_my_claudecode.context_engine import (
     Candidate,
     ContextEngine,
+    Evidence,
     PlannerConfig,
     RetrievalMode,
+    ScoreSignals,
     StaticCandidateProvider,
     StaticGraphProvider,
 )
+
+
+def test_evidence_rejects_duplicate_metadata_keys() -> None:
+    with pytest.raises(ValueError, match="metadata keys must be unique"):
+        Evidence(
+            candidate_id="duplicate",
+            content="content",
+            token_count=1,
+            score=1.0,
+            context_roi=1.0,
+            graph_depth=None,
+            signals=ScoreSignals(1.0, 0.0, 0.0, 0.0, None, 1.0),
+            citations=(),
+            metadata=(("path", "first"), ("path", "second")),
+        )
 
 
 def candidate(
