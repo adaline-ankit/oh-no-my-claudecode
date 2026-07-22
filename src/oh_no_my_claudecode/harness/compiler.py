@@ -145,7 +145,11 @@ def _policy_for(config: CompilerConfig, risk: RiskLevel) -> NodePolicy:
     if not isinstance(config.retry, RetryPolicy):
         raise ValueError("retry must be a RetryPolicy")
     config.retry.validate()
-    if not isinstance(config.context_budget, int) or isinstance(config.context_budget, bool):
+    if (
+        not isinstance(config.context_budget, int)
+        or isinstance(config.context_budget, bool)
+        or config.context_budget <= 0
+    ):
         raise ValueError("context_budget must be positive")
     scaled_budget = (
         config.context_budget
