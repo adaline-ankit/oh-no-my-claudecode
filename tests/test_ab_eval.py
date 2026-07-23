@@ -44,6 +44,7 @@ from oh_no_my_claudecode.evals.ab.runner import (
     _run_command,
     _run_gate,
     _run_setup,
+    _write_hidden_gate_test,
     run_ab,
     run_suite,
 )
@@ -725,6 +726,7 @@ def test_private_tasks_all_fields_non_empty() -> None:
         assert task.gate_command, f"Private task {task.id} missing gate_command"
         assert task.onmc_hint, f"Private task {task.id} missing onmc_hint"
         assert task.description, f"Private task {task.id} missing description"
+        assert task.hidden_gate_test, f"Private task {task.id} missing hidden_gate_test"
 
 
 def test_private_task_house_error_code_prefix_fields() -> None:
@@ -818,6 +820,7 @@ def test_run_suite_private_ids_in_report() -> None:
 def test_private_gate_fails_on_buggy_code_house_error(tmp_path: Path) -> None:
     """The buggy stub (kind.upper()) fails the gate."""
     _run_setup(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    _write_hidden_gate_test(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
     passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
     assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
 
@@ -836,6 +839,7 @@ def test_private_gate_passes_after_fix_house_error(tmp_path: Path) -> None:
         "    return _codes[kind]\n"
     )
     errors_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
     passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
     assert passed is True, f"Gate should PASS after fix.\n{output}"
 
@@ -843,6 +847,7 @@ def test_private_gate_passes_after_fix_house_error(tmp_path: Path) -> None:
 def test_private_gate_fails_on_buggy_code_retry(tmp_path: Path) -> None:
     """The buggy stub (retries all 5xx) fails the gate."""
     _run_setup(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    _write_hidden_gate_test(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
     passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
     assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
 
@@ -853,6 +858,7 @@ def test_private_gate_passes_after_fix_retry(tmp_path: Path) -> None:
     payment_path = tmp_path / "payment.py"
     fixed = "def should_retry(status: int) -> bool:\n    return status == 503\n"
     payment_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
     passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
     assert passed is True, f"Gate should PASS after fix.\n{output}"
 
@@ -870,6 +876,7 @@ def test_private_gate_fails_on_buggy_code_money(tmp_path: Path) -> None:
     )
     if result.stdout.strip() == "230":
         pytest.skip("float('2.30')*100 rounds to 230 on this platform — bug not reproducible")
+    _write_hidden_gate_test(TASK_MONEY_MINOR_UNITS, tmp_path)
     passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
     assert passed is False, f"Gate should FAIL on buggy float conversion.\n{output}"
 
@@ -884,5 +891,98 @@ def test_private_gate_passes_after_fix_money(tmp_path: Path) -> None:
         "    return int(Decimal(rupees) * 100)\n"
     )
     money_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_MONEY_MINOR_UNITS, tmp_path)
     passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
     assert passed is True, f"Gate should PASS after Decimal fix.\n{output}"
+
+
+# ---------------------------------------------------------------------------
+# Hidden gate info-asymmetry tests (Fix 2)
+# ---------------------------------------------------------------------------
+
+
+def test_hidden_gate_test_not_written_during_setup(tmp_path: Path) -> None:
+    """setup_script must NOT write test_gate.py — agent never sees the private rule."""
+    _run_setup(TASK_TENANT_HEADER, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists(), (
+        "test_gate.py must be absent after setup so the agent cannot read the "
+        "private rule from the test file (info-asymmetry)"
+    )
+
+
+def test_hidden_gate_test_present_after_write(tmp_path: Path) -> None:
+    """_write_hidden_gate_test creates test_gate.py after the agent finishes."""
+    _run_setup(TASK_TENANT_HEADER, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists()
+    _write_hidden_gate_test(TASK_TENANT_HEADER, tmp_path)
+    assert (tmp_path / "test_gate.py").exists()
+    content = (tmp_path / "test_gate.py").read_text()
+    assert "X-Acme-Workspace" in content
+
+
+def test_hidden_gate_noop_when_empty(tmp_path: Path) -> None:
+    """_write_hidden_gate_test is a no-op when hidden_gate_test is empty."""
+    task = _make_task()  # hidden_gate_test defaults to ""
+    _write_hidden_gate_test(task, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists()
+
+
+def test_hidden_gate_all_private_tasks_have_it() -> None:
+    """Every private task must use hidden_gate_test (no test file in setup_script)."""
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.hidden_gate_test, (
+            f"Private task {task.id!r} must have a non-empty hidden_gate_test"
+        )
+        assert "test_gate.py" not in task.setup_script, (
+            f"Private task {task.id!r} setup_script must not write test_gate.py "
+            "(use hidden_gate_test instead)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Baseline precheck tests (Fix 3)
+# ---------------------------------------------------------------------------
+
+
+def test_precheck_detects_stub_that_already_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the stub already passes the gate, stub_fails_precheck=False is recorded."""
+    task = ABTask(
+        id="trivial-stub-already-passes",
+        description="Do nothing — stub already correct.",
+        setup_script="from pathlib import Path\nPath('x.py').write_text('VALUE = 1\\n')\n",
+        gate_command="python -c 'import x; assert x.VALUE == 1'",
+        onmc_hint="[ONMC] hint",
+    )
+
+    # The gate passes before any agent touches anything.
+    # run_ab should record stub_fails_precheck=False and surface a warning.
+    import warnings
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.evals.ab.runner._run_claude_agent",
+        lambda *args, **kwargs: _AgentOutcome("no-op", 0, None, 0, 0.0, "sonnet"),
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_ab(task, "cc_alone", repo_root=tmp_path)
+
+    assert result.stub_fails_precheck is False
+    assert any("no signal" in str(w.message) for w in caught), (
+        "Expected a warning when the stub already passes the gate"
+    )
+
+
+def test_precheck_records_true_for_normally_failing_stub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stub that correctly fails the gate records stub_fails_precheck=True."""
+    not_found = _AgentOutcome("", None, "claude CLI not found", None, None, "sonnet")
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.evals.ab.runner._run_claude_agent",
+        lambda *args, **kwargs: not_found,
+    )
+    result = run_ab(TASK_LIST_SLICE_FIX, "cc_alone", repo_root=tmp_path)
+    assert result.stub_fails_precheck is True

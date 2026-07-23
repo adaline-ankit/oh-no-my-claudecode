@@ -21,6 +21,11 @@ Design rules
   CONVENTION / a FAILED_APPROACH incident dead-end).  It states the rule
   plus the reason, as compile_guard/compile_recall would inject it.  It is
   NOT a tautological restatement of the test.
+- ``setup_script`` writes ONLY the stub (raising NotImplementedError or a
+  plausible-wrong default).  The gate test is kept in ``hidden_gate_test``
+  and is withheld from the agent during setup — written only after the agent
+  finishes.  This preserves info-asymmetry: the agent cannot read the private
+  rule off the test file.
 
 Tasks in this suite
 -------------------
@@ -49,8 +54,9 @@ def format_error(kind: str) -> str:
     # BUG: uses generic uppercase — correct codes are arbitrary ACME-XXXX strings
     return kind.upper()
 ''')
+"""
 
-pathlib.Path("test_errors.py").write_text('''
+_HIDDEN_GATE_HOUSE_ERROR_CODE = """\
 from errors import format_error
 
 def test_not_found():
@@ -61,7 +67,6 @@ def test_unauthorized():
 
 def test_rate_limited():
     assert format_error("rate_limited") == "ACME-4029"
-''')
 """
 
 _ONMC_HINT_HOUSE_ERROR_CODE = """\
@@ -88,10 +93,11 @@ TASK_HOUSE_ERROR_CODE_PREFIX = ABTask(
         "`format_error('not_found')` returns the correct code for 'not_found', "
         "`format_error('unauthorized')` returns the correct code for 'unauthorized', "
         "and `format_error('rate_limited')` returns the correct code for 'rate_limited'.  "
-        "All tests in test_errors.py must pass."
+        "All tests must pass."
     ),
     setup_script=_SETUP_HOUSE_ERROR_CODE,
-    gate_command="python -m pytest test_errors.py -x -q",
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_HOUSE_ERROR_CODE,
     onmc_hint=_ONMC_HINT_HOUSE_ERROR_CODE,
     note=(
         "The correct codes (ACME-4004, ACME-4001, ACME-4029) are arbitrary house "
@@ -99,7 +105,7 @@ TASK_HOUSE_ERROR_CODE_PREFIX = ABTask(
         "agent naturally produces 'NOT_FOUND', '404', or similar generic strings.  "
         "The ONMC hint provides the exact mapping — the ONLY way to know it."
     ),
-    protected_paths=("test_errors.py",),
+    protected_paths=("test_gate.py",),
 )
 
 
@@ -119,8 +125,9 @@ def build_headers(token: str, workspace_id: str) -> dict[str, str]:
         "X-Tenant-ID": workspace_id,  # BUG: gateway only reads X-Acme-Workspace
     }
 ''')
+"""
 
-pathlib.Path("test_headers.py").write_text('''
+_HIDDEN_GATE_TENANT_HEADER = """\
 from headers import build_headers
 
 def test_acme_workspace_header_present():
@@ -136,7 +143,6 @@ def test_acme_workspace_header_value():
 def test_authorization_header_preserved():
     h = build_headers("tok123", "ws-456")
     assert h["Authorization"] == "Bearer tok123"
-''')
 """
 
 _ONMC_HINT_TENANT_HEADER = """\
@@ -161,11 +167,11 @@ TASK_TENANT_HEADER = ABTask(
     description=(
         "The function `build_headers(token, workspace_id)` in headers.py should "
         "return a dict with the `Authorization` header and the correct workspace "
-        "routing header.  Fix the workspace header name so all tests in "
-        "test_headers.py pass."
+        "routing header.  Fix the workspace header name so all tests pass."
     ),
     setup_script=_SETUP_TENANT_HEADER,
-    gate_command="python -m pytest test_headers.py -x -q",
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_TENANT_HEADER,
     onmc_hint=_ONMC_HINT_TENANT_HEADER,
     note=(
         "The correct header name (X-Acme-Workspace) is an arbitrary internal "
@@ -173,7 +179,7 @@ TASK_TENANT_HEADER = ABTask(
         "or a query parameter, all of which the gateway silently drops.  The ONMC "
         "hint names the incident and states the exact header."
     ),
-    protected_paths=("test_headers.py",),
+    protected_paths=("test_gate.py",),
 )
 
 
@@ -190,8 +196,9 @@ def should_retry(status: int) -> bool:
     \"\"\"Return True if the payment client should retry after this HTTP status.\"\"\"
     return 500 <= status < 600  # BUG: retrying all 5xx caused double charges
 ''')
+"""
 
-pathlib.Path("test_payment.py").write_text('''
+_HIDDEN_GATE_RETRY_ONLY_503 = """\
 from payment import should_retry
 
 def test_503_is_retried():
@@ -206,7 +213,9 @@ def test_502_not_retried():
 
 def test_504_not_retried():
     assert should_retry(504) is False
-''')
+
+def test_200_not_retried():
+    assert should_retry(200) is False
 """
 
 _ONMC_HINT_RETRY_ONLY_503 = """\
@@ -232,11 +241,12 @@ TASK_RETRY_ONLY_503_INCIDENT = ABTask(
     description=(
         "The function `should_retry(status: int) -> bool` in payment.py decides "
         "whether the payment client should retry after an HTTP error response.  "
-        "Fix it so all tests in test_payment.py pass.  The test expectations "
+        "Fix it so it passes all tests.  The test expectations "
         "reflect a strict business rule about which status codes are safe to retry."
     ),
     setup_script=_SETUP_RETRY_ONLY_503,
-    gate_command="python -m pytest test_payment.py -x -q",
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_RETRY_ONLY_503,
     onmc_hint=_ONMC_HINT_RETRY_ONLY_503,
     note=(
         "A cold agent naturally retries all 5xx (the standard practice) — "
@@ -244,7 +254,7 @@ TASK_RETRY_ONLY_503_INCIDENT = ABTask(
         "to retry; 500/502/504 may have already applied the charge.  This is "
         "an incident-derived rule, not inferrable from conventions."
     ),
-    protected_paths=("test_payment.py",),
+    protected_paths=("test_gate.py",),
 )
 
 
@@ -262,8 +272,9 @@ def idempotency_key(tenant: str, op: str, uid: str) -> str:
     # BUG: uses dash separator; dedup layer splits on colon
     return f"{tenant}-{op}-{uid}"
 ''')
+"""
 
-pathlib.Path("test_idem.py").write_text('''
+_HIDDEN_GATE_IDEMPOTENCY_KEY = """\
 from idem import idempotency_key
 
 def test_colon_separated_format():
@@ -283,7 +294,6 @@ def test_all_three_parts_colon_joined():
     assert parts == ["tenant", "op", "id-42"], (
         f"Expected exactly three colon-separated parts but got: {parts!r}"
     )
-''')
 """
 
 _ONMC_HINT_IDEMPOTENCY_KEY = """\
@@ -308,10 +318,11 @@ TASK_IDEMPOTENCY_KEY_FORMAT = ABTask(
     description=(
         "The function `idempotency_key(tenant, op, uid)` in idem.py should return "
         "a string that uniquely identifies an operation for deduplication.  "
-        "Fix it so all tests in test_idem.py pass."
+        "Fix it so all tests pass."
     ),
     setup_script=_SETUP_IDEMPOTENCY_KEY,
-    gate_command="python -m pytest test_idem.py -x -q",
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_IDEMPOTENCY_KEY,
     onmc_hint=_ONMC_HINT_IDEMPOTENCY_KEY,
     note=(
         "The required separator (':') is an arbitrary dedup-service contract.  "
@@ -319,7 +330,7 @@ TASK_IDEMPOTENCY_KEY_FORMAT = ABTask(
         "or a hash.  The colon format is knowable only from the service's "
         "DESIGN.md or a past incident — the ONMC hint provides it."
     ),
-    protected_paths=("test_idem.py",),
+    protected_paths=("test_gate.py",),
 )
 
 
@@ -338,20 +349,22 @@ def to_paise(rupees: str) -> int:
     # e.g. int(float("2.30") * 100) == 229 due to IEEE 754 representation
     return int(float(rupees) * 100)
 ''')
+"""
 
-pathlib.Path("test_money.py").write_text('''
+_HIDDEN_GATE_MONEY_MINOR_UNITS = """\
+from decimal import Decimal
 from money import to_paise
 
 def test_basic():
     assert to_paise("10.00") == 1000
 
-def test_ninety_nine():
-    assert to_paise("0.99") == 99
+def test_one_ten():
+    assert to_paise("1.10") == 110
 
 def test_float_trap():
     # float("2.30") * 100 == 229.99999... -> int gives 229, NOT 230
     assert to_paise("2.30") == 230, (
-        f"Expected 230 but got {to_paise(\\'2.30\\')} — "
+        f"Expected 230 but got {to_paise('2.30')} — "
         "float arithmetic truncates 2.30*100 to 229"
     )
 
@@ -360,7 +373,10 @@ def test_returns_int():
     assert isinstance(result, int), (
         f"to_paise must return int, got {type(result).__name__}"
     )
-''')
+
+def test_not_float_type():
+    result = to_paise("10.00")
+    assert not isinstance(result, float), "to_paise must not return a float"
 """
 
 _ONMC_HINT_MONEY_MINOR_UNITS = """\
@@ -389,12 +405,12 @@ TASK_MONEY_MINOR_UNITS = ABTask(
     description=(
         "The function `to_paise(rupees: str) -> int` in money.py converts a rupee "
         "decimal string to integer paise (100 paise = 1 rupee).  It currently uses "
-        "float arithmetic which produces wrong results for certain inputs (e.g. "
-        "``to_paise('2.30')`` returns 229 instead of 230).  Fix it so all tests in "
-        "test_money.py pass and the function returns an int."
+        "float arithmetic which produces wrong results for certain inputs.  "
+        "Fix it so all tests pass and the function returns an int."
     ),
     setup_script=_SETUP_MONEY_MINOR_UNITS,
-    gate_command="python -m pytest test_money.py -x -q",
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_MONEY_MINOR_UNITS,
     onmc_hint=_ONMC_HINT_MONEY_MINOR_UNITS,
     note=(
         "Float-to-paise rounding trap.  A cold agent's natural fix "
@@ -402,7 +418,7 @@ TASK_MONEY_MINOR_UNITS = ABTask(
         "The ONMC hint names the incident and mandates Decimal(rupees) * 100, "
         "the ONLY portable correct approach for this codebase."
     ),
-    protected_paths=("test_money.py",),
+    protected_paths=("test_gate.py",),
 )
 
 

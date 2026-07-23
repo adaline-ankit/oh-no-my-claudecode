@@ -17,6 +17,12 @@ subprocess boundary used by ClaudeCliAdapter in the loop engine). It uses the
 Claude CLI's configured authentication, including subscription login. The
 baseline is real, not simulated or auto-failed.
 
+Live mode is DISABLED BY DEFAULT: it runs the agent with
+``--dangerously-skip-permissions`` (autonomous, approvals off, isolated only by
+a temp directory). It refuses to run unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set
+to ``1``/``true``/``yes`` — an explicit, informed opt-in intended to be used
+inside a container/VM. Fixture mode (the default) needs no opt-in.
+
 ONMC grounding (cc_onmc condition)
 ------------------------------------
 In the cc_onmc condition, the task's prior lesson is stored in an isolated ONMC
@@ -204,6 +210,17 @@ def _run_gate(task: ABTask, repo_root: Path) -> tuple[bool, str]:
         return False, "[gate timed out]"
 
 
+def _write_hidden_gate_test(task: ABTask, repo_root: Path) -> None:
+    """Write task.hidden_gate_test to test_gate.py inside repo_root.
+
+    Called AFTER the agent has finished — the agent never sees this file during
+    setup.  When hidden_gate_test is empty, this is a no-op.
+    """
+    if not task.hidden_gate_test:
+        return
+    (repo_root / "test_gate.py").write_text(textwrap.dedent(task.hidden_gate_test))
+
+
 def _compile_onmc_context(task: ABTask) -> str:
     """Seed one repo-memory item and retrieve it through ONMC's real recall path."""
     from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
@@ -253,17 +270,22 @@ def _run_claude_agent(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> _AgentOutcome:
-    """Shell out to Claude Code with identical, isolated settings per condition."""
+    """Shell out to Claude Code with identical, isolated settings per condition.
+
+    ``--dangerously-skip-permissions`` is passed so the agent acts autonomously
+    in the throwaway temp repo without stalling on approval prompts.  This is
+    only reached after the ``ONMC_EVAL_ALLOW_DANGEROUS`` opt-in gate in
+    ``_run_suite_live`` — the agent is unsandboxed apart from the temp directory,
+    so callers must opt in explicitly (ideally in a container/VM).
+    """
     cmd = [
         "claude",
         "-p",
         prompt,
         "--output-format",
         "json",
-        "--safe-mode",
+        "--dangerously-skip-permissions",
         "--no-session-persistence",
-        "--permission-mode",
-        "acceptEdits",
         "--model",
         model,
         "--effort",
@@ -408,8 +430,23 @@ def run_ab(
 
     try:
         baseline_sha = _prepare_task(task, active_root)
+
+        # Fix 3: baseline precheck — run gate before touching the stub so we can
+        # record whether the task has signal.  For hidden-gate tasks the hidden
+        # test is NOT yet written, so the gate only sees the gate_command on the
+        # plain stub (which should fail; if it passes, the task has no signal).
         pre_gate_passed, pre_gate_output = _run_gate(task, active_root)
+        stub_fails_precheck: bool = not pre_gate_passed
+
         if pre_gate_passed:
+            import warnings
+
+            warnings.warn(
+                f"Task {task.id!r}: stub already passes the gate before the agent runs — "
+                "this task has no signal (stub_fails_precheck=False).  The result is "
+                "recorded but the task should be repaired or excluded.",
+                stacklevel=2,
+            )
             return ABTaskResult(
                 task_id=task.id,
                 condition=condition,
@@ -417,11 +454,12 @@ def run_ab(
                 tokens=None,
                 duration_s=0.0,
                 agent_output="",
-                error="invalid benchmark: fail-to-pass gate already passes",
+                error="invalid benchmark: stub already passes gate (no signal)",
                 gate_output=pre_gate_output,
                 repo_url=task.repo_url,
                 repo_commit=task.repo_commit,
                 prompt_sha256="",
+                stub_fails_precheck=False,
             )
 
         # Build prompt
@@ -438,6 +476,10 @@ def run_ab(
             max_budget_usd=max_budget_usd,
         )
         duration_s = round(time.monotonic() - t0, 2)
+
+        # Fix 2: write the hidden gate test (withheld during setup) now that the
+        # agent has finished.  If hidden_gate_test is empty this is a no-op.
+        _write_hidden_gate_test(task, active_root)
 
         passed, gate_output = _run_gate(task, active_root)
         pass_to_pass, pass_to_pass_output = _run_pass_to_pass(task, active_root)
@@ -477,6 +519,7 @@ def run_ab(
             repo_url=task.repo_url,
             repo_commit=task.repo_commit,
             prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+            stub_fails_precheck=stub_fails_precheck,
         )
     finally:
         if tmpdir_obj is not None:
@@ -586,7 +629,33 @@ def _run_suite_live(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> ABReport:
-    """Run all tasks live using Claude Code's configured auth."""
+    """Run all tasks live using Claude Code's configured auth.
+
+    Refuses unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set. Live mode spawns a real
+    Claude Code agent with ``--dangerously-skip-permissions`` (autonomous,
+    approvals OFF, isolated only by a temp directory — no container). It is OFF
+    by default; opt in only inside an isolated environment (container/VM).
+    """
+    import warnings
+
+    if os.environ.get("ONMC_EVAL_ALLOW_DANGEROUS", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        raise RuntimeError(
+            "Live A/B eval is disabled by default: it spawns a REAL Claude Code agent "
+            "with --dangerously-skip-permissions (autonomous, approvals off, isolated "
+            "only by a temp directory — no container isolation). Set "
+            "ONMC_EVAL_ALLOW_DANGEROUS=1 to run it, ideally inside a container/VM. "
+            "Fixture mode (the default, without --live) needs no opt-in."
+        )
+    warnings.warn(
+        "onmc eval live mode: spawning an unsandboxed autonomous Claude agent "
+        "(--dangerously-skip-permissions) per task/condition. Ensure you are running "
+        "in an isolated environment.",
+        stacklevel=2,
+    )
 
     comparisons: list[ABTaskComparison] = []
 
