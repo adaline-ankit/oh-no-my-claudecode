@@ -314,7 +314,7 @@ Usage: onmc achievements [OPTIONS]
 ## `onmc approve`
 
 ```text
-Usage: onmc approve [OPTIONS] {swarm_id} {message}
+Usage: onmc approve [OPTIONS] SWARM_ID MESSAGE
 
  Turn an approved chat action into a real merge of verified unit PR(s).
 
@@ -336,12 +336,12 @@ Usage: onmc approve [OPTIONS] {swarm_id} {message}
  onmc approve ab12cd34 "mission:approve:unit-0001" --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm id whose trust card the approval acts on.    │
-│                           [required]                                         │
-│ *    message       <str>  Chat reply or button callback to act on (e.g.      │
-│                           "approve all", "approve unit 2",                   │
-│                           "mission:approve:unit-0001").                      │
-│                           [required]                                         │
+│ *    swarm_id      TEXT  Swarm id whose trust card the approval acts on.     │
+│                          [required]                                          │
+│ *    message       TEXT  Chat reply or button callback to act on (e.g.       │
+│                          "approve all", "approve unit 2",                    │
+│                          "mission:approve:unit-0001").                       │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --execute,--yes          Perform the real merge(s). Omit for a DRY plan (no  │
@@ -372,7 +372,7 @@ Usage: onmc arena [OPTIONS] COMMAND [ARGS]...
 ## `onmc arena bout`
 
 ```text
-Usage: onmc arena bout [OPTIONS] {model_a} {model_b}
+Usage: onmc arena bout [OPTIONS] MODEL_A MODEL_B
 
  Record a head-to-head bout result and update ELO ratings.
 
@@ -384,16 +384,16 @@ Usage: onmc arena bout [OPTIONS] {model_a} {model_b}
  snapshotted to ``.onmc/arena/ratings.json``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    model_a      <str>  Name / identifier of the first model. [required]    │
-│ *    model_b      <str>  Name / identifier of the second model. [required]   │
+│ *    model_a      TEXT  Name / identifier of the first model. [required]     │
+│ *    model_b      TEXT  Name / identifier of the second model. [required]    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --winner        <str>  Bout outcome: A (model_a won), B (model_b won), or │
-│                           draw.                                              │
-│                           [required]                                         │
-│    --task          <str>  Optional free-text task description for context.   │
-│    --json                 Emit the updated ratings as JSON.                  │
-│    --help                 Show this message and exit.                        │
+│ *  --winner        TEXT  Bout outcome: A (model_a won), B (model_b won), or  │
+│                          draw.                                               │
+│                          [required]                                          │
+│    --task          TEXT  Optional free-text task description for context.    │
+│    --json                Emit the updated ratings as JSON.                   │
+│    --help                Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -416,14 +416,14 @@ Usage: onmc arena leaderboard [OPTIONS]
 ## `onmc arena standings`
 
 ```text
-Usage: onmc arena standings [OPTIONS] {model}
+Usage: onmc arena standings [OPTIONS] MODEL
 
  Show one model's ELO record + rating history.
 
  Exits non-zero when the model has no bouts recorded.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    model      <str>  The model name to look up. [required]                 │
+│ *    model      TEXT  The model name to look up. [required]                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the model's standings as JSON.                          │
@@ -434,7 +434,7 @@ Usage: onmc arena standings [OPTIONS] {model}
 ## `onmc ask`
 
 ```text
-Usage: onmc ask [OPTIONS] {question}
+Usage: onmc ask [OPTIONS] QUESTION
 
  Ask a natural-language question answered from repo memory.
 
@@ -452,18 +452,18 @@ Usage: onmc ask [OPTIONS] {question}
    onmc ask "what is the auth decision?" --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    question      <str>  Natural-language question to answer from repo      │
-│                           memory.                                            │
-│                           [required]                                         │
+│ *    question      TEXT  Natural-language question to answer from repo       │
+│                          memory.                                             │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit           <int range> [x>=1]  Maximum number of memory entries to    │
-│                                       rank.                                  │
-│                                       [default: 8]                           │
-│ --json                                Emit result as JSON.                   │
-│ --no-synth                            Skip LLM synthesis and return ranked   │
-│                                       entries only.                          │
-│ --help                                Show this message and exit.            │
+│ --limit           INTEGER RANGE [x>=1]  Maximum number of memory entries to  │
+│                                         rank.                                │
+│                                         [default: 8]                         │
+│ --json                                  Emit result as JSON.                 │
+│ --no-synth                              Skip LLM synthesis and return ranked │
+│                                         entries only.                        │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -488,28 +488,28 @@ Usage: onmc attempt [OPTIONS] COMMAND [ARGS]...
 ## `onmc attempt add`
 
 ```text
-Usage: onmc attempt add [OPTIONS] {task_id}
+Usage: onmc attempt add [OPTIONS] TASK_ID
 
  Add an attempt record for a task.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --summary                  <str>                   Short attempt summary. │
+│ *  --summary                  TEXT                    Short attempt summary. │
 │                                                       [required]             │
-│ *  --kind                     <fix_attempt|investiga  Attempt kind.          │
+│ *  --kind                     [fix_attempt|investiga  Attempt kind.          │
 │                               tion|test_strategy|ref  [required]             │
-│                               actor_attempt|other>                           │
-│ *  --status                   <proposed|tried|reject  Attempt status.        │
-│                               ed|succeeded|partial>   [required]             │
-│    --reasoning-summary        <str>                   Why this attempt       │
+│                               actor_attempt|other]                           │
+│ *  --status                   [proposed|tried|reject  Attempt status.        │
+│                               ed|succeeded|partial]   [required]             │
+│    --reasoning-summary        TEXT                    Why this attempt       │
 │                                                       seemed worth trying.   │
-│    --evidence-for             <str>                   Signals supporting the │
+│    --evidence-for             TEXT                    Signals supporting the │
 │                                                       attempt.               │
-│    --evidence-against         <str>                   Signals against the    │
+│    --evidence-against         TEXT                    Signals against the    │
 │                                                       attempt.               │
-│    --file                     <str>                   Repeat to record       │
+│    --file                     TEXT                    Repeat to record       │
 │                                                       touched file paths.    │
 │    --help                                             Show this message and  │
 │                                                       exit.                  │
@@ -519,12 +519,12 @@ Usage: onmc attempt add [OPTIONS] {task_id}
 ## `onmc attempt list`
 
 ```text
-Usage: onmc attempt list [OPTIONS] {task_id}
+Usage: onmc attempt list [OPTIONS] TASK_ID
 
  List attempts attached to a task.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -534,12 +534,12 @@ Usage: onmc attempt list [OPTIONS] {task_id}
 ## `onmc attempt show`
 
 ```text
-Usage: onmc attempt show [OPTIONS] {attempt_id}
+Usage: onmc attempt show [OPTIONS] ATTEMPT_ID
 
  Show one attempt record.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    attempt_id      <str>  [required]                                       │
+│ *    attempt_id      TEXT  [required]                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -549,25 +549,25 @@ Usage: onmc attempt show [OPTIONS] {attempt_id}
 ## `onmc attempt update`
 
 ```text
-Usage: onmc attempt update [OPTIONS] {attempt_id}
+Usage: onmc attempt update [OPTIONS] ATTEMPT_ID
 
  Update an existing attempt.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    attempt_id      <str>  [required]                                       │
+│ *    attempt_id      TEXT  [required]                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --status                   <proposed|tried|rejec  Updated attempt status. │
+│ *  --status                   [proposed|tried|rejec  Updated attempt status. │
 │                               ted|succeeded|partial  [required]              │
-│                               >                                              │
-│    --summary                  <str>                  Replace the attempt     │
+│                               ]                                              │
+│    --summary                  TEXT                   Replace the attempt     │
 │                                                      summary.                │
-│    --reasoning-summary        <str>                  Update reasoning notes. │
-│    --evidence-for             <str>                  Update supporting       │
+│    --reasoning-summary        TEXT                   Update reasoning notes. │
+│    --evidence-for             TEXT                   Update supporting       │
 │                                                      evidence.               │
-│    --evidence-against         <str>                  Update                  │
+│    --evidence-against         TEXT                   Update                  │
 │                                                      counter-evidence.       │
-│    --file                     <str>                  Replace touched file    │
+│    --file                     TEXT                   Replace touched file    │
 │                                                      paths.                  │
 │    --help                                            Show this message and   │
 │                                                      exit.                   │
@@ -612,7 +612,7 @@ Usage: onmc attest reputation [OPTIONS]
 ## `onmc attest sign`
 
 ```text
-Usage: onmc attest sign [OPTIONS] {receipt_or_swarm_id}
+Usage: onmc attest sign [OPTIONS] RECEIPT_OR_SWARM_ID
 
  Build a signed, portable attestation from an onmc receipt.
 
@@ -623,23 +623,23 @@ Usage: onmc attest sign [OPTIONS] {receipt_or_swarm_id}
  unsigned. ``--json`` emits the attestation for a verifier or registry.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    receipt_or_swarm_id      <str>  Path to a receipt JSON, or a swarm id   │
-│                                      (resolved via its manifest).            │
-│                                      [required]                              │
+│ *    receipt_or_swarm_id      TEXT  Path to a receipt JSON, or a swarm id    │
+│                                     (resolved via its manifest).             │
+│                                     [required]                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --unit          <str>  Unit id to select when a swarm id is given.           │
-│ --secret        <str>  Shared secret for HMAC signing (else                  │
-│                        ONMC_ATTEST_SECRET, else unsigned).                   │
-│ --json                 Emit the attestation as JSON.                         │
-│ --help                 Show this message and exit.                           │
+│ --unit          TEXT  Unit id to select when a swarm id is given.            │
+│ --secret        TEXT  Shared secret for HMAC signing (else                   │
+│                       ONMC_ATTEST_SECRET, else unsigned).                    │
+│ --json                Emit the attestation as JSON.                          │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc attest verify`
 
 ```text
-Usage: onmc attest verify [OPTIONS] {file}
+Usage: onmc attest verify [OPTIONS] FILE
 
  Verify an attestation file; exit 0 when valid, 1 when not.
 
@@ -648,22 +648,22 @@ Usage: onmc attest verify [OPTIONS] {file}
  an unsigned one passes on its integrity digest alone.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    file      <str>  Path to an attestation JSON produced by `attest sign   │
-│                       --json`.                                               │
-│                       [required]                                             │
+│ *    file      TEXT  Path to an attestation JSON produced by `attest sign    │
+│                      --json`.                                                │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --secret        <str>  Shared secret for HMAC verification (else             │
-│                        ONMC_ATTEST_SECRET).                                  │
-│ --json                 Emit the verify result as JSON.                       │
-│ --help                 Show this message and exit.                           │
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the verify result as JSON.                        │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc audit`
 
 ```text
-Usage: onmc audit [OPTIONS] [path]
+Usage: onmc audit [OPTIONS] [PATH]
 
  Scan agent configuration for security risks and emit a scored report.
 
@@ -689,56 +689,56 @@ Usage: onmc audit [OPTIONS] [path]
    viewer, and other SAST integrations.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      <path>  Repo root to scan.  Defaults to the current directory.   │
+│   [path]      PATH  Repo root to scan.  Defaults to the current directory.   │
 │                     The directory does not need to be an initialised ONMC    │
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                                Emit the full AuditReport as JSON to   │
-│                                       stdout.                                │
-│ --format                       <str>  Output format.  One of: text (default  │
-│                                       Rich scorecard), json (AuditReport     │
-│                                       JSON), sarif (SARIF 2.1.0 for GitHub   │
-│                                       code-scanning and VS Code SARIF        │
-│                                       viewer).  When --format is given it    │
-│                                       takes precedence over the legacy       │
-│                                       --json flag.                           │
-│                                       [default: text]                        │
-│ --fail-on                      <str>  Exit non-zero when at least one        │
-│                                       finding at this severity or higher     │
-│                                       exists.  One of: critical, high,       │
-│                                       medium, low, info.  Default: high.     │
-│                                       [default: high]                        │
-│ --semgrep     --no-semgrep            Also run semgrep static analysis and   │
-│                                       fold its findings into the report.     │
-│                                       Requires the 'semgrep' binary on PATH. │
-│                                       When the binary is absent this flag is │
-│                                       silently ignored — no pip dependency   │
-│                                       is added.  Default: off.               │
-│                                       [default: no-semgrep]                  │
-│ --gitleaks    --no-gitleaks           Also run gitleaks secret scanning and  │
-│                                       fold detected secrets into the report. │
-│                                       Requires the 'gitleaks' binary on      │
-│                                       PATH.  When the binary is absent this  │
-│                                       flag is silently ignored — no pip      │
-│                                       dependency is added.  Default: off.    │
-│                                       [default: no-gitleaks]                 │
-│ --osv         --no-osv                Also run osv-scanner                   │
-│                                       dependency-vulnerability scanning and  │
-│                                       fold detected CVEs into the report.    │
-│                                       Requires the 'osv-scanner' binary on   │
-│                                       PATH.  When the binary is absent this  │
-│                                       flag is silently ignored — no pip      │
-│                                       dependency is added.  Default: off.    │
-│                                       [default: no-osv]                      │
-│ --help                                Show this message and exit.            │
+│ --json                               Emit the full AuditReport as JSON to    │
+│                                      stdout.                                 │
+│ --format                       TEXT  Output format.  One of: text (default   │
+│                                      Rich scorecard), json (AuditReport      │
+│                                      JSON), sarif (SARIF 2.1.0 for GitHub    │
+│                                      code-scanning and VS Code SARIF         │
+│                                      viewer).  When --format is given it     │
+│                                      takes precedence over the legacy --json │
+│                                      flag.                                   │
+│                                      [default: text]                         │
+│ --fail-on                      TEXT  Exit non-zero when at least one finding │
+│                                      at this severity or higher exists.  One │
+│                                      of: critical, high, medium, low, info.  │
+│                                      Default: high.                          │
+│                                      [default: high]                         │
+│ --semgrep     --no-semgrep           Also run semgrep static analysis and    │
+│                                      fold its findings into the report.      │
+│                                      Requires the 'semgrep' binary on PATH.  │
+│                                      When the binary is absent this flag is  │
+│                                      silently ignored — no pip dependency is │
+│                                      added.  Default: off.                   │
+│                                      [default: no-semgrep]                   │
+│ --gitleaks    --no-gitleaks          Also run gitleaks secret scanning and   │
+│                                      fold detected secrets into the report.  │
+│                                      Requires the 'gitleaks' binary on PATH. │
+│                                      When the binary is absent this flag is  │
+│                                      silently ignored — no pip dependency is │
+│                                      added.  Default: off.                   │
+│                                      [default: no-gitleaks]                  │
+│ --osv         --no-osv               Also run osv-scanner                    │
+│                                      dependency-vulnerability scanning and   │
+│                                      fold detected CVEs into the report.     │
+│                                      Requires the 'osv-scanner' binary on    │
+│                                      PATH.  When the binary is absent this   │
+│                                      flag is silently ignored — no pip       │
+│                                      dependency is added.  Default: off.     │
+│                                      [default: no-osv]                       │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc autopilot`
 
 ```text
-Usage: onmc autopilot [OPTIONS] {goal}
+Usage: onmc autopilot [OPTIONS] GOAL
 
  Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on a goal.
 
@@ -769,10 +769,10 @@ Usage: onmc autopilot [OPTIONS] {goal}
  onmc autopilot "fix CI" --isolate                  # safe worktree run
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  Goal for the autopilot run. [required]                 │
+│ *    goal      TEXT  Goal for the autopilot run. [required]                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --agent                               <str>               Agent CLI to use:  │
+│ --agent                               TEXT                Agent CLI to use:  │
 │                                                           claude (default),  │
 │                                                           codex, or          │
 │                                                           opencode.          │
@@ -786,28 +786,28 @@ Usage: onmc autopilot [OPTIONS] {goal}
 │                                                           subprocess.  No    │
 │                                                           spend, no memory   │
 │                                                           writes.            │
-│ --max-iterations                      <int range> [x>=1]  Maximum loop       │
-│                                                           iterations.        │
+│ --max-iterations                      INTEGER RANGE       Maximum loop       │
+│                                       [x>=1]              iterations.        │
 │                                                           [default: 10]      │
-│ --budget-tokens                       <int range> [x>=1]  Stop when total    │
-│                                                           tokens exceed this │
+│ --budget-tokens                       INTEGER RANGE       Stop when total    │
+│                                       [x>=1]              tokens exceed this │
 │                                                           budget.            │
-│ --max-cost-usd                        <float range>       Stop before the    │
+│ --max-cost-usd                        FLOAT RANGE         Stop before the    │
 │                                       [x>=0.0]            next iteration     │
 │                                                           when cumulative    │
 │                                                           cost (USD) exceeds │
 │                                                           this value.        │
-│ --max-wall-seconds                    <int range> [x>=1]  Stop before the    │
-│                                                           next iteration     │
+│ --max-wall-seconds                    INTEGER RANGE       Stop before the    │
+│                                       [x>=1]              next iteration     │
 │                                                           when elapsed       │
 │                                                           wall-clock seconds │
 │                                                           exceed this.       │
-│ --verify                              <str>               Shell command run  │
+│ --verify                              TEXT                Shell command run  │
 │                                                           after each         │
 │                                                           iteration to       │
 │                                                           verify success.    │
 │                                                           [default: pytest]  │
-│ --plan-with                           <str>               Model name for the │
+│ --plan-with                           TEXT                Model name for the │
 │                                                           PLAN step          │
 │                                                           (expensive model). │
 │                                                           When set, a        │
@@ -823,7 +823,7 @@ Usage: onmc autopilot [OPTIONS] {goal}
 │                                                           memory.  Example:  │
 │                                                           --plan-with        │
 │                                                           claude-opus-4-5    │
-│ --execute-with                        <str>               Model name for the │
+│ --execute-with                        TEXT                Model name for the │
 │                                                           ACT (execute) step │
 │                                                           (cheap model).     │
 │                                                           When set, the loop │
@@ -868,7 +868,7 @@ Usage: onmc autoroute [OPTIONS] COMMAND [ARGS]...
 ## `onmc autoroute suggest`
 
 ```text
-Usage: onmc autoroute suggest [OPTIONS] {goal}
+Usage: onmc autoroute suggest [OPTIONS] GOAL
 
  Recommend the historically-best model for GOAL from verified receipts.
 
@@ -878,20 +878,20 @@ Usage: onmc autoroute suggest [OPTIONS] {goal}
  confidence 0 (exit 0) — never fabricates a recommendation.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  The goal/task to recommend a model for. [required]     │
+│ *    goal      TEXT  The goal/task to recommend a model for. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --default        <str>  Model to fall back to when history is thin.          │
-│                         [default: sonnet]                                    │
-│ --json                  Emit the suggestion as JSON.                         │
-│ --help                  Show this message and exit.                          │
+│ --default        TEXT  Model to fall back to when history is thin.           │
+│                        [default: sonnet]                                     │
+│ --json                 Emit the suggestion as JSON.                          │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc badge`
 
 ```text
-Usage: onmc badge [OPTIONS] {receipt_or_swarm_id}
+Usage: onmc badge [OPTIONS] RECEIPT_OR_SWARM_ID
 
  Render a "No-Slop verified" proof-of-work badge from an onmc receipt.
 
@@ -905,16 +905,16 @@ Usage: onmc badge [OPTIONS] {receipt_or_swarm_id}
  on PR #N via ``gh``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    receipt_or_swarm_id      <str>  Path to a receipt JSON, or a swarm id   │
-│                                      (resolved via its manifest).            │
-│                                      [required]                              │
+│ *    receipt_or_swarm_id      TEXT  Path to a receipt JSON, or a swarm id    │
+│                                     (resolved via its manifest).             │
+│                                     [required]                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --unit        <str>  Unit id to select when a swarm id is given.             │
-│ --json               Emit the shields.io endpoint payload as JSON.           │
-│ --post        <int>  PR number to post the proof-of-work comment to (via gh  │
-│                      pr comment).                                            │
-│ --help               Show this message and exit.                             │
+│ --unit        TEXT     Unit id to select when a swarm id is given.           │
+│ --json                 Emit the shields.io endpoint payload as JSON.         │
+│ --post        INTEGER  PR number to post the proof-of-work comment to (via   │
+│                        gh pr comment).                                       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -965,11 +965,11 @@ Usage: onmc benchmark [OPTIONS]
  Use --json for machine-readable output.  --runs controls timing precision.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --runs        <int>  Number of timing repetitions for timed benchmarks       │
-│                      (default: 20).                                          │
-│                      [default: 20]                                           │
-│ --json               Print machine-readable JSON to stdout.                  │
-│ --help               Show this message and exit.                             │
+│ --runs        INTEGER  Number of timing repetitions for timed benchmarks     │
+│                        (default: 20).                                        │
+│                        [default: 20]                                         │
+│ --json                 Print machine-readable JSON to stdout.                │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -993,30 +993,29 @@ Usage: onmc blackboard [OPTIONS] COMMAND [ARGS]...
 ## `onmc blackboard post`
 
 ```text
-Usage: onmc blackboard post [OPTIONS] {swarm_id}
+Usage: onmc blackboard post [OPTIONS] SWARM_ID
 
  Append one entry to a swarm's blackboard.
 
  The board is append-only: this never rewrites or removes prior entries.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm id to post to. [required]                    │
+│ *    swarm_id      TEXT  Swarm id to post to. [required]                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --note        <str>  The note text to post. [required]                    │
-│    --unit        <str>  Posting unit id (or a human handle).                 │
-│                         [default: human]                                     │
-│    --kind        <str>  Entry kind: one of finding, claim, warning,          │
-│                         question, done.                                      │
-│                         [default: finding]                                   │
-│    --help               Show this message and exit.                          │
+│ *  --note        TEXT  The note text to post. [required]                     │
+│    --unit        TEXT  Posting unit id (or a human handle). [default: human] │
+│    --kind        TEXT  Entry kind: one of finding, claim, warning, question, │
+│                        done.                                                 │
+│                        [default: finding]                                    │
+│    --help              Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc blackboard show`
 
 ```text
-Usage: onmc blackboard show [OPTIONS] [swarm_id]
+Usage: onmc blackboard show [OPTIONS] [SWARM_ID]
 
  Render a swarm's blackboard in post order.
 
@@ -1025,23 +1024,23 @@ Usage: onmc blackboard show [OPTIONS] [swarm_id]
  prints an honest empty-state message rather than an error.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm id to show. Omit to use the most recently       │
-│                        modified swarm.                                       │
+│   [swarm_id]      TEXT  Swarm id to show. Omit to use the most recently      │
+│                         modified swarm.                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --kind        <str>  Filter to one kind: one of finding, claim, warning,     │
-│                      question, done.                                         │
-│ --unit        <str>  Filter to entries posted by this unit id.               │
-│ --json               Emit the raw entries as JSON instead of a rendered      │
-│                      board.                                                  │
-│ --help               Show this message and exit.                             │
+│ --kind        TEXT  Filter to one kind: one of finding, claim, warning,      │
+│                     question, done.                                          │
+│ --unit        TEXT  Filter to entries posted by this unit id.                │
+│ --json              Emit the raw entries as JSON instead of a rendered       │
+│                     board.                                                   │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc blame`
 
 ```text
-Usage: onmc blame [OPTIONS] {path}
+Usage: onmc blame [OPTIONS] PATH
 
  Git blame for knowledge: map a file's symbols to the memories that govern
  them.
@@ -1054,8 +1053,8 @@ Usage: onmc blame [OPTIONS] {path}
  Supported: .py, .ts, .tsx, .js, .jsx, .mjs, .cjs, .md, .mdx.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    path      <str>  File path to blame (repo-relative or absolute).        │
-│                       [required]                                             │
+│ *    path      TEXT  File path to blame (repo-relative or absolute).         │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --terse          Emit compact terse output (overrides ONMC_TERSE env var).   │
@@ -1078,11 +1077,11 @@ Usage: onmc bottleneck [OPTIONS]
  receipt set prints an honest "no agent runs" note and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --top         <int>  Number of entries to show per ranked list. Defaults to  │
-│                      5.                                                      │
-│                      [default: 5]                                            │
-│ --json               Emit the bottleneck report as JSON.                     │
-│ --help               Show this message and exit.                             │
+│ --top         INTEGER  Number of entries to show per ranked list. Defaults   │
+│                        to 5.                                                 │
+│                        [default: 5]                                          │
+│ --json                 Emit the bottleneck report as JSON.                   │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1151,7 +1150,7 @@ Usage: onmc bounty board [OPTIONS]
 ## `onmc bounty claim`
 
 ```text
-Usage: onmc bounty claim [OPTIONS] {bounty_id}
+Usage: onmc bounty claim [OPTIONS] BOUNTY_ID
 
  Claim a bounty — mark it resolved and award the payout.
 
@@ -1165,7 +1164,7 @@ Usage: onmc bounty claim [OPTIONS] {bounty_id}
      onmc bounty claim abc123de --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    bounty_id      <str>  Bounty ID to claim. [required]                    │
+│ *    bounty_id      TEXT  Bounty ID to claim. [required]                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the claim result as a JSON envelope.                    │
@@ -1176,7 +1175,7 @@ Usage: onmc bounty claim [OPTIONS] {bounty_id}
 ## `onmc bounty forfeit`
 
 ```text
-Usage: onmc bounty forfeit [OPTIONS] {bounty_id}
+Usage: onmc bounty forfeit [OPTIONS] BOUNTY_ID
 
  Forfeit a bounty — close it unpaid.
 
@@ -1190,11 +1189,11 @@ Usage: onmc bounty forfeit [OPTIONS] {bounty_id}
      onmc bounty forfeit abc123de --reason "task no longer relevant"
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    bounty_id      <str>  Bounty ID to forfeit. [required]                  │
+│ *    bounty_id      TEXT  Bounty ID to forfeit. [required]                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --reason  -r      <str>  Optional rationale for forfeiting.                  │
-│ --help                   Show this message and exit.                         │
+│ --reason  -r      TEXT  Optional rationale for forfeiting.                   │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1223,7 +1222,7 @@ Usage: onmc bounty list [OPTIONS]
 ## `onmc bounty post`
 
 ```text
-Usage: onmc bounty post [OPTIONS] {task}
+Usage: onmc bounty post [OPTIONS] TASK
 
  Post a new bounty with a points wager on a task.
 
@@ -1239,16 +1238,16 @@ Usage: onmc bounty post [OPTIONS] {task}
      onmc bounty post "update README" --reward 20 --difficulty easy --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task      <str>  Task description for the bounty. [required]            │
+│ *    task      TEXT  Task description for the bounty. [required]             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --reward      -r      <int>  Base reward points to wager (> 0).           │
-│                                 [required]                                   │
-│    --difficulty  -d      <str>  Difficulty multiplier: easy (1×), med (2×),  │
-│                                 hard (3×).                                   │
-│                                 [default: med]                               │
-│    --json                       Emit the new bounty as a JSON envelope.      │
-│    --help                       Show this message and exit.                  │
+│ *  --reward      -r      INTEGER  Base reward points to wager (> 0).         │
+│                                   [required]                                 │
+│    --difficulty  -d      TEXT     Difficulty multiplier: easy (1×), med      │
+│                                   (2×), hard (3×).                           │
+│                                   [default: med]                             │
+│    --json                         Emit the new bounty as a JSON envelope.    │
+│    --help                         Show this message and exit.                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1260,14 +1259,14 @@ Usage: onmc brief [OPTIONS]
  Compile a task-specific context brief.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task              <str>                   Task description to compile a │
+│ *  --task              TEXT                    Task description to compile a │
 │                                                brief for.                    │
 │                                                [required]                    │
 │    --no-llm                                    Skip the optional LLM         │
 │                                                reranking pass.               │
-│    --style             <full|compact|caveman>  Brief rendering style.        │
+│    --style             [full|compact|caveman]  Brief rendering style.        │
 │                                                [default: full]               │
-│    --max-tokens        <int range> [x>=1]      Trim markdown output to a     │
+│    --max-tokens        INTEGER RANGE [x>=1]    Trim markdown output to a     │
 │                                                token budget.                 │
 │    --stdout                                    Print markdown only,          │
 │                                                optimized for agent paste     │
@@ -1329,16 +1328,16 @@ Usage: onmc budget set [OPTIONS]
  the same values twice yields an identical file.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --cap-usd           <float>  Hard spend cap in USD. Use a negative value  │
-│                                 to disable.                                  │
-│                                 [required]                                   │
-│    --window            <str>    Rolling window to sum spend over: day | week │
-│                                 | all.                                       │
-│                                 [default: day]                               │
-│    --warn-ratio        <float>  Fraction of the cap at which to warn         │
-│                                 (0.0-1.0). Default 0.8.                      │
-│                                 [default: 0.8]                               │
-│    --help                       Show this message and exit.                  │
+│ *  --cap-usd           FLOAT  Hard spend cap in USD. Use a negative value to │
+│                               disable.                                       │
+│                               [required]                                     │
+│    --window            TEXT   Rolling window to sum spend over: day | week | │
+│                               all.                                           │
+│                               [default: day]                                 │
+│    --warn-ratio        FLOAT  Fraction of the cap at which to warn           │
+│                               (0.0-1.0). Default 0.8.                        │
+│                               [default: 0.8]                                 │
+│    --help                     Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1375,9 +1374,9 @@ Usage: onmc capture [OPTIONS]
  runs automatically on SessionEnd (set ONMC_AUTOCAPTURE=0 to disable).
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --session           <str>   Session ID to capture (default: most recent).    │
-│ --transcript        <path>  Explicit path to a .jsonl transcript file.       │
-│ --help                      Show this message and exit.                      │
+│ --session           TEXT  Session ID to capture (default: most recent).      │
+│ --transcript        PATH  Explicit path to a .jsonl transcript file.         │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1399,15 +1398,15 @@ Usage: onmc check [OPTIONS]
  pre-commit hook (appends to any existing hook; never clobbers it).
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --staged                     Check git-staged files (default).               │
-│                              [default: True]                                 │
-│ --file                <str>  Explicit file paths to check (repeat for        │
-│                              multiple).                                      │
-│ --base                <str>  Diff against this git ref instead of staged     │
-│                              files.                                          │
-│ --strict                     Exit nonzero when warn-level findings exist.    │
-│ --install-hook               Install onmc check as a git pre-commit hook.    │
-│ --help                       Show this message and exit.                     │
+│ --staged                    Check git-staged files (default).                │
+│                             [default: True]                                  │
+│ --file                TEXT  Explicit file paths to check (repeat for         │
+│                             multiple).                                       │
+│ --base                TEXT  Diff against this git ref instead of staged      │
+│                             files.                                           │
+│ --strict                    Exit nonzero when warn-level findings exist.     │
+│ --install-hook              Install onmc check as a git pre-commit hook.     │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1432,54 +1431,54 @@ Usage: onmc claim [OPTIONS] COMMAND [ARGS]...
 ## `onmc claim acquire`
 
 ```text
-Usage: onmc claim acquire [OPTIONS] {owner} {paths}...
+Usage: onmc claim acquire [OPTIONS] OWNER PATHS...
 
  Acquire file/path leases for an owner.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    owner      <str>  Agent or process claiming the paths. [required]       │
-│ *    paths      <str>  One or more file paths to claim. [required]           │
+│ *    owner         TEXT  Agent or process claiming the paths. [required]     │
+│ *    paths...      TEXT  One or more file paths to claim. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --ttl-seconds        <int range> [x>=1]  Lease duration in seconds.          │
-│                                          [default: 3600]                     │
-│ --json                                   Emit machine-readable JSON to       │
-│                                          stdout.                             │
-│ --help                                   Show this message and exit.         │
+│ --ttl-seconds        INTEGER RANGE [x>=1]  Lease duration in seconds.        │
+│                                            [default: 3600]                   │
+│ --json                                     Emit machine-readable JSON to     │
+│                                            stdout.                           │
+│ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc claim check`
 
 ```text
-Usage: onmc claim check [OPTIONS] {paths}...
+Usage: onmc claim check [OPTIONS] PATHS...
 
  Check whether paths are free to claim.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      <str>  One or more file paths to check. [required]           │
+│ *    paths...      TEXT  One or more file paths to check. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --owner        <str>  Allow claims already held by this owner.               │
-│ --json                Emit machine-readable JSON to stdout.                  │
-│ --help                Show this message and exit.                            │
+│ --owner        TEXT  Allow claims already held by this owner.                │
+│ --json               Emit machine-readable JSON to stdout.                   │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc claim release`
 
 ```text
-Usage: onmc claim release [OPTIONS] {owner}
+Usage: onmc claim release [OPTIONS] OWNER
 
  Release one path or all active paths for an owner.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    owner      <str>  Owner whose claim(s) should be released. [required]   │
+│ *    owner      TEXT  Owner whose claim(s) should be released. [required]    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --path        <str>  Release only this path for the owner.                   │
-│ --json               Emit machine-readable JSON to stdout.                   │
-│ --help               Show this message and exit.                             │
+│ --path        TEXT  Release only this path for the owner.                    │
+│ --json              Emit machine-readable JSON to stdout.                    │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1598,7 +1597,7 @@ Usage: onmc coach cheer [OPTIONS]
 ## `onmc coach react`
 
 ```text
-Usage: onmc coach react [OPTIONS] {event}
+Usage: onmc coach react [OPTIONS] EVENT
 
  React to a coding-session event with a quip + updated streak.
 
@@ -1615,14 +1614,14 @@ Usage: onmc coach react [OPTIONS] {event}
      onmc coach react build_break --tone dry --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event      <str>  Event kind to react to. Recognised: test_pass,        │
-│                        test_fail, pr_merged, build_break, build_pass,        │
-│                        commit, revert, lint_pass, lint_fail, deploy_pass,    │
-│                        deploy_fail, review_approved, review_rejected.        │
-│                        [required]                                            │
+│ *    event      TEXT  Event kind to react to. Recognised: test_pass,         │
+│                       test_fail, pr_merged, build_break, build_pass, commit, │
+│                       revert, lint_pass, lint_fail, deploy_pass,             │
+│                       deploy_fail, review_approved, review_rejected.         │
+│                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --tone             <hype|roast|dry>  Commentary personality: hype, roast, or │
+│ --tone             [hype|roast|dry]  Commentary personality: hype, roast, or │
 │                                      dry.                                    │
 │                                      [default: hype]                         │
 │ --from-file        FILE              Read the event kind from the last word  │
@@ -1690,19 +1689,19 @@ Usage: onmc codegraph build [OPTIONS]
 ## `onmc codegraph context`
 
 ```text
-Usage: onmc codegraph context [OPTIONS] {goal}
+Usage: onmc codegraph context [OPTIONS] GOAL
 
  Select a small, bounded set of files relevant to a goal.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  Goal or task description to select relevant files for. │
-│                       [required]                                             │
+│ *    goal      TEXT  Goal or task description to select relevant files for.  │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --budget        <int range> [x>=1]  Maximum number of files to return.       │
-│                                     [default: 8]                             │
-│ --json                              Emit the selection as JSON.              │
-│ --help                              Show this message and exit.              │
+│ --budget        INTEGER RANGE [x>=1]  Maximum number of files to return.     │
+│                                       [default: 8]                           │
+│ --json                                Emit the selection as JSON.            │
+│ --help                                Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1730,24 +1729,23 @@ Usage: onmc codegraph coverage [OPTIONS]
      onmc codegraph coverage --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                Emit the coverage report as JSON.                      │
-│ --repo        <path>  Repository root (defaults to the current git repo      │
-│                       root).                                                 │
-│ --help                Show this message and exit.                            │
+│ --json              Emit the coverage report as JSON.                        │
+│ --repo        PATH  Repository root (defaults to the current git repo root). │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc codegraph neighbors`
 
 ```text
-Usage: onmc codegraph neighbors [OPTIONS] {target}
+Usage: onmc codegraph neighbors [OPTIONS] TARGET
 
  Show the blast radius (importers + dependents + tests) of a file or symbol.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    target      <str>  File path or symbol name to compute the blast radius │
-│                         for.                                                 │
-│                         [required]                                           │
+│ *    target      TEXT  File path or symbol name to compute the blast radius  │
+│                        for.                                                  │
+│                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit neighbors as JSON.                                      │
@@ -1763,13 +1761,13 @@ Usage: onmc codegraph summary [OPTIONS]
  Generate a compact markdown codegraph for token-efficient navigation.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --max-files          <int range> [x>=1]  Maximum hot files to include.       │
-│                                          [default: 40]                       │
-│ --max-dirs           <int range> [x>=1]  Maximum directories to include.     │
-│                                          [default: 12]                       │
-│ --output     -o      <path>              Write the markdown codegraph to     │
-│                                          this path.                          │
-│ --help                                   Show this message and exit.         │
+│ --max-files          INTEGER RANGE [x>=1]  Maximum hot files to include.     │
+│                                            [default: 40]                     │
+│ --max-dirs           INTEGER RANGE [x>=1]  Maximum directories to include.   │
+│                                            [default: 12]                     │
+│ --output     -o      PATH                  Write the markdown codegraph to   │
+│                                            this path.                        │
+│ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1814,17 +1812,17 @@ Usage: onmc codeindex build [OPTIONS]
      onmc codeindex build --repo /path/to/project
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                   Emit stats as JSON.                                 │
-│ --repo           <path>  Repository root.                                    │
-│ --quiet  -q              Suppress progress output.                           │
-│ --help                   Show this message and exit.                         │
+│ --json                 Emit stats as JSON.                                   │
+│ --repo           PATH  Repository root.                                      │
+│ --quiet  -q            Suppress progress output.                             │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc codeindex query`
 
 ```text
-Usage: onmc codeindex query [OPTIONS] {symbol}
+Usage: onmc codeindex query [OPTIONS] SYMBOL
 
  Look up a symbol by name and print its indexed chunks.
 
@@ -1842,14 +1840,14 @@ Usage: onmc codeindex query [OPTIONS] {symbol}
      onmc codeindex query MyClass.method --exact
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    symbol      <str>  Symbol name (exact) or substring to search.          │
-│                         [required]                                           │
+│ *    symbol      TEXT  Symbol name (exact) or substring to search.           │
+│                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                 Emit results as JSON.                                 │
-│ --exact                Exact symbol match (default: substring).              │
-│ --repo         <path>  Repository root.                                      │
-│ --help                 Show this message and exit.                           │
+│ --json               Emit results as JSON.                                   │
+│ --exact              Exact symbol match (default: substring).                │
+│ --repo         PATH  Repository root.                                        │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1871,16 +1869,16 @@ Usage: onmc codeindex stats [OPTIONS]
      onmc codeindex stats --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                Emit stats as JSON.                                    │
-│ --repo        <path>  Repository root.                                       │
-│ --help                Show this message and exit.                            │
+│ --json              Emit stats as JSON.                                      │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc codeindex update`
 
 ```text
-Usage: onmc codeindex update [OPTIONS] {changed_path}
+Usage: onmc codeindex update [OPTIONS] CHANGED_PATH
 
  Incrementally update one file in the code index.
 
@@ -1896,13 +1894,13 @@ Usage: onmc codeindex update [OPTIONS] {changed_path}
      onmc codeindex update src/cache.py --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    changed_path      <str>  Repo-relative path of the file to re-index.    │
-│                               [required]                                     │
+│ *    changed_path      TEXT  Repo-relative path of the file to re-index.     │
+│                              [required]                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                Emit result as JSON.                                   │
-│ --repo        <path>  Repository root.                                       │
-│ --help                Show this message and exit.                            │
+│ --json              Emit result as JSON.                                     │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1942,7 +1940,7 @@ Usage: onmc commands [OPTIONS]
 ## `onmc compare`
 
 ```text
-Usage: onmc compare [OPTIONS] {swarm_id_a} [swarm_id_b]
+Usage: onmc compare [OPTIONS] SWARM_ID_A [SWARM_ID_B]
 
  Side-by-side, read-only comparison of two swarm runs.
 
@@ -1954,9 +1952,9 @@ Usage: onmc compare [OPTIONS] {swarm_id_a} [swarm_id_b]
  instead of crashing.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id_a      <str>  First swarm id to compare. [required]            │
-│      swarm_id_b      <str>  Second swarm id to compare. Omit to use the most │
-│                             recent OTHER swarm.                              │
+│ *    swarm_id_a        TEXT  First swarm id to compare. [required]           │
+│      [swarm_id_b]      TEXT  Second swarm id to compare. Omit to use the     │
+│                              most recent OTHER swarm.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured comparison as JSON.                      │
@@ -1996,13 +1994,13 @@ Usage: onmc connect hermes [OPTIONS]
  rather than failing.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --from               <path>  Hermes MEMORY.md / USER.md file or directory │
-│                                 to mirror.                                   │
-│                                 [required]                                   │
-│    --dry     --apply            Dry mode: report the delta without writing   │
-│                                 (default). --apply writes.                   │
-│                                 [default: dry]                               │
-│    --help                       Show this message and exit.                  │
+│ *  --from               PATH  Hermes MEMORY.md / USER.md file or directory   │
+│                               to mirror.                                     │
+│                               [required]                                     │
+│    --dry     --apply          Dry mode: report the delta without writing     │
+│                               (default). --apply writes.                     │
+│                               [default: dry]                                 │
+│    --help                     Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2019,20 +2017,20 @@ Usage: onmc connect openclaw [OPTIONS]
  spends money or launches agents.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --file                <path>  Path to a JSON file holding one OpenClaw    │
-│                                  event envelope.                             │
-│                                  [required]                                  │
-│    --dry     --no-dry            Dry mode: decide but never spawn a live     │
-│                                  swarm (default).                            │
-│                                  [default: dry]                              │
-│    --help                        Show this message and exit.                 │
+│ *  --file                PATH  Path to a JSON file holding one OpenClaw      │
+│                                event envelope.                               │
+│                                [required]                                    │
+│    --dry     --no-dry          Dry mode: decide but never spawn a live swarm │
+│                                (default).                                    │
+│                                [default: dry]                                │
+│    --help                      Show this message and exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc connect test-sink`
 
 ```text
-Usage: onmc connect test-sink [OPTIONS] {kind}
+Usage: onmc connect test-sink [OPTIONS] KIND
 
  Format (and optionally send) a test message via a connect sink (JSON).
 
@@ -2041,14 +2039,14 @@ Usage: onmc connect test-sink [OPTIONS] {kind}
  stdlib transport (errors are swallowed by the sink, never raised).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    kind      <str>  Which sink to test: 'telegram' or 'openclaw'.          │
-│                       [required]                                             │
+│ *    kind      TEXT  Which sink to test: 'telegram' or 'openclaw'.           │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --to             <str>  Destination URL. Omit for a dry preview of the       │
-│                         payload (no network).                                │
-│ --message        <str>  Test message body. [default: onmc connect test]      │
-│ --help                  Show this message and exit.                          │
+│ --to             TEXT  Destination URL. Omit for a dry preview of the        │
+│                        payload (no network).                                 │
+│ --message        TEXT  Test message body. [default: onmc connect test]       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2069,7 +2067,7 @@ Usage: onmc consolidate [OPTIONS]
 ## `onmc context`
 
 ```text
-Usage: onmc context [OPTIONS] {file}
+Usage: onmc context [OPTIONS] FILE
 
  Show codegraph blast radius and relevant memory for a file.
 
@@ -2093,16 +2091,17 @@ Usage: onmc context [OPTIONS] {file}
      onmc context src/mypackage/cache.py --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    file      <str>  Repo-relative or absolute path of the file to inspect  │
-│                       (e.g. src/mypackage/cache.py).                         │
-│                       [required]                                             │
+│ *    file      TEXT  Repo-relative or absolute path of the file to inspect   │
+│                      (e.g. src/mypackage/cache.py).                          │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit        <int>  Maximum number of memory entries to show (default 8).  │
-│                       [default: 8]                                           │
-│ --json                Emit machine-readable JSON:                            │
-│                       {"kind":"context","file":str,"blast_radius":{...},"me… │
-│ --help                Show this message and exit.                            │
+│ --limit        INTEGER  Maximum number of memory entries to show (default    │
+│                         8).                                                  │
+│                         [default: 8]                                         │
+│ --json                  Emit machine-readable JSON:                          │
+│                         {"kind":"context","file":str,"blast_radius":{...},"… │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2124,7 +2123,7 @@ Usage: onmc contract [OPTIONS] COMMAND [ARGS]...
 ## `onmc contract init`
 
 ```text
-Usage: onmc contract init [OPTIONS] {spec}
+Usage: onmc contract init [OPTIONS] SPEC
 
  Emit a failing pytest skeleton + a stub module from a contract spec.
 
@@ -2132,14 +2131,14 @@ Usage: onmc contract init [OPTIONS] {spec}
  construction. Re-running with the same spec is idempotent.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    spec      <path>  Path to the JSON contract spec file. [required]       │
+│ *    spec      PATH  Path to the JSON contract spec file. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out          <path>  Directory the test file is written under.             │
-│                        [default: tests]                                      │
-│ --force                Overwrite existing test/stub files.                   │
-│ --json                 Emit a machine-readable JSON result.                  │
-│ --help                 Show this message and exit.                           │
+│ --out          PATH  Directory the test file is written under.               │
+│                      [default: tests]                                        │
+│ --force              Overwrite existing test/stub files.                     │
+│ --json               Emit a machine-readable JSON result.                    │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2210,10 +2209,10 @@ Usage: onmc cost [OPTIONS]
  "no agent runs" note and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --days        <int>  Trailing window size in days. Defaults to 30.           │
-│                      [default: 30]                                           │
-│ --json               Emit the cost report as JSON.                           │
-│ --help               Show this message and exit.                             │
+│ --days        INTEGER  Trailing window size in days. Defaults to 30.         │
+│                        [default: 30]                                         │
+│ --json                 Emit the cost report as JSON.                         │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2270,7 +2269,7 @@ Usage: onmc crews [OPTIONS] COMMAND [ARGS]...
 ## `onmc crews export`
 
 ```text
-Usage: onmc crews export [OPTIONS] {PLAN}
+Usage: onmc crews export [OPTIONS] PLAN
 
  Export an onmc plan or swarm manifest as a CrewAI crew specification.
 
@@ -2287,9 +2286,9 @@ Usage: onmc crews export [OPTIONS] {PLAN}
      onmc crews export plan.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    PLAN      <path>  Path to an onmc mission-plan JSON file                │
-│                        (MissionPlan.to_dict() shape) or a swarm manifest.    │
-│                        [required]                                            │
+│ *    PLAN      PATH  Path to an onmc mission-plan JSON file                  │
+│                      (MissionPlan.to_dict() shape) or a swarm manifest.      │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --out         FILE  Write the crew spec to FILE instead of stdout.           │
@@ -2302,7 +2301,7 @@ Usage: onmc crews export [OPTIONS] {PLAN}
 ## `onmc crews run`
 
 ```text
-Usage: onmc crews run [OPTIONS] {SPEC}
+Usage: onmc crews run [OPTIONS] SPEC
 
  Run a crew specification using the crewai backend under an onmc receipt.
 
@@ -2320,9 +2319,9 @@ Usage: onmc crews run [OPTIONS] {SPEC}
      onmc crews run crew.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    SPEC      <path>  Path to a crew specification JSON file (output of     │
-│                        'onmc crews export').                                 │
-│                        [required]                                            │
+│ *    SPEC      PATH  Path to a crew specification JSON file (output of 'onmc │
+│                      crews export').                                         │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the run receipt as JSON instead of a human-readable     │
@@ -2351,7 +2350,7 @@ Usage: onmc crossrepo [OPTIONS] COMMAND [ARGS]...
 ## `onmc crossrepo recall`
 
 ```text
-Usage: onmc crossrepo recall [OPTIONS] {query} [paths]...
+Usage: onmc crossrepo recall [OPTIONS] QUERY [PATHS]...
 
  Search every repo's ``.agent-memory/`` export for a query, attributed by repo.
 
@@ -2360,20 +2359,21 @@ Usage: onmc crossrepo recall [OPTIONS] {query} [paths]...
  repo. Pass repos via ``--repo`` (repeatable) and/or positional paths.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    query      <str>  Search query for federated memory recall. [required]  │
-│      paths      <str>  Additional repo paths to search (positional).         │
+│ *    query           TEXT  Search query for federated memory recall.         │
+│                            [required]                                        │
+│      [paths]...      TEXT  Additional repo paths to search (positional).     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --repo  -r      <str>  Repo path to search (repeatable).                     │
-│ --json                 Emit recall hits as JSON.                             │
-│ --help                 Show this message and exit.                           │
+│ --repo  -r      TEXT  Repo path to search (repeatable).                      │
+│ --json                Emit recall hits as JSON.                              │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc crossrepo scan`
 
 ```text
-Usage: onmc crossrepo scan [OPTIONS] {paths}...
+Usage: onmc crossrepo scan [OPTIONS] PATHS...
 
  Map where a change in one repo ripples into its siblings.
 
@@ -2382,9 +2382,9 @@ Usage: onmc crossrepo scan [OPTIONS] {paths}...
  offline: same repos always yield the same map.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      <str>  Sibling repo paths to scan for the cross-repo impact  │
-│                        map.                                                  │
-│                        [required]                                            │
+│ *    paths...      TEXT  Sibling repo paths to scan for the cross-repo       │
+│                          impact map.                                         │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the impact map as JSON.                                 │
@@ -2429,10 +2429,10 @@ Usage: onmc daily checkin [OPTIONS]
      onmc daily checkin --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --date        <str>  Date to mark active (YYYY-MM-DD). Defaults to today     │
-│                      (UTC).                                                  │
-│ --json               Emit the check-in result as JSON.                       │
-│ --help               Show this message and exit.                             │
+│ --date        TEXT  Date to mark active (YYYY-MM-DD). Defaults to today      │
+│                     (UTC).                                                   │
+│ --json              Emit the check-in result as JSON.                        │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2456,9 +2456,10 @@ Usage: onmc daily grid [OPTIONS]
      onmc daily grid --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --weeks  -w      <int>  Number of weeks to show (default 12). [default: 12]  │
-│ --json                  Emit the grid as JSON.                               │
-│ --help                  Show this message and exit.                          │
+│ --weeks  -w      INTEGER  Number of weeks to show (default 12).              │
+│                           [default: 12]                                      │
+│ --json                    Emit the grid as JSON.                             │
+│ --help                    Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2486,11 +2487,11 @@ Usage: onmc digest [OPTIONS]
    onmc digest --since abc1234
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --since        <str>  Git ref (tag, branch, commit hash) to diff          │
-│                          knowledge from.                                     │
-│                          [required]                                          │
-│    --json                Emit JSON instead of a rich terminal report.        │
-│    --help                Show this message and exit.                         │
+│ *  --since        TEXT  Git ref (tag, branch, commit hash) to diff knowledge │
+│                         from.                                                │
+│                         [required]                                           │
+│    --json               Emit JSON instead of a rich terminal report.         │
+│    --help               Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2564,8 +2565,8 @@ Usage: onmc drift check [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                                             Emit the drift report as  │
 │                                                    JSON.                     │
-│ --min-confidence        <float range>              Drop findings below this  │
-│                         [0.0<=x<=1.0]              confidence (0.0-1.0).     │
+│ --min-confidence        FLOAT RANGE [0.0<=x<=1.0]  Drop findings below this  │
+│                                                    confidence (0.0-1.0).     │
 │                                                    [default: 0.0]            │
 │ --help                                             Show this message and     │
 │                                                    exit.                     │
@@ -2575,7 +2576,7 @@ Usage: onmc drift check [OPTIONS]
 ## `onmc estimate`
 
 ```text
-Usage: onmc estimate [OPTIONS] {goal}
+Usage: onmc estimate [OPTIONS] GOAL
 
  Predict cost/time/outcome for <goal> from similar past runs.
 
@@ -2590,14 +2591,14 @@ Usage: onmc estimate [OPTIONS] {goal}
  Deterministic and fully offline (no LLM call).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  Goal to forecast a run for (keyword-matched against    │
-│                       history).                                              │
-│                       [required]                                             │
+│ *    goal      TEXT  Goal to forecast a run for (keyword-matched against     │
+│                      history).                                               │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --model        <str>  Condition the estimate on a specific model.            │
-│ --json                Emit the estimate as JSON.                             │
-│ --help                Show this message and exit.                            │
+│ --model        TEXT  Condition the estimate on a specific model.             │
+│ --json               Emit the estimate as JSON.                              │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2664,37 +2665,36 @@ Usage: onmc eval ab [OPTIONS]
    onmc eval ab --public-repo                     # live public-repo evidence
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --fixture                                     Replay pre-recorded fixture    │
-│                                               results (CI-safe, no LLM or    │
-│                                               Claude auth needed). Omit to   │
-│                                               run live with the Claude CLI's │
-│                                               configured authentication.     │
-│ --json                                        Output results as JSON.        │
-│ --task               <str>                    Run only the task with this id │
-│                                               (for debugging).               │
-│ --suite              <str>                    Task suite to run: 'builtin'   │
-│                                               (synthetic mini-repo bugs,     │
-│                                               default), 'private'            │
-│                                               (private-knowledge tasks       │
-│                                               requiring repo-specific        │
-│                                               facts), or 'all' (both suites  │
-│                                               combined).                     │
-│                                               [default: builtin]             │
-│ --public-repo                                 Run pinned third-party         │
-│                                               repository tasks instead of    │
-│                                               synthetic mini-repos.          │
-│ --model              <str>                    Claude model alias or full     │
-│                                               model id for both conditions.  │
-│                                               [default: sonnet]              │
-│ --effort             <str>                    Claude effort level for both   │
-│                                               conditions.                    │
-│                                               [default: medium]              │
-│ --budget-usd         <float range> [x>=0.01]  Maximum spend per condition.   │
-│                                               [default: 1.0]                 │
-│ --timeout            <int range> [x>=1]       Maximum seconds per Claude     │
-│                                               invocation.                    │
-│                                               [default: 120]                 │
-│ --help                                        Show this message and exit.    │
+│ --fixture                                   Replay pre-recorded fixture      │
+│                                             results (CI-safe, no LLM or      │
+│                                             Claude auth needed). Omit to run │
+│                                             live with the Claude CLI's       │
+│                                             configured authentication.       │
+│ --json                                      Output results as JSON.          │
+│ --task               TEXT                   Run only the task with this id   │
+│                                             (for debugging).                 │
+│ --suite              TEXT                   Task suite to run: 'builtin'     │
+│                                             (synthetic mini-repo bugs,       │
+│                                             default), 'private'              │
+│                                             (private-knowledge tasks         │
+│                                             requiring repo-specific facts),  │
+│                                             or 'all' (both suites combined). │
+│                                             [default: builtin]               │
+│ --public-repo                               Run pinned third-party           │
+│                                             repository tasks instead of      │
+│                                             synthetic mini-repos.            │
+│ --model              TEXT                   Claude model alias or full model │
+│                                             id for both conditions.          │
+│                                             [default: sonnet]                │
+│ --effort             TEXT                   Claude effort level for both     │
+│                                             conditions.                      │
+│                                             [default: medium]                │
+│ --budget-usd         FLOAT RANGE [x>=0.01]  Maximum spend per condition.     │
+│                                             [default: 1.0]                   │
+│ --timeout            INTEGER RANGE [x>=1]   Maximum seconds per Claude       │
+│                                             invocation.                      │
+│                                             [default: 120]                   │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2719,14 +2719,14 @@ Usage: onmc eval compare [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                                           Output comparison as JSON.  │
-│ --baseline            <float range>              Exit non-zero when the      │
+│ --baseline            FLOAT RANGE                Exit non-zero when the      │
 │                       [0.0<=x<=100.0]            with-memory score delta     │
 │                                                  (0–100) is below this       │
 │                                                  value. Use in CI to gate on │
 │                                                  brain contribution          │
 │                                                  regression.                 │
 │                                                  [default: 0.0]              │
-│ --recall-limit        <int>                      Max recall entries per      │
+│ --recall-limit        INTEGER                    Max recall entries per      │
 │                                                  case.                       │
 │                                                  [default: 8]                │
 │ --help                                           Show this message and exit. │
@@ -2749,19 +2749,19 @@ Usage: onmc eval create [OPTIONS]
  --expect-deadend.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --from-memory             <str>  Derive eval case from existing memory ID.   │
-│ --query           -q      <str>  Query/task for the eval case (manual mode). │
-│ --id                      <str>  Custom case ID (optional, auto-derived when │
-│                                  omitted).                                   │
-│ --expect-file             <str>  Expected file/memory ID to appear in recall │
-│                                  results. Repeatable: --expect-file foo      │
-│                                  --expect-file bar                           │
-│ --expect-deadend          <str>  Substring expected in a guard dead-end      │
-│                                  entry. Repeatable: --expect-deadend 'tried  │
-│                                  X' --expect-deadend 'bad approach'          │
-│ --note                    <str>  Optional human-readable note about what     │
-│                                  this case tests.                            │
-│ --help                           Show this message and exit.                 │
+│ --from-memory             TEXT  Derive eval case from existing memory ID.    │
+│ --query           -q      TEXT  Query/task for the eval case (manual mode).  │
+│ --id                      TEXT  Custom case ID (optional, auto-derived when  │
+│                                 omitted).                                    │
+│ --expect-file             TEXT  Expected file/memory ID to appear in recall  │
+│                                 results. Repeatable: --expect-file foo       │
+│                                 --expect-file bar                            │
+│ --expect-deadend          TEXT  Substring expected in a guard dead-end       │
+│                                 entry. Repeatable: --expect-deadend 'tried   │
+│                                 X' --expect-deadend 'bad approach'           │
+│ --note                    TEXT  Optional human-readable note about what this │
+│                                 case tests.                                  │
+│ --help                          Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2785,7 +2785,7 @@ Usage: onmc eval run [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                                             Output results as JSON.   │
-│ --fail-under            <float range>              Exit non-zero when        │
+│ --fail-under            FLOAT RANGE                Exit non-zero when        │
 │                         [0.0<=x<=100.0]            pass_rate (0–100) is      │
 │                                                    below this threshold. Use │
 │                                                    in CI to gate on memory   │
@@ -2795,7 +2795,7 @@ Usage: onmc eval run [OPTIONS]
 │                                                    (simulate no retrieval).  │
 │                                                    Useful for delta          │
 │                                                    comparison.               │
-│ --recall-limit          <int>                      Max recall entries per    │
+│ --recall-limit          INTEGER                    Max recall entries per    │
 │                                                    case.                     │
 │                                                    [default: 8]              │
 │ --help                                             Show this message and     │
@@ -2828,7 +2828,7 @@ Usage: onmc evolution [OPTIONS]
 ## `onmc explain`
 
 ```text
-Usage: onmc explain [OPTIONS] [receipt_ref]
+Usage: onmc explain [OPTIONS] [RECEIPT_REF]
 
  Plain-English verdict of a run receipt.
 
@@ -2874,9 +2874,9 @@ Usage: onmc explain [OPTIONS] [receipt_ref]
      onmc explain --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   receipt_ref      <str>  Path to a receipt file, its filename, or a short   │
-│                           hash (substring of the filename stem). Omit to use │
-│                           the newest receipt.                                │
+│   [receipt_ref]      TEXT  Path to a receipt file, its filename, or a short  │
+│                            hash (substring of the filename stem). Omit to    │
+│                            use the newest receipt.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit a machine-readable JSON envelope                        │
@@ -2888,7 +2888,7 @@ Usage: onmc explain [OPTIONS] [receipt_ref]
 ## `onmc feedback`
 
 ```text
-Usage: onmc feedback [OPTIONS] {memory_id} {direction}
+Usage: onmc feedback [OPTIONS] MEMORY_ID DIRECTION
 
  Apply a human trust signal to a stored memory.
 
@@ -2906,23 +2906,22 @@ Usage: onmc feedback [OPTIONS] {memory_id} {direction}
  onmc feedback mem_abc123 up --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  Memory ID to apply feedback to. [required]        │
-│ *    direction      <str>  Trust signal: 'up' (useful) or 'down'             │
-│                            (wrong/misleading).                               │
-│                            [required]                                        │
+│ *    memory_id      TEXT  Memory ID to apply feedback to. [required]         │
+│ *    direction      TEXT  Trust signal: 'up' (useful) or 'down'              │
+│                           (wrong/misleading).                                │
+│                           [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --note        <str>  Optional note appended to the memory details.           │
-│ --json               Emit the updated memory as JSON instead of a rich       │
-│                      panel.                                                  │
-│ --help               Show this message and exit.                             │
+│ --note        TEXT  Optional note appended to the memory details.            │
+│ --json              Emit the updated memory as JSON instead of a rich panel. │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc fix-ci`
 
 ```text
-Usage: onmc fix-ci [OPTIONS] {pr}
+Usage: onmc fix-ci [OPTIONS] PR
 
  Read a failed PR's CI log and emit a deterministic fix plan.
 
@@ -2931,14 +2930,14 @@ Usage: onmc fix-ci [OPTIONS] {pr}
  it the log is fetched via ``gh run view --log-failed``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr      <str>  PR number or URL whose failed CI to plan a fix for.      │
-│                     [required]                                               │
+│ *    pr      TEXT  PR number or URL whose failed CI to plan a fix for.       │
+│                    [required]                                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --log         <path>  Read the CI log from this file instead of fetching via │
-│                       gh (offline).                                          │
-│ --json                Emit the fix plan as JSON.                             │
-│ --help                Show this message and exit.                            │
+│ --log         PATH  Read the CI log from this file instead of fetching via   │
+│                     gh (offline).                                            │
+│ --json              Emit the fix plan as JSON.                               │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2979,9 +2978,9 @@ Usage: onmc fleet status [OPTIONS]
  Summarize local swarm, claim, and receipt state.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --swarm-id        <str>  Limit output to one swarm id.                       │
-│ --json                   Print machine-readable JSON to stdout.              │
-│ --help                   Show this message and exit.                         │
+│ --swarm-id        TEXT  Limit output to one swarm id.                        │
+│ --json                  Print machine-readable JSON to stdout.               │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -2998,10 +2997,10 @@ Usage: onmc flywheel [OPTIONS]
  recommendations. Deterministic and fully offline (no LLM call).
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                Emit the flywheel report as JSON.                      │
-│ --since        <str>  Only include runs since this time (e.g. 7d, 48h, or    │
-│                       ISO date).                                             │
-│ --help                Show this message and exit.                            │
+│ --json               Emit the flywheel report as JSON.                       │
+│ --since        TEXT  Only include runs since this time (e.g. 7d, 48h, or ISO │
+│                      date).                                                  │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3021,10 +3020,10 @@ Usage: onmc formats [OPTIONS]
  Read-only and deterministic: no filesystem, network, or clock reads.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                 Emit the spec as machine-readable JSON.               │
-│ --schema        <str>  Only emit one schema: 'receipt', 'attestation', or    │
-│                        'memory'. Default: all three.                         │
-│ --help                 Show this message and exit.                           │
+│ --json                Emit the spec as machine-readable JSON.                │
+│ --schema        TEXT  Only emit one schema: 'receipt', 'attestation', or     │
+│                       'memory'. Default: all three.                          │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3081,21 +3080,21 @@ Usage: onmc gateway serve [OPTIONS]
  never spend money or launch agents.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --host                <str>  Bind address (use 0.0.0.0 to expose to the      │
-│                              network).                                       │
-│                              [default: 127.0.0.1]                            │
-│ --port                <int>  TCP port to listen on. [default: 8770]          │
-│ --dry     --no-dry           Dry mode: accept & decide but never spawn a     │
-│                              live swarm (default).                           │
-│                              [default: dry]                                  │
-│ --help                       Show this message and exit.                     │
+│ --host                TEXT     Bind address (use 0.0.0.0 to expose to the    │
+│                                network).                                     │
+│                                [default: 127.0.0.1]                          │
+│ --port                INTEGER  TCP port to listen on. [default: 8770]        │
+│ --dry     --no-dry             Dry mode: accept & decide but never spawn a   │
+│                                live swarm (default).                         │
+│                                [default: dry]                                │
+│ --help                         Show this message and exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc gateway simulate`
 
 ```text
-Usage: onmc gateway simulate [OPTIONS] {channel} {user_id} {text}
+Usage: onmc gateway simulate [OPTIONS] CHANNEL USER_ID TEXT
 
  Run one message through the gateway pipeline and print the decision (JSON).
 
@@ -3103,19 +3102,18 @@ Usage: onmc gateway simulate [OPTIONS] {channel} {user_id} {text}
  when the sender is denied so a script can branch on the outcome.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    channel      <str>  Transport channel, e.g. slack / telegram /          │
-│                          openclaw.                                           │
-│                          [required]                                          │
-│ *    user_id      <str>  The transport's raw user id (scoped with the        │
-│                          channel).                                           │
-│                          [required]                                          │
-│ *    text         <str>  The inbound chat message to route through the       │
-│                          pipeline.                                           │
-│                          [required]                                          │
+│ *    channel      TEXT  Transport channel, e.g. slack / telegram / openclaw. │
+│                         [required]                                           │
+│ *    user_id      TEXT  The transport's raw user id (scoped with the         │
+│                         channel).                                            │
+│                         [required]                                           │
+│ *    text         TEXT  The inbound chat message to route through the        │
+│                         pipeline.                                            │
+│                         [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mention        <str>  Bot handle to strip (e.g. @onmc). [default: @onmc]   │
-│ --help                  Show this message and exit.                          │
+│ --mention        TEXT  Bot handle to strip (e.g. @onmc). [default: @onmc]    │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3137,7 +3135,7 @@ Usage: onmc gh-aw [OPTIONS] COMMAND [ARGS]...
 ## `onmc gh-aw init`
 
 ```text
-Usage: onmc gh-aw init [OPTIONS] [path]
+Usage: onmc gh-aw init [OPTIONS] [PATH]
 
  Scaffold memory-aware GitHub Actions workflows into a target repo.
 
@@ -3152,7 +3150,7 @@ Usage: onmc gh-aw init [OPTIONS] [path]
  --force is passed.  Use --dry-run to preview without writing anything.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      <path>  Target repo root. Defaults to the current directory (or  │
+│   [path]      PATH  Target repo root. Defaults to the current directory (or  │
 │                     nearest git root). The four workflows are written to     │
 │                     PATH/.github/workflows/onmc-*.yml.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -3172,15 +3170,15 @@ Usage: onmc guard [OPTIONS]
  Surface recorded dead-ends so you never repeat a known failure.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task         <str>               Task description to check for          │
-│                                       dead-ends.                             │
-│                                       [required]                             │
-│    --limit        <int range> [x>=1]  Maximum number of dead-end entries to  │
-│                                       return.                                │
-│                                       [default: 8]                           │
-│    --terse                            Emit compact terse output (overrides   │
-│                                       ONMC_TERSE env var).                   │
-│    --help                             Show this message and exit.            │
+│ *  --task         TEXT                  Task description to check for        │
+│                                         dead-ends.                           │
+│                                         [required]                           │
+│    --limit        INTEGER RANGE [x>=1]  Maximum number of dead-end entries   │
+│                                         to return.                           │
+│                                         [default: 8]                         │
+│    --terse                              Emit compact terse output (overrides │
+│                                         ONMC_TERSE env var).                 │
+│    --help                               Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3203,7 +3201,7 @@ Usage: onmc handoff [OPTIONS] COMMAND [ARGS]...
 ## `onmc handoff create`
 
 ```text
-Usage: onmc handoff create [OPTIONS] {goal}
+Usage: onmc handoff create [OPTIONS] GOAL
 
  Build a portable handoff bundle for GOAL and write it (or print it).
 
@@ -3212,24 +3210,24 @@ Usage: onmc handoff create [OPTIONS] {goal}
  empty sections with explanatory notes — the command never crashes.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  The task goal to package context for. [required]       │
+│ *    goal      TEXT  The task goal to package context for. [required]        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out         <path>  Where to write the bundle JSON.                        │
-│ --json                Emit the bundle JSON to stdout instead of a file.      │
-│ --help                Show this message and exit.                            │
+│ --out         PATH  Where to write the bundle JSON.                          │
+│ --json              Emit the bundle JSON to stdout instead of a file.        │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc handoff resume`
 
 ```text
-Usage: onmc handoff resume [OPTIONS] {file}
+Usage: onmc handoff resume [OPTIONS] FILE
 
  Read a handoff bundle FILE and render a resume briefing.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    file      <path>  Path to a handoff bundle JSON. [required]             │
+│ *    file      PATH  Path to a handoff bundle JSON. [required]               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the parsed bundle as JSON instead of a briefing.        │
@@ -3252,9 +3250,10 @@ Usage: onmc heatmap [OPTIONS]
  and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --weeks        <int>  Number of weeks to include in the grid. [default: 12]  │
-│ --json                Emit the heatmap as JSON.                              │
-│ --help                Show this message and exit.                            │
+│ --weeks        INTEGER  Number of weeks to include in the grid.              │
+│                         [default: 12]                                        │
+│ --json                  Emit the heatmap as JSON.                            │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3286,16 +3285,18 @@ Usage: onmc highlight [OPTIONS]
      onmc highlight --json           # JSON envelope for pipelines
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --since           <str>                   Only include runs since this point │
-│                                           — a relative window (7d, 48h, 30m) │
-│                                           or ISO date (2026-07-01).          │
-│ --limit           <int range> [1<=x<=20]  Maximum number of highlight        │
-│                                           moments to show (default 5).       │
-│                                           [default: 5]                       │
-│ --json                                    Emit the reel as a JSON envelope.  │
-│ --markdown                                Emit the reel as a shareable       │
-│                                           Markdown block.                    │
-│ --help                                    Show this message and exit.        │
+│ --since           TEXT                      Only include runs since this     │
+│                                             point — a relative window (7d,   │
+│                                             48h, 30m) or ISO date            │
+│                                             (2026-07-01).                    │
+│ --limit           INTEGER RANGE [1<=x<=20]  Maximum number of highlight      │
+│                                             moments to show (default 5).     │
+│                                             [default: 5]                     │
+│ --json                                      Emit the reel as a JSON          │
+│                                             envelope.                        │
+│ --markdown                                  Emit the reel as a shareable     │
+│                                             Markdown block.                  │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3571,7 +3572,7 @@ Usage: onmc hud [OPTIONS]
 ## `onmc import`
 
 ```text
-Usage: onmc import [OPTIONS] {source} [path]
+Usage: onmc import [OPTIONS] SOURCE [PATH]
 
  Import skills or memories from an external tool into the ONMC brain.
 
@@ -3610,24 +3611,22 @@ Usage: onmc import [OPTIONS] {source} [path]
  onmc import hermes --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      <str>   Source to import from. Use 'omc' for                │
-│                          oh-my-claudecode skills, 'hermes' for Nous          │
-│                          hermes-agent context files, or a path to a .md file │
-│                          / directory.                                        │
-│                          [required]                                          │
-│      path        <path>  Optional path override. For 'omc': path to          │
-│                          .omc/skills dir. For 'hermes': path to MEMORY.md /  │
-│                          USER.md / containing directory. For generic         │
-│                          markdown: the .md file or directory (use as         │
-│                          'source' instead).                                  │
+│ *    source      TEXT  Source to import from. Use 'omc' for oh-my-claudecode │
+│                        skills, 'hermes' for Nous hermes-agent context files, │
+│                        or a path to a .md file / directory.                  │
+│                        [required]                                            │
+│      [path]      PATH  Optional path override. For 'omc': path to            │
+│                        .omc/skills dir. For 'hermes': path to MEMORY.md /    │
+│                        USER.md / containing directory. For generic markdown: │
+│                        the .md file or directory (use as 'source' instead).  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --dry-run               Parse and report without writing anything.           │
-│ --as             <str>  Import generic markdown as 'skill' (default) or      │
-│                         'memory'.                                            │
-│                         [default: skill]                                     │
-│ --json                  Emit the result as JSON instead of a rich table.     │
-│ --help                  Show this message and exit.                          │
+│ --dry-run              Parse and report without writing anything.            │
+│ --as             TEXT  Import generic markdown as 'skill' (default) or       │
+│                        'memory'.                                             │
+│                        [default: skill]                                      │
+│ --json                 Emit the result as JSON instead of a rich table.      │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3652,12 +3651,12 @@ Usage: onmc inbox [OPTIONS] COMMAND [ARGS]...
 ## `onmc inbox add`
 
 ```text
-Usage: onmc inbox add [OPTIONS] {text}
+Usage: onmc inbox add [OPTIONS] TEXT
 
  Add a manual work item to the inbox (idempotent on text).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    text      <str>  The task description to enqueue. [required]            │
+│ *    text      TEXT  The task description to enqueue. [required]             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the stored item as JSON.                                │
@@ -3703,10 +3702,10 @@ Usage: onmc inbox run [OPTIONS]
  spawns work itself.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --top         <int range> [x>=1]  How many top-ranked items to plan.         │
-│                                   [default: 3]                               │
-│ --json                            Emit the plan as JSON.                     │
-│ --help                            Show this message and exit.                │
+│ --top         INTEGER RANGE [x>=1]  How many top-ranked items to plan.       │
+│                                     [default: 3]                             │
+│ --json                              Emit the plan as JSON.                   │
+│ --help                              Show this message and exit.              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3757,7 +3756,7 @@ Usage: onmc land [OPTIONS] COMMAND [ARGS]...
 ## `onmc land run`
 
 ```text
-Usage: onmc land run [OPTIONS] {pr}
+Usage: onmc land run [OPTIONS] PR
 
  Land PR safely: poll checks, rebase if behind, squash-merge when green.
 
@@ -3783,7 +3782,7 @@ Usage: onmc land run [OPTIONS] {pr}
      onmc land run 789 --max-wait 3600 --only-if-contention-le 5
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr      <int>  PR number to land. [required]                            │
+│ *    pr      INTEGER  PR number to land. [required]                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                                  Emit a JSON envelope {"kind":        │
@@ -3805,7 +3804,7 @@ Usage: onmc land run [OPTIONS] {pr}
 ## `onmc land status`
 
 ```text
-Usage: onmc land status [OPTIONS] {pr}
+Usage: onmc land status [OPTIONS] PR
 
  Show what the lander would do for this PR — read-only, no mutations.
 
@@ -3819,7 +3818,7 @@ Usage: onmc land status [OPTIONS] {pr}
      onmc land status 456 --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr      <int>  PR number to query. [required]                           │
+│ *    pr      INTEGER  PR number to query. [required]                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit a JSON status envelope {"kind": "land_status", ...}.    │
@@ -3850,7 +3849,7 @@ Usage: onmc leash [OPTIONS] COMMAND [ARGS]...
 ## `onmc leash add`
 
 ```text
-Usage: onmc leash add [OPTIONS] {rule}
+Usage: onmc leash add [OPTIONS] RULE
 
  Add a new guardrail rule to the leash.
 
@@ -3874,20 +3873,20 @@ Usage: onmc leash add [OPTIONS] {rule}
      onmc leash add "rm -rf" --severity hard
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    rule      <str>  The house rule to add. [required]                      │
+│ *    rule      TEXT  The house rule to add. [required]                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --severity        <str>  Rule severity: 'soft' (advisory) or 'hard'          │
-│                          (triggers a buzz on violation).                     │
-│                          [default: soft]                                     │
-│ --help                   Show this message and exit.                         │
+│ --severity        TEXT  Rule severity: 'soft' (advisory) or 'hard' (triggers │
+│                         a buzz on violation).                                │
+│                         [default: soft]                                      │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc leash check`
 
 ```text
-Usage: onmc leash check [OPTIONS] {event}
+Usage: onmc leash check [OPTIONS] EVENT
 
  Evaluate an event or action text against the active rules.
 
@@ -3903,8 +3902,8 @@ Usage: onmc leash check [OPTIONS] {event}
      onmc leash check "added a console.log for debugging" --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event      <str>  Event text or action description to evaluate.         │
-│                        [required]                                            │
+│ *    event      TEXT  Event text or action description to evaluate.          │
+│                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the result as a JSON envelope.                          │
@@ -3934,7 +3933,7 @@ Usage: onmc leash list [OPTIONS]
 ## `onmc leash remove`
 
 ```text
-Usage: onmc leash remove [OPTIONS] {rule_id}
+Usage: onmc leash remove [OPTIONS] RULE_ID
 
  Remove a guardrail rule by its ID.
 
@@ -3945,7 +3944,7 @@ Usage: onmc leash remove [OPTIONS] {rule_id}
      onmc leash remove rule_abc123
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    rule_id      <str>  The rule ID to remove. [required]                   │
+│ *    rule_id      TEXT  The rule ID to remove. [required]                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4121,17 +4120,17 @@ Usage: onmc llm configure [OPTIONS]
  Persist optional LLM provider settings to the local ONMC config.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --provider               <anthropic|openai|olla  LLM provider to          │
-│                             ma|litellm|mock>        configure.               │
+│ *  --provider               [anthropic|openai|olla  LLM provider to          │
+│                             ma|litellm|mock]        configure.               │
 │                                                     [required]               │
-│ *  --model                  <str>                   Default model name.      │
+│ *  --model                  TEXT                    Default model name.      │
 │                                                     [required]               │
-│    --api-key-env-var        <str>                   Environment variable to  │
+│    --api-key-env-var        TEXT                    Environment variable to  │
 │                                                     read the provider API    │
 │                                                     key from.                │
-│    --temperature            <float range>           Default temperature.     │
+│    --temperature            FLOAT RANGE             Default temperature.     │
 │                             [0.0<=x<=2.0]           [default: 0.0]           │
-│    --max-tokens             <int range> [x>=1]      Default maximum output   │
+│    --max-tokens             INTEGER RANGE [x>=1]    Default maximum output   │
 │                                                     tokens.                  │
 │                                                     [default: 1024]          │
 │    --help                                           Show this message and    │
@@ -4193,73 +4192,67 @@ Usage: onmc loop [OPTIONS]
  templates
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --goal                    <str>                   Goal text for the loop     │
-│                                                   (inline).                  │
-│ --spec                    <str>                   Path to a file containing  │
-│                                                   the goal text.             │
-│ --template                <str>                   Use a built-in loop        │
-│                                                   template to prefill goal,  │
-│                                                   verify, and limits.        │
-│                                                   Available: ci-healer,      │
-│                                                   pr-babysitter,             │
-│                                                   issue-to-pr. Explicit      │
-│                                                   flags override template    │
-│                                                   defaults. Use              │
-│                                                   --list-templates to see    │
-│                                                   all templates with         │
-│                                                   descriptions.              │
-│ --list-templates                                  Print available built-in   │
-│                                                   loop templates and exit.   │
-│ --agent                   <str>                   Agent CLI to use: claude   │
-│                                                   (default), codex, or       │
-│                                                   opencode.                  │
-│                                                   [default: claude]          │
-│ --max-iterations          <int range> [x>=1]      Maximum loop iterations.   │
-│ --budget-tokens           <int range> [x>=1]      Stop when total tokens     │
-│                                                   exceed this budget.        │
-│ --verify                  <str>                   Shell command run after    │
-│                                                   each iteration to verify   │
-│                                                   success.                   │
-│ --dry-run                                         Build the prompt and       │
-│                                                   recall dead-ends without   │
-│                                                   invoking the agent or      │
-│                                                   verify. Safe to run        │
-│                                                   without any configured     │
-│                                                   agent.                     │
-│ --json                                            Print the full result as   │
-│                                                   JSON.                      │
-│ --max-cost-usd            <float range> [x>=0.0]  Stop before the next       │
-│                                                   iteration when cumulative  │
-│                                                   cost (USD) exceeds this    │
-│                                                   value.                     │
-│ --max-wall-seconds        <int range> [x>=1]      Stop before the next       │
-│                                                   iteration when elapsed     │
-│                                                   wall-clock seconds exceed  │
-│                                                   this.                      │
-│ --isolate                                         Run the loop inside a      │
-│                                                   fresh git worktree so      │
-│                                                   changes are isolated. On   │
-│                                                   success (converged) the    │
-│                                                   worktree path is           │
-│                                                   preserved; on failure the  │
-│                                                   worktree is removed and no │
-│                                                   partial changes leak into  │
-│                                                   the working tree. Degrades │
-│                                                   gracefully (warns + runs   │
-│                                                   in-place) when git         │
-│                                                   worktree add fails.        │
-│ --resume                                          Resume a previous run from │
-│                                                   its last checkpoint. Loads │
-│                                                   the checkpoint for the     │
-│                                                   matching goal + verify     │
-│                                                   pair and continues from    │
-│                                                   the next iteration,        │
-│                                                   preserving all prior       │
-│                                                   contracts and counters.    │
-│                                                   No-op when no matching     │
-│                                                   checkpoint exists.         │
-│ --help                                            Show this message and      │
-│                                                   exit.                      │
+│ --goal                    TEXT                  Goal text for the loop       │
+│                                                 (inline).                    │
+│ --spec                    TEXT                  Path to a file containing    │
+│                                                 the goal text.               │
+│ --template                TEXT                  Use a built-in loop template │
+│                                                 to prefill goal, verify, and │
+│                                                 limits. Available:           │
+│                                                 ci-healer, pr-babysitter,    │
+│                                                 issue-to-pr. Explicit flags  │
+│                                                 override template defaults.  │
+│                                                 Use --list-templates to see  │
+│                                                 all templates with           │
+│                                                 descriptions.                │
+│ --list-templates                                Print available built-in     │
+│                                                 loop templates and exit.     │
+│ --agent                   TEXT                  Agent CLI to use: claude     │
+│                                                 (default), codex, or         │
+│                                                 opencode.                    │
+│                                                 [default: claude]            │
+│ --max-iterations          INTEGER RANGE [x>=1]  Maximum loop iterations.     │
+│ --budget-tokens           INTEGER RANGE [x>=1]  Stop when total tokens       │
+│                                                 exceed this budget.          │
+│ --verify                  TEXT                  Shell command run after each │
+│                                                 iteration to verify success. │
+│ --dry-run                                       Build the prompt and recall  │
+│                                                 dead-ends without invoking   │
+│                                                 the agent or verify. Safe to │
+│                                                 run without any configured   │
+│                                                 agent.                       │
+│ --json                                          Print the full result as     │
+│                                                 JSON.                        │
+│ --max-cost-usd            FLOAT RANGE [x>=0.0]  Stop before the next         │
+│                                                 iteration when cumulative    │
+│                                                 cost (USD) exceeds this      │
+│                                                 value.                       │
+│ --max-wall-seconds        INTEGER RANGE [x>=1]  Stop before the next         │
+│                                                 iteration when elapsed       │
+│                                                 wall-clock seconds exceed    │
+│                                                 this.                        │
+│ --isolate                                       Run the loop inside a fresh  │
+│                                                 git worktree so changes are  │
+│                                                 isolated. On success         │
+│                                                 (converged) the worktree     │
+│                                                 path is preserved; on        │
+│                                                 failure the worktree is      │
+│                                                 removed and no partial       │
+│                                                 changes leak into the        │
+│                                                 working tree. Degrades       │
+│                                                 gracefully (warns + runs     │
+│                                                 in-place) when git worktree  │
+│                                                 add fails.                   │
+│ --resume                                        Resume a previous run from   │
+│                                                 its last checkpoint. Loads   │
+│                                                 the checkpoint for the       │
+│                                                 matching goal + verify pair  │
+│                                                 and continues from the next  │
+│                                                 iteration, preserving all    │
+│                                                 prior contracts and          │
+│                                                 counters. No-op when no      │
+│                                                 matching checkpoint exists.  │
+│ --help                                          Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4306,7 +4299,7 @@ Usage: onmc mcp [OPTIONS] COMMAND [ARGS]...
 ## `onmc mcp check`
 
 ```text
-Usage: onmc mcp check [OPTIONS] [calls_file]
+Usage: onmc mcp check [OPTIONS] [CALLS_FILE]
 
  Classify MCP tool calls from a JSONL file (or stdin) against the trust policy.
 
@@ -4326,19 +4319,19 @@ Usage: onmc mcp check [OPTIONS] [calls_file]
      cat calls.jsonl | onmc mcp check - --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   calls_file      <path>  Path to a JSONL file of recorded tool calls.  Each │
+│   [calls_file]      PATH  Path to a JSONL file of recorded tool calls.  Each │
 │                           line: {"server": "...", "tool": "...", "args":     │
 │                           {...}}.  Omit or pass '-' to read from stdin.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                        Emit classifications as JSON to stdout.        │
-│ --fail-on             <str>   Exit non-zero when any decision has this       │
-│                               verdict or worse.  One of: block,              │
-│                               approval_required.  Default: block.            │
-│                               [default: block]                               │
-│ --no-audit-log                Skip writing to .onmc/mcp-audit.log.           │
-│ --repo                <path>  Repo root for locating .onmc/mcp-policy.yaml.  │
-│ --help                        Show this message and exit.                    │
+│ --json                      Emit classifications as JSON to stdout.          │
+│ --fail-on             TEXT  Exit non-zero when any decision has this verdict │
+│                             or worse.  One of: block, approval_required.     │
+│                             Default: block.                                  │
+│                             [default: block]                                 │
+│ --no-audit-log              Skip writing to .onmc/mcp-audit.log.             │
+│ --repo                PATH  Repo root for locating .onmc/mcp-policy.yaml.    │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4361,7 +4354,7 @@ Usage: onmc mcp policy [OPTIONS] COMMAND [ARGS]...
 ## `onmc mcp policy init`
 
 ```text
-Usage: onmc mcp policy init [OPTIONS] [path]
+Usage: onmc mcp policy init [OPTIONS] [PATH]
 
  Write a documented starter .onmc/mcp-policy.yaml for the MCP trust gateway.
 
@@ -4371,7 +4364,7 @@ Usage: onmc mcp policy init [OPTIONS] [path]
  Re-running is safe — the file is not overwritten unless --force is passed.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      <path>  Repo root.  Defaults to current directory.               │
+│   [path]      PATH  Repo root.  Defaults to current directory.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
@@ -4515,42 +4508,42 @@ Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
 ## `onmc memory add`
 
 ```text
-Usage: onmc memory add [OPTIONS] {task_id}
+Usage: onmc memory add [OPTIONS] TASK_ID
 
  Add a task-derived memory artifact.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --type                  <fix|did_not_work|desig  Task-derived memory      │
+│ *  --type                  [fix|did_not_work|desig  Task-derived memory      │
 │                            n_conflict|gotcha|invar  artifact type.           │
-│                            iant|validation>         [required]               │
-│ *  --title                 <str>                    Short artifact title.    │
+│                            iant|validation]         [required]               │
+│ *  --title                 TEXT                     Short artifact title.    │
 │                                                     [required]               │
-│ *  --summary               <str>                    What worked, failed, or  │
+│ *  --summary               TEXT                     What worked, failed, or  │
 │                                                     conflicted.              │
 │                                                     [required]               │
-│    --why-it-matters        <str>                    Why a future agent or    │
+│    --why-it-matters        TEXT                     Why a future agent or    │
 │                                                     engineer should keep     │
 │                                                     this in mind.            │
 │                                                     [default: Preserve this  │
 │                                                     task outcome so future   │
 │                                                     work starts from a known │
 │                                                     result.]                 │
-│    --apply-when            <str>                    When this guidance       │
+│    --apply-when            TEXT                     When this guidance       │
 │                                                     should be used.          │
-│    --avoid-when            <str>                    When this guidance       │
+│    --avoid-when            TEXT                     When this guidance       │
 │                                                     should not be applied.   │
-│    --evidence              <str>                    Evidence from the task   │
+│    --evidence              TEXT                     Evidence from the task   │
 │                                                     or attempts.             │
 │                                                     [default: Recorded from  │
 │                                                     task-scoped work.]       │
-│    --file                  <str>                    Repeat to record related │
+│    --file                  TEXT                     Repeat to record related │
 │                                                     file paths.              │
-│    --module                <str>                    Repeat to record related │
+│    --module                TEXT                     Repeat to record related │
 │                                                     module names.            │
-│    --confidence            <float range>            Confidence from 0.0 to   │
+│    --confidence            FLOAT RANGE              Confidence from 0.0 to   │
 │                            [0.0<=x<=1.0]            1.0.                     │
 │                                                     [default: 0.7]           │
 │    --help                                           Show this message and    │
@@ -4561,12 +4554,12 @@ Usage: onmc memory add [OPTIONS] {task_id}
 ## `onmc memory confirm`
 
 ```text
-Usage: onmc memory confirm [OPTIONS] {memory_id}
+Usage: onmc memory confirm [OPTIONS] MEMORY_ID
 
  Mark a memory record as verified useful.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4576,12 +4569,12 @@ Usage: onmc memory confirm [OPTIONS] {memory_id}
 ## `onmc memory edit`
 
 ```text
-Usage: onmc memory edit [OPTIONS] {memory_id}
+Usage: onmc memory edit [OPTIONS] MEMORY_ID
 
  Edit a memory summary and reset its feedback score.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4614,21 +4607,21 @@ Usage: onmc memory list [OPTIONS]
  List stored memory entries.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --kind                           <doc_fact|decision|i  Filter by memory      │
+│ --kind                           [doc_fact|decision|i  Filter by memory      │
 │                                  nvariant|hotspot|git  kind.                 │
 │                                  _pattern|validation_                        │
 │                                  rule|failed_approach                        │
 │                                  |design_conflict|got                        │
-│                                  cha>                                        │
-│ --source                         <git|doc|code|manual  Filter by memory      │
+│                                  cha]                                        │
+│ --source                         [git|doc|code|manual  Filter by memory      │
 │                                  |manual_seed|llm_ext  source type.          │
 │                                  racted|transcript|gi                        │
-│                                  thub_pr|session>                            │
-│ --type                           <fix|did_not_work|de  Filter task-derived   │
+│                                  thub_pr|session]                            │
+│ --type                           [fix|did_not_work|de  Filter task-derived   │
 │                                  sign_conflict|gotcha  memory artifacts by   │
 │                                  |invariant|validatio  type.                 │
-│                                  n>                                          │
-│ --min-confidence                 <float range>         Filter by minimum     │
+│                                  n]                                          │
+│ --min-confidence                 FLOAT RANGE           Filter by minimum     │
 │                                  [0.0<=x<=1.0]         confidence.           │
 │ --confirmed                                            Show only explicitly  │
 │                                                        confirmed memories.   │
@@ -4658,12 +4651,12 @@ Usage: onmc memory prune [OPTIONS]
 ## `onmc memory reject`
 
 ```text
-Usage: onmc memory reject [OPTIONS] {memory_id}
+Usage: onmc memory reject [OPTIONS] MEMORY_ID
 
  Mark a memory record as wrong or stale.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4673,12 +4666,12 @@ Usage: onmc memory reject [OPTIONS] {memory_id}
 ## `onmc memory show`
 
 ```text
-Usage: onmc memory show [OPTIONS] {memory_id}
+Usage: onmc memory show [OPTIONS] MEMORY_ID
 
  Show a single memory entry with provenance.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4700,7 +4693,7 @@ Usage: onmc memory verify [OPTIONS]
 ## `onmc memory-diff`
 
 ```text
-Usage: onmc memory-diff [OPTIONS] {commit_a} {commit_b}
+Usage: onmc memory-diff [OPTIONS] COMMIT_A COMMIT_B
 
  Show what repo knowledge changed between two commits.
 
@@ -4713,10 +4706,10 @@ Usage: onmc memory-diff [OPTIONS] {commit_a} {commit_b}
  Run `onmc sync --commit` and commit `.agent-memory/` to unlock full diffs.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    commit_a      <str>  Older commit-ish (hash, tag, or branch name).      │
-│                           [required]                                         │
-│ *    commit_b      <str>  Newer commit-ish (hash, tag, or branch name).      │
-│                           [required]                                         │
+│ *    commit_a      TEXT  Older commit-ish (hash, tag, or branch name).       │
+│                          [required]                                          │
+│ *    commit_b      TEXT  Newer commit-ish (hash, tag, or branch name).       │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4768,7 +4761,7 @@ Usage: onmc memprovider list [OPTIONS]
 ## `onmc memprovider search`
 
 ```text
-Usage: onmc memprovider search [OPTIONS] {query}
+Usage: onmc memprovider search [OPTIONS] QUERY
 
  Search across available memory providers and print attributed hits.
 
@@ -4787,17 +4780,17 @@ Usage: onmc memprovider search [OPTIONS] {query}
      onmc memprovider search "ETF allocation" --provider mem0 --limit 5
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    query      <str>  Free-text search query. [required]                    │
+│ *    query      TEXT  Free-text search query. [required]                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --provider  -p      NAME                     Restrict search to this         │
-│                                              provider name (e.g. 'builtin',  │
-│                                              'mem0').                        │
-│ --limit     -n      <int range> [1<=x<=100]  Maximum hits per provider.      │
-│                                              [default: 10]                   │
-│ --json                                       Emit a JSON envelope instead of │
-│                                              human-readable text.            │
-│ --help                                       Show this message and exit.     │
+│ --provider  -p      NAME                       Restrict search to this       │
+│                                                provider name (e.g.           │
+│                                                'builtin', 'mem0').           │
+│ --limit     -n      INTEGER RANGE [1<=x<=100]  Maximum hits per provider.    │
+│                                                [default: 10]                 │
+│ --json                                         Emit a JSON envelope instead  │
+│                                                of human-readable text.       │
+│ --help                                         Show this message and exit.   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4824,7 +4817,7 @@ Usage: onmc memstage [OPTIONS] COMMAND [ARGS]...
 ## `onmc memstage add`
 
 ```text
-Usage: onmc memstage add [OPTIONS] {text}
+Usage: onmc memstage add [OPTIONS] TEXT
 
  Stage a proposed memory write into the pending queue.
 
@@ -4841,24 +4834,24 @@ Usage: onmc memstage add [OPTIONS] {text}
        --reason "Burnt 2h on this"
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    text      <str>  The proposed memory entry body (the summary).          │
-│                       [required]                                             │
+│ *    text      TEXT  The proposed memory entry body (the summary).           │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --title         <str>  Short title for the memory entry.                     │
-│ --kind          <str>  Memory kind (doc_fact, decision, invariant, hotspot,  │
-│                        git_pattern, validation_rule, failed_approach,        │
-│                        design_conflict, gotcha). Defaults to 'doc_fact'.     │
-│ --reason        <str>  Why this write is being proposed.                     │
-│ --json                 Emit the staged proposal as JSON.                     │
-│ --help                 Show this message and exit.                           │
+│ --title         TEXT  Short title for the memory entry.                      │
+│ --kind          TEXT  Memory kind (doc_fact, decision, invariant, hotspot,   │
+│                       git_pattern, validation_rule, failed_approach,         │
+│                       design_conflict, gotcha). Defaults to 'doc_fact'.      │
+│ --reason        TEXT  Why this write is being proposed.                      │
+│ --json                Emit the staged proposal as JSON.                      │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc memstage approve`
 
 ```text
-Usage: onmc memstage approve [OPTIONS] {proposal_id}
+Usage: onmc memstage approve [OPTIONS] PROPOSAL_ID
 
  Approve a pending proposal and persist it to the memory store.
 
@@ -4868,9 +4861,9 @@ Usage: onmc memstage approve [OPTIONS] {proposal_id}
  audit record is written under ``.onmc/memstage/audit/``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to approve (from 'onmc memstage     │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to approve (from 'onmc memstage      │
+│                             list').                                          │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the audit record as JSON.                               │
@@ -4881,7 +4874,7 @@ Usage: onmc memstage approve [OPTIONS] {proposal_id}
 ## `onmc memstage diff`
 
 ```text
-Usage: onmc memstage diff [OPTIONS] {proposal_id}
+Usage: onmc memstage diff [OPTIONS] PROPOSAL_ID
 
  Show the full proposed entry in unified-diff style.
 
@@ -4890,9 +4883,8 @@ Usage: onmc memstage diff [OPTIONS] {proposal_id}
  something that *would* land in the store on approve.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to diff (from 'onmc memstage        │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to diff (from 'onmc memstage list'). │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -4919,7 +4911,7 @@ Usage: onmc memstage list [OPTIONS]
 ## `onmc memstage reject`
 
 ```text
-Usage: onmc memstage reject [OPTIONS] {proposal_id}
+Usage: onmc memstage reject [OPTIONS] PROPOSAL_ID
 
  Reject a pending proposal: drop it and keep an audit trail.
 
@@ -4927,14 +4919,14 @@ Usage: onmc memstage reject [OPTIONS] {proposal_id}
  written under ``.onmc/memstage/audit/`` so the decision is traceable.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to reject (from 'onmc memstage      │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to reject (from 'onmc memstage       │
+│                             list').                                          │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --reason        <str>  Why this proposal is being rejected.                  │
-│ --json                 Emit the audit record as JSON.                        │
-│ --help                 Show this message and exit.                           │
+│ --reason        TEXT  Why this proposal is being rejected.                   │
+│ --json                Emit the audit record as JSON.                         │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4946,20 +4938,20 @@ Usage: onmc mine [OPTIONS]
  Mine Claude Code session transcripts into ONMC memory.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --github                Mine GitHub PRs and reviews from the repo remote.    │
-│ --session        <str>  Mine a specific session id.                          │
-│ --dry-run               Show findings without writing them.                  │
-│ --since          <str>  Only process transcripts newer than this value.      │
-│ --no-llm                Skip LLM extraction and only inspect transcript      │
-│                         availability.                                        │
-│ --help                  Show this message and exit.                          │
+│ --github               Mine GitHub PRs and reviews from the repo remote.     │
+│ --session        TEXT  Mine a specific session id.                           │
+│ --dry-run              Show findings without writing them.                   │
+│ --since          TEXT  Only process transcripts newer than this value.       │
+│ --no-llm               Skip LLM extraction and only inspect transcript       │
+│                        availability.                                         │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc mission`
 
 ```text
-Usage: onmc mission [OPTIONS] {goal}
+Usage: onmc mission [OPTIONS] GOAL
 
  Run the engineering pipeline end-to-end into one mission plan.
 
@@ -4969,29 +4961,29 @@ Usage: onmc mission [OPTIONS] {goal}
  agents; ``--execute`` additionally allocates the swarm manifest.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  The mission goal — what you want done. [required]      │
+│ *    goal      TEXT  The mission goal — what you want done. [required]       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --execute                                  Hand the plan to the swarm        │
-│                                            (materialise its manifest).       │
-│                                            Default is plan mode: a safe,     │
-│                                            offline dry-run that spawns       │
-│                                            nothing.                          │
-│ --concurrency        <int range> [x>=1]    Advisory swarm fan-out width.     │
-│                                            [default: 4]                      │
-│ --budget             <int range> [x>=400]  Context-pack markdown character   │
-│                                            budget.                           │
-│                                            [default: 12000]                  │
-│ --json                                     Emit the mission plan as JSON     │
-│                                            instead of markdown.              │
-│ --strict                                   Refuse to run the mission when    │
-│                                            the brain is unready (never       │
-│                                            ingested or repo-file index       │
-│                                            empty). Without --strict a        │
-│                                            warning is printed to stderr and  │
-│                                            the mission proceeds (possibly    │
-│                                            unreliable).                      │
-│ --help                                     Show this message and exit.       │
+│ --execute                                    Hand the plan to the swarm      │
+│                                              (materialise its manifest).     │
+│                                              Default is plan mode: a safe,   │
+│                                              offline dry-run that spawns     │
+│                                              nothing.                        │
+│ --concurrency        INTEGER RANGE [x>=1]    Advisory swarm fan-out width.   │
+│                                              [default: 4]                    │
+│ --budget             INTEGER RANGE [x>=400]  Context-pack markdown character │
+│                                              budget.                         │
+│                                              [default: 12000]                │
+│ --json                                       Emit the mission plan as JSON   │
+│                                              instead of markdown.            │
+│ --strict                                     Refuse to run the mission when  │
+│                                              the brain is unready (never     │
+│                                              ingested or repo-file index     │
+│                                              empty). Without --strict a      │
+│                                              warning is printed to stderr    │
+│                                              and the mission proceeds        │
+│                                              (possibly unreliable).          │
+│ --help                                       Show this message and exit.     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5018,7 +5010,7 @@ Usage: onmc mission-bridge [OPTIONS] COMMAND [ARGS]...
 ## `onmc mission-bridge allow`
 
 ```text
-Usage: onmc mission-bridge allow [OPTIONS] [identity]
+Usage: onmc mission-bridge allow [OPTIONS] [IDENTITY]
 
  Manage the deny-by-default mission command allowlist.
 
@@ -5026,27 +5018,27 @@ Usage: onmc mission-bridge allow [OPTIONS] [identity]
  different channel is a different principal.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   identity      <str>  Channel-scoped identity, e.g. slack:U123 or           │
-│                        telegram:456.                                         │
+│   [identity]      TEXT  Channel-scoped identity, e.g. slack:U123 or          │
+│                         telegram:456.                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --remove               Remove the identity instead of adding it.             │
-│ --check         <str>  Test an identity against the allowlist and exit.      │
-│ --list                 List the current allowlist and exit.                  │
-│ --help                 Show this message and exit.                           │
+│ --remove              Remove the identity instead of adding it.              │
+│ --check         TEXT  Test an identity against the allowlist and exit.       │
+│ --list                List the current allowlist and exit.                   │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc mission-bridge approve`
 
 ```text
-Usage: onmc mission-bridge approve [OPTIONS] {message}
+Usage: onmc mission-bridge approve [OPTIONS] MESSAGE
 
  Resolve a chat reply into a structured approve action (JSON).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    message      <str>  Chat reply or button callback_data to resolve.      │
-│                          [required]                                          │
+│ *    message      TEXT  Chat reply or button callback_data to resolve.       │
+│                         [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -5056,7 +5048,7 @@ Usage: onmc mission-bridge approve [OPTIONS] {message}
 ## `onmc mission-bridge card`
 
 ```text
-Usage: onmc mission-bridge card [OPTIONS] {swarm_id}
+Usage: onmc mission-bridge card [OPTIONS] SWARM_ID
 
  Build a swarm's channel-agnostic trust card and render it.
 
@@ -5064,20 +5056,20 @@ Usage: onmc mission-bridge card [OPTIONS] {swarm_id}
  emits a card marking each unit VERIFIED or HELD, with honest cost.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm id to build the trust card for. [required]   │
+│ *    swarm_id      TEXT  Swarm id to build the trust card for. [required]    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --goal            <str>  Optional mission goal for the card header.          │
-│ --format  -f      <str>  Render format: slack | telegram | plain.            │
-│                          [default: plain]                                    │
-│ --help                   Show this message and exit.                         │
+│ --goal            TEXT  Optional mission goal for the card header.           │
+│ --format  -f      TEXT  Render format: slack | telegram | plain.             │
+│                         [default: plain]                                     │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc mission-bridge intake`
 
 ```text
-Usage: onmc mission-bridge intake [OPTIONS] {message}
+Usage: onmc mission-bridge intake [OPTIONS] MESSAGE
 
  Parse a chat message into a mission goal + optional concurrency/budget.
 
@@ -5085,20 +5077,20 @@ Usage: onmc mission-bridge intake [OPTIONS] {message}
  or mention-only) so a gateway can ignore it.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    message      <str>  Inbound chat message to normalize into a mission    │
-│                          request.                                            │
-│                          [required]                                          │
+│ *    message      TEXT  Inbound chat message to normalize into a mission     │
+│                         request.                                             │
+│                         [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mention        <str>  Bot handle to strip (e.g. @onmc). [default: @onmc]   │
-│ --help                  Show this message and exit.                          │
+│ --mention        TEXT  Bot handle to strip (e.g. @onmc). [default: @onmc]    │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc missioncontrol`
 
 ```text
-Usage: onmc missioncontrol [OPTIONS] [swarm_id]
+Usage: onmc missioncontrol [OPTIONS] [SWARM_ID]
 
  Live, read-only dashboard for an onmc swarm.
 
@@ -5108,7 +5100,7 @@ Usage: onmc missioncontrol [OPTIONS] [swarm_id]
  Never mutates swarm state.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm id to inspect. Omit with --all to list swarms.  │
+│   [swarm_id]      TEXT  Swarm id to inspect. Omit with --all to list swarms. │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           List all swarms under .onmc/swarm and exit.                  │
@@ -5131,25 +5123,25 @@ Usage: onmc nightshift [OPTIONS]
  suppresses the digest, emitting the plan as JSON.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --goal                       <str>   A backlog goal for the overnight swarm. │
-│                                      Repeatable.                             │
-│ --file                       <path>  Read backlog goals from a file (one per │
-│                                      line, # comments ignored).              │
-│ --budget                     <int>   Max swarm units to schedule overnight.  │
-│                                      [default: 5]                            │
-│ --dry-run    --no-dry-run            Plan only — spawn nothing (default).    │
-│                                      Print the plan + a sample morning       │
-│                                      digest.                                 │
-│                                      [default: dry-run]                      │
-│ --json                               Emit the nightshift plan as JSON.       │
-│ --help                               Show this message and exit.             │
+│ --goal                       TEXT     A backlog goal for the overnight       │
+│                                       swarm. Repeatable.                     │
+│ --file                       PATH     Read backlog goals from a file (one    │
+│                                       per line, # comments ignored).         │
+│ --budget                     INTEGER  Max swarm units to schedule overnight. │
+│                                       [default: 5]                           │
+│ --dry-run    --no-dry-run             Plan only — spawn nothing (default).   │
+│                                       Print the plan + a sample morning      │
+│                                       digest.                                │
+│                                       [default: dry-run]                     │
+│ --json                                Emit the nightshift plan as JSON.      │
+│ --help                                Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc nomistakes`
 
 ```text
-Usage: onmc nomistakes [OPTIONS] {goal}
+Usage: onmc nomistakes [OPTIONS] GOAL
 
  Run the No-Mistakes PR gate: audit + eval + autopilot + receipt verdict.
 
@@ -5167,49 +5159,49 @@ Usage: onmc nomistakes [OPTIONS] {goal}
  onmc nomistakes "inspect risk only" --autonomy L1 --dry-run
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  Goal for the PR/CI gate. [required]                    │
+│ *    goal      TEXT  Goal for the PR/CI gate. [required]                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --agent                               <str>              Agent CLI to use:   │
+│ --agent                               TEXT               Agent CLI to use:   │
 │                                                          claude (default),   │
 │                                                          codex, or opencode. │
 │                                                          [default: claude]   │
-│ --autonomy                            <str>              Autonomy level: L0  │
+│ --autonomy                            TEXT               Autonomy level: L0  │
 │                                                          observe, L1 advise, │
 │                                                          L2 act+prove, L3    │
 │                                                          extended, L4        │
 │                                                          reserved.           │
 │                                                          [default: L2]       │
-│ --verify                              <str>              Shell verifier      │
+│ --verify                              TEXT               Shell verifier      │
 │                                                          required for        │
 │                                                          approval.           │
 │                                                          [default: pytest]   │
-│ --max-iterations                      <int range>        Maximum loop        │
+│ --max-iterations                      INTEGER RANGE      Maximum loop        │
 │                                       [x>=1]             iterations.         │
 │                                                          [default: 6]        │
-│ --budget-tokens                       <int range>        Stop when total     │
+│ --budget-tokens                       INTEGER RANGE      Stop when total     │
 │                                       [x>=1]             tokens exceed this  │
 │                                                          budget.             │
 │                                                          [default: 80000]    │
-│ --max-cost-usd                        <float range>      USD cost ceiling    │
+│ --max-cost-usd                        FLOAT RANGE        USD cost ceiling    │
 │                                       [x>=0.0]           for the run.        │
 │                                                          [default: 3.0]      │
-│ --max-wall-seconds                    <int range>        Wall-clock ceiling  │
+│ --max-wall-seconds                    INTEGER RANGE      Wall-clock ceiling  │
 │                                       [x>=1]             in seconds.         │
 │                                                          [default: 900]      │
-│ --audit-fail-on                       <str>              Block on audit      │
+│ --audit-fail-on                       TEXT               Block on audit      │
 │                                                          findings at or      │
 │                                                          above: critical,    │
 │                                                          high, medium, low,  │
 │                                                          info.               │
 │                                                          [default: high]     │
-│ --eval-fail-under                     <float range>      Run eval gate and   │
+│ --eval-fail-under                     FLOAT RANGE        Run eval gate and   │
 │                                       [0.0<=x<=100.0]    block when score is │
 │                                                          below this          │
 │                                                          threshold.          │
-│ --plan-with                           <str>              Model for optional  │
+│ --plan-with                           TEXT               Model for optional  │
 │                                                          PLAN step.          │
-│ --execute-with                        <str>              Model for ACT step. │
+│ --execute-with                        TEXT               Model for ACT step. │
 │ --isolate             --no-isolate                       Run in an isolated  │
 │                                                          git worktree by     │
 │                                                          default.            │
@@ -5276,10 +5268,10 @@ Usage: onmc notify tail [OPTIONS]
  the FileSink always writes a local JSONL copy when enabled.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --lines  -n      <int range> [x>=1]  Number of recent events to show.        │
-│                                      [default: 20]                           │
-│ --json                               Emit events as a JSON array.            │
-│ --help                               Show this message and exit.             │
+│ --lines  -n      INTEGER RANGE [x>=1]  Number of recent events to show.      │
+│                                        [default: 20]                         │
+│ --json                                 Emit events as a JSON array.          │
+│ --help                                 Show this message and exit.           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5294,9 +5286,9 @@ Usage: onmc notify test [OPTIONS]
  connecting real hooks.  The test event has kind=generic and severity=routine.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --message  -m      <str>  Custom message for the test event.                 │
-│                           [default: test notification from onmc]             │
-│ --help                    Show this message and exit.                        │
+│ --message  -m      TEXT  Custom message for the test event.                  │
+│                          [default: test notification from onmc]              │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5356,12 +5348,12 @@ Usage: onmc orggraph build [OPTIONS]
 ## `onmc orggraph query`
 
 ```text
-Usage: onmc orggraph query [OPTIONS] {entity}
+Usage: onmc orggraph query [OPTIONS] ENTITY
 
  Show an entity's neighbours and the provenance (memory ids) behind it.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    entity      <str>  Entity name to inspect. [required]                   │
+│ *    entity      TEXT  Entity name to inspect. [required]                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the query result as JSON.                               │
@@ -5372,12 +5364,12 @@ Usage: onmc orggraph query [OPTIONS] {entity}
 ## `onmc orggraph why`
 
 ```text
-Usage: onmc orggraph why [OPTIONS] {decision}
+Usage: onmc orggraph why [OPTIONS] DECISION
 
  Explain a decision: the ordered chain of edges/memories behind it.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    decision      <str>  Decision entity name. [required]                   │
+│ *    decision      TEXT  Decision entity name. [required]                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the lineage as JSON.                                    │
@@ -5388,7 +5380,7 @@ Usage: onmc orggraph why [OPTIONS] {decision}
 ## `onmc pack`
 
 ```text
-Usage: onmc pack [OPTIONS] {goal}
+Usage: onmc pack [OPTIONS] GOAL
 
  Build a per-task context pack: dead-ends, decisions, reuse, files.
 
@@ -5400,21 +5392,21 @@ Usage: onmc pack [OPTIONS] {goal}
  agent always starts with the exact files it was told to edit.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    goal      <str>  Goal or task description for the spawned agent.        │
-│                       [required]                                             │
+│ *    goal      TEXT  Goal or task description for the spawned agent.         │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --budget        <int range> [x>=400]  Maximum markdown characters.           │
-│                                       [default: 12000]                       │
-│ --json                                Emit the pack as JSON instead of       │
-│                                       markdown.                              │
-│ --strict                              Refuse to build the pack when the      │
-│                                       brain is unready (never ingested or    │
-│                                       repo-file index empty). Without        │
-│                                       --strict a warning is printed to       │
-│                                       stderr and the pack proceeds (possibly │
-│                                       unreliable).                           │
-│ --help                                Show this message and exit.            │
+│ --budget        INTEGER RANGE [x>=400]  Maximum markdown characters.         │
+│                                         [default: 12000]                     │
+│ --json                                  Emit the pack as JSON instead of     │
+│                                         markdown.                            │
+│ --strict                                Refuse to build the pack when the    │
+│                                         brain is unready (never ingested or  │
+│                                         repo-file index empty). Without      │
+│                                         --strict a warning is printed to     │
+│                                         stderr and the pack proceeds         │
+│                                         (possibly unreliable).               │
+│ --help                                  Show this message and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5463,7 +5455,7 @@ Usage: onmc persona list [OPTIONS]
 ## `onmc persona say`
 
 ```text
-Usage: onmc persona say [OPTIONS] {event}
+Usage: onmc persona say [OPTIONS] EVENT
 
  Emit a line for EVENT in the active persona's voice.
 
@@ -5479,25 +5471,25 @@ Usage: onmc persona say [OPTIONS] {event}
      onmc persona say build_break --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event      <str>  Event kind to speak to. Recognised: test_pass,        │
-│                        test_fail, pr_merged, build_pass, build_break,        │
-│                        commit, generic. Unknown events fall through to the   │
-│                        generic bank.                                         │
-│                        [required]                                            │
+│ *    event      TEXT  Event kind to speak to. Recognised: test_pass,         │
+│                       test_fail, pr_merged, build_pass, build_break, commit, │
+│                       generic. Unknown events fall through to the generic    │
+│                       bank.                                                  │
+│                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --seed        <int>  Deterministic selection seed. The same (persona, event, │
-│                      seed) triple always produces the same line.             │
-│                      [default: 0]                                            │
-│ --json               Emit the result as JSON.                                │
-│ --help               Show this message and exit.                             │
+│ --seed        INTEGER  Deterministic selection seed. The same (persona,      │
+│                        event, seed) triple always produces the same line.    │
+│                        [default: 0]                                          │
+│ --json                 Emit the result as JSON.                              │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc persona set`
 
 ```text
-Usage: onmc persona set [OPTIONS] {name}
+Usage: onmc persona set [OPTIONS] NAME
 
  Set the active personality preset for this repository.
 
@@ -5512,9 +5504,9 @@ Usage: onmc persona set [OPTIONS] {name}
      onmc persona set hype-beast --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    name      <str>  Persona name to activate. Available: drill-sergeant,   │
-│                       hype-beast, pirate, professional, zen-master.          │
-│                       [required]                                             │
+│ *    name      TEXT  Persona name to activate. Available: drill-sergeant,    │
+│                      hype-beast, pirate, professional, zen-master.           │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the result as JSON.                                     │
@@ -5589,12 +5581,12 @@ Usage: onmc playbook list [OPTIONS]
 ## `onmc playbook show`
 
 ```text
-Usage: onmc playbook show [OPTIONS] {playbook_id}
+Usage: onmc playbook show [OPTIONS] PLAYBOOK_ID
 
  Show a single playbook with steps and provenance.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    playbook_id      <str>  Playbook ID (or prefix) to show. [required]     │
+│ *    playbook_id      TEXT  Playbook ID (or prefix) to show. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -5604,7 +5596,7 @@ Usage: onmc playbook show [OPTIONS] {playbook_id}
 ## `onmc plug`
 
 ```text
-Usage: onmc plug [OPTIONS] {target}
+Usage: onmc plug [OPTIONS] TARGET
 
  Wire onmc into a target coding agent (one-shot idempotent wizard).
 
@@ -5624,9 +5616,9 @@ Usage: onmc plug [OPTIONS] {target}
  All writes are idempotent — running twice never duplicates stanzas.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    target      <str>  Agent to wire onmc into. Choices: claude-code,       │
-│                         codex, opencode, cursor, omc, omx, all.              │
-│                         [required]                                           │
+│ *    target      TEXT  Agent to wire onmc into. Choices: claude-code, codex, │
+│                        opencode, cursor, omc, omx, all.                      │
+│                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -5636,7 +5628,7 @@ Usage: onmc plug [OPTIONS] {target}
 ## `onmc postmortem`
 
 ```text
-Usage: onmc postmortem [OPTIONS] [swarm_id]
+Usage: onmc postmortem [OPTIONS] [SWARM_ID]
 
  LLM-free structured narrative recap of a completed swarm run.
 
@@ -5648,7 +5640,8 @@ Usage: onmc postmortem [OPTIONS] [swarm_id]
  missing/partial data instead of crashing.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm id to recap. Omit to use the most recent swarm. │
+│   [swarm_id]      TEXT  Swarm id to recap. Omit to use the most recent       │
+│                         swarm.                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured postmortem as JSON.                      │
@@ -5659,7 +5652,7 @@ Usage: onmc postmortem [OPTIONS] [swarm_id]
 ## `onmc prbadge`
 
 ```text
-Usage: onmc prbadge [OPTIONS] {pr_number}
+Usage: onmc prbadge [OPTIONS] PR_NUMBER
 
  Post a "verified-work" onmc badge comment on a GitHub PR.
 
@@ -5675,18 +5668,18 @@ Usage: onmc prbadge [OPTIONS] {pr_number}
  number.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr_number      <int>  PR number to post the onmc verified-work badge    │
-│                            to.                                               │
-│                            [required]                                        │
+│ *    pr_number      INTEGER  PR number to post the onmc verified-work badge  │
+│                              to.                                             │
+│                              [required]                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --dry-run               Build and print the comment without posting it       │
-│                         (default when --json is set).                        │
-│ --repo           <str>  owner/name to post to (defaults to auto-detection    │
-│                         via gh/git remote).                                  │
-│ --json                  Emit the structured badge data as JSON. Implies      │
-│                         --dry-run; never posts.                              │
-│ --help                  Show this message and exit.                          │
+│ --dry-run              Build and print the comment without posting it        │
+│                        (default when --json is set).                         │
+│ --repo           TEXT  owner/name to post to (defaults to auto-detection via │
+│                        gh/git remote).                                       │
+│ --json                 Emit the structured badge data as JSON. Implies       │
+│                        --dry-run; never posts.                               │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5720,23 +5713,23 @@ Usage: onmc preflight [OPTIONS]
  - 2 — usage error
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --only             <str>  Run only these steps (repeatable).  One or more    │
-│                           of: ruff, mypy, cliref, pytest.  Default: run all, │
-│                           in CI order.                                       │
-│ --json                    Emit the PreflightReport as JSON to stdout.        │
-│ --provision               Run each tool via `uv run --with <tool>` so a      │
-│                           fresh worktree (no dev deps installed) resolves    │
-│                           ruff/mypy/pytest on demand, and pin typer==0.26.8  │
-│                           for the cli-reference step to match CI.            │
-│ --exact                   Mirror the CI quality gate exactly: uses the full  │
-│                           pytest coverage flags (--cov-fail-under=80) and    │
-│                           always pins typer==0.26.8 for the cli-reference    │
-│                           step.  Provisions via uv when available.           │
-│ --fix                     Auto-fix ruff violations (ruff check --fix) and    │
-│                           regenerate docs/cli-reference.md with pinned       │
-│                           typer==0.26.8, then re-run the exact CI gate and   │
-│                           report the result.  Implies --exact.               │
-│ --help                    Show this message and exit.                        │
+│ --only             TEXT  Run only these steps (repeatable).  One or more of: │
+│                          ruff, mypy, cliref, pytest.  Default: run all, in   │
+│                          CI order.                                           │
+│ --json                   Emit the PreflightReport as JSON to stdout.         │
+│ --provision              Run each tool via `uv run --with <tool>` so a fresh │
+│                          worktree (no dev deps installed) resolves           │
+│                          ruff/mypy/pytest on demand, and pin typer==0.26.8   │
+│                          for the cli-reference step to match CI.             │
+│ --exact                  Mirror the CI quality gate exactly: uses the full   │
+│                          pytest coverage flags (--cov-fail-under=80) and     │
+│                          always pins typer==0.26.8 for the cli-reference     │
+│                          step.  Provisions via uv when available.            │
+│ --fix                    Auto-fix ruff violations (ruff check --fix) and     │
+│                          regenerate docs/cli-reference.md with pinned        │
+│                          typer==0.26.8, then re-run the exact CI gate and    │
+│                          report the result.  Implies --exact.                │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5808,7 +5801,7 @@ Usage: onmc proptest [OPTIONS] COMMAND [ARGS]...
 ## `onmc proptest init`
 
 ```text
-Usage: onmc proptest init [OPTIONS] {spec}
+Usage: onmc proptest init [OPTIONS] SPEC
 
  Generate a fixed-seed property test from an invariant SPEC.
 
@@ -5818,14 +5811,14 @@ Usage: onmc proptest init [OPTIONS] {spec}
  runs are deterministic and reproducible.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    spec      <path>  Path to the invariant spec JSON file. [required]      │
+│ *    spec      PATH  Path to the invariant spec JSON file. [required]        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out          <path>  Directory to write the generated test into.           │
-│                        [default: tests]                                      │
-│ --force                Overwrite an existing test file.                      │
-│ --json                 Emit a JSON result instead of human text.             │
-│ --help                 Show this message and exit.                           │
+│ --out          PATH  Directory to write the generated test into.             │
+│                      [default: tests]                                        │
+│ --force              Overwrite an existing test file.                        │
+│ --json               Emit a JSON result instead of human text.               │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -5871,17 +5864,17 @@ Usage: onmc proxy serve [OPTIONS]
      onmc proxy serve --host 0.0.0.0 --port 8760
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --port        <int>  TCP port to listen on. [default: 8760]                  │
-│ --host        <str>  Bind address (use 0.0.0.0 to expose to the network).    │
-│                      [default: 127.0.0.1]                                    │
-│ --help               Show this message and exit.                             │
+│ --port        INTEGER  TCP port to listen on. [default: 8760]                │
+│ --host        TEXT     Bind address (use 0.0.0.0 to expose to the network).  │
+│                        [default: 127.0.0.1]                                  │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc pull`
 
 ```text
-Usage: onmc pull [OPTIONS] [source]
+Usage: onmc pull [OPTIONS] [SOURCE]
 
  Import another repo's .agent-memory/ export into this brain (federated
  memories).
@@ -5908,33 +5901,33 @@ Usage: onmc pull [OPTIONS] [source]
  config.yaml.  One failing source never aborts the rest.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   source      <str>  Local path to another repo (or its .agent-memory/ dir), │
-│                      or a remote git URL (https://, git@, ssh://). Omit when │
-│                      using --all.                                            │
+│   [source]      TEXT  Local path to another repo (or its .agent-memory/      │
+│                       dir), or a remote git URL (https://, git@, ssh://).    │
+│                       Omit when using --all.                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --all                   Pull from every source listed in federation.sources  │
-│                         in config.yaml. Mutually exclusive with the SOURCE   │
-│                         argument.                                            │
-│ --label          <str>  Override the short repo label used for the           │
-│                         federated:<label> tag. For local paths defaults to   │
-│                         the source directory name; for git URLs defaults to  │
-│                         the last path segment of the URL. Ignored when --all │
-│                         is used.                                             │
-│ --ref            <str>  Branch, tag, or commit-ish to check out when cloning │
-│                         a remote git URL. Ignored for local paths and when   │
-│                         --all is used.                                       │
-│ --dry-run               List what would be pulled without writing any        │
-│                         memories (--all only).                               │
-│ --json                  Emit a machine-readable JSON summary to stdout.      │
-│ --help                  Show this message and exit.                          │
+│ --all                  Pull from every source listed in federation.sources   │
+│                        in config.yaml. Mutually exclusive with the SOURCE    │
+│                        argument.                                             │
+│ --label          TEXT  Override the short repo label used for the            │
+│                        federated:<label> tag. For local paths defaults to    │
+│                        the source directory name; for git URLs defaults to   │
+│                        the last path segment of the URL. Ignored when --all  │
+│                        is used.                                              │
+│ --ref            TEXT  Branch, tag, or commit-ish to check out when cloning  │
+│                        a remote git URL. Ignored for local paths and when    │
+│                        --all is used.                                        │
+│ --dry-run              List what would be pulled without writing any         │
+│                        memories (--all only).                                │
+│ --json                 Emit a machine-readable JSON summary to stdout.       │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc pulse`
 
 ```text
-Usage: onmc pulse [OPTIONS] [swarm_id]
+Usage: onmc pulse [OPTIONS] [SWARM_ID]
 
  Live "is it stuck?" heartbeat for your swarms — push it to your phone.
 
@@ -5951,17 +5944,17 @@ Usage: onmc pulse [OPTIONS] [swarm_id]
  when there are no active swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Only pulse this swarm. Omit to pulse every active     │
-│                        swarm.                                                │
+│   [swarm_id]      TEXT  Only pulse this swarm. Omit to pulse every active    │
+│                         swarm.                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                        Emit the pulse as machine-readable JSON.       │
-│ --notify                      Push the verdict via the configured notify     │
-│                               sink(s).                                       │
-│ --stuck-after        <float>  Seconds a running unit may make no progress    │
-│                               before it is flagged stuck.                    │
-│                               [default: 300.0]                               │
-│ --help                        Show this message and exit.                    │
+│ --json                      Emit the pulse as machine-readable JSON.         │
+│ --notify                    Push the verdict via the configured notify       │
+│                             sink(s).                                         │
+│ --stuck-after        FLOAT  Seconds a running unit may make no progress      │
+│                             before it is flagged stuck.                      │
+│                             [default: 300.0]                                 │
+│ --help                      Show this message and exit.                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6072,7 +6065,7 @@ Usage: onmc quickstart [OPTIONS]
 ## `onmc race`
 
 ```text
-Usage: onmc race [OPTIONS] [goal]
+Usage: onmc race [OPTIONS] [GOAL]
 
  Offline model/strategy tournament over recorded run receipts.
 
@@ -6085,7 +6078,7 @@ Usage: onmc race [OPTIONS] [goal]
  fully offline (no LLM call).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   goal      <str>  Goal to cluster receipts on (keyword overlap).            │
+│   [goal]      TEXT  Goal to cluster receipts on (keyword overlap).           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Race every model over the whole receipt corpus.              │
@@ -6097,7 +6090,7 @@ Usage: onmc race [OPTIONS] [goal]
 ## `onmc recall`
 
 ```text
-Usage: onmc recall [OPTIONS] [query]
+Usage: onmc recall [OPTIONS] [QUERY]
 
  Search memory for past incidents matching an error or stacktrace.
 
@@ -6111,16 +6104,16 @@ Usage: onmc recall [OPTIONS] [query]
    cat error.log | onmc recall
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   query      <str>  Error text or stacktrace to search for. Omit to read     │
-│                     from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).    │
+│   [query]      TEXT  Error text or stacktrace to search for. Omit to read    │
+│                      from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit        <int range> [x>=1]  Maximum number of incident matches to     │
-│                                    return.                                   │
-│                                    [default: 8]                              │
-│ --terse                            Emit compact terse output (overrides      │
-│                                    ONMC_TERSE env var).                      │
-│ --help                             Show this message and exit.               │
+│ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
+│                                      return.                                 │
+│                                      [default: 8]                            │
+│ --terse                              Emit compact terse output (overrides    │
+│                                      ONMC_TERSE env var).                    │
+│ --help                               Show this message and exit.             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6146,7 +6139,7 @@ Usage: onmc refinery [OPTIONS] COMMAND [ARGS]...
 ## `onmc refinery add`
 
 ```text
-Usage: onmc refinery add [OPTIONS] {pr}
+Usage: onmc refinery add [OPTIONS] PR
 
  Enqueue a PR (or update its priority if already present).
 
@@ -6159,14 +6152,14 @@ Usage: onmc refinery add [OPTIONS] {pr}
      onmc refinery add 456 --priority 10
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr      <int>  PR number to enqueue. [required]                         │
+│ *    pr      INTEGER  PR number to enqueue. [required]                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --priority        <int>  Queue priority (higher = processed first). Default  │
-│                          0.                                                  │
-│                          [default: 0]                                        │
-│ --json                   Emit result as a JSON object.                       │
-│ --help                   Show this message and exit.                         │
+│ --priority        INTEGER  Queue priority (higher = processed first).        │
+│                            Default 0.                                        │
+│                            [default: 0]                                      │
+│ --json                     Emit result as a JSON object.                     │
+│ --help                     Show this message and exit.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6190,7 +6183,7 @@ Usage: onmc refinery clear [OPTIONS]
 ## `onmc refinery drop`
 
 ```text
-Usage: onmc refinery drop [OPTIONS] {pr}
+Usage: onmc refinery drop [OPTIONS] PR
 
  Remove a PR from the queue (any state).
 
@@ -6199,7 +6192,7 @@ Usage: onmc refinery drop [OPTIONS] {pr}
  onmc refinery drop 123
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    pr      <int>  PR number to remove from the queue. [required]           │
+│ *    pr      INTEGER  PR number to remove from the queue. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit result as a JSON object.                                │
@@ -6227,10 +6220,10 @@ Usage: onmc refinery run [OPTIONS]
      onmc refinery run --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --max         <int>  Maximum number of PRs to process (default: 1).          │
-│                      [default: 1]                                            │
-│ --json               Emit results as a JSON object.                          │
-│ --help               Show this message and exit.                             │
+│ --max         INTEGER  Maximum number of PRs to process (default: 1).        │
+│                        [default: 1]                                          │
+│ --json                 Emit results as a JSON object.                        │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6277,7 +6270,7 @@ Usage: onmc registry [OPTIONS] COMMAND [ARGS]...
 ## `onmc registry add`
 
 ```text
-Usage: onmc registry add [OPTIONS] {attestation_file}
+Usage: onmc registry add [OPTIONS] ATTESTATION_FILE
 
  Verify + ingest one attestation into the persisted trust ledger.
 
@@ -6288,35 +6281,35 @@ Usage: onmc registry add [OPTIONS] {attestation_file}
  read at all.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    attestation_file      <str>  Path to an attestation JSON produced by    │
-│                                   `attest sign --json`.                      │
-│                                   [required]                                 │
+│ *    attestation_file      TEXT  Path to an attestation JSON produced by     │
+│                                  `attest sign --json`.                       │
+│                                  [required]                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --secret        <str>  Shared secret for HMAC verification (else             │
-│                        ONMC_ATTEST_SECRET).                                  │
-│ --json                 Emit the updated agent line as JSON.                  │
-│ --help                 Show this message and exit.                           │
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the updated agent line as JSON.                   │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc registry agent`
 
 ```text
-Usage: onmc registry agent [OPTIONS] {subject}
+Usage: onmc registry agent [OPTIONS] SUBJECT
 
  Show one agent's full reputation + its attestation history count.
 
  Exits non-zero when the subject has no attestations in the ledger.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    subject      <str>  The agent subject (identity) to look up. [required] │
+│ *    subject      TEXT  The agent subject (identity) to look up. [required]  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --secret        <str>  Shared secret for HMAC verification (else             │
-│                        ONMC_ATTEST_SECRET).                                  │
-│ --json                 Emit the agent's reputation as JSON.                  │
-│ --help                 Show this message and exit.                           │
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the agent's reputation as JSON.                   │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6332,10 +6325,10 @@ Usage: onmc registry rank [OPTIONS]
  empty ledger prints a friendly note.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --secret        <str>  Shared secret for HMAC verification (else             │
-│                        ONMC_ATTEST_SECRET).                                  │
-│ --json                 Emit the ranked leaderboard as JSON.                  │
-│ --help                 Show this message and exit.                           │
+│ --secret        TEXT  Shared secret for HMAC verification (else              │
+│                       ONMC_ATTEST_SECRET).                                   │
+│ --json                Emit the ranked leaderboard as JSON.                   │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6403,7 +6396,7 @@ Usage: onmc replay [OPTIONS] COMMAND [ARGS]...
 ## `onmc replay run`
 
 ```text
-Usage: onmc replay run [OPTIONS] {session_id_or_path}
+Usage: onmc replay run [OPTIONS] SESSION_ID_OR_PATH
 
  Re-derive onmc memory hits over a recorded trace session.
 
@@ -6425,10 +6418,10 @@ Usage: onmc replay run [OPTIONS] {session_id_or_path}
    onmc replay run tr_abc123def456 --without-memory
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    session_id_or_path      <str>  Session ID (tr_…) to load from           │
-│                                     .onmc/traces/, or a direct path to a     │
-│                                     .jsonl session file.                     │
-│                                     [required]                               │
+│ *    session_id_or_path      TEXT  Session ID (tr_…) to load from            │
+│                                    .onmc/traces/, or a direct path to a      │
+│                                    .jsonl session file.                      │
+│                                    [required]                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --compare                 Run both with-memory and without-memory conditions │
@@ -6448,8 +6441,8 @@ Usage: onmc report [OPTIONS]
  Generate a shareable agent-readiness report.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --output  -o      <path>  Write the markdown report to this path.            │
-│ --help                    Show this message and exit.                        │
+│ --output  -o      PATH  Write the markdown report to this path.              │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6473,7 +6466,7 @@ Usage: onmc retrieval-eval [OPTIONS] COMMAND [ARGS]...
 ## `onmc reuse`
 
 ```text
-Usage: onmc reuse [OPTIONS] {query}
+Usage: onmc reuse [OPTIONS] QUERY
 
  Surface existing code that already does a thing — reuse before reimplementing.
 
@@ -6494,29 +6487,31 @@ Usage: onmc reuse [OPTIONS] {query}
    onmc reuse "def $F($$$ARGS):" --ast-grep
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    query      <str>  A description of the behaviour you need, or an        │
-│                        existing symbol name.                                 │
-│                        [required]                                            │
+│ *    query      TEXT  A description of the behaviour you need, or an         │
+│                       existing symbol name.                                  │
+│                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit                        <int range> [x>=1]  Maximum number of reuse   │
-│                                                    hits to return.           │
-│                                                    [default: 8]              │
-│ --json                                             Emit the ranked hits as   │
-│                                                    JSON instead of a table.  │
-│ --ast-grep    --no-ast-grep                        Use ast-grep (the         │
-│                                                    'ast-grep' or 'sg'        │
-│                                                    binary) for               │
-│                                                    structural/AST-pattern    │
-│                                                    matching in addition to   │
-│                                                    the text heuristic.       │
-│                                                    No-op when neither binary │
-│                                                    is on PATH (falls back to │
-│                                                    text-only, zero           │
-│                                                    regression).              │
-│                                                    [default: no-ast-grep]    │
-│ --help                                             Show this message and     │
-│                                                    exit.                     │
+│ --limit                        INTEGER RANGE [x>=1]  Maximum number of reuse │
+│                                                      hits to return.         │
+│                                                      [default: 8]            │
+│ --json                                               Emit the ranked hits as │
+│                                                      JSON instead of a       │
+│                                                      table.                  │
+│ --ast-grep    --no-ast-grep                          Use ast-grep (the       │
+│                                                      'ast-grep' or 'sg'      │
+│                                                      binary) for             │
+│                                                      structural/AST-pattern  │
+│                                                      matching in addition to │
+│                                                      the text heuristic.     │
+│                                                      No-op when neither      │
+│                                                      binary is on PATH       │
+│                                                      (falls back to          │
+│                                                      text-only, zero         │
+│                                                      regression).            │
+│                                                      [default: no-ast-grep]  │
+│ --help                                               Show this message and   │
+│                                                      exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6528,12 +6523,11 @@ Usage: onmc review [OPTIONS]
  Compile repo-aware review context and critique the proposed approach.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task              <str>   Task or proposed change to review. [required] │
-│    --input-file        <path>  Optional file containing plan, diff, or       │
-│                                notes.                                        │
-│    --no-llm                    Use heuristic fallback instead of the         │
-│                                configured LLM.                               │
-│    --help                      Show this message and exit.                   │
+│ *  --task              TEXT  Task or proposed change to review. [required]   │
+│    --input-file        PATH  Optional file containing plan, diff, or notes.  │
+│    --no-llm                  Use heuristic fallback instead of the           │
+│                              configured LLM.                                 │
+│    --help                    Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6557,7 +6551,7 @@ Usage: onmc roast [OPTIONS]
 ## `onmc route`
 
 ```text
-Usage: onmc route [OPTIONS] {task}
+Usage: onmc route [OPTIONS] TASK
 
  Deterministically route a task to an agent/model/strategy/gate.
 
@@ -6565,7 +6559,7 @@ Usage: onmc route [OPTIONS] {task}
  the same decision.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task      <str>  The task description to route. [required]              │
+│ *    task      TEXT  The task description to route. [required]               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the decision as JSON.                                   │
@@ -6576,7 +6570,7 @@ Usage: onmc route [OPTIONS] {task}
 ## `onmc run`
 
 ```text
-Usage: onmc run [OPTIONS] {task}
+Usage: onmc run [OPTIONS] TASK
 
  Plan safely by default, or execute ONMC's memory-grounded loop.
 
@@ -6586,41 +6580,40 @@ Usage: onmc run [OPTIONS] {task}
  ``--execute --resume RUN_ID``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task      <str>  Task for the execution harness. [required]             │
+│ *    task      TEXT  Task for the execution harness. [required]              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --plan-only                                     Emit the deterministic plan  │
-│                                                 without invoking an agent or │
-│                                                 verifier.                    │
-│ --execute                                       Explicitly allow the harness │
-│                                                 to invoke an agent and       │
-│                                                 mutate the worktree.         │
-│ --agent                 <str>                   Agent CLI: claude, codex, or │
-│                                                 opencode.                    │
-│                                                 [default: claude]            │
-│ --model                 <str>                   Model selector passed to the │
-│                                                 chosen agent adapter.        │
-│                                                 [default: default]           │
-│ --verifier              <str>                   Verifier command run by the  │
-│                                                 existing loop engine.        │
-│                                                 [default: pytest]            │
-│ --max-iterations        <int range> [x>=1]      Maximum loop iterations.     │
-│                                                 [default: 10]                │
-│ --max-cost-usd          <float range> [x>=0.0]  Optional agent cost ceiling  │
-│                                                 in USD.                      │
-│ --isolate                                       Run agent changes in the     │
-│                                                 loop engine's worktree.      │
-│ --risk                  <str>                   Execution risk: low, medium, │
-│                                                 high, or critical.           │
-│                                                 [default: medium]            │
-│ --context-budget        <int range> [x>=1]      Maximum context packet       │
-│                                                 tokens.                      │
-│                                                 [default: 4000]              │
-│ --resume                <str>                   Resume or inspect the        │
-│                                                 durable state for a run ID.  │
-│ --json                                          Emit the plan and result as  │
-│                                                 canonical JSON.              │
-│ --help                                          Show this message and exit.  │
+│ --plan-only                                   Emit the deterministic plan    │
+│                                               without invoking an agent or   │
+│                                               verifier.                      │
+│ --execute                                     Explicitly allow the harness   │
+│                                               to invoke an agent and mutate  │
+│                                               the worktree.                  │
+│ --agent                 TEXT                  Agent CLI: claude, codex, or   │
+│                                               opencode.                      │
+│                                               [default: claude]              │
+│ --model                 TEXT                  Model selector passed to the   │
+│                                               chosen agent adapter.          │
+│                                               [default: default]             │
+│ --verifier              TEXT                  Verifier command run by the    │
+│                                               existing loop engine.          │
+│                                               [default: pytest]              │
+│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
+│                                               [default: 10]                  │
+│ --max-cost-usd          FLOAT RANGE [x>=0.0]  Optional agent cost ceiling in │
+│                                               USD.                           │
+│ --isolate                                     Run agent changes in the loop  │
+│                                               engine's worktree.             │
+│ --risk                  TEXT                  Execution risk: low, medium,   │
+│                                               high, or critical.             │
+│                                               [default: medium]              │
+│ --context-budget        INTEGER RANGE [x>=1]  Maximum context packet tokens. │
+│                                               [default: 4000]                │
+│ --resume                TEXT                  Resume or inspect the durable  │
+│                                               state for a run ID.            │
+│ --json                                        Emit the plan and result as    │
+│                                               canonical JSON.                │
+│ --help                                        Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6754,17 +6747,17 @@ Usage: onmc serve [OPTIONS]
  Serve ONMC over the requested runtime protocol.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mcp                Run the ONMC MCP server over stdio.                     │
-│ --repo        <str>  Repository path to serve (resolved once at startup).    │
-│                      [default: .]                                            │
-│ --help               Show this message and exit.                             │
+│ --mcp               Run the ONMC MCP server over stdio.                      │
+│ --repo        TEXT  Repository path to serve (resolved once at startup).     │
+│                     [default: .]                                             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc session-search`
 
 ```text
-Usage: onmc session-search [OPTIONS] {query}
+Usage: onmc session-search [OPTIONS] QUERY
 
  Full-text search across all of onmc's persisted history.
 
@@ -6784,19 +6777,19 @@ Usage: onmc session-search [OPTIONS] {query}
      onmc session-search "migration" --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    query      <str>  Search query.  All alphanumeric tokens are matched    │
-│                        (OR logic).                                           │
-│                        [required]                                            │
+│ *    query      TEXT  Search query.  All alphanumeric tokens are matched (OR │
+│                       logic).                                                │
+│                       [required]                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit  -n      <int range> [1<=x<=500]  Maximum number of results to       │
-│                                           return.                            │
-│                                           [default: 20]                      │
-│ --json                                    Emit results as a JSON envelope    │
-│                                           {"kind": "session-search",         │
-│                                           "query": "...", "hits": [...]} for │
-│                                           pipeline composition.              │
-│ --help                                    Show this message and exit.        │
+│ --limit  -n      INTEGER RANGE [1<=x<=500]  Maximum number of results to     │
+│                                             return.                          │
+│                                             [default: 20]                    │
+│ --json                                      Emit results as a JSON envelope  │
+│                                             {"kind": "session-search",       │
+│                                             "query": "...", "hits": [...]}   │
+│                                             for pipeline composition.        │
+│ --help                                      Show this message and exit.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6883,19 +6876,19 @@ Usage: onmc skill export [OPTIONS]
  onmc skill export --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out          <path>  Output directory (default: .claude/skills/).          │
-│ --scope        <str>   'project' (default) → .claude/skills/; 'personal' →   │
-│                        ~/.claude/skills/.                                    │
-│                        [default: project]                                    │
-│ --json                 Emit list of written paths as JSON.                   │
-│ --help                 Show this message and exit.                           │
+│ --out          PATH  Output directory (default: .claude/skills/).            │
+│ --scope        TEXT  'project' (default) → .claude/skills/; 'personal' →     │
+│                      ~/.claude/skills/.                                      │
+│                      [default: project]                                      │
+│ --json               Emit list of written paths as JSON.                     │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc skill feedback`
 
 ```text
-Usage: onmc skill feedback [OPTIONS] {skill_id} {direction}
+Usage: onmc skill feedback [OPTIONS] SKILL_ID DIRECTION
 
  Apply a trust signal to a stored skill.
 
@@ -6911,10 +6904,10 @@ Usage: onmc skill feedback [OPTIONS] {skill_id} {direction}
  onmc skill feedback sk_abc123 up --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    skill_id       <str>  Skill ID to apply feedback to. [required]         │
-│ *    direction      <str>  Trust signal: 'up' (helped) or 'down' (did not    │
-│                            help).                                            │
-│                            [required]                                        │
+│ *    skill_id       TEXT  Skill ID to apply feedback to. [required]          │
+│ *    direction      TEXT  Trust signal: 'up' (helped) or 'down' (did not     │
+│                           help).                                             │
+│                           [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the updated skill as JSON.                              │
@@ -6938,7 +6931,7 @@ Usage: onmc skill list [OPTIONS]
 ## `onmc skill promote`
 
 ```text
-Usage: onmc skill promote [OPTIONS] [playbook_id]
+Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
 
  Promote a playbook or recurring patterns to skill(s).
 
@@ -6955,13 +6948,13 @@ Usage: onmc skill promote [OPTIONS] [playbook_id]
  onmc skill promote --auto --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   playbook_id      <str>  Playbook ID (or prefix) to promote to a skill.     │
+│   [playbook_id]      TEXT  Playbook ID (or prefix) to promote to a skill.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --auto               Auto-detect recurring patterns and promote all.         │
-│ --name        <str>  Override the skill name (only used with a playbook-id). │
-│ --json               Emit the new skill(s) as JSON.                          │
-│ --help               Show this message and exit.                             │
+│ --auto              Auto-detect recurring patterns and promote all.          │
+│ --name        TEXT  Override the skill name (only used with a playbook-id).  │
+│ --json              Emit the new skill(s) as JSON.                           │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6986,12 +6979,12 @@ Usage: onmc skill prune [OPTIONS]
 ## `onmc skill show`
 
 ```text
-Usage: onmc skill show [OPTIONS] {skill_id}
+Usage: onmc skill show [OPTIONS] SKILL_ID
 
  Show a single skill with body, trigger, and metadata.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    skill_id      <str>  Skill ID (or prefix) to show. [required]           │
+│ *    skill_id      TEXT  Skill ID (or prefix) to show. [required]            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the skill as JSON.                                      │
@@ -7023,7 +7016,7 @@ Usage: onmc skillguard [OPTIONS] COMMAND [ARGS]...
 ## `onmc skillguard approve`
 
 ```text
-Usage: onmc skillguard approve [OPTIONS] {proposal_id}
+Usage: onmc skillguard approve [OPTIONS] PROPOSAL_ID
 
  Approve a pending proposal and apply it to the skill store.
 
@@ -7033,9 +7026,9 @@ Usage: onmc skillguard approve [OPTIONS] {proposal_id}
  ``.onmc/skillguard/audit/``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to approve (from 'onmc skillguard   │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to approve (from 'onmc skillguard    │
+│                             list').                                          │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the audit record as JSON.                               │
@@ -7046,7 +7039,7 @@ Usage: onmc skillguard approve [OPTIONS] {proposal_id}
 ## `onmc skillguard diff`
 
 ```text
-Usage: onmc skillguard diff [OPTIONS] {proposal_id}
+Usage: onmc skillguard diff [OPTIONS] PROPOSAL_ID
 
  Show a unified diff of the proposed skill change.
 
@@ -7055,9 +7048,9 @@ Usage: onmc skillguard diff [OPTIONS] {proposal_id}
  ``-`` lines would be removed.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to diff (from 'onmc skillguard      │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to diff (from 'onmc skillguard       │
+│                             list').                                          │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -7084,7 +7077,7 @@ Usage: onmc skillguard list [OPTIONS]
 ## `onmc skillguard reject`
 
 ```text
-Usage: onmc skillguard reject [OPTIONS] {proposal_id}
+Usage: onmc skillguard reject [OPTIONS] PROPOSAL_ID
 
  Reject a pending proposal: drop it and keep an audit trail.
 
@@ -7092,14 +7085,14 @@ Usage: onmc skillguard reject [OPTIONS] {proposal_id}
  written under ``.onmc/skillguard/audit/`` so the decision is traceable.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    proposal_id      <str>  Proposal id to reject (from 'onmc skillguard    │
-│                              list').                                         │
-│                              [required]                                      │
+│ *    proposal_id      TEXT  Proposal id to reject (from 'onmc skillguard     │
+│                             list').                                          │
+│                             [required]                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --reason        <str>  Why this proposal is being rejected.                  │
-│ --json                 Emit the audit record as JSON.                        │
-│ --help                 Show this message and exit.                           │
+│ --reason        TEXT  Why this proposal is being rejected.                   │
+│ --json                Emit the audit record as JSON.                         │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7129,19 +7122,18 @@ Usage: onmc skillguard stage [OPTIONS]
        --reason "obsolete since v2 migration"
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --name                <str>  Name of the skill to create, edit, or        │
-│                                 delete.                                      │
-│                                 [required]                                   │
-│ *  --op                  <str>  Operation to propose: create, edit, or       │
-│                                 delete.                                      │
-│                                 [required]                                   │
-│    --content             <str>  Proposed skill body (inline string).         │
-│                                 Mutually exclusive with --content-file.      │
-│    --content-file        FILE   Path to a file whose contents become the     │
-│                                 proposed skill body.                         │
-│    --reason              <str>  Why this skill change is being proposed.     │
-│    --json                       Emit the staged proposal as JSON.            │
-│    --help                       Show this message and exit.                  │
+│ *  --name                TEXT  Name of the skill to create, edit, or delete. │
+│                                [required]                                    │
+│ *  --op                  TEXT  Operation to propose: create, edit, or        │
+│                                delete.                                       │
+│                                [required]                                    │
+│    --content             TEXT  Proposed skill body (inline string). Mutually │
+│                                exclusive with --content-file.                │
+│    --content-file        FILE  Path to a file whose contents become the      │
+│                                proposed skill body.                          │
+│    --reason              TEXT  Why this skill change is being proposed.      │
+│    --json                      Emit the staged proposal as JSON.             │
+│    --help                      Show this message and exit.                   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7218,11 +7210,11 @@ Usage: onmc solve [OPTIONS]
  approach.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task           <str>  Engineering task to solve. [required]             │
-│    --task-id        <str>  Optional existing task to link this output to.    │
-│    --no-llm                Use heuristic fallback instead of the configured  │
-│                            LLM.                                              │
-│    --help                  Show this message and exit.                       │
+│ *  --task           TEXT  Engineering task to solve. [required]              │
+│    --task-id        TEXT  Optional existing task to link this output to.     │
+│    --no-llm               Use heuristic fallback instead of the configured   │
+│                           LLM.                                               │
+│    --help                 Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7249,7 +7241,7 @@ Usage: onmc soundboard [OPTIONS] COMMAND [ARGS]...
 ## `onmc soundboard bind`
 
 ```text
-Usage: onmc soundboard bind [OPTIONS] {event} {reaction_text}
+Usage: onmc soundboard bind [OPTIONS] EVENT REACTION_TEXT
 
  Set or override the reaction for an event.
 
@@ -7265,9 +7257,9 @@ Usage: onmc soundboard bind [OPTIONS] {event} {reaction_text}
      onmc soundboard bind deploy_done "🚢 sailing!"
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event              <str>  Event name to bind (e.g. test_pass).          │
-│                                [required]                                    │
-│ *    reaction_text      <str>  Reaction string (e.g. "🎉 nice!"). [required] │
+│ *    event              TEXT  Event name to bind (e.g. test_pass).           │
+│                               [required]                                     │
+│ *    reaction_text      TEXT  Reaction string (e.g. "🎉 nice!"). [required]  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --bell          Append a terminal bell (\a) to the reaction.                 │
@@ -7300,7 +7292,7 @@ Usage: onmc soundboard list [OPTIONS]
 ## `onmc soundboard react`
 
 ```text
-Usage: onmc soundboard react [OPTIONS] {event}
+Usage: onmc soundboard react [OPTIONS] EVENT
 
  Emit the reaction for a session event.
 
@@ -7317,7 +7309,7 @@ Usage: onmc soundboard react [OPTIONS] {event}
      onmc soundboard react pr_merged
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event      <str>  Event name to react to (e.g. test_pass). [required]   │
+│ *    event      TEXT  Event name to react to (e.g. test_pass). [required]    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the reaction as a JSON envelope.                        │
@@ -7328,7 +7320,7 @@ Usage: onmc soundboard react [OPTIONS] {event}
 ## `onmc soundboard unbind`
 
 ```text
-Usage: onmc soundboard unbind [OPTIONS] {event}
+Usage: onmc soundboard unbind [OPTIONS] EVENT
 
  Remove a user override, restoring the default reaction.
 
@@ -7341,7 +7333,7 @@ Usage: onmc soundboard unbind [OPTIONS] {event}
      onmc soundboard unbind build_break
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    event      <str>  Event name to remove the override for. [required]     │
+│ *    event      TEXT  Event name to remove the override for. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -7389,9 +7381,9 @@ Usage: onmc spec validate [OPTIONS]
  code 1 if any errors are found.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --path        <path>  Path to the .agent-memory/ directory to validate.      │
-│                       Defaults to .agent-memory/ in the current repo root.   │
-│ --help                Show this message and exit.                            │
+│ --path        PATH  Path to the .agent-memory/ directory to validate.        │
+│                     Defaults to .agent-memory/ in the current repo root.     │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7409,11 +7401,11 @@ Usage: onmc standup [OPTIONS]
  empty window prints an honest "no agent runs" note and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --since        <str>  Window to summarize — a relative window (24h, 7d) or   │
-│                       an ISO date/datetime. Defaults to 24h.                 │
-│                       [default: 24h]                                         │
-│ --json                Emit the standup as JSON.                              │
-│ --help                Show this message and exit.                            │
+│ --since        TEXT  Window to summarize — a relative window (24h, 7d) or an │
+│                      ISO date/datetime. Defaults to 24h.                     │
+│                      [default: 24h]                                          │
+│ --json               Emit the standup as JSON.                               │
+│ --help               Show this message and exit.                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7474,7 +7466,7 @@ Usage: onmc swarm [OPTIONS] COMMAND [ARGS]...
 ## `onmc swarm abort`
 
 ```text
-Usage: onmc swarm abort [OPTIONS] [swarm_id]
+Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
 
  Request graceful abort of a swarm or all swarms.
 
@@ -7489,7 +7481,7 @@ Usage: onmc swarm abort [OPTIONS] [swarm_id]
  onmc swarm abort --all
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm ID to abort.  Omit when using --all.            │
+│   [swarm_id]      TEXT  Swarm ID to abort.  Omit when using --all.           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
@@ -7532,25 +7524,26 @@ Usage: onmc swarm plan [OPTIONS]
  onmc swarm plan --task "fix the parser" --auto-model --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --task               <str>               Goal text for one unit.  Repeat for │
-│                                          multiple.                           │
-│ --file               <path>              Text file: one task goal per        │
-│                                          non-empty line.                     │
-│ --concurrency        <int range> [x>=1]  Recommended fan-out width           │
-│                                          (advisory; Claude Code caps ~10     │
-│                                          subagents).                         │
-│ --json                                   Emit the plan as JSON to stdout.    │
-│ --auto-model                             Advisory: annotate each unit with a │
-│                                          flywheel-learned suggested_model    │
-│                                          (does not change execution).        │
-│ --help                                   Show this message and exit.         │
+│ --task               TEXT                  Goal text for one unit.  Repeat   │
+│                                            for multiple.                     │
+│ --file               PATH                  Text file: one task goal per      │
+│                                            non-empty line.                   │
+│ --concurrency        INTEGER RANGE [x>=1]  Recommended fan-out width         │
+│                                            (advisory; Claude Code caps ~10   │
+│                                            subagents).                       │
+│ --json                                     Emit the plan as JSON to stdout.  │
+│ --auto-model                               Advisory: annotate each unit with │
+│                                            a flywheel-learned                │
+│                                            suggested_model (does not change  │
+│                                            execution).                       │
+│ --help                                     Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc swarm pr`
 
 ```text
-Usage: onmc swarm pr [OPTIONS] {swarm_id} {unit_id}
+Usage: onmc swarm pr [OPTIONS] SWARM_ID UNIT_ID
 
  Open the unit's OWN pull request (push branch + ``gh pr create``).
 
@@ -7563,23 +7556,23 @@ Usage: onmc swarm pr [OPTIONS] {swarm_id} {unit_id}
  onmc swarm pr ab12cd34 unit-0000 --worktree /tmp/wt-unit-0000 --base main
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm ID returned by `swarm plan`. [required]      │
-│ *    unit_id       <str>  Unit ID (e.g. unit-0000). [required]               │
+│ *    swarm_id      TEXT  Swarm ID returned by `swarm plan`. [required]       │
+│ *    unit_id       TEXT  Unit ID (e.g. unit-0000). [required]                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --worktree        <path>  The unit's worktree whose branch is pushed.     │
-│                              [required]                                      │
-│    --base            <str>   Base branch the PR targets. [default: main]     │
-│    --title           <str>   PR title (defaults to a unit-scoped title).     │
-│    --json                    Emit the PR result as JSON.                     │
-│    --help                    Show this message and exit.                     │
+│ *  --worktree        PATH  The unit's worktree whose branch is pushed.       │
+│                            [required]                                        │
+│    --base            TEXT  Base branch the PR targets. [default: main]       │
+│    --title           TEXT  PR title (defaults to a unit-scoped title).       │
+│    --json                  Emit the PR result as JSON.                       │
+│    --help                  Show this message and exit.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc swarm record`
 
 ```text
-Usage: onmc swarm record [OPTIONS] {swarm_id} {unit_id}
+Usage: onmc swarm record [OPTIONS] SWARM_ID UNIT_ID
 
  Record one finished inline unit: write a receipt + update the manifest.
 
@@ -7603,15 +7596,15 @@ Usage: onmc swarm record [OPTIONS] {swarm_id} {unit_id}
      --auto-verify --worktree /tmp/wt-unit-0000 --base main
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm ID returned by `swarm plan`. [required]      │
-│ *    unit_id       <str>  Unit ID (e.g. unit-0000). [required]               │
+│ *    swarm_id      TEXT  Swarm ID returned by `swarm plan`. [required]       │
+│ *    unit_id       TEXT  Unit ID (e.g. unit-0000). [required]                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --goal                             <str>               The unit's goal    │
+│ *  --goal                             TEXT                The unit's goal    │
 │                                                           text (for the      │
 │                                                           receipt).          │
 │                                                           [required]         │
-│    --summary                          <str>               What the subagent  │
+│    --summary                          TEXT                What the subagent  │
 │                                                           did (recorded in   │
 │                                                           the receipt).      │
 │    --verified       --not-verified                        Did the unit meet  │
@@ -7624,12 +7617,12 @@ Usage: onmc swarm record [OPTIONS] {swarm_id} {unit_id}
 │    --aborted                                              Mark the unit as   │
 │                                                           aborted (cut       │
 │                                                           short).            │
-│    --cost-usd                         <float range>       Optional USD cost  │
+│    --cost-usd                         FLOAT RANGE         Optional USD cost  │
 │                                       [x>=0.0]            for this unit.     │
-│    --tokens                           <int range> [x>=0]  Optional token     │
-│                                                           count for this     │
+│    --tokens                           INTEGER RANGE       Optional token     │
+│                                       [x>=0]              count for this     │
 │                                                           unit.              │
-│    --files                            <str>               Comma-separated    │
+│    --files                            TEXT                Comma-separated    │
 │                                                           list of files the  │
 │                                                           unit touched.      │
 │    --auto-verify                                          Staff-engineer     │
@@ -7640,11 +7633,11 @@ Usage: onmc swarm record [OPTIONS] {swarm_id} {unit_id}
 │                                                           the REAL quality   │
 │                                                           gate run in        │
 │                                                           --worktree.        │
-│    --worktree                         <path>              The unit's         │
+│    --worktree                         PATH                The unit's         │
 │                                                           worktree (required │
 │                                                           with               │
 │                                                           --auto-verify).    │
-│    --base                             <str>               Base ref the       │
+│    --base                             TEXT                Base ref the       │
 │                                                           unit's diff is     │
 │                                                           taken against.     │
 │                                                           [default: main]    │
@@ -7677,25 +7670,25 @@ Usage: onmc swarm run [OPTIONS]
  onmc swarm run --task "lint check" --agent codex --no-isolate --json
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --task                                   <str>             Goal text for one │
+│ --task                                   TEXT              Goal text for one │
 │                                                            swarm unit.       │
 │                                                            Repeat for        │
 │                                                            multiple tasks.   │
 │                                                            Mutually          │
 │                                                            exclusive with    │
 │                                                            --file.           │
-│ --file                                   <path>            Path to a text    │
+│ --file                                   PATH              Path to a text    │
 │                                                            file where each   │
 │                                                            non-empty line is │
 │                                                            one task goal.    │
 │                                                            Mutually          │
 │                                                            exclusive with    │
 │                                                            --task.           │
-│ --agent                                  <str>             Agent CLI: claude │
+│ --agent                                  TEXT              Agent CLI: claude │
 │                                                            (default), codex, │
 │                                                            or opencode.      │
 │                                                            [default: claude] │
-│ --concurrency                            <int range>       Max parallel      │
+│ --concurrency                            INTEGER RANGE     Max parallel      │
 │                                          [x>=1]            workers.  Default │
 │                                                            min(cpu_count-1,  │
 │                                                            8).  HONEST: this │
@@ -7703,12 +7696,12 @@ Usage: onmc swarm run [OPTIONS]
 │                                                            — not unlimited   │
 │                                                            simultaneous      │
 │                                                            agents.           │
-│ --max-cost-usd                           <float range>     Swarm-level total │
+│ --max-cost-usd                           FLOAT RANGE       Swarm-level total │
 │                                          [x>=0.0]          cost ceiling in   │
 │                                                            USD.              │
-│ --per-unit-max-i…                        <int range>       Per-unit max loop │
+│ --per-unit-max-i…                        INTEGER RANGE     Per-unit max loop │
 │                                          [x>=1]            iterations.       │
-│ --verify                                 <str>             Verify command    │
+│ --verify                                 TEXT              Verify command    │
 │                                                            applied to all    │
 │                                                            units (default:   │
 │                                                            pytest).          │
@@ -7718,7 +7711,7 @@ Usage: onmc swarm run [OPTIONS]
 │                                                            (default: True).  │
 │                                                            [default:         │
 │                                                            isolate]          │
-│ --agent-timeout-…                        <int range>       Hard timeout for  │
+│ --agent-timeout-…                        INTEGER RANGE     Hard timeout for  │
 │                                          [x>=1]            each agent CLI    │
 │                                                            invocation.       │
 │                                                            [default: 1200]   │
@@ -7738,12 +7731,12 @@ Usage: onmc swarm run [OPTIONS]
 ## `onmc swarm status`
 
 ```text
-Usage: onmc swarm status [OPTIONS] [swarm_id]
+Usage: onmc swarm status [OPTIONS] [SWARM_ID]
 
  Show status of a swarm or all swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm ID to inspect.  Omit to list all swarms.        │
+│   [swarm_id]      TEXT  Swarm ID to inspect.  Omit to list all swarms.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit status as JSON.                                         │
@@ -7754,7 +7747,7 @@ Usage: onmc swarm status [OPTIONS] [swarm_id]
 ## `onmc swarm verify`
 
 ```text
-Usage: onmc swarm verify [OPTIONS] {swarm_id} {unit_id}
+Usage: onmc swarm verify [OPTIONS] SWARM_ID UNIT_ID
 
  Run the HONEST per-unit quality gate in the unit's OWN worktree.
 
@@ -7769,23 +7762,23 @@ Usage: onmc swarm verify [OPTIONS] {swarm_id} {unit_id}
  onmc swarm verify ab12cd34 unit-0000 --worktree /tmp/wt-unit-0000 --base main
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id      <str>  Swarm ID returned by `swarm plan`. [required]      │
-│ *    unit_id       <str>  Unit ID (e.g. unit-0000). [required]               │
+│ *    swarm_id      TEXT  Swarm ID returned by `swarm plan`. [required]       │
+│ *    unit_id       TEXT  Unit ID (e.g. unit-0000). [required]                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --worktree        <path>  The unit's worktree to run the quality gate in. │
-│                              [required]                                      │
-│    --base            <str>   Base ref the unit's diff is taken against.      │
-│                              [default: main]                                 │
-│    --json                    Emit the verdict as JSON.                       │
-│    --help                    Show this message and exit.                     │
+│ *  --worktree        PATH  The unit's worktree to run the quality gate in.   │
+│                            [required]                                        │
+│    --base            TEXT  Base ref the unit's diff is taken against.        │
+│                            [default: main]                                   │
+│    --json                  Emit the verdict as JSON.                         │
+│    --help                  Show this message and exit.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc swarmreplay`
 
 ```text
-Usage: onmc swarmreplay [OPTIONS] [swarm_id]
+Usage: onmc swarmreplay [OPTIONS] [SWARM_ID]
 
  Time-travel, step-by-step reconstruction of a swarm run.
 
@@ -7807,13 +7800,13 @@ Usage: onmc swarmreplay [OPTIONS] [swarm_id]
    onmc swarmreplay abc123 --step 3  # just step 3's detail
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      <str>  Swarm id to replay. Omit to use the most recently     │
-│                        active swarm.                                         │
+│   [swarm_id]      TEXT  Swarm id to replay. Omit to use the most recently    │
+│                         active swarm.                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json               Emit the full ordered step list as JSON.                │
-│ --step        <int>  Print only step N's detail (0-based index).             │
-│ --help               Show this message and exit.                             │
+│ --json                 Emit the full ordered step list as JSON.              │
+│ --step        INTEGER  Print only step N's detail (0-based index).           │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7854,18 +7847,18 @@ Usage: onmc task [OPTIONS] COMMAND [ARGS]...
 ## `onmc task end`
 
 ```text
-Usage: onmc task end [OPTIONS] {task_id}
+Usage: onmc task end [OPTIONS] TASK_ID
 
  End a task with a terminal status and final summary.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --summary        <str>                       Final task summary.          │
+│ *  --summary        TEXT                        Final task summary.          │
 │                                                 [required]                   │
-│    --status         <open|active|blocked|solve  Terminal task status.        │
-│                     d|abandoned>                [default: solved]            │
+│    --status         [open|active|blocked|solve  Terminal task status.        │
+│                     d|abandoned]                [default: solved]            │
 │    --help                                       Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -7885,12 +7878,12 @@ Usage: onmc task list [OPTIONS]
 ## `onmc task show`
 
 ```text
-Usage: onmc task show [OPTIONS] {task_id}
+Usage: onmc task show [OPTIONS] TASK_ID
 
  Show a stored task with lifecycle details.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -7905,26 +7898,26 @@ Usage: onmc task start [OPTIONS]
  Create and activate a new task for the current repository.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --title              <str>  Short task title. [required]                  │
-│ *  --description        <str>  Task description. [required]                  │
-│    --label              <str>  Repeat to attach one or more labels.          │
-│    --help                      Show this message and exit.                   │
+│ *  --title              TEXT  Short task title. [required]                   │
+│ *  --description        TEXT  Task description. [required]                   │
+│    --label              TEXT  Repeat to attach one or more labels.           │
+│    --help                     Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc task status`
 
 ```text
-Usage: onmc task status [OPTIONS] {task_id}
+Usage: onmc task status [OPTIONS] TASK_ID
 
  Update task status.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    task_id      <str>  [required]                                          │
+│ *    task_id      TEXT  [required]                                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --status        <open|active|blocked|solved  New task status. [required]  │
-│                    |abandoned>                                               │
+│ *  --status        [open|active|blocked|solved  New task status. [required]  │
+│                    |abandoned]                                               │
 │    --help                                       Show this message and exit.  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -7937,14 +7930,13 @@ Usage: onmc teach [OPTIONS]
  Compile repo-aware teaching context and generate a learning artifact.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --task               <str>  Task to explain and teach from. [required]    │
-│    --task-id            <str>  Optional existing task to link this output    │
-│                                to.                                           │
-│    --interactive               Enter a follow-up Q&A loop after the initial  │
-│                                output.                                       │
-│    --no-llm                    Use heuristic fallback instead of the         │
-│                                configured LLM.                               │
-│    --help                      Show this message and exit.                   │
+│ *  --task               TEXT  Task to explain and teach from. [required]     │
+│    --task-id            TEXT  Optional existing task to link this output to. │
+│    --interactive              Enter a follow-up Q&A loop after the initial   │
+│                               output.                                        │
+│    --no-llm                   Use heuristic fallback instead of the          │
+│                               configured LLM.                                │
+│    --help                     Show this message and exit.                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7969,7 +7961,7 @@ Usage: onmc teams [OPTIONS] COMMAND [ARGS]...
 ## `onmc teams export`
 
 ```text
-Usage: onmc teams export [OPTIONS] {PLAN}
+Usage: onmc teams export [OPTIONS] PLAN
 
  Convert an onmc plan to an AutoGen team/GroupChat specification.
 
@@ -7988,9 +7980,9 @@ Usage: onmc teams export [OPTIONS] {PLAN}
      onmc mission --json | onmc teams export -
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    PLAN      <str>  Path to an onmc mission/swarm plan JSON file, or ``-`` │
-│                       to read from stdin.                                    │
-│                       [required]                                             │
+│ *    PLAN      TEXT  Path to an onmc mission/swarm plan JSON file, or ``-``  │
+│                      to read from stdin.                                     │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --out         FILE  Write the team spec to FILE instead of stdout.           │
@@ -8003,7 +7995,7 @@ Usage: onmc teams export [OPTIONS] {PLAN}
 ## `onmc teams run`
 
 ```text
-Usage: onmc teams run [OPTIONS] {SPEC}
+Usage: onmc teams run [OPTIONS] SPEC
 
  Run an AutoGen team spec under an onmc receipt.
 
@@ -8019,9 +8011,9 @@ Usage: onmc teams run [OPTIONS] {SPEC}
      onmc teams run team.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    SPEC      <path>  Path to an AutoGen team spec JSON file (from ``onmc   │
-│                        teams export``).                                      │
-│                        [required]                                            │
+│ *    SPEC      PATH  Path to an AutoGen team spec JSON file (from ``onmc     │
+│                      teams export``).                                        │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit a JSON receipt envelope instead of a human-readable     │
@@ -8042,12 +8034,12 @@ Usage: onmc timeline [OPTIONS]
  and offline. An empty brain prints a 'no history yet' note and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --since           <str>  Only include milestones on/after this point — an    │
-│                          ISO date (2026-07-01) or a relative window (30d).   │
-│ --group           <str>  Period granularity: 'day' or 'week'. [default: day] │
-│ --json                   Emit the timeline as JSON.                          │
-│ --markdown               Emit the timeline as a markdown story.              │
-│ --help                   Show this message and exit.                         │
+│ --since           TEXT  Only include milestones on/after this point — an ISO │
+│                         date (2026-07-01) or a relative window (30d).        │
+│ --group           TEXT  Period granularity: 'day' or 'week'. [default: day]  │
+│ --json                  Emit the timeline as JSON.                           │
+│ --markdown              Emit the timeline as a markdown story.               │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8071,7 +8063,7 @@ Usage: onmc trace [OPTIONS] COMMAND [ARGS]...
 ## `onmc trace report`
 
 ```text
-Usage: onmc trace report [OPTIONS] [session_id]
+Usage: onmc trace report [OPTIONS] [SESSION_ID]
 
  Show the Agent Trace Observatory token-ROI card for a session.
 
@@ -8083,8 +8075,8 @@ Usage: onmc trace report [OPTIONS] [session_id]
  Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   session_id      <str>  Session ID to report on.  Defaults to the current   │
-│                          active session.                                     │
+│   [session_id]      TEXT  Session ID to report on.  Defaults to the current  │
+│                           active session.                                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json              Print machine-readable JSON to stdout.                   │
@@ -8105,8 +8097,8 @@ Usage: onmc trace start [OPTIONS]
  'onmc trace report' to view the results.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --label  -l      <str>  Human-readable label for this session.               │
-│ --help                  Show this message and exit.                          │
+│ --label  -l      TEXT  Human-readable label for this session.                │
+│ --help                 Show this message and exit.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8154,7 +8146,7 @@ Usage: onmc twin [OPTIONS] COMMAND [ARGS]...
 ## `onmc twin plan`
 
 ```text
-Usage: onmc twin plan [OPTIONS] {paths}...
+Usage: onmc twin plan [OPTIONS] PATHS...
 
  Predict the blast radius of touching PATHS — before you edit.
 
@@ -8164,8 +8156,9 @@ Usage: onmc twin plan [OPTIONS] {paths}...
  empty, run `onmc codegraph` first.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      <str>  Repo-relative (or absolute) files you intend to edit. │
-│                        [required]                                            │
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the rehearsal plan as JSON.                             │
@@ -8176,7 +8169,7 @@ Usage: onmc twin plan [OPTIONS] {paths}...
 ## `onmc twin rehearse`
 
 ```text
-Usage: onmc twin rehearse [OPTIONS] {paths}...
+Usage: onmc twin rehearse [OPTIONS] PATHS...
 
  Rehearse touching PATHS with an explicit before-you-edit advisory.
 
@@ -8186,8 +8179,9 @@ Usage: onmc twin rehearse [OPTIONS] {paths}...
  empty, run `onmc codegraph` first.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      <str>  Repo-relative (or absolute) files you intend to edit. │
-│                        [required]                                            │
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the rehearsal plan as JSON.                             │
@@ -8217,14 +8211,14 @@ Usage: onmc ui [OPTIONS]
  ship the server ingest + serve here.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --host                    <str>                    Dashboard bind address.   │
+│ --host                    TEXT                     Dashboard bind address.   │
 │                                                    [default: 127.0.0.1]      │
-│ --port                    <int range>              Dashboard TCP port.       │
+│ --port                    INTEGER RANGE            Dashboard TCP port.       │
 │                           [0<=x<=65535]            [default: 8765]           │
 │ --open      --no-open                              Open the dashboard in a   │
 │                                                    browser.                  │
 │                                                    [default: open]           │
-│ --export                  <path>                   Write a standalone HTML   │
+│ --export                  PATH                     Write a standalone HTML   │
 │                                                    snapshot instead of       │
 │                                                    serving.                  │
 │ --serve     --no-serve                             Shared-dashboard mode:    │
@@ -8236,7 +8230,7 @@ Usage: onmc ui [OPTIONS]
 │                                                    push telemetry to this    │
 │                                                    central dashboard.        │
 │                                                    [default: no-serve]       │
-│ --token                   <str>                    Bearer token for          │
+│ --token                   TEXT                     Bearer token for          │
 │                                                    dashboard auth. When set  │
 │                                                    (or via ONMC_UI_TOKEN env │
 │                                                    var), every request must  │
@@ -8316,11 +8310,11 @@ Usage: onmc user add [OPTIONS]
  Examples: "always use pytest", "run ruff before committing".
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --title          <str>  Short preference title. [required]                │
-│ *  --summary        <str>  Full description of the preference or             │
-│                            working-style fact.                               │
-│                            [required]                                        │
-│    --help                  Show this message and exit.                       │
+│ *  --title          TEXT  Short preference title. [required]                 │
+│ *  --summary        TEXT  Full description of the preference or              │
+│                           working-style fact.                                │
+│                           [required]                                         │
+│    --help                 Show this message and exit.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8339,12 +8333,12 @@ Usage: onmc user list [OPTIONS]
 ## `onmc user remove`
 
 ```text
-Usage: onmc user remove [OPTIONS] {memory_id}
+Usage: onmc user remove [OPTIONS] MEMORY_ID
 
  Remove a user preference by ID.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -8354,12 +8348,12 @@ Usage: onmc user remove [OPTIONS] {memory_id}
 ## `onmc user show`
 
 ```text
-Usage: onmc user show [OPTIONS] {memory_id}
+Usage: onmc user show [OPTIONS] MEMORY_ID
 
  Show a single user preference by ID.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    memory_id      <str>  [required]                                        │
+│ *    memory_id      TEXT  [required]                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -8385,18 +8379,18 @@ Usage: onmc verify-diff [OPTIONS]
  - 1 — one or more checks failed
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --base                 <str>  Git ref to diff against (default: main).       │
-│                               [default: main]                                │
-│ --expect-symbol        <str>  Symbol that must appear in added lines.        │
-│                               Repeatable.                                    │
-│ --expect-file          <str>  Repo-relative path that must receive added     │
-│                               lines.  Repeatable.                            │
-│ --structural                  Use difftastic (the 'difft' binary) for a      │
-│                               structural/AST diff that ignores formatting    │
-│                               noise.  No-op when 'difft' is not on PATH      │
-│                               (falls back to line-diff).                     │
-│ --json                        Emit the full VerifyReport as JSON to stdout.  │
-│ --help                        Show this message and exit.                    │
+│ --base                 TEXT  Git ref to diff against (default: main).        │
+│                              [default: main]                                 │
+│ --expect-symbol        TEXT  Symbol that must appear in added lines.         │
+│                              Repeatable.                                     │
+│ --expect-file          TEXT  Repo-relative path that must receive added      │
+│                              lines.  Repeatable.                             │
+│ --structural                 Use difftastic (the 'difft' binary) for a       │
+│                              structural/AST diff that ignores formatting     │
+│                              noise.  No-op when 'difft' is not on PATH       │
+│                              (falls back to line-diff).                      │
+│ --json                       Emit the full VerifyReport as JSON to stdout.   │
+│ --help                       Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8457,7 +8451,7 @@ Usage: onmc viz [OPTIONS] COMMAND [ARGS]...
 ## `onmc viz code`
 
 ```text
-Usage: onmc viz code [OPTIONS] {target}
+Usage: onmc viz code [OPTIONS] TARGET
 
  Print the code-graph blast radius of *target* as a diagram.
 
@@ -8467,13 +8461,13 @@ Usage: onmc viz code [OPTIONS] {target}
  default Mermaid ``graph TD``. Deterministic and offline.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    target      <str>  Repo-relative file path or bare symbol name to graph │
-│                         the blast radius of.                                 │
-│                         [required]                                           │
+│ *    target      TEXT  Repo-relative file path or bare symbol name to graph  │
+│                        the blast radius of.                                  │
+│                        [required]                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                        Wrap the diagram text in a JSON envelope.      │
-│ --format        <mermaid|d2>  Output diagram format: mermaid (default) or    │
+│ --format        [mermaid|d2]  Output diagram format: mermaid (default) or    │
 │                               d2.                                            │
 │                               [default: mermaid]                             │
 │ --help                        Show this message and exit.                    │
@@ -8493,11 +8487,11 @@ Usage: onmc viz memory [OPTIONS]
  instead of the default Mermaid ``graph TD``. Deterministic and offline.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --limit         <int>         Maximum number of memory nodes to render (most │
+│ --limit         INTEGER       Maximum number of memory nodes to render (most │
 │                               recent first).                                 │
 │                               [default: 40]                                  │
 │ --json                        Wrap the diagram text in a JSON envelope.      │
-│ --format        <mermaid|d2>  Output diagram format: mermaid (default) or    │
+│ --format        [mermaid|d2]  Output diagram format: mermaid (default) or    │
 │                               d2.                                            │
 │                               [default: mermaid]                             │
 │ --help                        Show this message and exit.                    │
@@ -8523,12 +8517,12 @@ Usage: onmc watch [OPTIONS]
  swarms) renders an honest empty-state message.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --interval        <float>  Seconds between refreshes. [default: 2.0]         │
-│ --once                     Render exactly one frame and exit.                │
-│ --json                     Emit one JSON frame and exit (implies --once).    │
-│ --all                      Include swarms whose units are all terminal, not  │
-│                            just active ones.                                 │
-│ --help                     Show this message and exit.                       │
+│ --interval        FLOAT  Seconds between refreshes. [default: 2.0]           │
+│ --once                   Render exactly one frame and exit.                  │
+│ --json                   Emit one JSON frame and exit (implies --once).      │
+│ --all                    Include swarms whose units are all terminal, not    │
+│                          just active ones.                                   │
+│ --help                   Show this message and exit.                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8599,20 +8593,20 @@ Usage: onmc whip crack [OPTIONS]
      onmc whip crack --goal "add timeout param" --agent my-swarm-unit
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --reason  -r      <str>  Optional rationale for the correction.              │
-│ --goal            <str>  Override the current goal label (default:           │
-│                          'current').                                         │
-│                          [default: current]                                  │
-│ --agent           <str>  Agent identifier (default: 'claude').               │
-│                          [default: claude]                                   │
-│ --help                   Show this message and exit.                         │
+│ --reason  -r      TEXT  Optional rationale for the correction.               │
+│ --goal            TEXT  Override the current goal label (default:            │
+│                         'current').                                          │
+│                         [default: current]                                   │
+│ --agent           TEXT  Agent identifier (default: 'claude').                │
+│                         [default: claude]                                    │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc whip nudge`
 
 ```text
-Usage: onmc whip nudge [OPTIONS] {msg}
+Usage: onmc whip nudge [OPTIONS] MSG
 
  Queue a gentle steering directive for the running agent.
 
@@ -8627,7 +8621,7 @@ Usage: onmc whip nudge [OPTIONS] {msg}
      onmc whip nudge "add a docstring to each new public method"
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    msg      <str>  Gentle steering message to queue. [required]            │
+│ *    msg      TEXT  Gentle steering message to queue. [required]             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -8660,7 +8654,7 @@ Usage: onmc whip pending [OPTIONS]
 ## `onmc whip redirect`
 
 ```text
-Usage: onmc whip redirect [OPTIONS] {msg}
+Usage: onmc whip redirect [OPTIONS] MSG
 
  Queue a hard course-correction directive for the running agent.
 
@@ -8676,7 +8670,7 @@ Usage: onmc whip redirect [OPTIONS] {msg}
      onmc whip redirect "do NOT touch the migration files"
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    msg      <str>  Hard course-correction message to queue. [required]     │
+│ *    msg      TEXT  Hard course-correction message to queue. [required]      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │
@@ -8726,35 +8720,35 @@ Usage: onmc whip treat [OPTIONS]
      onmc whip treat --goal "refactor parser" --agent my-swarm-unit
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --reason  -r      <str>  Optional rationale for the praise.                  │
-│ --goal            <str>  Override the current goal label (default:           │
-│                          'current').                                         │
-│                          [default: current]                                  │
-│ --agent           <str>  Agent identifier (default: 'claude').               │
-│                          [default: claude]                                   │
-│ --help                   Show this message and exit.                         │
+│ --reason  -r      TEXT  Optional rationale for the praise.                   │
+│ --goal            TEXT  Override the current goal label (default:            │
+│                         'current').                                          │
+│                         [default: current]                                   │
+│ --agent           TEXT  Agent identifier (default: 'claude').                │
+│                         [default: claude]                                    │
+│ --help                  Show this message and exit.                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
 ## `onmc why`
 
 ```text
-Usage: onmc why [OPTIONS] {path}
+Usage: onmc why [OPTIONS] PATH
 
  Explain why a file looks the way it does, from memory + git history.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    path      <str>  File path to explain (repo-relative or absolute).      │
-│                       [required]                                             │
+│ *    path      TEXT  File path to explain (repo-relative or absolute).       │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --no-llm               Skip the optional LLM narrative; deterministic only.  │
-│ --at            <str>  Bound the git-history section to this commit-ish      │
-│                        (hash, tag, or branch). Memory entries reflect the    │
-│                        current store and are NOT time-bounded.               │
-│ --terse                Emit compact terse output (overrides ONMC_TERSE env   │
-│                        var).                                                 │
-│ --help                 Show this message and exit.                           │
+│ --no-llm              Skip the optional LLM narrative; deterministic only.   │
+│ --at            TEXT  Bound the git-history section to this commit-ish       │
+│                       (hash, tag, or branch). Memory entries reflect the     │
+│                       current store and are NOT time-bounded.                │
+│ --terse               Emit compact terse output (overrides ONMC_TERSE env    │
+│                       var).                                                  │
+│ --help                Show this message and exit.                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8766,11 +8760,11 @@ Usage: onmc wiki [OPTIONS] COMMAND [ARGS]...
  Generate wiki and knowledge-graph exports from stored memory.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --output        <path>               Directory to write wiki pages into.     │
+│ --output        PATH                 Directory to write wiki pages into.     │
 │                                      Defaults to .onmc/wiki/ (gitignored).   │
 │                                      Pass e.g. docs/wiki to produce a        │
 │                                      committable copy.                       │
-│ --format        <markdown|obsidian>  Output format: markdown wiki or         │
+│ --format        [markdown|obsidian]  Output format: markdown wiki or         │
 │                                      Obsidian vault.                         │
 │                                      [default: markdown]                     │
 │ --help                               Show this message and exit.             │
@@ -8799,10 +8793,10 @@ Usage: onmc wiki foam [OPTIONS]
  extension installed.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out         <path>  Directory to write Foam notes into. Defaults to        │
-│                       .onmc/foam/ (gitignored).                              │
-│ --json                Print a JSON envelope listing written paths.           │
-│ --help                Show this message and exit.                            │
+│ --out         PATH  Directory to write Foam notes into. Defaults to          │
+│                     .onmc/foam/ (gitignored).                                │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8821,10 +8815,10 @@ Usage: onmc wiki logseq [OPTIONS]
  directly in the Logseq desktop app as a graph folder.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out         <path>  Directory to write Logseq pages into. Defaults to      │
-│                       .onmc/logseq/ (gitignored).                            │
-│ --json                Print a JSON envelope listing written paths.           │
-│ --help                Show this message and exit.                            │
+│ --out         PATH  Directory to write Logseq pages into. Defaults to        │
+│                     .onmc/logseq/ (gitignored).                              │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -8843,10 +8837,10 @@ Usage: onmc wiki site [OPTIONS]
  The output directory defaults to ``.onmc/site/``.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --out         <path>  Directory to write the HTML site into. Defaults to     │
-│                       .onmc/site/ (gitignored).                              │
-│ --json                Print a JSON envelope listing written paths.           │
-│ --help                Show this message and exit.                            │
+│ --out         PATH  Directory to write the HTML site into. Defaults to       │
+│                     .onmc/site/ (gitignored).                                │
+│ --json              Print a JSON envelope listing written paths.             │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
