@@ -90,6 +90,12 @@ class ABTask:
     setup_commands: tuple[tuple[str, ...], ...] = ()
     pass_to_pass_commands: tuple[tuple[str, ...], ...] = ()
     protected_paths: tuple[str, ...] = ()
+    hidden_gate_test: str = ""
+    """When non-empty, this pytest source is WITHHELD during setup (the agent never
+    sees it) and written to the working dir only after the agent finishes, before
+    the gate is evaluated.  This preserves info-asymmetry: the private rule encoded
+    in the test is not leakable by reading the test file.  When empty, behaves
+    exactly like the old setup_script-includes-test path (backward compatible)."""
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +149,10 @@ class ABTaskResult:
     repo_url: str | None = None
     repo_commit: str | None = None
     prompt_sha256: str = ""
+    stub_fails_precheck: bool | None = None
+    """True when the stub (pre-agent) fails the gate — as expected.
+    False when the stub already passes (task has no signal — surfaces as a warning).
+    None means the precheck was not performed (e.g. fixture mode)."""
 
     def to_dict(self) -> dict[str, object]:
         """Serialise for JSON storage."""
@@ -166,6 +176,7 @@ class ABTaskResult:
             "repo_url": self.repo_url,
             "repo_commit": self.repo_commit,
             "prompt_sha256": self.prompt_sha256,
+            "stub_fails_precheck": self.stub_fails_precheck,
         }
 
     @classmethod
@@ -185,6 +196,8 @@ class ABTaskResult:
         evidence_kind: Literal["fixture", "live"] = (
             "fixture" if bool(d.get("fixture", False)) else "live"
         )
+        stub_raw = d.get("stub_fails_precheck")
+        stub_fails_precheck: bool | None = bool(stub_raw) if stub_raw is not None else None
         return cls(
             task_id=str(d["task_id"]),
             condition=d["condition"],  # type: ignore[arg-type]
@@ -205,6 +218,7 @@ class ABTaskResult:
             repo_url=str(d["repo_url"]) if d.get("repo_url") is not None else None,
             repo_commit=(str(d["repo_commit"]) if d.get("repo_commit") is not None else None),
             prompt_sha256=str(d.get("prompt_sha256", "")),
+            stub_fails_precheck=stub_fails_precheck,
         )
 
 

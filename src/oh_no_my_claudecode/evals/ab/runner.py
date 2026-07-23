@@ -204,6 +204,17 @@ def _run_gate(task: ABTask, repo_root: Path) -> tuple[bool, str]:
         return False, "[gate timed out]"
 
 
+def _write_hidden_gate_test(task: ABTask, repo_root: Path) -> None:
+    """Write task.hidden_gate_test to test_gate.py inside repo_root.
+
+    Called AFTER the agent has finished — the agent never sees this file during
+    setup.  When hidden_gate_test is empty, this is a no-op.
+    """
+    if not task.hidden_gate_test:
+        return
+    (repo_root / "test_gate.py").write_text(textwrap.dedent(task.hidden_gate_test))
+
+
 def _compile_onmc_context(task: ABTask) -> str:
     """Seed one repo-memory item and retrieve it through ONMC's real recall path."""
     from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
@@ -253,17 +264,20 @@ def _run_claude_agent(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> _AgentOutcome:
-    """Shell out to Claude Code with identical, isolated settings per condition."""
+    """Shell out to Claude Code with identical, isolated settings per condition.
+
+    ``--dangerously-skip-permissions`` is passed so the agent acts autonomously
+    in the throwaway temp repo without stalling on approval prompts.  The eval
+    always runs in an isolated temporary directory, so this is safe.
+    """
     cmd = [
         "claude",
         "-p",
         prompt,
         "--output-format",
         "json",
-        "--safe-mode",
+        "--dangerously-skip-permissions",
         "--no-session-persistence",
-        "--permission-mode",
-        "acceptEdits",
         "--model",
         model,
         "--effort",
@@ -408,8 +422,23 @@ def run_ab(
 
     try:
         baseline_sha = _prepare_task(task, active_root)
+
+        # Fix 3: baseline precheck — run gate before touching the stub so we can
+        # record whether the task has signal.  For hidden-gate tasks the hidden
+        # test is NOT yet written, so the gate only sees the gate_command on the
+        # plain stub (which should fail; if it passes, the task has no signal).
         pre_gate_passed, pre_gate_output = _run_gate(task, active_root)
+        stub_fails_precheck: bool = not pre_gate_passed
+
         if pre_gate_passed:
+            import warnings
+
+            warnings.warn(
+                f"Task {task.id!r}: stub already passes the gate before the agent runs — "
+                "this task has no signal (stub_fails_precheck=False).  The result is "
+                "recorded but the task should be repaired or excluded.",
+                stacklevel=2,
+            )
             return ABTaskResult(
                 task_id=task.id,
                 condition=condition,
@@ -417,11 +446,12 @@ def run_ab(
                 tokens=None,
                 duration_s=0.0,
                 agent_output="",
-                error="invalid benchmark: fail-to-pass gate already passes",
+                error="invalid benchmark: stub already passes gate (no signal)",
                 gate_output=pre_gate_output,
                 repo_url=task.repo_url,
                 repo_commit=task.repo_commit,
                 prompt_sha256="",
+                stub_fails_precheck=False,
             )
 
         # Build prompt
@@ -438,6 +468,10 @@ def run_ab(
             max_budget_usd=max_budget_usd,
         )
         duration_s = round(time.monotonic() - t0, 2)
+
+        # Fix 2: write the hidden gate test (withheld during setup) now that the
+        # agent has finished.  If hidden_gate_test is empty this is a no-op.
+        _write_hidden_gate_test(task, active_root)
 
         passed, gate_output = _run_gate(task, active_root)
         pass_to_pass, pass_to_pass_output = _run_pass_to_pass(task, active_root)
@@ -477,6 +511,7 @@ def run_ab(
             repo_url=task.repo_url,
             repo_commit=task.repo_commit,
             prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+            stub_fails_precheck=stub_fails_precheck,
         )
     finally:
         if tmpdir_obj is not None:
