@@ -695,16 +695,21 @@ def test_fixture_has_at_least_one_non_auto_fail_baseline() -> None:
 
 from oh_no_my_claudecode.evals.ab.private_tasks import (  # noqa: E402
     PRIVATE_KNOWLEDGE_TASKS,
+    TASK_AUDIT_LOG_SCHEMA_VERSION,
+    TASK_CURRENCY_ALLOWLIST,
+    TASK_EPOCH_MILLIS_TIMESTAMP,
     TASK_HOUSE_ERROR_CODE_PREFIX,
     TASK_IDEMPOTENCY_KEY_FORMAT,
     TASK_MONEY_MINOR_UNITS,
+    TASK_PAGINATION_CURSOR_SCHEME,
     TASK_RETRY_ONLY_503_INCIDENT,
     TASK_TENANT_HEADER,
+    TASK_WEBHOOK_SIGNATURE_HEADER,
 )
 
 
 def test_private_tasks_count() -> None:
-    assert len(PRIVATE_KNOWLEDGE_TASKS) == 5
+    assert len(PRIVATE_KNOWLEDGE_TASKS) == 10
 
 
 def test_private_tasks_ids_unique() -> None:
@@ -1109,7 +1114,7 @@ def test_private_fixture_has_auto_results_for_all_private_tasks() -> None:
 
 
 def test_auto_fixture_honest_distribution() -> None:
-    """4/5 private tasks should have auto=pass; 1/5 (house_error_code_prefix) auto=fail."""
+    """8/10 private tasks should have auto=pass; 2/10 have auto=fail."""
     fixtures = load_fixture_results()
     auto_results = {
         task.id: fixtures.get((task.id, "cc_onmc_auto"))
@@ -1117,11 +1122,15 @@ def test_auto_fixture_honest_distribution() -> None:
     }
     passes = [tid for tid, r in auto_results.items() if r is not None and r.passed]
     fails = [tid for tid, r in auto_results.items() if r is not None and not r.passed]
-    assert len(passes) == 4, f"Expected 4 auto-pass tasks, got: {passes}"
-    assert len(fails) == 1, f"Expected 1 auto-fail task, got: {fails}"
+    assert len(passes) == 8, f"Expected 8 auto-pass tasks, got: {passes}"
+    assert len(fails) == 2, f"Expected 2 auto-fail tasks, got: {fails}"
     assert "house_error_code_prefix" in fails, (
-        "house_error_code_prefix should be the auto-fail task "
+        "house_error_code_prefix should be auto-fail "
         "(exact ACME code mapping is harder to surface than a hand hint)"
+    )
+    assert "audit_log_schema_version" in fails, (
+        "audit_log_schema_version should be auto-fail "
+        "(exact version string 'audit.v2' vs 'v2' requires verbatim recall)"
     )
 
 
@@ -1138,9 +1147,9 @@ def test_run_suite_private_fixture_with_auto_results() -> None:
 def test_report_auto_wins_aggregate() -> None:
     """ABReport.auto_wins counts tasks where auto passed but alone failed."""
     report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
-    # 4 tasks have auto=pass; all 5 have alone=fail → 4 auto wins
-    assert report.auto_wins == 4, (
-        f"Expected 4 auto wins from private fixture but got {report.auto_wins}"
+    # 8 tasks have auto=pass; all 10 have alone=fail → 8 auto wins
+    assert report.auto_wins == 8, (
+        f"Expected 8 auto wins from private fixture but got {report.auto_wins}"
     )
 
 
@@ -1149,7 +1158,7 @@ def test_report_to_dict_includes_auto() -> None:
     report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
     d = report.to_dict()
     assert "auto_wins" in d
-    assert d["auto_wins"] == 4
+    assert d["auto_wins"] == 8
     for comparison_dict in d["comparisons"]:  # type: ignore[union-attr]
         assert "auto" in comparison_dict, "Each comparison dict must include 'auto'"
         assert "auto_wins" in comparison_dict
@@ -1198,3 +1207,237 @@ def test_abtaskcomparison_auto_wins_property() -> None:
 
     cmp_no_auto = ABTaskComparison(task=task, alone=alone, onmc=onmc)
     assert cmp_no_auto.auto_wins is False
+
+
+# ---------------------------------------------------------------------------
+# Anti-leak guard: rule keyword must NOT appear in setup_script or description
+# ---------------------------------------------------------------------------
+
+# Each entry: (task, keyword_that_reveals_the_rule)
+# The keyword must appear ONLY in onmc_hint / grounding_doc — never in what
+# the bare agent sees (setup_script + description).
+_ANTI_LEAK_CASES: list[tuple[object, str]] = [
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4004"),
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4001"),
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4029"),
+    (TASK_TENANT_HEADER, "X-Acme-Workspace"),
+    (TASK_RETRY_ONLY_503_INCIDENT, "503"),
+    (TASK_IDEMPOTENCY_KEY_FORMAT, "colon"),
+    (TASK_MONEY_MINOR_UNITS, "Decimal"),
+    (TASK_EPOCH_MILLIS_TIMESTAMP, "millisecond"),
+    (TASK_EPOCH_MILLIS_TIMESTAMP, "* 1000"),
+    (TASK_PAGINATION_CURSOR_SCHEME, "tilde"),
+    (TASK_PAGINATION_CURSOR_SCHEME, "~"),
+    (TASK_AUDIT_LOG_SCHEMA_VERSION, "audit.v2"),
+    (TASK_AUDIT_LOG_SCHEMA_VERSION, "_schema"),
+    (TASK_CURRENCY_ALLOWLIST, "SGD"),
+    (TASK_CURRENCY_ALLOWLIST, "allowlist"),
+    (TASK_WEBHOOK_SIGNATURE_HEADER, "X-Acme-Hook-Sig"),
+    (TASK_WEBHOOK_SIGNATURE_HEADER, "sha256="),
+]
+
+
+def test_anti_leak_rule_keyword_absent_from_agent_visible_content() -> None:
+    """For every private task, the rule's giveaway token must NOT appear in
+    what the agent sees (setup_script + description).  It must appear ONLY
+    in onmc_hint or grounding_doc."""
+    from oh_no_my_claudecode.evals.ab.models import ABTask as _ABTask
+
+    failures: list[str] = []
+    for task, keyword in _ANTI_LEAK_CASES:
+        assert isinstance(task, _ABTask)
+        agent_visible = task.setup_script + "\n" + task.description
+        if keyword in agent_visible:
+            failures.append(
+                f"Task {task.id!r}: keyword {keyword!r} leaks into agent-visible content.\n"
+                f"  Found in: {'setup_script' if keyword in task.setup_script else 'description'}"
+            )
+        # Sanity-check: keyword IS present in onmc_hint or grounding_doc
+        private_content = task.onmc_hint + "\n" + (task.grounding_doc or "")
+        if keyword not in private_content:
+            failures.append(
+                f"Task {task.id!r}: keyword {keyword!r} not found in onmc_hint/grounding_doc "
+                f"either — check that the task is correctly structured."
+            )
+    assert not failures, "Anti-leak guard failures:\n" + "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
+# New task field tests (tasks 6-10)
+# ---------------------------------------------------------------------------
+
+
+def test_private_task_epoch_millis_fields() -> None:
+    task = TASK_EPOCH_MILLIS_TIMESTAMP
+    assert task.id == "epoch_millis_timestamp"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "millisecond" in task.onmc_hint.lower() or "* 1000" in task.onmc_hint
+
+
+def test_private_task_pagination_cursor_fields() -> None:
+    task = TASK_PAGINATION_CURSOR_SCHEME
+    assert task.id == "pagination_cursor_scheme"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "~" in task.onmc_hint
+
+
+def test_private_task_audit_log_fields() -> None:
+    task = TASK_AUDIT_LOG_SCHEMA_VERSION
+    assert task.id == "audit_log_schema_version"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "audit.v2" in task.onmc_hint
+
+
+def test_private_task_currency_allowlist_fields() -> None:
+    task = TASK_CURRENCY_ALLOWLIST
+    assert task.id == "currency_allowlist"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "SGD" in task.onmc_hint
+
+
+def test_private_task_webhook_signature_fields() -> None:
+    task = TASK_WEBHOOK_SIGNATURE_HEADER
+    assert task.id == "webhook_signature_header"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "X-Acme-Hook-Sig" in task.onmc_hint
+
+
+# ---------------------------------------------------------------------------
+# Gate tests for new tasks (no agent needed — tests gate infra)
+# ---------------------------------------------------------------------------
+
+
+def test_private_gate_fails_on_buggy_code_epoch_millis(tmp_path: Path) -> None:
+    """ISO format stub fails the epoch-millis gate."""
+    _run_setup(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    _write_hidden_gate_test(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    passed, output = _run_gate(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    assert passed is False, f"Gate should FAIL on ISO format stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_epoch_millis(tmp_path: Path) -> None:
+    """Epoch-ms string implementation passes the gate."""
+    _run_setup(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    ts_path = tmp_path / "timestamps.py"
+    fixed = (
+        "import datetime\n\n"
+        "def format_timestamp(dt: datetime.datetime) -> str:\n"
+        "    return str(int(dt.timestamp() * 1000))\n"
+    )
+    ts_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    passed, output = _run_gate(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    assert passed is True, f"Gate should PASS after epoch-ms fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_pagination(tmp_path: Path) -> None:
+    """str(page) stub fails the tilde-cursor gate."""
+    _run_setup(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    _write_hidden_gate_test(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    passed, output = _run_gate(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    assert passed is False, f"Gate should FAIL on str(page) stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_pagination(tmp_path: Path) -> None:
+    """Tilde-separated cursor passes the gate."""
+    _run_setup(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    p_path = tmp_path / "pagination.py"
+    p_path.write_text(
+        "def make_cursor(page: int, watermark: int) -> str:\n"
+        "    return f'{page}~{watermark}'\n"
+    )
+    _write_hidden_gate_test(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    passed, output = _run_gate(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    assert passed is True, f"Gate should PASS after tilde-cursor fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_audit(tmp_path: Path) -> None:
+    """Stub without _schema field fails the audit gate."""
+    _run_setup(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    _write_hidden_gate_test(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    passed, output = _run_gate(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    assert passed is False, f"Gate should FAIL on stub missing _schema.\n{output}"
+
+
+def test_private_gate_passes_after_fix_audit(tmp_path: Path) -> None:
+    """Payload with _schema: audit.v2 passes the gate."""
+    _run_setup(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    a_path = tmp_path / "audit.py"
+    a_path.write_text(
+        "import time\n\n"
+        "def build_audit_payload(action: str, user_id: str) -> dict:\n"
+        "    return {\n"
+        "        '_schema': 'audit.v2',\n"
+        "        'action': action,\n"
+        "        'user_id': user_id,\n"
+        "        'ts': int(time.time()),\n"
+        "    }\n"
+    )
+    _write_hidden_gate_test(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    passed, output = _run_gate(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    assert passed is True, f"Gate should PASS after audit.v2 fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_currency(tmp_path: Path) -> None:
+    """Format-only validator (accepts GBP) fails the currency gate."""
+    _run_setup(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    _write_hidden_gate_test(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    passed, output = _run_gate(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    assert passed is False, f"Gate should FAIL on format-only validator.\n{output}"
+
+
+def test_private_gate_passes_after_fix_currency(tmp_path: Path) -> None:
+    """Hard allowlist {INR, USD, SGD} passes the gate."""
+    _run_setup(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    c_path = tmp_path / "currency.py"
+    c_path.write_text(
+        "_ALLOWED = {'INR', 'USD', 'SGD'}\n\n"
+        "def validate_currency(code: str) -> str:\n"
+        "    if code not in _ALLOWED:\n"
+        "        raise ValueError(f'unsupported_currency: {code!r}')\n"
+        "    return code\n"
+    )
+    _write_hidden_gate_test(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    passed, output = _run_gate(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    assert passed is True, f"Gate should PASS after allowlist fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_webhook(tmp_path: Path) -> None:
+    """X-Signature bare-hex stub fails the webhook gate."""
+    _run_setup(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    _write_hidden_gate_test(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    passed, output = _run_gate(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    assert passed is False, f"Gate should FAIL on X-Signature stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_webhook(tmp_path: Path) -> None:
+    """X-Acme-Hook-Sig with sha256= prefix passes the gate."""
+    _run_setup(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    w_path = tmp_path / "webhook.py"
+    w_path.write_text(
+        "import hashlib\nimport hmac\n\n"
+        "def build_webhook_headers(payload: bytes, secret: str) -> dict[str, str]:\n"
+        "    sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()\n"
+        "    return {\n"
+        "        'Content-Type': 'application/json',\n"
+        "        'X-Acme-Hook-Sig': f'sha256={sig}',\n"
+        "    }\n"
+    )
+    _write_hidden_gate_test(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    passed, output = _run_gate(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    assert passed is True, f"Gate should PASS after correct header fix.\n{output}"

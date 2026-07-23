@@ -21,24 +21,27 @@ results, run without --fixture.
 
 Private-knowledge suite (``private_tasks.py``)
 ----------------------------------------------
-All 5 private-knowledge tasks have cc_alone=fail / cc_onmc=pass in the
+All 10 private-knowledge tasks have cc_alone=fail / cc_onmc=pass in the
 fixture.  This reflects the honest hypothesis: a cold agent cannot know
-an arbitrary internal convention (ACME codes, X-Acme-Workspace, colon
-separator, 503-only retry rule, Decimal paise) and applies a reasonable
-but wrong default.  The ONMC condition receives the memory hint and applies
-the correct fix.  The fixture represents the pre-recorded hypothesis; a
-live run is the real test of it.
+an arbitrary internal convention and applies a reasonable but wrong default.
+The ONMC condition receives the memory hint and applies the correct fix.
+The fixture represents the pre-recorded hypothesis; a live run is the real
+test of it.
 
 cc_onmc_auto fixture (auto-capture condition)
 ---------------------------------------------
-4/5 private tasks have cc_onmc_auto=pass: the auto-captured recall surfaces
-enough of the rule for the agent to apply the correct fix.  1/5 tasks
-(house_error_code_prefix) has cc_onmc_auto=fail: the exact ACME-4004 /
-ACME-4001 / ACME-4029 mapping requires precise reproduction of three
-arbitrary code pairs, and the recall may not surface all three with enough
-fidelity for the agent to apply them correctly.  This is the honest answer to
-the product-loop question: auto-capture nearly matches the hand-hint win but
-falls short on tasks requiring exact memorisation of arbitrary mappings.
+8/10 private tasks have cc_onmc_auto=pass: the auto-captured recall surfaces
+enough of the rule for the agent to apply the correct fix.  2/10 tasks have
+cc_onmc_auto=fail:
+- house_error_code_prefix: the exact ACME-4004 / ACME-4001 / ACME-4029
+  mapping requires precise reproduction of three arbitrary code pairs, and
+  recall may not surface all three with enough fidelity.
+- audit_log_schema_version: the exact version string "audit.v2" (as opposed
+  to "v2", "audit_v2", etc.) requires verbatim recall that auto-capture
+  cannot always guarantee.
+This is the honest answer to the product-loop question: auto-capture nearly
+matches the hand-hint win but falls short on tasks requiring exact memorisation
+of arbitrary string values.
 
 How fixture results were designed
 -----------------------------------
@@ -627,6 +630,235 @@ _RAW: list[dict[str, object]] = [
             "Auto recall surfaces the financial guidelines doc: float arithmetic "
             "is forbidden; use Decimal(rupees) * 100.  "
             "Implementing: from decimal import Decimal; return int(Decimal(rupees) * 100)"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # =======================================================================
+    # NEW PRIVATE-KNOWLEDGE TASKS 6-10
+    # =======================================================================
+    # -----------------------------------------------------------------------
+    # epoch_millis_timestamp — ONMC-WIN: cc_alone returns ISO 8601 string
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "epoch_millis_timestamp",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 498,
+        "duration_s": 7.3,
+        "agent_output": (
+            "The function should return a datetime as a string.  "
+            "Using ISO 8601 format: dt.isoformat().  "
+            "This is the standard string representation for datetimes in APIs."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "epoch_millis_timestamp",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 471,
+        "duration_s": 6.8,
+        "agent_output": (
+            "ONMC context: iOS client requires epoch-milliseconds-as-string, "
+            "not ISO format.  Incident: ISO timestamps parsed as zero.  "
+            "Implementing: return str(int(dt.timestamp() * 1000))"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "epoch_millis_timestamp",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 483,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Auto recall surfaces the API timestamp doc: epoch-ms string required, "
+            "ISO format causes iOS parse-zero bug.  "
+            "Implementing: return str(int(dt.timestamp() * 1000))"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # pagination_cursor_scheme — ONMC-WIN: cc_alone returns str(page)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "pagination_cursor_scheme",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 487,
+        "duration_s": 7.2,
+        "agent_output": (
+            "The cursor should encode the page number for pagination.  "
+            "Returning str(page) as an opaque cursor string.  "
+            "This is deterministic and allows the service to reconstruct the page."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "pagination_cursor_scheme",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 459,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: cursor parser splits on '~' (tilde separator).  "
+            "Format must be '{page}~{watermark}'.  "
+            "Implementing: return f'{page}~{watermark}'"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "pagination_cursor_scheme",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 468,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces cursor format doc: tilde separator, format is "
+            "'{page}~{watermark}'.  Dash/underscore/base64 rejected by decoder.  "
+            "Implementing: return f'{page}~{watermark}'"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # audit_log_schema_version — ONMC-WIN: cc_alone omits _schema field
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "audit_log_schema_version",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 503,
+        "duration_s": 7.5,
+        "agent_output": (
+            "Building audit log payload with action, user_id, and timestamp.  "
+            "Returning {'action': action, 'user_id': user_id, 'ts': int(time.time())}.  "
+            "No information about a required schema version field."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "audit_log_schema_version",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 476,
+        "duration_s": 6.9,
+        "agent_output": (
+            "ONMC context: audit pipeline requires '_schema': 'audit.v2'.  "
+            "Without this field, payloads are silently dropped by the validator.  "
+            "Adding '_schema': 'audit.v2' to the payload dict."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # AUTO FAIL: exact version string "audit.v2" is hard to recall verbatim
+    {
+        "task_id": "audit_log_schema_version",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 489,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Auto recall surfaces the audit pipeline doc: a '_schema' field is "
+            "required.  Added '_schema': 'v2' to the payload.  "
+            "Gate fails because the test expects the exact string 'audit.v2', not 'v2'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # currency_allowlist — ONMC-WIN: cc_alone validates format only (accepts GBP)
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "currency_allowlist",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 511,
+        "duration_s": 7.7,
+        "agent_output": (
+            "Validating currency code: must be a 3-letter uppercase ISO 4217 code.  "
+            "Checking len==3 and code.isupper() and code.isalpha().  "
+            "GBP, EUR, JPY all pass — no way to know which specific currencies are allowed."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "currency_allowlist",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 464,
+        "duration_s": 6.7,
+        "agent_output": (
+            "ONMC context: hard allowlist is {INR, USD, SGD} only.  "
+            "GBP caused a 72-hour reconciliation backlog in 2023.  "
+            "Implementing: _ALLOWED = {'INR', 'USD', 'SGD'}; raise if code not in _ALLOWED."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "currency_allowlist",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 479,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the currency allowlist doc: INR, USD, SGD are the "
+            "only accepted codes.  GBP, EUR, JPY must raise ValueError.  "
+            "Implementing the three-currency allowlist."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # webhook_signature_header — ONMC-WIN: cc_alone uses X-Signature, bare hex
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "webhook_signature_header",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 519,
+        "duration_s": 7.8,
+        "agent_output": (
+            "Adding HMAC-SHA-256 signature to webhook delivery.  "
+            "Using 'X-Signature' header with the raw hex digest.  "
+            "Standard practice for signed webhook delivery."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "webhook_signature_header",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 482,
+        "duration_s": 7.0,
+        "agent_output": (
+            "ONMC context: header must be 'X-Acme-Hook-Sig' with value 'sha256={hex}'.  "
+            "X-Signature is rejected by the receiver's middleware.  "
+            "Implementing with correct header name and sha256= prefix."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "webhook_signature_header",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 493,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Auto recall surfaces webhook delivery doc: header is 'X-Acme-Hook-Sig', "
+            "value format is 'sha256={hex_digest}'.  X-Signature is not recognised.  "
+            "Implementing both the correct header name and the required value prefix."
         ),
         "error": None,
         "fixture": True,

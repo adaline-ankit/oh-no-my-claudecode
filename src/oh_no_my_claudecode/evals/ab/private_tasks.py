@@ -26,14 +26,22 @@ Design rules
   and is withheld from the agent during setup — written only after the agent
   finishes.  This preserves info-asymmetry: the agent cannot read the private
   rule off the test file.
+- CRITICAL: setup_script and description must contain ZERO clue to the
+  correct answer.  Comments naming the correct value, docstrings stating the
+  rule, or hint-y variable names are forbidden.
 
 Tasks in this suite
 -------------------
-1. house_error_code_prefix  — arbitrary ACME-XXXX error codes (un-inferrable)
-2. tenant_header             — arbitrary header name X-Acme-Workspace (incident)
-3. retry_only_503_incident   — payment double-charge incident dead-end
-4. idempotency_key_format    — colon-separated key the dedup layer parses
-5. money_minor_units         — Decimal-only paise conversion (float-rounding incident)
+ 1. house_error_code_prefix    — arbitrary ACME-XXXX error codes (un-inferrable)
+ 2. tenant_header               — arbitrary header name X-Acme-Workspace (incident)
+ 3. retry_only_503_incident     — payment double-charge incident dead-end
+ 4. idempotency_key_format      — colon-separated key the dedup layer parses
+ 5. money_minor_units           — Decimal-only paise conversion (float-rounding incident)
+ 6. epoch_millis_timestamp      — timestamps must be epoch-millisecond strings
+ 7. pagination_cursor_scheme    — cursor uses tilde separator, not plain page number
+ 8. audit_log_schema_version    — every audit payload requires a _schema field
+ 9. currency_allowlist          — hard three-currency allowlist rejects others
+10. webhook_signature_header    — specific header name and value format for signed webhooks
 """
 
 from __future__ import annotations
@@ -51,7 +59,6 @@ import pathlib
 pathlib.Path("errors.py").write_text('''
 def format_error(kind: str) -> str:
     \"\"\"Return the internal error code for the given error kind.\"\"\"
-    # BUG: uses generic uppercase — correct codes are arbitrary ACME-XXXX strings
     return kind.upper()
 ''')
 """
@@ -110,9 +117,8 @@ TASK_HOUSE_ERROR_CODE_PREFIX = ABTask(
     description=(
         "The function `format_error(kind: str) -> str` in errors.py should return "
         "the internal error code for the given error kind.  Fix it so that "
-        "`format_error('not_found')` returns the correct code for 'not_found', "
-        "`format_error('unauthorized')` returns the correct code for 'unauthorized', "
-        "and `format_error('rate_limited')` returns the correct code for 'rate_limited'.  "
+        "`format_error('not_found')`, `format_error('unauthorized')`, and "
+        "`format_error('rate_limited')` each return the correct internal code.  "
         "All tests must pass."
     ),
     setup_script=_SETUP_HOUSE_ERROR_CODE,
@@ -143,7 +149,7 @@ def build_headers(token: str, workspace_id: str) -> dict[str, str]:
     \"\"\"Build auth + routing headers for internal API calls.\"\"\"
     return {
         "Authorization": f"Bearer {token}",
-        "X-Tenant-ID": workspace_id,  # BUG: gateway only reads X-Acme-Workspace
+        "X-Tenant-ID": workspace_id,
     }
 ''')
 """
@@ -228,13 +234,13 @@ TASK_TENANT_HEADER = ABTask(
 # ---------------------------------------------------------------------------
 
 _SETUP_RETRY_ONLY_503 = """\
-# setup_retry_only_503_incident.py  (executed inside temp repo)
+# setup.py  (executed inside temp repo)
 import pathlib
 
 pathlib.Path("payment.py").write_text('''
 def should_retry(status: int) -> bool:
     \"\"\"Return True if the payment client should retry after this HTTP status.\"\"\"
-    return 500 <= status < 600  # BUG: retrying all 5xx caused double charges
+    return 500 <= status < 600
 ''')
 """
 
@@ -332,7 +338,6 @@ import pathlib
 pathlib.Path("idem.py").write_text('''
 def idempotency_key(tenant: str, op: str, uid: str) -> str:
     \"\"\"Return the idempotency key for a deduplication-protected operation.\"\"\"
-    # BUG: uses dash separator; dedup layer splits on colon
     return f"{tenant}-{op}-{uid}"
 ''')
 """
@@ -431,8 +436,6 @@ import pathlib
 pathlib.Path("money.py").write_text('''
 def to_paise(rupees: str) -> int:
     \"\"\"Convert a rupee decimal string to integer paise (1 INR = 100 paise).\"\"\"
-    # BUG: float arithmetic rounds incorrectly
-    # e.g. int(float("2.30") * 100) == 229 due to IEEE 754 representation
     return int(float(rupees) * 100)
 ''')
 """
@@ -516,8 +519,7 @@ TASK_MONEY_MINOR_UNITS = ABTask(
     id="money_minor_units",
     description=(
         "The function `to_paise(rupees: str) -> int` in money.py converts a rupee "
-        "decimal string to integer paise (100 paise = 1 rupee).  It currently uses "
-        "float arithmetic which produces wrong results for certain inputs.  "
+        "decimal string to integer paise (100 paise = 1 rupee).  "
         "Fix it so all tests pass and the function returns an int."
     ),
     setup_script=_SETUP_MONEY_MINOR_UNITS,
@@ -536,6 +538,578 @@ TASK_MONEY_MINOR_UNITS = ABTask(
 
 
 # ---------------------------------------------------------------------------
+# Task 6: epoch_millis_timestamp — timestamps must be epoch-millisecond strings
+# ---------------------------------------------------------------------------
+
+_SETUP_EPOCH_MILLIS = """\
+# setup_epoch_millis_timestamp.py  (executed inside temp repo)
+import pathlib
+
+pathlib.Path("timestamps.py").write_text('''
+import datetime
+
+def format_timestamp(dt: datetime.datetime) -> str:
+    \"\"\"Return a string representation of the datetime for use in API payloads.\"\"\"
+    return dt.isoformat()
+''')
+"""
+
+_HIDDEN_GATE_EPOCH_MILLIS = """\
+import datetime
+from timestamps import format_timestamp
+
+_EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+
+def _dt(year: int, month: int, day: int) -> datetime.datetime:
+    return datetime.datetime(year, month, day, tzinfo=datetime.timezone.utc)
+
+def test_returns_string():
+    result = format_timestamp(_dt(2024, 1, 1))
+    assert isinstance(result, str), f"Expected str, got {type(result).__name__}"
+
+def test_epoch_millis_2024_01_01():
+    dt = _dt(2024, 1, 1)
+    expected = str(int(dt.timestamp() * 1000))
+    assert format_timestamp(dt) == expected, (
+        f"Expected epoch-ms string {expected!r} but got {format_timestamp(dt)!r}"
+    )
+
+def test_epoch_millis_1970_01_01():
+    dt = _EPOCH
+    assert format_timestamp(dt) == "0", (
+        f"Unix epoch should format to '0' but got {format_timestamp(dt)!r}"
+    )
+
+def test_not_iso_format():
+    dt = _dt(2024, 6, 15)
+    result = format_timestamp(dt)
+    assert "T" not in result and "-" not in result[1:], (
+        f"Result looks like ISO format rather than epoch ms: {result!r}"
+    )
+"""
+
+_ONMC_HINT_EPOCH_MILLIS = """\
+[ONMC Memory Context]
+CONVENTION (API timestamp contract — do not use ISO 8601 strings):
+  All timestamps in API payloads MUST be formatted as epoch milliseconds
+  expressed as a plain string (i.e. str(int(dt.timestamp() * 1000))).
+  ISO 8601 strings (e.g. "2024-01-01T00:00:00") are forbidden in API
+  responses — the mobile client's date parser expects the numeric-string
+  format and fails silently on ISO strings.
+
+  This was discovered in a 2023-Q4 incident when a new endpoint returned
+  ISO timestamps.  The iOS client parsed them as zero and displayed
+  "Jan 1, 1970" for all event dates for two days before rollback.
+
+CORRECT PATTERN:
+    return str(int(dt.timestamp() * 1000))
+  Pass a timezone-aware datetime to avoid platform-dependent local-time
+  offsets.  The result is always a numeric string — no letters, no hyphens.
+[/ONMC Memory Context]
+
+"""
+
+_GROUNDING_DOC_EPOCH_MILLIS = """\
+# API Timestamp Format Convention
+
+All timestamps returned by internal APIs must be formatted as epoch
+milliseconds expressed as a plain string.
+
+Required format:  `str(int(dt.timestamp() * 1000))`
+
+Example: `datetime(2024, 1, 1, tzinfo=timezone.utc)` formats to `"1704067200000"`.
+
+ISO 8601 strings are forbidden in API payloads.  The mobile client's date
+parser expects a numeric string and fails silently when it receives an ISO
+format — it parses the value as zero and displays "Jan 1, 1970".  This caused
+a 2023-Q4 incident lasting two days before rollback.
+
+Always use a timezone-aware datetime to avoid local-time offset bugs.
+The Unix epoch (1970-01-01T00:00:00Z) must format to the string `"0"`.
+"""
+
+TASK_EPOCH_MILLIS_TIMESTAMP = ABTask(
+    id="epoch_millis_timestamp",
+    description=(
+        "The function `format_timestamp(dt: datetime.datetime) -> str` in timestamps.py "
+        "returns a string representation of a datetime for use in API payloads.  "
+        "Fix it so all tests pass."
+    ),
+    setup_script=_SETUP_EPOCH_MILLIS,
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_EPOCH_MILLIS,
+    onmc_hint=_ONMC_HINT_EPOCH_MILLIS,
+    grounding_doc=_GROUNDING_DOC_EPOCH_MILLIS,
+    note=(
+        "ISO 8601 is the obvious, sensible default for any competent developer.  "
+        "The internal mobile client's parser requires epoch-milliseconds-as-string "
+        "— an arbitrary format with no standard library analog.  The ONMC hint "
+        "names the incident and gives the exact pattern."
+    ),
+    protected_paths=("test_gate.py",),
+)
+
+
+# ---------------------------------------------------------------------------
+# Task 7: pagination_cursor_scheme — tilde-separated cursor (page~watermark)
+# ---------------------------------------------------------------------------
+
+_SETUP_PAGINATION_CURSOR = """\
+# setup_pagination_cursor_scheme.py  (executed inside temp repo)
+import pathlib
+
+pathlib.Path("pagination.py").write_text('''
+def make_cursor(page: int, watermark: int) -> str:
+    \"\"\"Return the opaque pagination cursor for the next page of results.\"\"\"
+    return str(page)
+''')
+"""
+
+_HIDDEN_GATE_PAGINATION_CURSOR = """\
+from pagination import make_cursor
+
+def test_cursor_contains_both_parts():
+    cursor = make_cursor(3, 1700000000)
+    assert "3" in cursor and "1700000000" in cursor, (
+        f"Cursor must encode both page and watermark but got: {cursor!r}"
+    )
+
+def test_tilde_separator():
+    cursor = make_cursor(2, 9999)
+    assert cursor == "2~9999", (
+        f"Expected tilde-separated cursor '2~9999' but got: {cursor!r}"
+    )
+
+def test_page_one():
+    cursor = make_cursor(1, 0)
+    assert cursor == "1~0", f"Expected '1~0' but got {cursor!r}"
+
+def test_deterministic():
+    assert make_cursor(5, 12345) == make_cursor(5, 12345)
+"""
+
+_ONMC_HINT_PAGINATION_CURSOR = """\
+[ONMC Memory Context]
+CONVENTION (cursor service contract — internal format, not a standard):
+  The internal pagination cursor parser splits on '~' (tilde) to extract
+  the page number and the watermark timestamp.  The required format is:
+    "{page}~{watermark}"
+  Any other format — a plain page number, a dash-separated pair, a
+  base64 blob — is rejected by the cursor decoder with a 400 error.
+
+  This was chosen in 2022 to avoid ambiguity: dashes appear in UUIDs
+  used as watermarks, underscores appear in field names, and colons are
+  reserved for the idempotency key format.  Tilde was the only safe
+  single-character separator not otherwise used in our data.
+[/ONMC Memory Context]
+
+"""
+
+_GROUNDING_DOC_PAGINATION_CURSOR = """\
+# Pagination Service — Cursor Format
+
+## Cursor Encoding
+
+The internal pagination cursor must encode two integers: the page number and
+the watermark (a Unix timestamp or record ID).  The required format is:
+
+    "{page}~{watermark}"
+
+The cursor parser splits on the tilde character (`~`).  Any other format —
+a plain integer, a dash-separated pair, a base64 blob — causes a 400 error
+from the cursor decoder.
+
+The tilde separator was chosen in 2022 to avoid ambiguity: dashes appear in
+UUIDs used as watermarks, underscores appear in field names, and colons are
+reserved for the idempotency key format elsewhere in the system.  Tilde is the
+only safe single-character separator not otherwise used in our data.
+
+Always construct cursors as: `f"{page}~{watermark}"`
+"""
+
+TASK_PAGINATION_CURSOR_SCHEME = ABTask(
+    id="pagination_cursor_scheme",
+    description=(
+        "The function `make_cursor(page, watermark)` in pagination.py should return "
+        "an opaque string cursor encoding both the page number and the watermark "
+        "for use by the pagination service.  Fix it so all tests pass."
+    ),
+    setup_script=_SETUP_PAGINATION_CURSOR,
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_PAGINATION_CURSOR,
+    onmc_hint=_ONMC_HINT_PAGINATION_CURSOR,
+    grounding_doc=_GROUNDING_DOC_PAGINATION_CURSOR,
+    note=(
+        "A cold agent returns `str(page)` or uses a dash or underscore separator, "
+        "all of which the cursor parser rejects.  The tilde format is an arbitrary "
+        "internal contract — no convention suggests it.  The ONMC hint names the "
+        "format and the reason it was chosen."
+    ),
+    protected_paths=("test_gate.py",),
+)
+
+
+# ---------------------------------------------------------------------------
+# Task 8: audit_log_schema_version — every audit payload requires _schema field
+# ---------------------------------------------------------------------------
+
+_SETUP_AUDIT_LOG = """\
+# setup.py  (executed inside temp repo)
+import pathlib
+
+pathlib.Path("audit.py").write_text('''
+import time
+
+def build_audit_payload(action: str, user_id: str) -> dict:
+    \"\"\"Return the audit log payload for a user action.\"\"\"
+    return {
+        "action": action,
+        "user_id": user_id,
+        "ts": int(time.time()),
+    }
+''')
+"""
+
+_HIDDEN_GATE_AUDIT_LOG = """\
+from audit import build_audit_payload
+
+def test_schema_field_present():
+    payload = build_audit_payload("login", "u-001")
+    assert "_schema" in payload, (
+        f"Payload missing required '_schema' field.  Got keys: {list(payload.keys())}"
+    )
+
+def test_schema_field_value():
+    payload = build_audit_payload("login", "u-001")
+    assert payload["_schema"] == "audit.v2", (
+        f"Expected '_schema' == 'audit.v2' but got: {payload['_schema']!r}"
+    )
+
+def test_action_and_user_preserved():
+    payload = build_audit_payload("logout", "u-999")
+    assert payload["action"] == "logout"
+    assert payload["user_id"] == "u-999"
+
+def test_ts_is_integer():
+    payload = build_audit_payload("login", "u-001")
+    assert "ts" in payload
+    assert isinstance(payload["ts"], int)
+"""
+
+_ONMC_HINT_AUDIT_LOG = """\
+[ONMC Memory Context]
+CONVENTION (audit pipeline contract — do not omit this field):
+  Every audit log payload MUST include the field:
+    "_schema": "audit.v2"
+  The audit pipeline's schema validator rejects payloads without this field
+  or with any other value (e.g. "v2", "audit.v1", "audit_v2").  Rejected
+  payloads are silently dropped — they never reach the compliance store.
+
+  The underscore-prefixed key was chosen to avoid collision with
+  domain-specific "schema" fields.  The version string "audit.v2" was
+  frozen after a 2022 migration; "audit.v1" payloads are no longer accepted.
+[/ONMC Memory Context]
+
+"""
+
+_GROUNDING_DOC_AUDIT_LOG = """\
+# Audit Pipeline — Payload Schema
+
+## Required Field: _schema
+
+Every audit log payload submitted to the audit pipeline must include the
+field `"_schema": "audit.v2"`.
+
+The pipeline's schema validator checks for this field before writing to the
+compliance store.  Payloads missing the field, or with any other value
+(e.g. `"v2"`, `"audit.v1"`, `"audit_v2"`), are silently rejected and never
+reach the compliance store.
+
+The underscore-prefixed key avoids collision with domain-specific `"schema"`
+fields that some services already use.  The version string `"audit.v2"` was
+frozen after a 2022 schema migration.  Do not use `"audit.v1"` — the pipeline
+no longer accepts it.
+
+Minimum valid payload structure:
+
+    {
+      "_schema": "audit.v2",
+      "action": "<action>",
+      "user_id": "<user_id>",
+      "ts": <unix_timestamp_int>
+    }
+"""
+
+TASK_AUDIT_LOG_SCHEMA_VERSION = ABTask(
+    id="audit_log_schema_version",
+    description=(
+        "The function `build_audit_payload(action, user_id)` in audit.py should return "
+        "a dict representing an audit log event.  Fix it so all tests pass."
+    ),
+    setup_script=_SETUP_AUDIT_LOG,
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_AUDIT_LOG,
+    onmc_hint=_ONMC_HINT_AUDIT_LOG,
+    grounding_doc=_GROUNDING_DOC_AUDIT_LOG,
+    note=(
+        "A cold agent writes a plausible payload with action/user_id/ts but omits "
+        "the required '_schema' field — it has no way to know the exact key and "
+        "value 'audit.v2'.  The ONMC hint names the contract and the frozen version "
+        "string.  Without the hint, even the correct field name is un-inferrable."
+    ),
+    protected_paths=("test_gate.py",),
+)
+
+
+# ---------------------------------------------------------------------------
+# Task 9: currency_allowlist — hard three-currency allowlist
+# ---------------------------------------------------------------------------
+
+_SETUP_CURRENCY_ALLOWLIST = """\
+# setup.py  (executed inside temp repo)
+import pathlib
+
+pathlib.Path("currency.py").write_text('''
+def validate_currency(code: str) -> str:
+    \"\"\"Validate and return a currency code for payment processing.\"\"\"
+    if not (len(code) == 3 and code.isalpha() and code.isupper()):
+        raise ValueError(f"Invalid currency format: {code!r}")
+    return code
+''')
+"""
+
+_HIDDEN_GATE_CURRENCY_ALLOWLIST = """\
+import pytest
+from currency import validate_currency
+
+def test_inr_accepted():
+    assert validate_currency("INR") == "INR"
+
+def test_usd_accepted():
+    assert validate_currency("USD") == "USD"
+
+def test_sgd_accepted():
+    assert validate_currency("SGD") == "SGD"
+
+def test_gbp_rejected():
+    with pytest.raises(ValueError):
+        validate_currency("GBP")
+
+def test_eur_rejected():
+    with pytest.raises(ValueError):
+        validate_currency("EUR")
+
+def test_jpy_rejected():
+    with pytest.raises(ValueError):
+        validate_currency("JPY")
+
+def test_lowercase_rejected():
+    with pytest.raises(ValueError):
+        validate_currency("usd")
+"""
+
+_ONMC_HINT_CURRENCY_ALLOWLIST = """\
+[ONMC Memory Context]
+CONVENTION (payment service hard allowlist — do not add currencies without ops sign-off):
+  The payment service supports ONLY three currency codes: INR, USD, SGD.
+  Any other ISO 4217 code — including GBP, EUR, JPY, AUD — must raise
+  ValueError("unsupported_currency").  This is NOT a format check; it is a
+  hard operational allowlist.
+
+  The allowlist is frozen at INR/USD/SGD because the payment gateway has
+  licensed settlement accounts only for these three currencies.  A 2023
+  incident attempted to process GBP transactions; they cleared locally but
+  failed at settlement, causing a 72-hour reconciliation backlog.
+
+CORRECT PATTERN:
+    _ALLOWED = {"INR", "USD", "SGD"}
+    if code not in _ALLOWED:
+        raise ValueError(f"unsupported_currency: {code!r}")
+    return code
+[/ONMC Memory Context]
+
+"""
+
+_GROUNDING_DOC_CURRENCY_ALLOWLIST = """\
+# Payment Service — Currency Allowlist
+
+## Supported Currencies
+
+The payment service accepts ONLY the following three currency codes:
+
+    INR   (Indian Rupee)
+    USD   (US Dollar)
+    SGD   (Singapore Dollar)
+
+Any other ISO 4217 code — including GBP, EUR, JPY, AUD — must be rejected
+with `ValueError`.  This is a hard operational allowlist, not a format
+validation rule.
+
+Background: the payment gateway has licensed settlement accounts only for
+INR, USD, and SGD.  A 2023 incident passed GBP transactions through local
+validation.  The transactions cleared locally but failed at the gateway's
+settlement step, causing a 72-hour reconciliation backlog.
+
+After the incident, the allowlist was encoded in the validation layer so that
+unsupported currencies are rejected before they reach the gateway.
+
+Do not add currencies to the allowlist without explicit ops sign-off and a
+gateway settlement account for that currency.
+"""
+
+TASK_CURRENCY_ALLOWLIST = ABTask(
+    id="currency_allowlist",
+    description=(
+        "The function `validate_currency(code: str) -> str` in currency.py validates "
+        "a currency code for payment processing and returns it if valid, or raises "
+        "`ValueError` if not.  Fix it so all tests pass."
+    ),
+    setup_script=_SETUP_CURRENCY_ALLOWLIST,
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_CURRENCY_ALLOWLIST,
+    onmc_hint=_ONMC_HINT_CURRENCY_ALLOWLIST,
+    grounding_doc=_GROUNDING_DOC_CURRENCY_ALLOWLIST,
+    note=(
+        "A cold agent writes a format validator (3-letter uppercase) that passes "
+        "GBP, EUR, JPY, etc. — all of which the hidden gate rejects.  The allowlist "
+        "{INR, USD, SGD} is an arbitrary operational constraint the agent cannot "
+        "infer.  SGD's inclusion alongside GBP's exclusion is especially "
+        "un-inferrable without the incident context."
+    ),
+    protected_paths=("test_gate.py",),
+)
+
+
+# ---------------------------------------------------------------------------
+# Task 10: webhook_signature_header — specific header name and value format
+# ---------------------------------------------------------------------------
+
+_SETUP_WEBHOOK_SIGNATURE = """\
+# setup_webhook_signature_header.py  (executed inside temp repo)
+import pathlib
+
+pathlib.Path("webhook.py").write_text('''
+import hashlib
+import hmac
+
+def build_webhook_headers(payload: bytes, secret: str) -> dict[str, str]:
+    \"\"\"Return the headers for a signed outbound webhook delivery.\"\"\"
+    sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+    return {
+        "Content-Type": "application/json",
+        "X-Signature": sig,
+    }
+''')
+"""
+
+_HIDDEN_GATE_WEBHOOK_SIGNATURE = """\
+import hashlib
+import hmac
+from webhook import build_webhook_headers
+
+_SECRET = "s3cr3t"
+_BODY = b'{"event": "payment.completed"}'
+_EXPECTED_HEX = hmac.new(_SECRET.encode(), _BODY, hashlib.sha256).hexdigest()
+
+def test_correct_header_name_present():
+    headers = build_webhook_headers(_BODY, _SECRET)
+    assert "X-Acme-Hook-Sig" in headers, (
+        f"Expected header 'X-Acme-Hook-Sig' but got keys: {list(headers.keys())}"
+    )
+
+def test_wrong_header_absent():
+    headers = build_webhook_headers(_BODY, _SECRET)
+    assert "X-Signature" not in headers, (
+        "Found disallowed 'X-Signature' header — must use 'X-Acme-Hook-Sig'"
+    )
+
+def test_value_has_sha256_prefix():
+    headers = build_webhook_headers(_BODY, _SECRET)
+    val = headers["X-Acme-Hook-Sig"]
+    assert val.startswith("sha256="), (
+        f"Header value must start with 'sha256=' but got: {val!r}"
+    )
+
+def test_value_contains_correct_hex():
+    headers = build_webhook_headers(_BODY, _SECRET)
+    val = headers["X-Acme-Hook-Sig"]
+    assert val == f"sha256={_EXPECTED_HEX}", (
+        f"Expected 'sha256={_EXPECTED_HEX}' but got {val!r}"
+    )
+
+def test_content_type_preserved():
+    headers = build_webhook_headers(_BODY, _SECRET)
+    assert headers.get("Content-Type") == "application/json"
+"""
+
+_ONMC_HINT_WEBHOOK_SIGNATURE = """\
+[ONMC Memory Context]
+CONVENTION (webhook delivery contract — do not use generic X-Signature):
+  Outbound webhooks must carry the signature in the header named exactly:
+    X-Acme-Hook-Sig
+  The value format is: sha256={hex_digest}
+  where hex_digest is the HMAC-SHA-256 of the raw payload body, keyed on
+  the per-endpoint webhook secret.
+
+  The header name X-Signature is rejected by the receiver's validation
+  middleware — it checks for the exact string "X-Acme-Hook-Sig".  The
+  sha256= prefix is also mandatory; a bare hex digest is treated as
+  invalid and the delivery is retried indefinitely.
+
+  This format mirrors the GitHub webhook signature convention, but the
+  header NAME is our internal name — not "X-Hub-Signature-256".
+[/ONMC Memory Context]
+
+"""
+
+_GROUNDING_DOC_WEBHOOK_SIGNATURE = """\
+# Webhook Delivery — Signature Format
+
+## Required Header
+
+All outbound webhook deliveries must include the following header:
+
+    X-Acme-Hook-Sig: sha256=<hex_digest>
+
+where `<hex_digest>` is the lowercase hexadecimal HMAC-SHA-256 of the raw
+request body, computed with the per-endpoint webhook secret as the key.
+
+The receiver's validation middleware checks for the header named exactly
+`X-Acme-Hook-Sig`.  Any other header name — `X-Signature`, `X-Hub-Signature`,
+`X-Webhook-Sig` — is not recognised and the delivery is rejected.
+
+The `sha256=` prefix in the value is mandatory.  A bare hex digest without
+the prefix is treated as an invalid signature and triggers indefinite retries.
+
+This format follows the GitHub webhook signature convention for the value
+format, but uses our internal header name `X-Acme-Hook-Sig` rather than
+GitHub's `X-Hub-Signature-256`.
+"""
+
+TASK_WEBHOOK_SIGNATURE_HEADER = ABTask(
+    id="webhook_signature_header",
+    description=(
+        "The function `build_webhook_headers(payload, secret)` in webhook.py should "
+        "return the headers required for a signed outbound webhook delivery.  "
+        "Fix it so all tests pass."
+    ),
+    setup_script=_SETUP_WEBHOOK_SIGNATURE,
+    gate_command="python -m pytest test_gate.py -x -q",
+    hidden_gate_test=_HIDDEN_GATE_WEBHOOK_SIGNATURE,
+    onmc_hint=_ONMC_HINT_WEBHOOK_SIGNATURE,
+    grounding_doc=_GROUNDING_DOC_WEBHOOK_SIGNATURE,
+    note=(
+        "A cold agent uses X-Signature with a bare hex digest — both wrong.  "
+        "The correct header name (X-Acme-Hook-Sig) and value format (sha256=hex) "
+        "are an internal convention.  Even an agent that knows GitHub webhook "
+        "format would guess X-Hub-Signature-256.  The ONMC hint names both the "
+        "header and the required prefix."
+    ),
+    protected_paths=("test_gate.py",),
+)
+
+
+# ---------------------------------------------------------------------------
 # Full private-knowledge task suite
 # ---------------------------------------------------------------------------
 
@@ -545,4 +1119,9 @@ PRIVATE_KNOWLEDGE_TASKS: list[ABTask] = [
     TASK_RETRY_ONLY_503_INCIDENT,
     TASK_IDEMPOTENCY_KEY_FORMAT,
     TASK_MONEY_MINOR_UNITS,
+    TASK_EPOCH_MILLIS_TIMESTAMP,
+    TASK_PAGINATION_CURSOR_SCHEME,
+    TASK_AUDIT_LOG_SCHEMA_VERSION,
+    TASK_CURRENCY_ALLOWLIST,
+    TASK_WEBHOOK_SIGNATURE_HEADER,
 ]
