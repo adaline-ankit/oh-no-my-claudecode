@@ -465,7 +465,9 @@ def run_ab(
     tmpdir_obj: tempfile.TemporaryDirectory[str] | None = None
     if repo_root is None:
         tmpdir_obj = tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_")
-        active_root = Path(tmpdir_obj.name)
+        # Resolve symlinks so the agent cwd, gate, and diff all use the
+        # same real path (on macOS /var/... resolves to /private/var/...).
+        active_root = Path(tmpdir_obj.name).resolve()
     else:
         active_root = repo_root
 
@@ -518,6 +520,20 @@ def run_ab(
         )
         duration_s = round(time.monotonic() - t0, 2)
 
+        # Fix 3: compute the diff and protected-path check BEFORE writing the
+        # hidden gate test.  _write_hidden_gate_test() creates test_gate.py after
+        # the agent finishes; it is never in the baseline commit.  If the diff
+        # runs after that write, git sees test_gate.py as an untracked new file
+        # and the protected-path guard fires a false positive, forcing passed=False
+        # even when the agent made the correct edit and the gate actually passed.
+        # Computing the diff first ensures only agent-written changes are audited.
+        changed_files, additions, deletions = _diff_metrics(active_root, baseline_sha)
+        protected_changes = sorted(
+            path
+            for path in changed_files
+            if any(fnmatch.fnmatch(path, pattern) for pattern in task.protected_paths)
+        )
+
         # Fix 2: write the hidden gate test (withheld during setup) now that the
         # agent has finished.  If hidden_gate_test is empty this is a no-op.
         _write_hidden_gate_test(task, active_root)
@@ -527,12 +543,6 @@ def run_ab(
         passed = passed and pass_to_pass
         if outcome.error and not outcome.output:
             passed = False
-        changed_files, additions, deletions = _diff_metrics(active_root, baseline_sha)
-        protected_changes = sorted(
-            path
-            for path in changed_files
-            if any(fnmatch.fnmatch(path, pattern) for pattern in task.protected_paths)
-        )
         if protected_changes:
             passed = False
             violations = "\n".join(
@@ -710,10 +720,12 @@ def _run_suite_live(
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_onmc_") as onmc_dir,
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_auto_") as auto_dir,
         ):
+            # Resolve symlinks so agent cwd, gate, and diff all share the same
+            # real path (on macOS /var/folders/... -> /private/var/folders/...).
             alone = run_ab(
                 task,
                 "cc_alone",
-                repo_root=Path(alone_dir),
+                repo_root=Path(alone_dir).resolve(),
                 timeout=timeout,
                 model=model,
                 effort=effort,
@@ -722,7 +734,7 @@ def _run_suite_live(
             onmc = run_ab(
                 task,
                 "cc_onmc",
-                repo_root=Path(onmc_dir),
+                repo_root=Path(onmc_dir).resolve(),
                 timeout=timeout,
                 model=model,
                 effort=effort,
@@ -734,7 +746,7 @@ def _run_suite_live(
                 auto = run_ab(
                     task,
                     "cc_onmc_auto",
-                    repo_root=Path(auto_dir),
+                    repo_root=Path(auto_dir).resolve(),
                     timeout=timeout,
                     model=model,
                     effort=effort,
