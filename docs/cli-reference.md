@@ -203,6 +203,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
 │                 coding-session events with personality-driven quips and      │
 │                 tracks your green/red streak.                                │
+│ codeindex       Incremental code-intelligence index (blob-SHA keyed, AST     │
+│                 chunks).                                                     │
 │ connect         Bidirectional ecosystem adapter: OpenClaw transport + Hermes │
 │                 memory.                                                      │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
@@ -1766,6 +1768,139 @@ Usage: onmc codegraph summary [OPTIONS]
 │ --output     -o      PATH                  Write the markdown codegraph to   │
 │                                            this path.                        │
 │ --help                                     Show this message and exit.       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex`
+
+```text
+Usage: onmc codeindex [OPTIONS] COMMAND [ARGS]...
+
+ Incremental code-intelligence index (blob-SHA keyed, AST chunks).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ build   Atomically rebuild the full code-intelligence index.                 │
+│ update  Incrementally update one file in the code index.                     │
+│ stats   Print code index statistics.                                         │
+│ query   Look up a symbol by name and print its indexed chunks.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex build`
+
+```text
+Usage: onmc codeindex build [OPTIONS]
+
+ Atomically rebuild the full code-intelligence index.
+
+ Walks all indexable source files, chunks them by AST symbols, and
+ stores chunks + edges in ``.onmc/codeindex.db``.  Unchanged files
+ are always re-indexed during a full build (use ``update`` for
+ incremental).
+
+ Exits 0 on success with a stats summary, 1 on error.
+
+ Examples:
+
+     onmc codeindex build
+
+     onmc codeindex build --json
+
+     onmc codeindex build --repo /path/to/project
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                 Emit stats as JSON.                                   │
+│ --repo           PATH  Repository root.                                      │
+│ --quiet  -q            Suppress progress output.                             │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex query`
+
+```text
+Usage: onmc codeindex query [OPTIONS] SYMBOL
+
+ Look up a symbol by name and print its indexed chunks.
+
+ By default performs a case-insensitive substring search.  Pass
+ ``--exact`` for an exact-match lookup.
+
+ Exits 0 with results (or empty), 1 on error.
+
+ Examples:
+
+     onmc codeindex query invalidate_cache
+
+     onmc codeindex query cache --json
+
+     onmc codeindex query MyClass.method --exact
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    symbol      TEXT  Symbol name (exact) or substring to search.           │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json               Emit results as JSON.                                   │
+│ --exact              Exact symbol match (default: substring).                │
+│ --repo         PATH  Repository root.                                        │
+│ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex stats`
+
+```text
+Usage: onmc codeindex stats [OPTIONS]
+
+ Print code index statistics.
+
+ Shows chunk and edge counts, file count, language breakdown, and the
+ HEAD commit SHA at last build.  Exits 1 when no index has been built
+ yet.
+
+ Examples:
+
+     onmc codeindex stats
+
+     onmc codeindex stats --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit stats as JSON.                                      │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex update`
+
+```text
+Usage: onmc codeindex update [OPTIONS] CHANGED_PATH
+
+ Incrementally update one file in the code index.
+
+ Re-chunks *path* only if its git blob SHA has changed since the last
+ index.  If the file is unchanged the command exits 0 with no output.
+
+ Exits 0 on success, 1 on error.
+
+ Examples:
+
+     onmc codeindex update src/cache.py
+
+     onmc codeindex update src/cache.py --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    changed_path      TEXT  Repo-relative path of the file to re-index.     │
+│                              [required]                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit result as JSON.                                     │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
