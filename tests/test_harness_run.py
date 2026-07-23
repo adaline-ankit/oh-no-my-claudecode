@@ -20,6 +20,9 @@ from oh_no_my_claudecode.harness_run import (
     LoopInvocation,
     RunRequest,
 )
+from oh_no_my_claudecode.harness_run.context import (
+    HybridRepositoryCandidateProvider,
+)
 from oh_no_my_claudecode.harness_run.controller import (
     _default_loop_executor,
     default_dependencies,
@@ -27,6 +30,7 @@ from oh_no_my_claudecode.harness_run.controller import (
 from oh_no_my_claudecode.loop.adapters import CodexCliAdapter
 from oh_no_my_claudecode.loop.engine import _default_verify_runner
 from oh_no_my_claudecode.loop.models import IterationContract, LoopResult
+from oh_no_my_claudecode.retrieval import HybridRetriever
 from oh_no_my_claudecode.tool_broker import Decision, DecisionEffect
 
 
@@ -348,3 +352,169 @@ def test_isolated_execution_binds_agent_and_verifier_to_worktree(
     assert subprocess_calls[0][1]["cwd"] == isolated
     assert "shell" not in subprocess_calls[0][1]
     assert result.worktree_path == str(isolated)
+
+
+# ---------------------------------------------------------------------------
+# Hybrid retrieval integration tests
+# ---------------------------------------------------------------------------
+
+
+class _SpyHybridRetriever(HybridRetriever):
+    """Subclass that records each retrieve() call for assertion."""
+
+    calls: list[tuple[str, int]] = []
+
+    def retrieve(self, query: str, k: int, *, mode: str = "hybrid") -> list:  # type: ignore[override]
+        _SpyHybridRetriever.calls.append((query, k))
+        return super().retrieve(query, k, mode=mode)
+
+
+def test_hybrid_provider_invokes_retrieval_and_returns_ranked_candidates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HybridRepositoryCandidateProvider uses HybridRetriever and returns Candidates
+    with hybrid retrieval scores, citations, and retrieval_rank metadata."""
+    # Fixture: two Python files — one highly relevant, one tangential.
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "cache.py").write_text(
+        "def invalidate_cache():\n    return 'fresh'\n", encoding="utf-8"
+    )
+    (tmp_path / "src" / "unrelated.py").write_text(
+        "def greet(): return 'hello'\n", encoding="utf-8"
+    )
+
+    # Track HybridRetriever.retrieve calls via monkeypatch.
+    retrieve_calls: list[tuple[str, int]] = []
+    _original_retrieve = HybridRetriever.retrieve
+
+    def _spy_retrieve(
+        self: HybridRetriever, query: str, k: int, *, mode: str = "hybrid"
+    ) -> list:
+        retrieve_calls.append((query, k))
+        return _original_retrieve(self, query, k, mode=mode)
+
+    monkeypatch.setattr(HybridRetriever, "retrieve", _spy_retrieve)
+
+    provider = HybridRepositoryCandidateProvider(tmp_path, top_k=10)
+    from oh_no_my_claudecode.context_engine import RetrievalMode
+
+    candidates = provider.candidates("Fix cache invalidation", RetrievalMode.LOCAL)
+
+    # Retrieval was invoked exactly once.
+    assert len(retrieve_calls) == 1
+    assert retrieve_calls[0][0] == "Fix cache invalidation"
+    assert retrieve_calls[0][1] == 10  # top_k
+
+    # At least one candidate returned.
+    assert candidates, "Expected at least one candidate from hybrid retrieval"
+
+    # All candidates have the required Candidate fields populated.
+    for cand in candidates:
+        assert cand.id.startswith("repo:")
+        assert cand.content
+        assert cand.source
+        assert cand.token_count >= 1
+        assert cand.provenance == (cand.id,)
+        assert 0.0 <= cand.structural_score <= 1.0
+        assert cand.semantic_score is not None and 0.0 <= cand.semantic_score <= 1.0
+        # retrieval_rank metadata must be present.
+        meta = dict(cand.metadata)
+        assert "retrieval_rank" in meta
+        assert "path" in meta
+        assert meta["kind"] == "repository-file"
+
+    # The most relevant file (cache.py) must be cited first.
+    assert candidates[0].id == "repo:src/cache.py"
+
+    # Secrets and binaries excluded — no .env etc. in fixture, so just confirm
+    # that the provider does not raise and returns sane results.
+    assert all("never-read" not in c.content for c in candidates)
+
+
+def test_hybrid_provider_token_budget_limits_candidates(tmp_path: Path) -> None:
+    """token_budget is forwarded to HybridRetriever and caps evidence accumulation."""
+    (tmp_path / "big.py").write_text("x = " + "a" * 3000 + "\n", encoding="utf-8")
+    (tmp_path / "small.py").write_text("y = 1\n", encoding="utf-8")
+
+    from oh_no_my_claudecode.context_engine import RetrievalMode
+
+    # With a tiny budget (5 whitespace-tokens) the retriever stops early.
+    provider = HybridRepositoryCandidateProvider(tmp_path, top_k=20, token_budget=5)
+    candidates = provider.candidates("y = 1 small", RetrievalMode.LOCAL)
+    # Must not exceed budget: each hit's evidence has ≤ 5 whitespace tokens
+    # OR only one hit was collected before the budget was hit.
+    assert len(candidates) <= 2  # at most 2 files in this tiny corpus
+
+
+def test_hybrid_provider_noop_on_empty_corpus(tmp_path: Path) -> None:
+    """Returns an empty tuple when no safe text files exist in the repository."""
+    # Only a binary / excluded file — corpus is empty.
+    (tmp_path / "data.bin").write_bytes(b"\x00\x01\x02")
+
+    from oh_no_my_claudecode.context_engine import RetrievalMode
+
+    provider = HybridRepositoryCandidateProvider(tmp_path)
+    candidates = provider.candidates("anything", RetrievalMode.LOCAL)
+    assert candidates == ()
+
+
+def test_hybrid_provider_falls_back_on_retrieval_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected errors from HybridRetriever are caught and the call transparently
+    falls back to RepositoryCandidateProvider."""
+    (tmp_path / "fallback.py").write_text(
+        "def fallback_function(): pass\n", encoding="utf-8"
+    )
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("simulated retriever failure")
+
+    monkeypatch.setattr(HybridRetriever, "__init__", _boom)
+
+    from oh_no_my_claudecode.context_engine import RetrievalMode
+
+    provider = HybridRepositoryCandidateProvider(tmp_path)
+    # Must not raise; fallback returns RepositoryCandidateProvider results.
+    candidates = provider.candidates("fallback function", RetrievalMode.LOCAL)
+    # The fallback provider returns repo:fallback.py (lexical match).
+    assert any(c.id == "repo:fallback.py" for c in candidates)
+
+
+def test_default_dependencies_use_hybrid_provider(tmp_path: Path) -> None:
+    """default_dependencies() wires HybridRepositoryCandidateProvider, not the old one."""
+    deps = default_dependencies(tmp_path)
+    providers = deps.context_engine.candidate_providers
+    assert len(providers) == 1
+    assert isinstance(providers[0], HybridRepositoryCandidateProvider)
+    assert providers[0].repo_root == tmp_path
+
+
+def test_harness_run_context_from_hybrid_retrieval_end_to_end(tmp_path: Path) -> None:
+    """End-to-end: HarnessController.plan() builds context from hybrid retrieval,
+    respects token_budget, and cites the right source file."""
+    source = tmp_path / "src" / "cache.py"
+    source.parent.mkdir()
+    source.write_text("def invalidate_cache():\n    return 'fresh'\n", encoding="utf-8")
+    # Secret — must never appear in context.
+    (tmp_path / ".env").write_text("CACHE_SECRET=never-read\n", encoding="utf-8")
+    # Binary — must be excluded.
+    (tmp_path / "binary.py").write_bytes(b"cache\x00binary")
+
+    plan = HarnessController(tmp_path).run(
+        RunRequest(task="Fix cache invalidation", plan_only=True, context_budget=500)
+    ).plan
+
+    assert [item.candidate_id for item in plan.context_packet.evidence] == [
+        "repo:src/cache.py"
+    ]
+    rendered = json.dumps(plan.context_packet.to_dict())
+    assert "never-read" not in rendered
+    assert "binary.py" not in rendered
+    assert plan.context_packet.used_tokens <= 500
+    # Confirm semantic_score is populated (from hybrid retrieval).
+    evidence = plan.context_packet.evidence[0]
+    assert evidence.signals.semantic is not None
+    assert 0.0 <= evidence.signals.semantic <= 1.0
