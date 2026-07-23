@@ -6230,7 +6230,7 @@ def eval_ab_command(
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if as_json:
-        console.print(_json.dumps(report.to_dict(), indent=2))
+        sys.stdout.write(_json.dumps(report.to_dict(), indent=2) + "\n")
         return
 
     console.print(report.to_markdown())

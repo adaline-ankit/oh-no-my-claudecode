@@ -14,8 +14,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pytest
-
 from oh_no_my_claudecode.loop.engine import (
     _files_from_git_status,
     _scope_violation,

@@ -23,7 +23,6 @@ Coverage
 from __future__ import annotations
 
 import json
-import textwrap
 from pathlib import Path
 
 import pytest
@@ -35,6 +34,10 @@ from oh_no_my_claudecode.evals.ab.models import (
     ABTaskComparison,
     ABTaskResult,
 )
+from oh_no_my_claudecode.evals.ab.private_tasks import (
+    PRIVATE_KNOWLEDGE_TASKS,
+    PrivateKnowledgeTask,
+)
 from oh_no_my_claudecode.evals.ab.runner import _run_gate, _run_setup, run_suite
 from oh_no_my_claudecode.evals.ab.tasks import (
     BUILTIN_TASKS,
@@ -42,7 +45,6 @@ from oh_no_my_claudecode.evals.ab.tasks import (
     TASK_LIST_SLICE_FIX,
     TASK_WORD_REVERSE,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -139,7 +141,7 @@ def test_abtaskresult_round_trip_none_tokens() -> None:
 def test_abtaskresult_to_dict_shape() -> None:
     result = _make_result()
     d = result.to_dict()
-    for key in ("task_id", "condition", "passed", "tokens", "duration_s", "agent_output", "fixture"):
+    for key in ("task_id", "condition", "passed", "tokens", "duration_s", "agent_output", "fixture"):  # noqa: E501
         assert key in d, f"Missing key: {key}"
 
 
@@ -493,3 +495,126 @@ def test_fixture_has_at_least_one_non_auto_fail_baseline() -> None:
         "All cc_alone fixture results fail — this would be an auto-fail rigged baseline. "
         "At least one task should have cc_alone=pass to prove the baseline is real."
     )
+
+
+# ---------------------------------------------------------------------------
+# Private-knowledge task suite
+# ---------------------------------------------------------------------------
+
+
+def test_private_knowledge_tasks_count_at_least_30() -> None:
+    assert len(PRIVATE_KNOWLEDGE_TASKS) >= 30, (
+        f"Expected at least 30 private knowledge tasks, found {len(PRIVATE_KNOWLEDGE_TASKS)}"
+    )
+
+
+def test_private_knowledge_task_ids_unique() -> None:
+    ids = [t.id for t in PRIVATE_KNOWLEDGE_TASKS]
+    assert len(ids) == len(set(ids)), "Private task IDs must be unique"
+
+
+def test_private_knowledge_tasks_all_fields_non_empty() -> None:
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.id
+        assert task.description
+        assert task.setup_script
+        assert task.gate_command
+        assert task.onmc_hint
+        assert isinstance(task, PrivateKnowledgeTask)
+        assert task.rule_token, f"Task {task.id!r} missing rule_token"
+        assert task.grounding_doc, f"Task {task.id!r} missing grounding_doc"
+
+
+def test_private_knowledge_tasks_are_abtask_subclass() -> None:
+    """PrivateKnowledgeTask must be a subclass of ABTask for runner compatibility."""
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert isinstance(task, ABTask), (
+            f"Task {task.id!r} is not an ABTask subclass — runner will reject it"
+        )
+
+
+def test_fixture_covers_all_private_knowledge_tasks() -> None:
+    """fixtures.py must have cc_alone + cc_onmc entries for every private task."""
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert (task.id, "cc_alone") in fixtures, (
+            f"Missing cc_alone fixture for private task {task.id!r}"
+        )
+        assert (task.id, "cc_onmc") in fixtures, (
+            f"Missing cc_onmc fixture for private task {task.id!r}"
+        )
+
+
+def test_antileak_all_private_tasks_rule_token_not_in_description() -> None:
+    """Anti-leak: rule_token must NOT appear in any task's description."""
+    leaks = [
+        task.id
+        for task in PRIVATE_KNOWLEDGE_TASKS
+        if task.rule_token in task.description
+    ]
+    assert not leaks, (
+        f"Rule token LEAKS into description for tasks: {leaks}. "
+        f"This reveals the answer to the bare agent."
+    )
+
+
+def test_antileak_all_private_tasks_rule_token_not_in_setup_script() -> None:
+    """Anti-leak: rule_token must NOT appear in any task's setup_script."""
+    leaks = [
+        task.id
+        for task in PRIVATE_KNOWLEDGE_TASKS
+        if task.rule_token in task.setup_script
+    ]
+    assert not leaks, (
+        f"Rule token LEAKS into setup_script for tasks: {leaks}. "
+        f"This plants the correct value in the agent-visible initial state."
+    )
+
+
+def test_private_knowledge_suite_has_onmc_wins_in_fixtures() -> None:
+    """At least some private tasks must show ONMC wins (alone=fail, onmc=pass)."""
+    fixtures = load_fixture_results()
+    onmc_wins = [
+        task.id
+        for task in PRIVATE_KNOWLEDGE_TASKS
+        if (
+            (task.id, "cc_alone") in fixtures
+            and (task.id, "cc_onmc") in fixtures
+            and not fixtures[(task.id, "cc_alone")].passed
+            and fixtures[(task.id, "cc_onmc")].passed
+        )
+    ]
+    assert len(onmc_wins) >= 10, (
+        f"Expected at least 10 ONMC wins in private knowledge fixtures, "
+        f"found {len(onmc_wins)}: {onmc_wins}"
+    )
+
+
+def test_private_knowledge_suite_has_both_pass_in_fixtures() -> None:
+    """At least some private tasks must have both_pass — baseline not universally rigged."""
+    fixtures = load_fixture_results()
+    both_pass = [
+        task.id
+        for task in PRIVATE_KNOWLEDGE_TASKS
+        if (
+            (task.id, "cc_alone") in fixtures
+            and (task.id, "cc_onmc") in fixtures
+            and fixtures[(task.id, "cc_alone")].passed
+            and fixtures[(task.id, "cc_onmc")].passed
+        )
+    ]
+    assert len(both_pass) >= 1, (
+        "No both_pass tasks in private knowledge fixtures — "
+        "the baseline appears universally rigged."
+    )
+
+
+def test_run_suite_fixture_with_private_tasks() -> None:
+    """run_suite in fixture mode works correctly with private knowledge tasks."""
+    # Run first 3 private tasks only (avoid slow test)
+    sample = PRIVATE_KNOWLEDGE_TASKS[:3]
+    report = run_suite(list(sample), fixture=True)
+    assert report.total_tasks == 3
+    assert report.fixture is True
+    for comparison in report.comparisons:
+        assert comparison.task.id in {t.id for t in sample}
