@@ -256,6 +256,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 at a time.                                                   │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
+│ retrieval-eval  Run the offline retrieval quality evaluation harness. Scores │
+│                 the current retrieval surfaces (recall, guard) against a     │
+│                 frozen labeled dataset using Recall@5/10, MRR@10, nDCG@10,   │
+│                 and P@5. OFFLINE, DETERMINISTIC — no LLM calls, no network.  │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
 │                 a transcript and propose memory updates for human approval.  │
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
@@ -6439,6 +6443,23 @@ Usage: onmc report [OPTIONS]
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --output  -o      PATH  Write the markdown report to this path.              │
 │ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc retrieval-eval`
+
+```text
+Usage: onmc retrieval-eval [OPTIONS] COMMAND [ARGS]...
+
+ Run the offline retrieval quality evaluation harness. Scores the current
+ retrieval surfaces (recall, guard) against a frozen labeled dataset using
+ Recall@5/10, MRR@10, nDCG@10, and P@5. OFFLINE, DETERMINISTIC — no LLM calls,
+ no network.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Output the full report as JSON instead of a Markdown         │
+│                 scorecard.                                                   │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
