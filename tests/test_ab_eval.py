@@ -986,3 +986,215 @@ def test_precheck_records_true_for_normally_failing_stub(
     )
     result = run_ab(TASK_LIST_SLICE_FIX, "cc_alone", repo_root=tmp_path)
     assert result.stub_fails_precheck is True
+
+
+# ---------------------------------------------------------------------------
+# Auto-capture condition (cc_onmc_auto)
+# ---------------------------------------------------------------------------
+
+
+def test_private_tasks_all_have_grounding_doc() -> None:
+    """Every private task must have a non-empty grounding_doc for cc_onmc_auto."""
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.grounding_doc, (
+            f"Private task {task.id!r} must have a non-empty grounding_doc "
+            "(used by the cc_onmc_auto condition)"
+        )
+
+
+def test_grounding_doc_tenant_header_contains_rule_keyword() -> None:
+    """tenant_header grounding_doc must mention X-Acme-Workspace explicitly."""
+    assert "X-Acme-Workspace" in TASK_TENANT_HEADER.grounding_doc
+
+
+def test_grounding_doc_retry_503_contains_rule_keyword() -> None:
+    """retry_only_503_incident grounding_doc must mention 503 as the only safe code."""
+    assert "503" in TASK_RETRY_ONLY_503_INCIDENT.grounding_doc
+    assert "must NOT be retried" in TASK_RETRY_ONLY_503_INCIDENT.grounding_doc
+
+
+def test_grounding_doc_idempotency_key_contains_rule_keyword() -> None:
+    """idempotency_key_format grounding_doc must mention the colon separator."""
+    assert ":" in TASK_IDEMPOTENCY_KEY_FORMAT.grounding_doc
+    assert "tenant:op:uid" in TASK_IDEMPOTENCY_KEY_FORMAT.grounding_doc
+
+
+def test_grounding_doc_money_contains_decimal_rule() -> None:
+    """money_minor_units grounding_doc must mention Decimal-based conversion."""
+    assert "Decimal" in TASK_MONEY_MINOR_UNITS.grounding_doc
+
+
+def test_ingest_recall_surfaces_rule_keyword_for_tenant_header() -> None:
+    """Deterministic unit test: ingest grounding_doc → recall contains X-Acme-Workspace.
+
+    This exercises the real extract_doc_memories → SQLiteStorage.upsert_memories
+    → compile_prompt_recall path without any LLM calls or network access.
+    Paths are resolved so the test works on macOS (/var → /private/var symlink).
+    """
+    import tempfile
+    from pathlib import Path
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_test_ingest_") as brain_dir:
+        # Resolve to avoid macOS /var→/private/var symlink mismatch in relative_to().
+        brain_root = Path(brain_dir).resolve()
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(TASK_TENANT_HEADER.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        assert memories, "extract_doc_memories must return at least one memory from the doc"
+        storage.upsert_memories(memories)
+
+        context, token_count = compile_prompt_recall(
+            storage, TASK_TENANT_HEADER.description, terse=False
+        )
+
+    assert context, "compile_prompt_recall must return non-empty context from the ingested doc"
+    assert token_count > 0
+    assert "X-Acme-Workspace" in context, (
+        "The recalled context must surface 'X-Acme-Workspace' from the grounding doc — "
+        "this is the rule the agent needs to fix the header bug"
+    )
+
+
+def test_ingest_recall_surfaces_rule_keyword_for_retry_503() -> None:
+    """Deterministic: ingest retry_only_503 grounding_doc → recall contains '503'."""
+    import tempfile
+    from pathlib import Path
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_test_ingest_") as brain_dir:
+        # Resolve to avoid macOS /var→/private/var symlink mismatch in relative_to().
+        brain_root = Path(brain_dir).resolve()
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(TASK_RETRY_ONLY_503_INCIDENT.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        assert memories
+        storage.upsert_memories(memories)
+
+        context, _ = compile_prompt_recall(
+            storage, TASK_RETRY_ONLY_503_INCIDENT.description, terse=False
+        )
+
+    assert context
+    assert "503" in context, (
+        "The recalled context must surface '503' from the postmortem grounding doc"
+    )
+
+
+def test_private_fixture_has_auto_results_for_all_private_tasks() -> None:
+    """All 5 private tasks must have a cc_onmc_auto fixture entry."""
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        key = (task.id, "cc_onmc_auto")
+        assert key in fixtures, (
+            f"Missing cc_onmc_auto fixture for task {task.id!r}"
+        )
+        result = fixtures[key]
+        assert result.condition == "cc_onmc_auto"
+        assert result.fixture is True
+
+
+def test_auto_fixture_honest_distribution() -> None:
+    """4/5 private tasks should have auto=pass; 1/5 (house_error_code_prefix) auto=fail."""
+    fixtures = load_fixture_results()
+    auto_results = {
+        task.id: fixtures.get((task.id, "cc_onmc_auto"))
+        for task in PRIVATE_KNOWLEDGE_TASKS
+    }
+    passes = [tid for tid, r in auto_results.items() if r is not None and r.passed]
+    fails = [tid for tid, r in auto_results.items() if r is not None and not r.passed]
+    assert len(passes) == 4, f"Expected 4 auto-pass tasks, got: {passes}"
+    assert len(fails) == 1, f"Expected 1 auto-fail task, got: {fails}"
+    assert "house_error_code_prefix" in fails, (
+        "house_error_code_prefix should be the auto-fail task "
+        "(exact ACME code mapping is harder to surface than a hand hint)"
+    )
+
+
+def test_run_suite_private_fixture_with_auto_results() -> None:
+    """run_suite(fixture=True) loads auto fixtures into ABTaskComparison.auto."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    for comparison in report.comparisons:
+        assert comparison.auto is not None, (
+            f"Task {comparison.task.id!r} should have auto fixture loaded"
+        )
+        assert comparison.auto.condition == "cc_onmc_auto"
+
+
+def test_report_auto_wins_aggregate() -> None:
+    """ABReport.auto_wins counts tasks where auto passed but alone failed."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    # 4 tasks have auto=pass; all 5 have alone=fail → 4 auto wins
+    assert report.auto_wins == 4, (
+        f"Expected 4 auto wins from private fixture but got {report.auto_wins}"
+    )
+
+
+def test_report_to_dict_includes_auto() -> None:
+    """ABReport.to_dict() includes 'auto' key and 'auto_wins' in each comparison."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    d = report.to_dict()
+    assert "auto_wins" in d
+    assert d["auto_wins"] == 4
+    for comparison_dict in d["comparisons"]:  # type: ignore[union-attr]
+        assert "auto" in comparison_dict, "Each comparison dict must include 'auto'"
+        assert "auto_wins" in comparison_dict
+
+
+def test_report_to_markdown_includes_auto_column() -> None:
+    """ABReport.to_markdown() renders a cc_auto column."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    md = report.to_markdown()
+    assert "cc_auto" in md
+    assert "auto_wins" in md.lower() or "Auto wins" in md
+
+
+def test_abtaskresult_round_trip_auto_condition() -> None:
+    """ABTaskResult with condition='cc_onmc_auto' serialises and deserialises cleanly."""
+    result = ABTaskResult(
+        task_id="tenant_header",
+        condition="cc_onmc_auto",
+        passed=True,
+        tokens=484,
+        duration_s=7.2,
+        agent_output="auto recalled X-Acme-Workspace",
+        fixture=True,
+    )
+    d = result.to_dict()
+    assert d["condition"] == "cc_onmc_auto"
+    loaded = ABTaskResult.from_dict(d)
+    assert loaded.condition == "cc_onmc_auto"
+    assert loaded.passed is True
+    assert loaded.fixture is True
+
+
+def test_abtaskcomparison_auto_wins_property() -> None:
+    """ABTaskComparison.auto_wins is True only when auto passed and alone failed."""
+    task = _make_task()
+    alone = _make_result(passed=False)
+    onmc = _make_result(condition="cc_onmc", passed=True)
+    auto_pass = _make_result(condition="cc_onmc_auto", passed=True)
+    auto_fail = _make_result(condition="cc_onmc_auto", passed=False)
+
+    cmp_with_auto_win = ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto_pass)
+    assert cmp_with_auto_win.auto_wins is True
+
+    cmp_with_auto_fail = ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto_fail)
+    assert cmp_with_auto_fail.auto_wins is False
+
+    cmp_no_auto = ABTaskComparison(task=task, alone=alone, onmc=onmc)
+    assert cmp_no_auto.auto_wins is False

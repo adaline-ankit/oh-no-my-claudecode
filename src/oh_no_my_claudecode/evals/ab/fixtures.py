@@ -6,8 +6,13 @@ reflect plausible agent behaviour on these tasks:
 
 - cc_alone: the cold agent sees only the task description.  On tasks
   with a plausible "wrong fix" dead-end it may apply the wrong patch.
-- cc_onmc: the ONMC-grounded agent receives the dead-end hint and steers
+- cc_onmc: the ONMC-grounded agent receives the hand-authored hint and steers
   to the correct fix.
+- cc_onmc_auto: the ONMC-grounded agent receives recall compiled from the
+  real ingest→recall pipeline over a grounding_doc artifact — no hand hint.
+  This fixture models the honest auto-capture hypothesis: recall mostly
+  surfaces the rule, but may be weaker than the hand hint for tasks requiring
+  exact reproduction of arbitrary codes.
 
 IMPORTANT: These results are PRE-RECORDED for CI reproducibility.  They
 do NOT prove that ONMC always wins on these tasks in a live run.  Live
@@ -23,6 +28,17 @@ separator, 503-only retry rule, Decimal paise) and applies a reasonable
 but wrong default.  The ONMC condition receives the memory hint and applies
 the correct fix.  The fixture represents the pre-recorded hypothesis; a
 live run is the real test of it.
+
+cc_onmc_auto fixture (auto-capture condition)
+---------------------------------------------
+4/5 private tasks have cc_onmc_auto=pass: the auto-captured recall surfaces
+enough of the rule for the agent to apply the correct fix.  1/5 tasks
+(house_error_code_prefix) has cc_onmc_auto=fail: the exact ACME-4004 /
+ACME-4001 / ACME-4029 mapping requires precise reproduction of three
+arbitrary code pairs, and the recall may not surface all three with enough
+fidelity for the agent to apply them correctly.  This is the honest answer to
+the product-loop question: auto-capture nearly matches the hand-hint win but
+falls short on tasks requiring exact memorisation of arbitrary mappings.
 
 How fixture results were designed
 -----------------------------------
@@ -513,6 +529,104 @@ _RAW: list[dict[str, object]] = [
             "ONMC incident memory: float truncates 1.10*100 to 109.  "
             "Must use Decimal for monetary conversion: "
             "int(Decimal(rupees) * 100).  Importing from decimal module."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # =======================================================================
+    # AUTO-CAPTURE SUITE — cc_onmc_auto results for private-knowledge tasks.
+    # The auto condition seeds a temp ONMC brain by ingesting grounding_doc via
+    # the real doc-ingest pipeline (no hand-written hint), then compiles recall.
+    # 4/5 tasks: auto-recall surfaces enough of the rule to win.
+    # 1/5 (house_error_code_prefix): recall surfaces the ACME prefix but the
+    #   agent fails to reproduce all three exact code pairs (ACME-4004 /
+    #   ACME-4001 / ACME-4029) precisely — arbitrary code memorisation is weaker
+    #   than a hand hint that gives the exact mapping.
+    # =======================================================================
+    # -----------------------------------------------------------------------
+    # house_error_code_prefix — AUTO FAIL: codes are too specific for auto recall
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "house_error_code_prefix",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 508,
+        "duration_s": 7.9,
+        "agent_output": (
+            "Auto recall surfaces the ACME- prefix convention from the doc.  "
+            "Implemented a lookup dict with ACME- prefixed codes, but the exact "
+            "numeric suffixes (4004, 4001, 4029) were not clearly recalled — "
+            "used ACME-404, ACME-401, ACME-429 (guessed HTTP codes) instead.  "
+            "Gate fails because the test expects the exact ACME-4004 / ACME-4001 "
+            "/ ACME-4029 mapping."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # tenant_header — AUTO PASS: X-Acme-Workspace is explicitly named in doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "tenant_header",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 484,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Auto recall surfaces the gateway doc excerpt: X-Acme-Workspace is "
+            "the correct header for workspace routing.  Replacing X-Tenant-ID "
+            "with X-Acme-Workspace in build_headers()."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # retry_only_503_incident — AUTO PASS: 503-only rule explicitly stated
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "retry_only_503_incident",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 491,
+        "duration_s": 7.3,
+        "agent_output": (
+            "Auto recall surfaces the incident postmortem: retry ONLY on 503, "
+            "never on 500/502/504 (double-charge risk).  "
+            "Implementing: return status == 503"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # idempotency_key_format — AUTO PASS: colon separator explicitly named in doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "idempotency_key_format",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 471,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the DESIGN.md excerpt: dedup service splits on "
+            "colon, required format is tenant:op:uid.  "
+            "Implementing: return f'{tenant}:{op}:{uid}'"
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # money_minor_units — AUTO PASS: Decimal pattern explicitly stated in doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "money_minor_units",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 496,
+        "duration_s": 7.6,
+        "agent_output": (
+            "Auto recall surfaces the financial guidelines doc: float arithmetic "
+            "is forbidden; use Decimal(rupees) * 100.  "
+            "Implementing: from decimal import Decimal; return int(Decimal(rupees) * 100)"
         ),
         "error": None,
         "fixture": True,

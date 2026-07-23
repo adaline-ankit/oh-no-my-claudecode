@@ -253,11 +253,52 @@ def _compile_onmc_context(task: ABTask) -> str:
     return context
 
 
+def _compile_onmc_auto_context(task: ABTask) -> str:
+    """Seed a temp ONMC brain by ingesting task.grounding_doc and recall via real pipeline.
+
+    This exercises the real doc-ingest → recall path (no hand-written hint).
+    The grounding_doc is written to a temp file, ingested via
+    ``extract_doc_memories``, stored in a temporary SQLite brain, and then
+    retrieved through the production ``compile_prompt_recall`` path.
+
+    Returns "" when ``task.grounding_doc`` is empty (condition behaves like cc_alone).
+    """
+    if not task.grounding_doc.strip():
+        return ""
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_ab_auto_") as brain_dir:
+        # Resolve the path so relative_to() works on macOS (/var → /private/var symlink).
+        brain_root = Path(brain_dir).resolve()
+        # Write the grounding doc as a markdown file inside the temp brain dir.
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(task.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        # Use the real doc-ingest path to extract memories from the artifact.
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        if memories:
+            storage.upsert_memories(memories)
+
+        context, _ = compile_prompt_recall(storage, task.description, terse=False)
+    return context
+
+
 def _build_prompt(task: ABTask, condition: ABCondition) -> str:
     """Build the agent prompt for the given condition."""
     if condition == "cc_onmc":
         context = _compile_onmc_context(task)
         return f"{context}\n\n## Task\n\n{task.description}"
+    if condition == "cc_onmc_auto":
+        context = _compile_onmc_auto_context(task)
+        if context:
+            return f"{context}\n\n## Task\n\n{task.description}"
+        return task.description
     return task.description
 
 
@@ -590,6 +631,7 @@ def _run_suite_fixture(tasks: list[ABTask]) -> ABReport:
     for task in tasks:
         alone_key = (task.id, "cc_alone")
         onmc_key = (task.id, "cc_onmc")
+        auto_key = (task.id, "cc_onmc_auto")
 
         alone = fixture_map.get(
             alone_key,
@@ -617,7 +659,9 @@ def _run_suite_fixture(tasks: list[ABTask]) -> ABReport:
                 fixture=True,
             ),
         )
-        comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc))
+        # auto fixture is optional — only populated when a cc_onmc_auto fixture exists.
+        auto = fixture_map.get(auto_key)
+        comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto))
 
     return ABReport(comparisons=comparisons, fixture=True)
 
@@ -660,10 +704,11 @@ def _run_suite_live(
     comparisons: list[ABTaskComparison] = []
 
     for task in tasks:
-        # Each condition gets its own isolated tmpdir so repo state is fresh
+        # Each condition gets its own isolated tmpdir so repo state is fresh.
         with (
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_alone_") as alone_dir,
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_onmc_") as onmc_dir,
+            tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_auto_") as auto_dir,
         ):
             alone = run_ab(
                 task,
@@ -683,6 +728,18 @@ def _run_suite_live(
                 effort=effort,
                 max_budget_usd=max_budget_usd,
             )
-            comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc))
+            # Run the auto-capture condition only when a grounding_doc is provided.
+            auto: ABTaskResult | None = None
+            if task.grounding_doc.strip():
+                auto = run_ab(
+                    task,
+                    "cc_onmc_auto",
+                    repo_root=Path(auto_dir),
+                    timeout=timeout,
+                    model=model,
+                    effort=effort,
+                    max_budget_usd=max_budget_usd,
+                )
+            comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto))
 
     return ABReport(comparisons=comparisons, fixture=False)
