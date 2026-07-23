@@ -695,21 +695,41 @@ def test_fixture_has_at_least_one_non_auto_fail_baseline() -> None:
 
 from oh_no_my_claudecode.evals.ab.private_tasks import (  # noqa: E402
     PRIVATE_KNOWLEDGE_TASKS,
+    TASK_API_RESPONSE_ENVELOPE,
+    TASK_AUDIT_ACTOR_PREFIX,
     TASK_AUDIT_LOG_SCHEMA_VERSION,
+    TASK_BATCH_MAX_FIFTY,
+    TASK_CONFIG_SECRET_SCOPE,
     TASK_CURRENCY_ALLOWLIST,
+    TASK_CURSOR_BASE64URL_NO_PADDING,
+    TASK_DB_NULL_SENTINEL,
+    TASK_DURATION_MICROSECONDS,
     TASK_EPOCH_MILLIS_TIMESTAMP,
+    TASK_EVENT_SCHEMA_VERSION,
+    TASK_FEATURE_FLAG_ENV_PREFIX,
+    TASK_FX_RATE_PRECISION,
     TASK_HOUSE_ERROR_CODE_PREFIX,
     TASK_IDEMPOTENCY_KEY_FORMAT,
+    TASK_JWT_EDDSA_ONLY,
+    TASK_LOG_CONTEXT_KEY,
+    TASK_MIGRATION_FILE_PREFIX,
     TASK_MONEY_MINOR_UNITS,
     TASK_PAGINATION_CURSOR_SCHEME,
+    TASK_PAGINATION_TOTAL_KEY,
+    TASK_PAYMENT_REF_SEPARATOR,
+    TASK_REFUND_CREDIT_FLAG,
+    TASK_REQUEST_NONCE_HEADER,
     TASK_RETRY_ONLY_503_INCIDENT,
+    TASK_SERVICE_VERSION_HEADER,
     TASK_TENANT_HEADER,
+    TASK_TZ_OFFSET_COMPACT_FORMAT,
+    TASK_VALIDATION_FIELD_PATH,
     TASK_WEBHOOK_SIGNATURE_HEADER,
 )
 
 
 def test_private_tasks_count() -> None:
-    assert len(PRIVATE_KNOWLEDGE_TASKS) == 10
+    assert len(PRIVATE_KNOWLEDGE_TASKS) == 30
 
 
 def test_private_tasks_ids_unique() -> None:
@@ -1114,7 +1134,7 @@ def test_private_fixture_has_auto_results_for_all_private_tasks() -> None:
 
 
 def test_auto_fixture_honest_distribution() -> None:
-    """8/10 private tasks should have auto=pass; 2/10 have auto=fail."""
+    """24/30 private tasks should have auto=pass; 6/30 have auto=fail."""
     fixtures = load_fixture_results()
     auto_results = {
         task.id: fixtures.get((task.id, "cc_onmc_auto"))
@@ -1122,8 +1142,8 @@ def test_auto_fixture_honest_distribution() -> None:
     }
     passes = [tid for tid, r in auto_results.items() if r is not None and r.passed]
     fails = [tid for tid, r in auto_results.items() if r is not None and not r.passed]
-    assert len(passes) == 8, f"Expected 8 auto-pass tasks, got: {passes}"
-    assert len(fails) == 2, f"Expected 2 auto-fail tasks, got: {fails}"
+    assert len(passes) == 24, f"Expected 24 auto-pass tasks, got: {passes}"
+    assert len(fails) == 6, f"Expected 6 auto-fail tasks, got: {fails}"
     assert "house_error_code_prefix" in fails, (
         "house_error_code_prefix should be auto-fail "
         "(exact ACME code mapping is harder to surface than a hand hint)"
@@ -1131,6 +1151,22 @@ def test_auto_fixture_honest_distribution() -> None:
     assert "audit_log_schema_version" in fails, (
         "audit_log_schema_version should be auto-fail "
         "(exact version string 'audit.v2' vs 'v2' requires verbatim recall)"
+    )
+    assert "api_response_envelope" in fails, (
+        "api_response_envelope should be auto-fail "
+        "(underscore-prefixed '_ok' sentinel is easy to confuse with plain 'ok')"
+    )
+    assert "event_schema_version" in fails, (
+        "event_schema_version should be auto-fail "
+        "(exact version '2.1' vs '2.0' or '2' requires verbatim recall)"
+    )
+    assert "migration_file_prefix" in fails, (
+        "migration_file_prefix should be auto-fail "
+        "(M{YYYYMMDD}{seq:03d}__ format is complex to recall verbatim)"
+    )
+    assert "fx_rate_precision" in fails, (
+        "fx_rate_precision should be auto-fail "
+        "(exact '8' decimal places vs 4 or 6 common defaults requires verbatim recall)"
     )
 
 
@@ -1147,9 +1183,9 @@ def test_run_suite_private_fixture_with_auto_results() -> None:
 def test_report_auto_wins_aggregate() -> None:
     """ABReport.auto_wins counts tasks where auto passed but alone failed."""
     report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
-    # 8 tasks have auto=pass; all 10 have alone=fail → 8 auto wins
-    assert report.auto_wins == 8, (
-        f"Expected 8 auto wins from private fixture but got {report.auto_wins}"
+    # 24 tasks have auto=pass; all 30 have alone=fail → 24 auto wins
+    assert report.auto_wins == 24, (
+        f"Expected 24 auto wins from private fixture but got {report.auto_wins}"
     )
 
 
@@ -1158,7 +1194,7 @@ def test_report_to_dict_includes_auto() -> None:
     report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
     d = report.to_dict()
     assert "auto_wins" in d
-    assert d["auto_wins"] == 8
+    assert d["auto_wins"] == 24
     for comparison_dict in d["comparisons"]:  # type: ignore[union-attr]
         assert "auto" in comparison_dict, "Each comparison dict must include 'auto'"
         assert "auto_wins" in comparison_dict
@@ -1234,6 +1270,28 @@ _ANTI_LEAK_CASES: list[tuple[object, str]] = [
     (TASK_CURRENCY_ALLOWLIST, "allowlist"),
     (TASK_WEBHOOK_SIGNATURE_HEADER, "X-Acme-Hook-Sig"),
     (TASK_WEBHOOK_SIGNATURE_HEADER, "sha256="),
+    # Tasks 11-30
+    (TASK_API_RESPONSE_ENVELOPE, "_ok"),
+    (TASK_SERVICE_VERSION_HEADER, "X-Acme-Svc-Ver"),
+    (TASK_EVENT_SCHEMA_VERSION, '"_ev"'),  # quoted form avoids false match on make_event
+    (TASK_EVENT_SCHEMA_VERSION, "2.1"),
+    (TASK_VALIDATION_FIELD_PATH, "field_path"),
+    (TASK_PAYMENT_REF_SEPARATOR, "|"),
+    (TASK_REFUND_CREDIT_FLAG, "is_credit"),
+    (TASK_FX_RATE_PRECISION, "8 decimal"),
+    (TASK_TZ_OFFSET_COMPACT_FORMAT, "+0530"),
+    (TASK_DURATION_MICROSECONDS, "microsecond"),
+    (TASK_PAGINATION_TOTAL_KEY, "total_count"),
+    (TASK_CURSOR_BASE64URL_NO_PADDING, "urlsafe"),
+    (TASK_LOG_CONTEXT_KEY, "log_ctx"),
+    (TASK_AUDIT_ACTOR_PREFIX, "user:"),
+    (TASK_FEATURE_FLAG_ENV_PREFIX, "FF_"),
+    (TASK_CONFIG_SECRET_SCOPE, "sec:"),
+    (TASK_JWT_EDDSA_ONLY, "EdDSA"),
+    (TASK_REQUEST_NONCE_HEADER, "X-Acme-Nonce"),
+    (TASK_MIGRATION_FILE_PREFIX, "seq:03d"),
+    (TASK_DB_NULL_SENTINEL, "__NULL__"),
+    (TASK_BATCH_MAX_FIFTY, "50"),
 ]
 
 

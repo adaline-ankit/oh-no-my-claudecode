@@ -863,6 +863,937 @@ _RAW: list[dict[str, object]] = [
         "error": None,
         "fixture": True,
     },
+    # =======================================================================
+    # TASKS 11-30 — 20 new private-knowledge tasks
+    # Auto-fail: api_response_envelope, event_schema_version,
+    #            migration_file_prefix, fx_rate_precision (arbitrary exact values)
+    # All others: auto-pass
+    # =======================================================================
+    # -----------------------------------------------------------------------
+    # api_response_envelope — ONMC-WIN: cc_alone uses "result" key
+    # AUTO FAIL: "_ok" sentinel requires exact verbatim recall
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "api_response_envelope",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 487,
+        "duration_s": 7.1,
+        "agent_output": (
+            "The function should wrap the data in a standard envelope.  "
+            "Returning {'result': data} — a common pattern for API responses.  "
+            "No information about a specific sentinel key requirement."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "api_response_envelope",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 462,
+        "duration_s": 6.7,
+        "agent_output": (
+            "ONMC context: envelope requires 'data' key and '_ok': True sentinel.  "
+            "The gateway checks '_ok' (underscore prefix) to distinguish healthy responses.  "
+            "Returning {'data': data, '_ok': True}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # AUTO FAIL: "_ok" underscore sentinel requires exact verbatim recall
+    {
+        "task_id": "api_response_envelope",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 474,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the envelope convention: a sentinel flag is required.  "
+            "Added 'ok': True (without underscore prefix) to the envelope dict.  "
+            "Gate fails because the test expects '_ok' (underscore-prefixed), not 'ok'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # service_version_header — ONMC-WIN: cc_alone uses X-Service-Version
+    # AUTO PASS: X-Acme-Svc-Ver is explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "service_version_header",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 493,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Adding version header for inter-service calls.  "
+            "Using 'X-Service-Version: {version}' — a standard convention.  "
+            "No information about a specific header name or value format."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "service_version_header",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 459,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: service mesh header is 'X-Acme-Svc-Ver' with value "
+            "'{service}/{version}'.  Other header names are silently ignored.  "
+            "Returning {'X-Acme-Svc-Ver': f'{service}/{version}'}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "service_version_header",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 471,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the service mesh telemetry doc: header must be "
+            "'X-Acme-Svc-Ver' with slash-joined service/version value.  "
+            "Implementing: {'X-Acme-Svc-Ver': f'{service}/{version}'}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # event_schema_version — ONMC-WIN: cc_alone omits _ev key
+    # AUTO FAIL: exact version "2.1" requires verbatim recall
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "event_schema_version",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 499,
+        "duration_s": 7.4,
+        "agent_output": (
+            "Building a domain event with type and payload.  "
+            "Returning {'type': event_type, 'payload': payload}.  "
+            "No information about a required schema version meta key."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "event_schema_version",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 468,
+        "duration_s": 6.8,
+        "agent_output": (
+            "ONMC context: event bus requires '_ev': '2.1' meta key.  "
+            "Events missing this key or with wrong version are dead-lettered.  "
+            "Returning {'_ev': '2.1', 'type': event_type, 'payload': payload}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # AUTO FAIL: exact version "2.1" vs "2.0" or "2" is hard to recall verbatim
+    {
+        "task_id": "event_schema_version",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 481,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Auto recall surfaces the event bus doc: an '_ev' meta key is required.  "
+            "Added '_ev': '2.0' to the event dict (doc mentions migration from '2.0').  "
+            "Gate fails because the test expects exactly '2.1', not '2.0'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # validation_field_path — ONMC-WIN: cc_alone uses "field" key
+    # AUTO PASS: "field_path" is explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "validation_field_path",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 478,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Building a validation error dict.  "
+            "Using 'field' key for the field name — standard REST API convention.  "
+            "Returning {'error': message, 'field': field_name}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "validation_field_path",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 451,
+        "duration_s": 6.5,
+        "agent_output": (
+            "ONMC context: frontend renderer reads 'field_path' (underscore-joined).  "
+            "Using 'field' causes the inline error to be dropped.  "
+            "Returning {'error': message, 'field_path': field_name}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "validation_field_path",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 463,
+        "duration_s": 6.8,
+        "agent_output": (
+            "Auto recall surfaces the validation schema doc: key must be 'field_path' "
+            "not 'field' — ORM collision context explained.  "
+            "Implementing: return {'error': message, 'field_path': field_name}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # payment_ref_separator — ONMC-WIN: cc_alone uses dash separator
+    # AUTO PASS: pipe "|" separator is explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "payment_ref_separator",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 485,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Building a payment reference from merchant_id and order_id.  "
+            "Joining with dash: f'{merchant_id}-{order_id}'.  "
+            "Dash-separated composite IDs are standard in payment systems."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "payment_ref_separator",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 456,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: gateway splits on '|' (pipe character).  "
+            "Dash is ambiguous since IDs can contain dashes.  "
+            "Implementing: return f'{merchant_id}|{order_id}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "payment_ref_separator",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 468,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the payment gateway doc: pipe '|' is the required "
+            "separator (dashes are ambiguous with dash-containing IDs).  "
+            "Implementing: return f'{merchant_id}|{order_id}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # refund_credit_flag — ONMC-WIN: cc_alone uses negative amount
+    # AUTO PASS: is_credit flag and positive-only rule explicitly stated
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "refund_credit_flag",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 501,
+        "duration_s": 7.4,
+        "agent_output": (
+            "Encoding a refund as a negative amount: {'amount_paise': -amount_paise}.  "
+            "Negative amounts represent credits/refunds in standard accounting.  "
+            "This is the natural encoding for a refund value."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "refund_credit_flag",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 473,
+        "duration_s": 6.9,
+        "agent_output": (
+            "ONMC incident memory: negative amounts were booked as debits, causing "
+            "double charges for 47 transactions in 2023-Q4.  "
+            "Must use positive amount + is_credit flag: "
+            "{'amount_paise': amount_paise, 'is_credit': True}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "refund_credit_flag",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 485,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Auto recall surfaces the payment processor incident: refunds must use "
+            "positive amount with is_credit=True flag — negative amounts cause double charges.  "
+            "Implementing: return {'amount_paise': amount_paise, 'is_credit': True}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # fx_rate_precision — ONMC-WIN: cc_alone uses str(float(rate))
+    # AUTO FAIL: exact number "8" decimal places requires verbatim recall
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "fx_rate_precision",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 494,
+        "duration_s": 7.3,
+        "agent_output": (
+            "Formatting the FX rate for storage.  "
+            "Using str(float(rate)) — converts to float and back to string.  "
+            "No information about a specific decimal precision requirement."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "fx_rate_precision",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 466,
+        "duration_s": 6.8,
+        "agent_output": (
+            "ONMC context: exchange service requires exactly 8 decimal places.  "
+            "Must use Decimal, not float: f'{Decimal(rate):.8f}'.  "
+            "Implementing with Decimal to avoid float precision loss."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # AUTO FAIL: exact precision "8" (vs 4 or 6 which are common defaults)
+    {
+        "task_id": "fx_rate_precision",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 477,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the exchange service doc: Decimal and fixed precision required.  "
+            "Using f'{Decimal(rate):.4f}' — 4 decimal places (common fintech default).  "
+            "Gate fails because the test expects exactly 8 decimal places."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # tz_offset_compact_format — ONMC-WIN: cc_alone adds UTC prefix
+    # AUTO PASS: 5-char +HHMM format is explicitly stated in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "tz_offset_compact_format",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 488,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Formatting a UTC offset from minutes.  "
+            "Using 'UTC+0530' format (UTC prefix + sign + hours + minutes).  "
+            "This is a human-readable and unambiguous representation."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "tz_offset_compact_format",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 460,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: telemetry parser uses 5-char fixed-width field.  "
+            "UTC prefix makes it 8 chars and breaks the parser.  "
+            "Implementing compact '+HHMM' format: f'{sign}{h:02d}{m:02d}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "tz_offset_compact_format",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 472,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the telemetry schema doc: 5-character +HHMM format "
+            "required, no UTC prefix or colon separator.  "
+            "Implementing: f'{sign}{h:02d}{m:02d}' for a 5-char result."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # duration_microseconds — ONMC-WIN: cc_alone divides by 1,000,000 (ms)
+    # AUTO PASS: microseconds (÷1000) rule explicitly stated in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "duration_microseconds",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 495,
+        "duration_s": 7.3,
+        "agent_output": (
+            "Converting nanoseconds to a storage unit.  "
+            "Dividing by 1,000,000 to get milliseconds — the standard profiling unit.  "
+            "No information about a specific storage unit requirement."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "duration_microseconds",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 467,
+        "duration_s": 6.7,
+        "agent_output": (
+            "ONMC context: storage schema uses microseconds (÷1000), not milliseconds.  "
+            "Millisecond storage collapsed sub-1ms spans to zero in 2023.  "
+            "Implementing: return nanoseconds // 1_000."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "duration_microseconds",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 479,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the profiler schema doc: microseconds required, "
+            "not milliseconds — 2023 migration for sub-millisecond span preservation.  "
+            "Implementing: return nanoseconds // 1_000."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # pagination_total_key — ONMC-WIN: cc_alone uses "total" key
+    # AUTO PASS: "total_count" key explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "pagination_total_key",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 481,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Building a paginated list response.  "
+            "Using 'total' key for the overall item count — the natural key name.  "
+            "Returning {'items': items, 'total': total, 'page': page}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "pagination_total_key",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 453,
+        "duration_s": 6.5,
+        "agent_output": (
+            "ONMC context: frontend pagination component reads 'total_count' (underscore-joined).  "
+            "'total' conflicts with financial subtotals.  "
+            "Returning {'items': items, 'total_count': total, 'page': page}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "pagination_total_key",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 465,
+        "duration_s": 6.8,
+        "agent_output": (
+            "Auto recall surfaces the pagination schema doc: 'total_count' is required, "
+            "'total' was renamed in 2022 to avoid financial subtotal collisions.  "
+            "Implementing: {'items': items, 'total_count': total, 'page': page}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # cursor_base64url_no_padding — ONMC-WIN: cc_alone uses standard base64
+    # AUTO PASS: urlsafe + no-padding rule explicitly stated in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "cursor_base64url_no_padding",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 497,
+        "duration_s": 7.4,
+        "agent_output": (
+            "Encoding cursor payload as an opaque string.  "
+            "Using base64.b64encode(payload).decode() — standard base64 encoding.  "
+            "This produces an opaque, reversible encoding for the cursor."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "cursor_base64url_no_padding",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 469,
+        "duration_s": 6.8,
+        "agent_output": (
+            "ONMC context: cursors must be URL-safe, no padding.  "
+            "Standard base64 produces '+' and '/' (URL-unsafe) and '=' padding.  "
+            "Using: base64.urlsafe_b64encode(payload).rstrip(b'=').decode()."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "cursor_base64url_no_padding",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 481,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Auto recall surfaces the cursor encoding doc: base64url without padding "
+            "required — 2023 incident where '/' in cursors caused 404s.  "
+            "Using: base64.urlsafe_b64encode(payload).rstrip(b'=').decode()."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # log_context_key — ONMC-WIN: cc_alone uses "context" key
+    # AUTO PASS: "log_ctx" key explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "log_context_key",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 476,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Building a structured log entry.  "
+            "Using 'context' key for the trace context — natural, readable key name.  "
+            "Returning {'message': message, 'level': level, 'context': context}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "log_context_key",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 449,
+        "duration_s": 6.5,
+        "agent_output": (
+            "ONMC context: log aggregator index maps 'log_ctx' key.  "
+            "'context' collides with runtime context (heap/GC stats) — renamed in 2023.  "
+            "Returning {'message': message, 'level': level, 'log_ctx': context}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "log_context_key",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 461,
+        "duration_s": 6.7,
+        "agent_output": (
+            "Auto recall surfaces the log aggregator schema doc: 'log_ctx' is the "
+            "indexed field — 'context' was renamed to avoid ORM collision.  "
+            "Implementing: return {'message': message, 'level': level, 'log_ctx': context}."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # audit_actor_prefix — ONMC-WIN: cc_alone returns bare user_id
+    # AUTO PASS: "user:" prefix explicitly stated in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "audit_actor_prefix",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 483,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Returning the actor identifier for audit logs.  "
+            "Returning the bare user_id — it already uniquely identifies the user.  "
+            "No information about a required prefix format."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "audit_actor_prefix",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 455,
+        "duration_s": 6.5,
+        "agent_output": (
+            "ONMC context: audit resolver splits on ':' to determine actor type.  "
+            "Bare user_id is tagged as 'unresolved' and excluded from compliance reports.  "
+            "Implementing: return f'user:{user_id}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "audit_actor_prefix",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 467,
+        "duration_s": 6.8,
+        "agent_output": (
+            "Auto recall surfaces the audit pipeline doc: actor must use 'user:{id}' "
+            "format — colon-prefix scheme introduced in 2022 schema v2 migration.  "
+            "Implementing: return f'user:{user_id}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # feature_flag_env_prefix — ONMC-WIN: cc_alone uses FEATURE_ prefix
+    # AUTO PASS: "FF_" prefix explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "feature_flag_env_prefix",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 479,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Building the environment variable name for a feature flag.  "
+            "Using 'FEATURE_{name.upper()}' — clear and descriptive prefix.  "
+            "No information about a specific prefix convention."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "feature_flag_env_prefix",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 452,
+        "duration_s": 6.5,
+        "agent_output": (
+            "ONMC context: flag service loader scans for 'FF_' keys only.  "
+            "'FEATURE_' prefix was deprecated in 2023 — silently skipped.  "
+            "Implementing: return f'FF_{flag_name.upper()}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "feature_flag_env_prefix",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 464,
+        "duration_s": 6.8,
+        "agent_output": (
+            "Auto recall surfaces the feature flag config doc: 'FF_' prefix required, "
+            "'FEATURE_' was deprecated in 2023 to avoid third-party conflicts.  "
+            "Implementing: return f'FF_{flag_name.upper()}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # config_secret_scope — ONMC-WIN: cc_alone uses SECRET_ prefix
+    # AUTO PASS: "sec:" namespace explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "config_secret_scope",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 486,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Building a config store key for a secret value.  "
+            "Using 'SECRET_{key_name}' prefix — clear and readable.  "
+            "No information about a specific namespace prefix."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "config_secret_scope",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 458,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: secret backend mounts at 'sec:' namespace.  "
+            "'SECRET_' routes to plaintext store — causes secret leakage in logs.  "
+            "Implementing: return f'sec:{key_name}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "config_secret_scope",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 470,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the config service doc: 'sec:' namespace routes to "
+            "the vault-backed secret backend — 'SECRET_' goes to plaintext.  "
+            "Implementing: return f'sec:{key_name}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # jwt_edDSA_only — ONMC-WIN: cc_alone returns HS256 + RS256
+    # AUTO PASS: EdDSA-only rule explicitly stated in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "jwt_edDSA_only",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 502,
+        "duration_s": 7.5,
+        "agent_output": (
+            "Returning the list of permitted JWT algorithms.  "
+            "Using ['HS256', 'RS256'] — the two most common JWT signing algorithms.  "
+            "No information about a specific algorithm restriction."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "jwt_edDSA_only",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 474,
+        "duration_s": 6.9,
+        "agent_output": (
+            "ONMC context: 2024-Q1 security incident — algorithm confusion allows "
+            "token forgery with HS256 + RS256 combo.  Only 'EdDSA' is permitted.  "
+            "Implementing: return ['EdDSA']."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "jwt_edDSA_only",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 486,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Auto recall surfaces the JWT security policy doc: only EdDSA is permitted "
+            "after the 2024-Q1 algorithm confusion incident.  HS256 and RS256 forbidden.  "
+            "Implementing: return ['EdDSA']."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # request_nonce_header — ONMC-WIN: cc_alone uses X-Nonce
+    # AUTO PASS: X-Acme-Nonce explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "request_nonce_header",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 489,
+        "duration_s": 7.2,
+        "agent_output": (
+            "Adding a nonce header to signed requests.  "
+            "Using 'X-Nonce: {nonce}' — a standard-ish header for request nonces.  "
+            "No information about a specific header name requirement."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "request_nonce_header",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 461,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: signing middleware checks 'X-Acme-Nonce' header.  "
+            "'X-Nonce' was conflicting with CDN nonce header — namespaced in 2023.  "
+            "Adding 'X-Acme-Nonce': nonce to headers dict."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "request_nonce_header",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 473,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the request signing doc: 'X-Acme-Nonce' is required "
+            "for replay-attack prevention — CDN was injecting X-Nonce in 2023.  "
+            "Adding 'X-Acme-Nonce': nonce to the headers dict."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # migration_file_prefix — ONMC-WIN: cc_alone uses Flyway V{seq}__ format
+    # AUTO FAIL: M{YYYYMMDD}{seq:03d}__ is too specific for auto recall
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "migration_file_prefix",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 498,
+        "duration_s": 7.4,
+        "agent_output": (
+            "Building a migration file name.  "
+            "Using Flyway-style 'V{seq}__{description}' format — the standard convention.  "
+            "No information about a custom prefix format."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "migration_file_prefix",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 470,
+        "duration_s": 6.8,
+        "agent_output": (
+            "ONMC context: runner uses 'M{YYYYMMDD}{seq:03d}__' format.  "
+            "Flyway 'V' prefix is silently skipped — legacy Flyway coexists in repo.  "
+            "Implementing: return f'M{date_str}{seq:03d}__{description}'."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # AUTO FAIL: exact format M{YYYYMMDD}{seq:03d}__ requires verbatim recall of all components
+    {
+        "task_id": "migration_file_prefix",
+        "condition": "cc_onmc_auto",
+        "passed": False,
+        "tokens": 482,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Auto recall surfaces the migration runner doc: 'M' prefix required, not 'V'.  "
+            "Implementing 'M{seq:03d}__{description}' (seq only, missing date component).  "
+            "Gate fails because the test expects the date embedded: M{YYYYMMDD}{seq:03d}__."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # db_null_sentinel — ONMC-WIN: cc_alone returns None unchanged
+    # AUTO PASS: "__NULL__" sentinel explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "db_null_sentinel",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 484,
+        "duration_s": 7.1,
+        "agent_output": (
+            "Encoding a nullable value for a NOT NULL column.  "
+            "Returning the value unchanged — None is handled by the ORM.  "
+            "No information about a specific sentinel encoding."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "db_null_sentinel",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 456,
+        "duration_s": 6.6,
+        "agent_output": (
+            "ONMC context: JSONB column is NOT NULL — JSON null violates the constraint.  "
+            "ORM recognises '__NULL__' sentinel string and decodes it back to None on read.  "
+            "Implementing: return '__NULL__' if value is None else value."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "db_null_sentinel",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 468,
+        "duration_s": 6.9,
+        "agent_output": (
+            "Auto recall surfaces the JSONB column doc: '__NULL__' sentinel required "
+            "for NOT NULL constraint — ORM decodes it back to None automatically.  "
+            "Implementing: return '__NULL__' if value is None else value."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    # -----------------------------------------------------------------------
+    # batch_max_fifty — ONMC-WIN: cc_alone raises for > 100
+    # AUTO PASS: "50" limit explicitly named in grounding doc
+    # -----------------------------------------------------------------------
+    {
+        "task_id": "batch_max_fifty",
+        "condition": "cc_alone",
+        "passed": False,
+        "tokens": 491,
+        "duration_s": 7.3,
+        "agent_output": (
+            "Validating batch size.  "
+            "Raising ValueError for batches larger than 100 items — a standard limit.  "
+            "No information about the specific maximum batch size."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "batch_max_fifty",
+        "condition": "cc_onmc",
+        "passed": True,
+        "tokens": 463,
+        "duration_s": 6.7,
+        "agent_output": (
+            "ONMC context: enrichment service times out after 5 seconds.  "
+            "50 items complete at p99; 51+ routinely timeout.  100 was rolled back.  "
+            "Implementing: raise ValueError if len(items) > 50."
+        ),
+        "error": None,
+        "fixture": True,
+    },
+    {
+        "task_id": "batch_max_fifty",
+        "condition": "cc_onmc_auto",
+        "passed": True,
+        "tokens": 475,
+        "duration_s": 7.0,
+        "agent_output": (
+            "Auto recall surfaces the batch import doc: 50 item limit due to enrichment "
+            "service timeout — 100 was the rolled-back experiment value.  "
+            "Implementing: raise ValueError if len(items) > 50."
+        ),
+        "error": None,
+        "fixture": True,
+    },
 ]
 
 
