@@ -17,6 +17,12 @@ subprocess boundary used by ClaudeCliAdapter in the loop engine). It uses the
 Claude CLI's configured authentication, including subscription login. The
 baseline is real, not simulated or auto-failed.
 
+Live mode is DISABLED BY DEFAULT: it runs the agent with
+``--dangerously-skip-permissions`` (autonomous, approvals off, isolated only by
+a temp directory). It refuses to run unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set
+to ``1``/``true``/``yes`` — an explicit, informed opt-in intended to be used
+inside a container/VM. Fixture mode (the default) needs no opt-in.
+
 ONMC grounding (cc_onmc condition)
 ------------------------------------
 In the cc_onmc condition, the task's prior lesson is stored in an isolated ONMC
@@ -267,8 +273,10 @@ def _run_claude_agent(
     """Shell out to Claude Code with identical, isolated settings per condition.
 
     ``--dangerously-skip-permissions`` is passed so the agent acts autonomously
-    in the throwaway temp repo without stalling on approval prompts.  The eval
-    always runs in an isolated temporary directory, so this is safe.
+    in the throwaway temp repo without stalling on approval prompts.  This is
+    only reached after the ``ONMC_EVAL_ALLOW_DANGEROUS`` opt-in gate in
+    ``_run_suite_live`` — the agent is unsandboxed apart from the temp directory,
+    so callers must opt in explicitly (ideally in a container/VM).
     """
     cmd = [
         "claude",
@@ -621,7 +629,33 @@ def _run_suite_live(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> ABReport:
-    """Run all tasks live using Claude Code's configured auth."""
+    """Run all tasks live using Claude Code's configured auth.
+
+    Refuses unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set. Live mode spawns a real
+    Claude Code agent with ``--dangerously-skip-permissions`` (autonomous,
+    approvals OFF, isolated only by a temp directory — no container). It is OFF
+    by default; opt in only inside an isolated environment (container/VM).
+    """
+    import warnings
+
+    if os.environ.get("ONMC_EVAL_ALLOW_DANGEROUS", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        raise RuntimeError(
+            "Live A/B eval is disabled by default: it spawns a REAL Claude Code agent "
+            "with --dangerously-skip-permissions (autonomous, approvals off, isolated "
+            "only by a temp directory — no container isolation). Set "
+            "ONMC_EVAL_ALLOW_DANGEROUS=1 to run it, ideally inside a container/VM. "
+            "Fixture mode (the default, without --live) needs no opt-in."
+        )
+    warnings.warn(
+        "onmc eval live mode: spawning an unsandboxed autonomous Claude agent "
+        "(--dangerously-skip-permissions) per task/condition. Ensure you are running "
+        "in an isolated environment.",
+        stacklevel=2,
+    )
 
     comparisons: list[ABTaskComparison] = []
 
