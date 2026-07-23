@@ -1,4 +1,14 @@
-"""Repository-backed candidates for the public execution harness."""
+"""Repository-backed candidates for the public execution harness.
+
+Two providers are exported:
+
+* :class:`RepositoryCandidateProvider` — original graph-neighbours / token-match
+  provider.  Used as the safe fallback.
+* :class:`HybridRepositoryCandidateProvider` — wraps the hybrid BM25+dense+RRF
+  retrieval module.  Token-budgeted, no-op on weak evidence (via ``min_score``),
+  with an automatic fallback to :class:`RepositoryCandidateProvider` when hybrid
+  retrieval raises an unexpected error (e.g. corpus construction failure).
+"""
 
 from __future__ import annotations
 
@@ -8,6 +18,7 @@ from pathlib import Path
 
 from oh_no_my_claudecode.context_engine import Candidate, RetrievalMode
 from oh_no_my_claudecode.ingest.repo_tree import scan_repository_files
+from oh_no_my_claudecode.retrieval import HybridRetriever
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _TEXT_EXTENSIONS = frozenset(
@@ -151,4 +162,122 @@ class RepositoryCandidateProvider:
         return tuple(items)
 
 
-__all__ = ["RepositoryCandidateProvider"]
+@dataclass(frozen=True, slots=True)
+class HybridRepositoryCandidateProvider:
+    """BM25+dense+RRF-ranked candidate provider for ``onmc run`` context.
+
+    Indexes all safe text files in the repository once per ``candidates()``
+    call and ranks them with :class:`~oh_no_my_claudecode.retrieval.HybridRetriever`.
+
+    Parameters
+    ----------
+    repo_root:
+        Absolute path to the repository root.
+    top_k:
+        Maximum number of ranked files to surface as candidates (default 20).
+    min_score:
+        Minimum fused RRF score for the top result.  When the top result falls
+        below this threshold ``retrieve()`` returns ``[]`` (no-op / no evidence),
+        and this provider returns an empty tuple.  ``0.0`` disables the gate.
+    token_budget:
+        Optional whitespace-token cap passed to the underlying retriever; when
+        reached the retriever stops collecting hits.  ``None`` → no cap (the
+        :class:`~oh_no_my_claudecode.context_engine.ContextEngine` enforces the
+        authoritative token budget during ``plan()``).
+
+    Fallback behaviour
+    ------------------
+    Any unexpected exception during corpus construction or retrieval causes a
+    transparent fallback to :class:`RepositoryCandidateProvider` so the run
+    is never blocked by a retrieval error.
+    """
+
+    repo_root: Path
+    top_k: int = 20
+    min_score: float = 0.0
+    token_budget: int | None = None
+
+    def candidates(self, query: str, mode: RetrievalMode) -> tuple[Candidate, ...]:
+        try:
+            return self._hybrid_candidates(query)
+        except Exception:  # noqa: BLE001
+            return RepositoryCandidateProvider(self.repo_root).candidates(query, mode)
+
+    def _hybrid_candidates(self, query: str) -> tuple[Candidate, ...]:
+        root = self.repo_root.resolve()
+        records = scan_repository_files(root, exclude_dirs=_EXCLUDED_DIRS)
+
+        doc_ids: list[str] = []
+        index_texts: list[str] = []  # path-prefixed for BM25 path-term matching
+        full_texts: list[str] = []  # raw content for evidence / excerpt
+
+        for record in records:
+            path = record.path
+            file_path = root / path
+            if (
+                _is_secret_path(path)
+                or record.size_bytes > _MAX_FILE_BYTES
+                or (
+                    (record.extension or "") not in _TEXT_EXTENSIONS
+                    and file_path.name not in _TEXT_FILENAMES
+                )
+            ):
+                continue
+            try:
+                raw = file_path.read_bytes()
+                if b"\x00" in raw:
+                    continue
+                text = raw.decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            doc_ids.append(f"repo:{path}")
+            index_texts.append(f"{path}\n{text}")
+            full_texts.append(text[:_MAX_CONTENT_CHARS])
+
+        if not doc_ids:
+            return ()
+
+        retriever = HybridRetriever(
+            doc_ids=doc_ids,
+            texts=index_texts,
+            evidence_texts=full_texts,
+            min_score=self.min_score,
+            token_budget=self.token_budget,
+        )
+        hits = retriever.retrieve(query, k=self.top_k)
+        if not hits:
+            return ()
+
+        query_tokens = _tokens(query)
+        top_score = hits[0].score
+        norm = top_score if top_score > 0.0 else 1.0
+
+        items: list[Candidate] = []
+        for hit in hits:
+            path = hit.doc_id.removeprefix("repo:")
+            path_tokens = _tokens(path)
+            structural = 1.0 if query_tokens & path_tokens else 0.35
+            content = _excerpt(hit.evidence, query_tokens)
+            token_count = max(1, (len(content) + 3) // 4)
+            semantic = min(1.0, hit.score / norm)
+            items.append(
+                Candidate(
+                    id=hit.doc_id,
+                    content=content,
+                    source=path,
+                    token_count=token_count,
+                    provenance=(hit.doc_id,),
+                    structural_score=structural,
+                    semantic_score=semantic,
+                    dedupe_key=path,
+                    metadata=(
+                        ("path", path),
+                        ("kind", "repository-file"),
+                        ("retrieval_rank", str(hit.rank)),
+                    ),
+                )
+            )
+        return tuple(items)
+
+
+__all__ = ["HybridRepositoryCandidateProvider", "RepositoryCandidateProvider"]

@@ -61,7 +61,7 @@ from oh_no_my_claudecode.tool_broker import (
     ToolBroker,
 )
 
-from .context import RepositoryCandidateProvider
+from .context import HybridRepositoryCandidateProvider
 from .models import (
     ExecutionPlan,
     HarnessResult,
@@ -253,7 +253,7 @@ def default_dependencies(repo_root: Path) -> ControllerDependencies:
     return ControllerDependencies(
         context_engine=ContextEngine(
             PlannerConfig(min_context_roi=0.00025),
-            candidate_providers=(RepositoryCandidateProvider(repo_root),)
+            candidate_providers=(HybridRepositoryCandidateProvider(repo_root),),
         ),
         runtime_store=RuntimeStore(runtime_root),
         policy_decider=_default_policy(),
