@@ -14,9 +14,6 @@ Covers:
 from __future__ import annotations
 
 import math
-from typing import Any
-
-import pytest
 
 from oh_no_my_claudecode.retrieval_eval.dataset import EXPECTED_DATASET_SHA, load_dataset
 from oh_no_my_claudecode.retrieval_eval.metrics import (
@@ -28,11 +25,9 @@ from oh_no_my_claudecode.retrieval_eval.metrics import (
 from oh_no_my_claudecode.retrieval_eval.runner import (
     BaselineAdapter,
     RetrievalDataset,
-    RetrievalReport,
     SurfaceReport,
     run_evaluation,
 )
-
 
 # ---------------------------------------------------------------------------
 # Metric correctness tests — hand-computed expected values
