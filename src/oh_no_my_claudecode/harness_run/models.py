@@ -9,6 +9,10 @@ from typing import Any, Literal
 
 from oh_no_my_claudecode.context_engine import EvidencePacket
 from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
+from oh_no_my_claudecode.harness_policy import PolicyEvaluation
+
+from .receipt import RunReceipt
+from .stages import StageOutcome
 
 AgentName = Literal["claude", "codex", "opencode"]
 
@@ -140,6 +144,14 @@ class HarnessResult:
     resumed: bool = False
     resume_run_id: str | None = None
     worktree_path: str | None = None
+    stages: tuple[StageOutcome, ...] = ()
+    policy_evaluation: PolicyEvaluation | None = None
+    receipt: RunReceipt | None = None
+
+    @property
+    def verified(self) -> bool:
+        """Single source of truth: verified only when the receipt says so."""
+        return self.receipt is not None and self.receipt.verified
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -152,6 +164,12 @@ class HarnessResult:
             "resumed": self.resumed,
             "resume_run_id": self.resume_run_id,
             "worktree_path": self.worktree_path,
+            "verified": self.verified,
+            "stages": [stage.to_dict() for stage in self.stages],
+            "policy": (
+                self.policy_evaluation.to_dict() if self.policy_evaluation is not None else None
+            ),
+            "receipt": self.receipt.to_dict() if self.receipt is not None else None,
         }
 
     def render_text(self) -> str:
