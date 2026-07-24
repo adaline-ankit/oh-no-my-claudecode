@@ -7,7 +7,7 @@ import json
 import secrets
 import shlex
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -47,6 +47,7 @@ from oh_no_my_claudecode.proof_graph import (
     VerifierResult,
     evaluate_proof,
 )
+from oh_no_my_claudecode.proof_graph.receipt import ProofReceipt
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.tool_broker import (
     Action,
@@ -61,7 +62,7 @@ from oh_no_my_claudecode.tool_broker import (
     ToolBroker,
 )
 
-from .context import RepositoryCandidateProvider
+from .context import HybridRepositoryCandidateProvider
 from .models import (
     ExecutionPlan,
     HarnessResult,
@@ -71,6 +72,74 @@ from .models import (
     RunRequest,
     state_path_for,
 )
+from .receipt import HarnessRunReceipt
+from .run_policy import (
+    RunPolicy,
+    RunPolicyDecision,
+    VerifierSignal,
+    evaluate_run_policy,
+    load_run_policy,
+)
+from .stages import (
+    StageRecord,
+    context_stage,
+    execute_stage,
+    learn_candidate_stage,
+    prepare_stage,
+    proof_stage,
+    verify_stage,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ChangeSet:
+    """The observed effect of a run: which files changed and the raw diff."""
+
+    changed_files: tuple[str, ...]
+    diff_line_count: int
+    diff_text: str
+
+    @classmethod
+    def empty(cls) -> ChangeSet:
+        return cls((), 0, "")
+
+
+class ChangesReader(Protocol):
+    def __call__(self, root: Path) -> ChangeSet:
+        """Return the working-tree change set for *root*."""
+        ...
+
+
+def _git_changes(root: Path) -> ChangeSet:
+    """Best-effort working-tree change set via git (empty on any failure)."""
+
+    def _git(*args: str) -> str:
+        try:
+            completed = subprocess.run(  # noqa: S603
+                ["git", "-C", str(root), *args],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return completed.stdout if completed.returncode == 0 else ""
+
+    status = _git("status", "--porcelain")
+    changed: list[str] = []
+    for line in status.splitlines():
+        entry = line[3:].strip() if len(line) > 3 else ""
+        if " -> " in entry:  # rename: keep the destination path
+            entry = entry.split(" -> ", 1)[1]
+        if entry:
+            changed.append(entry)
+    diff_text = _git("diff", "HEAD")
+    diff_line_count = sum(
+        1
+        for line in diff_text.splitlines()
+        if (line.startswith(("+", "-")) and not line.startswith(("+++", "---")))
+    )
+    return ChangeSet(tuple(dict.fromkeys(changed)), diff_line_count, diff_text)
 
 
 class PolicyDecider(Protocol):
@@ -116,6 +185,8 @@ class ControllerDependencies:
     policy_decider: PolicyDecider
     loop_executor: LoopExecutor
     compiler: TaskCompiler = compile_task
+    run_policy: RunPolicy = field(default_factory=RunPolicy.permissive)
+    changes_reader: ChangesReader = _git_changes
 
 
 def _render_context(packet: EvidencePacket) -> str:
@@ -253,11 +324,13 @@ def default_dependencies(repo_root: Path) -> ControllerDependencies:
     return ControllerDependencies(
         context_engine=ContextEngine(
             PlannerConfig(min_context_roi=0.00025),
-            candidate_providers=(RepositoryCandidateProvider(repo_root),)
+            candidate_providers=(HybridRepositoryCandidateProvider(repo_root),),
         ),
         runtime_store=RuntimeStore(runtime_root),
         policy_decider=_default_policy(),
         loop_executor=_default_loop_executor,
+        run_policy=load_run_policy(repo_root / ".onmc" / "policy.toml"),
+        changes_reader=_git_changes,
     )
 
 
@@ -404,6 +477,9 @@ class HarnessController:
             for kind in (NodeKind.UNDERSTAND, NodeKind.RETRIEVE, NodeKind.PLAN, NodeKind.CLAIM):
                 snapshot = self._succeed_pending_node(plan.run_id, kind.value, snapshot)
 
+            prepare_rec = prepare_stage(plan.dag, plan.run_id, plan.dag.risk)
+            context_rec = context_stage(plan.context_packet)
+
             execute_state = snapshot.nodes[NodeKind.EXECUTE.value].state
             if execute_state is NodeState.PENDING:
                 snapshot = store.start_node(
@@ -419,9 +495,40 @@ class HarnessController:
                     resume=resumed,
                 )
             )
+
+            effective_root = (
+                Path(loop_result.worktree_path)
+                if loop_result.worktree_path
+                else self.repo_root
+            )
+            change_set = self.dependencies.changes_reader(effective_root)
+            execute_rec = execute_stage(
+                loop_result,
+                changed_files=change_set.changed_files,
+                diff_line_count=change_set.diff_line_count,
+            )
+
+            signals = _verifier_signals(request, loop_result)
+            verify_rec = verify_stage(signals)
+
             proof_graph = _proof_graph(plan.dag.task, plan.proof_requirements[0].argv)
-            assessment = _assess_loop_proof(proof_graph, loop_result)
-            proof_complete = loop_result.converged and assessment.complete
+            assessment, results, evidence = _assess_loop_proof(proof_graph, loop_result)
+            proof_receipt = ProofReceipt.build(proof_graph, assessment, results, evidence)
+            proof_rec = proof_stage(assessment, receipt_hash=proof_receipt.receipt_hash)
+
+            policy_decision = evaluate_run_policy(
+                self.dependencies.run_policy,
+                changed_files=change_set.changed_files,
+                diff_line_count=change_set.diff_line_count,
+                diff_text=change_set.diff_text,
+                verifier_signals=signals,
+            )
+
+            # Proof is complete only when it is both complete AND not false-green.
+            proof_complete = (
+                loop_result.converged and assessment.complete and not assessment.false_green
+            )
+            policy_ok = policy_decision.allowed and not policy_decision.approvals_required
 
             if not loop_result.converged:
                 store.fail_node(
@@ -435,13 +542,25 @@ class HarnessController:
                     reason=loop_result.stop_reason,
                     idempotency_key="harness:fail",
                 )
-                return HarnessResult(
-                    HarnessStatus.FAILED,
-                    plan,
+                learn_rec = learn_candidate_stage(loop_result, proven=False)
+                return self._finish(
+                    status=HarnessStatus.FAILED,
+                    plan=plan,
+                    stages=(
+                        prepare_rec,
+                        context_rec,
+                        execute_rec,
+                        verify_rec,
+                        proof_rec,
+                        learn_rec,
+                    ),
+                    policy=policy_decision,
+                    assessment=assessment,
+                    loop_converged=False,
+                    proof_complete=False,
                     stop_reason=loop_result.stop_reason,
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
-                    resume_run_id=plan.run_id,
                     worktree_path=loop_result.worktree_path,
                 )
 
@@ -467,29 +586,95 @@ class HarnessController:
                     reason="proof requirements not satisfied",
                     idempotency_key="harness:proof-fail",
                 )
-                return HarnessResult(
-                    HarnessStatus.FAILED,
-                    plan,
+                learn_rec = learn_candidate_stage(loop_result, proven=False)
+                return self._finish(
+                    status=HarnessStatus.FAILED,
+                    plan=plan,
+                    stages=(
+                        prepare_rec,
+                        context_rec,
+                        execute_rec,
+                        verify_rec,
+                        proof_rec,
+                        learn_rec,
+                    ),
+                    policy=policy_decision,
+                    assessment=assessment,
                     loop_converged=True,
                     proof_complete=False,
                     stop_reason="proof-incomplete",
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
-                    resume_run_id=plan.run_id,
+                    worktree_path=loop_result.worktree_path,
+                )
+
+            if not policy_ok:
+                # Proof is complete, but the change violates policy or awaits approval.
+                store.start_node(
+                    plan.run_id,
+                    NodeKind.VERIFY.value,
+                    idempotency_key="node:verify:start",
+                )
+                store.fail_node(
+                    plan.run_id,
+                    NodeKind.VERIFY.value,
+                    reason="run policy blocked completion",
+                    idempotency_key="node:verify:policy-block",
+                )
+                store.fail(
+                    plan.run_id,
+                    reason="run policy blocked completion",
+                    idempotency_key="harness:policy-block",
+                )
+                learn_rec = learn_candidate_stage(loop_result, proven=False)
+                stop_reason = (
+                    "awaiting-approval"
+                    if policy_decision.approvals_required and policy_decision.allowed
+                    else "policy-blocked"
+                )
+                return self._finish(
+                    status=HarnessStatus.BLOCKED,
+                    plan=plan,
+                    stages=(
+                        prepare_rec,
+                        context_rec,
+                        execute_rec,
+                        verify_rec,
+                        proof_rec,
+                        learn_rec,
+                    ),
+                    policy=policy_decision,
+                    assessment=assessment,
+                    loop_converged=True,
+                    proof_complete=True,
+                    stop_reason=stop_reason,
+                    proof_reasons=tuple(v.message for v in policy_decision.violations),
+                    resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                 )
 
             for kind in (NodeKind.VERIFY, NodeKind.REPAIR, NodeKind.PROVE, NodeKind.LEARN):
                 snapshot = self._succeed_pending_node(plan.run_id, kind.value, snapshot)
             store.complete(plan.run_id, idempotency_key="harness:complete")
-            return HarnessResult(
-                HarnessStatus.COMPLETED,
-                plan,
+            learn_rec = learn_candidate_stage(loop_result, proven=True)
+            return self._finish(
+                status=HarnessStatus.COMPLETED,
+                plan=plan,
+                stages=(
+                    prepare_rec,
+                    context_rec,
+                    execute_rec,
+                    verify_rec,
+                    proof_rec,
+                    learn_rec,
+                ),
+                policy=policy_decision,
+                assessment=assessment,
                 loop_converged=True,
                 proof_complete=True,
                 stop_reason=loop_result.stop_reason,
+                proof_reasons=(),
                 resumed=resumed,
-                resume_run_id=plan.run_id,
                 worktree_path=loop_result.worktree_path,
             )
         except Exception as exc:
@@ -540,6 +725,47 @@ class HarnessController:
             idempotency_key=f"node:{node_id}:complete",
         )
 
+    def _finish(
+        self,
+        *,
+        status: HarnessStatus,
+        plan: ExecutionPlan,
+        stages: tuple[StageRecord, ...],
+        policy: RunPolicyDecision,
+        assessment: ProofAssessment,
+        loop_converged: bool,
+        proof_complete: bool,
+        stop_reason: str,
+        proof_reasons: tuple[str, ...],
+        resumed: bool,
+        worktree_path: str | None,
+    ) -> HarnessResult:
+        """Assemble the receipt (the sole ``verified`` authority) and result."""
+        receipt = HarnessRunReceipt.build(
+            run_id=plan.run_id,
+            task=plan.dag.task,
+            status=status.value,
+            completed=status is HarnessStatus.COMPLETED,
+            stages=stages,
+            policy=policy,
+            proof=assessment,
+        )
+        return HarnessResult(
+            status,
+            plan,
+            loop_converged=loop_converged,
+            proof_complete=proof_complete,
+            verified=receipt.verified,
+            stop_reason=stop_reason,
+            proof_reasons=proof_reasons,
+            resumed=resumed,
+            resume_run_id=plan.run_id,
+            worktree_path=worktree_path,
+            stages=stages,
+            policy_decision=policy,
+            receipt=receipt,
+        )
+
 
 def _proof_graph(task: str, verifier_argv: tuple[str, ...]) -> ProofGraph:
     claim = Claim("claim:task", f"The requested task is complete: {task}", ClaimKind.BEHAVIOR)
@@ -553,9 +779,28 @@ def _proof_graph(task: str, verifier_argv: tuple[str, ...]) -> ProofGraph:
     return ProofGraph(metadata, RiskMetadata(), DiffMetadata(), (verifier,))
 
 
-def _assess_loop_proof(graph: ProofGraph, result: LoopResult) -> ProofAssessment:
+def _verifier_signals(request: RunRequest, result: LoopResult) -> tuple[VerifierSignal, ...]:
+    """Observed verifier outcomes for policy evaluation (final iteration only)."""
     if not result.iterations:
-        return ProofAssessment(False, True, ("loop produced no verifier result",))
+        return ()
+    final = result.iterations[-1]
+    return (VerifierSignal(request.verifier, final.verify_passed),)
+
+
+def _assess_loop_proof(
+    graph: ProofGraph, result: LoopResult
+) -> tuple[ProofAssessment, tuple[VerifierResult, ...], tuple[Evidence, ...]]:
+    """Assess the loop's proof and return (assessment, results, evidence).
+
+    Returning the results and evidence lets the caller build a content-addressed
+    proof receipt without re-deriving them.
+    """
+    if not result.iterations:
+        return (
+            ProofAssessment(False, True, ("loop produced no verifier result",)),
+            (),
+            (),
+        )
     final = result.iterations[-1]
     outcome = Outcome.PASSED if final.verify_passed else Outcome.FAILED
     digest = hashlib.sha256(final.verify_output.encode()).hexdigest()
@@ -567,11 +812,9 @@ def _assess_loop_proof(graph: ProofGraph, result: LoopResult) -> ProofAssessment
         tuple(claim.claim_id for claim in graph.claims),
         EvidenceSource.VERIFIER,
     )
-    return evaluate_proof(
-        graph,
-        (VerifierResult("verify:configured", outcome, (evidence.evidence_id,)),),
-        (evidence,),
-    )
+    results = (VerifierResult("verify:configured", outcome, (evidence.evidence_id,)),)
+    assessment = evaluate_proof(graph, results, (evidence,))
+    return assessment, results, (evidence,)
 
 
 def _run_id(

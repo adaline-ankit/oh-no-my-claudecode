@@ -45,6 +45,76 @@ _CHARS_PER_TOKEN = 5
 # Minimum score a memory must achieve to be included in the output.
 _MIN_SCORE = 0.1
 
+# ---------------------------------------------------------------------------
+# Relevance gate + budget cap
+# ---------------------------------------------------------------------------
+
+# Environment variable names for the two new controls.
+_ENV_MIN_SCORE = "ONMC_RECALL_MIN_SCORE"
+_ENV_MAX_CHARS = "ONMC_RECALL_MAX_CHARS"
+
+# Default minimum score for the TOP retrieved entry.  If the best match
+# doesn't reach this bar, nothing is injected.  1.5 requires either at least
+# one token overlap (3 pts) + some confidence, or very-high-confidence memory
+# with no overlap (rare). 0.0 disables the gate entirely.
+_GATE_MIN_SCORE_DEFAULT: float = 1.5
+
+# Default max injected characters (0 = disabled).  When enabled, entries are
+# kept highest-scored-first; the tail is dropped with a terse trailing note.
+_GATE_MAX_CHARS_DEFAULT: int = 0
+
+
+def _read_min_score(override: float | None) -> float:
+    """Resolve the effective min-score threshold from param or env."""
+    if override is not None:
+        return override
+    try:
+        return float(os.environ.get(_ENV_MIN_SCORE, str(_GATE_MIN_SCORE_DEFAULT)))
+    except (TypeError, ValueError):
+        return _GATE_MIN_SCORE_DEFAULT
+
+
+def _read_max_chars(override: int | None) -> int:
+    """Resolve the effective max-chars budget from param or env (0 = off)."""
+    if override is not None:
+        return override
+    try:
+        return int(os.environ.get(_ENV_MAX_CHARS, str(_GATE_MAX_CHARS_DEFAULT)))
+    except (TypeError, ValueError):
+        return _GATE_MAX_CHARS_DEFAULT
+
+
+def _apply_char_budget(
+    candidates: list[MemoryEntry],
+    max_chars: int,
+) -> tuple[list[MemoryEntry], int]:
+    """Trim *candidates* to fit within *max_chars* (highest-scored first).
+
+    Returns ``(kept, dropped_count)``.  Always keeps at least one entry so
+    callers never see a budget-gated empty when relevant content exists.
+    The char estimate uses title + summary + details + 50-char formatting
+    overhead per entry — conservative but avoids a full render-then-recount
+    cycle.
+    """
+    if max_chars <= 0:
+        return candidates, 0
+    char_total = 0
+    kept: list[MemoryEntry] = []
+    for cand in candidates:
+        cand_chars = len(cand.title) + len(cand.summary) + len(cand.details or "") + 50
+        if not kept or char_total + cand_chars <= max_chars:
+            kept.append(cand)
+            char_total += cand_chars
+        # else: drop silently (counted below)
+    dropped = len(candidates) - len(kept)
+    return kept, dropped
+
+
+def _dropped_note(dropped: int) -> str:
+    """Terse trailing note appended when budget cap drops entries."""
+    word = "memory" if dropped == 1 else "memories"
+    return f"[{dropped} {word} not shown — budget cap]"
+
 
 def _count_tokens(text: str) -> int:
     """Approximate token count using whitespace splitting (no LLM dependency)."""
@@ -105,6 +175,8 @@ def compile_prompt_recall(
     limit: int = 5,
     budget_tokens: int = 300,
     terse: bool | None = None,
+    min_score: float | None = None,
+    max_chars: int | None = None,
 ) -> tuple[str, int]:
     """Return a tight "Relevant repo memory" block for *prompt*.
 
@@ -115,11 +187,19 @@ def compile_prompt_recall(
         budget_tokens: Hard token cap for the returned markdown (full mode only).
         terse: When None, checks ONMC_VERBOSE/ONMC_TERSE env vars with
             hook default (terse=True).  Pass True/False to override.
+        min_score: Relevance gate — if the top-scored entry's score is below
+            this value, nothing is injected.  ``None`` reads
+            ``ONMC_RECALL_MIN_SCORE`` env (default 1.5).  Set to ``0.0`` to
+            disable the gate.
+        max_chars: Char budget cap.  Entries are kept highest-scored-first;
+            the tail is dropped with a terse trailing note.  ``None`` reads
+            ``ONMC_RECALL_MAX_CHARS`` env (default 0 = disabled).
 
     Returns:
         ``(text, token_count)`` where *text* is the formatted block and
         *token_count* is the approximate whitespace-token count.  Returns
-        ``("", 0)`` when no relevant memories are found.
+        ``("", 0)`` when no relevant memories are found or the relevance gate
+        rejects the best result.
     """
     if not prompt or not prompt.strip():
         return "", 0
@@ -165,6 +245,12 @@ def compile_prompt_recall(
     # Sort descending by score, then title for deterministic tie-breaking.
     scored.sort(key=lambda item: (-item[0], item[1].title))
 
+    # Relevance gate — suppress injection when the best match doesn't clear the
+    # threshold.  This avoids bloating context with unfocused, low-signal hints.
+    effective_min_score = _read_min_score(min_score)
+    if effective_min_score > 0.0 and scored[0][0] < effective_min_score:
+        return "", 0
+
     # Step 2b — Optional embeddings rerank (applied to the top candidates
     # before token-budget truncation so the most semantically relevant entries
     # survive the budget cut).
@@ -176,6 +262,11 @@ def compile_prompt_recall(
 
         top_candidates = rerank_with_embeddings(top_candidates, prompt, top_scores, storage)
 
+    # Budget cap — trim candidates to fit within max_chars, keeping the
+    # highest-scored entries.  A terse trailing note is appended for transparency.
+    effective_max_chars = _read_max_chars(max_chars)
+    top_candidates, dropped = _apply_char_budget(top_candidates, effective_max_chars)
+
     # Step 3 — Render output.
     if terse:
         from oh_no_my_claudecode.serialize.terse import render_recall_terse
@@ -183,6 +274,8 @@ def compile_prompt_recall(
         text = render_recall_terse(top_candidates, max_items=limit)
         if not text:
             return "", 0
+        if dropped:
+            text = text + "\n" + _dropped_note(dropped)
         return text, _count_tokens(text)
 
     # Full markdown mode.
@@ -215,6 +308,8 @@ def compile_prompt_recall(
         return "", 0
 
     markdown = "\n".join(lines).rstrip() + "\n"
+    if dropped:
+        markdown = markdown + _dropped_note(dropped) + "\n"
     return markdown, _count_tokens(markdown)
 
 
@@ -332,6 +427,8 @@ def compile_prompt_recall_safe(
     terse: bool | None = None,
     timeout_ms: int | None = None,
     repo_root: Path | None = None,
+    min_score: float | None = None,
+    max_chars: int | None = None,
 ) -> tuple[str, int]:
     """compile_prompt_recall + skills injection wrapped with a wall-clock timeout.
 
@@ -350,6 +447,12 @@ def compile_prompt_recall_safe(
       When recall text is produced, a ``recall_surfaced`` event is emitted to
       the side sink.  Pass *repo_root* to specify the sink target; defaults to
       ``Path.cwd()``.  Set ``ONMC_FIREWALL=0`` to disable sink emission.
+
+    Args:
+        min_score: Passed through to ``compile_prompt_recall``.  ``None`` reads
+            the ``ONMC_RECALL_MIN_SCORE`` env var (default 1.5).
+        max_chars: Passed through to ``compile_prompt_recall``.  ``None`` reads
+            the ``ONMC_RECALL_MAX_CHARS`` env var (default 0 = disabled).
     """
     import threading
 
@@ -370,6 +473,8 @@ def compile_prompt_recall_safe(
                 limit=limit,
                 budget_tokens=budget_tokens,
                 terse=terse,
+                min_score=min_score,
+                max_chars=max_chars,
             )
             # Skills block — always suppressed so a skill error never breaks
             # the memory recall output.
