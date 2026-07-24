@@ -117,6 +117,41 @@ credentials present, and invoke `PortfolioRunner`. Results are labeled `external
 `internal`. Until then every claim in this doc is `implemented` / `internal` —
 **no "SOTA" or "improves Claude Code" claim is made.**
 
+
+## Real-agent A/B pilot — measured null-to-negative result (2026-07-24)
+
+Two bounded live pilots using the repo's own `run_ab` (real `claude`, sonnet,
+$1.00/run cap, objective HIDDEN gate written only after the agent finishes;
+permission flag narrowed to `--permission-mode acceptEdits`):
+
+| Run | cc_alone (bare Claude) | cc_onmc (ONMC memory) | delta |
+|---|---|---|---|
+| N=3 x1 trial | **1/3** | 0/3 | **-1** |
+| N=6 x1 trial | **2/6** | 1/6 | **-1** |
+| pooled | **3/9** | 1/9 | **-2** |
+
+**Verdict: no measured benefit from ONMC memory context on these tasks.** At
+N=6 single-trial the difference is inside binomial noise, so the honest reading
+is *null-to-negative*, not "ONMC is worse". **No SOTA claim is made or implied.**
+
+Treatment was verified applied (cc_onmc prompt 1084 chars incl. the convention
+answer vs 158 chars bare; compiled context 915 chars via the production recall
+compiler). Budget was not binding (runs used $0.29-0.48 of a $1.00 cap).
+
+**Robust secondary signal (9/9 runs):** cc_onmc consistently cost ~20% less
+($0.29-0.36 vs $0.32-0.43). Hypothesis to test: the injected prior lesson makes
+the agent terminate earlier -- cheaper, less exploration, not more correct.
+
+**Instrument failures found and fixed en route** (each invalidated an earlier
+run; reported rather than banked): (1) a $0.25/run cap killed 7/8 agents
+mid-work; (2) the gate's `python -m pytest` was unresolvable in the venv; (3) a
+hand-rolled driver skipped the hidden-gate-test step. Only results after all
+three fixes are reported above.
+
+**What a real claim needs:** >=10 tasks x 3 trials x 2-3 conditions with
+bootstrap CIs and per-task pairing (~$21+ at observed per-run cost) -- above the
+blueprint's $10 auto-spend ceiling, so it requires explicit budget approval.
+
 ## Reproduce
 
 ```bash
