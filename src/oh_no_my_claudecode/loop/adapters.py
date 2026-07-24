@@ -320,7 +320,19 @@ class ClaudeCliAdapter:
         # Snapshot git status before running.
         before = _git_status_paths(self._cmd_runner, self._repo_root, 30)
 
-        cmd = ["claude", "-p", effective_prompt, "--output-format", "json"]
+        # Headless runs must be able to apply file edits, or the loop spins on
+        # blocked writes (observed in smoke: unapplied edits -> duplicate-action).
+        # `acceptEdits` auto-accepts edit/write tools only; it is NOT the blanket
+        # `bypassPermissions` skip — bash/network stay gated by Claude Code.
+        cmd = [
+            "claude",
+            "-p",
+            effective_prompt,
+            "--output-format",
+            "json",
+            "--permission-mode",
+            "acceptEdits",
+        ]
         if effective_model:
             cmd.extend(["--model", effective_model])
 

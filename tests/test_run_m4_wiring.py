@@ -148,6 +148,21 @@ def test_verifier_false_green_downgrades_to_failed(tmp_path: Path) -> None:
     assert result.verified is False
 
 
+def test_monitor_policy_allows_repo_run_but_denies_traversal(tmp_path: Path) -> None:
+    # The default monitor policy makes enforced mode usable for a real run:
+    # repo-scoped writes and verifier commands ALLOW; out-of-repo writes DENY.
+    from oh_no_my_claudecode.enforcement import Effect
+    from oh_no_my_claudecode.harness_run.controller import _monitor_policy
+
+    monitor = ReferenceMonitor(_monitor_policy(tmp_path), enforced=True)
+    in_repo = monitor.guard(Effect.filesystem("write", str(tmp_path / "calc.py")))
+    verifier = monitor.guard(Effect.command(("python", "-m", "pytest", "-q")))
+    traversal = monitor.guard(Effect.filesystem("write", str(tmp_path / ".." / "etc" / "passwd")))
+    assert in_repo.effect is DecisionEffect.ALLOW
+    assert verifier.effect is DecisionEffect.ALLOW
+    assert traversal.effect is not DecisionEffect.ALLOW
+
+
 def test_no_monitor_and_no_checker_is_behavior_preserving(tmp_path: Path) -> None:
     controller = _controller(tmp_path)  # both seams unset
     result = controller.run(RunRequest(task="plain run", execute=True))

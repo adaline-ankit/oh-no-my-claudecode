@@ -58,6 +58,7 @@ from oh_no_my_claudecode.tool_broker import (
     CommandRule,
     Decision,
     DecisionEffect,
+    PathRule,
     Policy,
     PolicyRule,
     TokenAuthority,
@@ -248,6 +249,46 @@ def _default_policy() -> ToolBroker:
     )
 
 
+def _monitor_policy(repo_root: Path) -> ToolBroker:
+    """Broker the reference monitor composes for a real run.
+
+    Unlike :func:`_default_policy` (which gates verifier commands behind
+    ``verifier=True`` and has no filesystem capability), this allows the effects
+    a legitimate in-repo run actually performs — repo-scoped file writes and the
+    standard verifier commands as plain commands — so *enforced* mode permits a
+    real fix while still denying out-of-repo writes (path traversal) and
+    non-allowlisted commands. Advisory mode uses the same policy to record an
+    honest, non-misleading trace.
+    """
+    agent_capability = Capability(
+        ActionType.TOOL,
+        resources=frozenset({"agent:claude", "agent:codex", "agent:opencode"}),
+    )
+    command_capability = Capability(
+        ActionType.COMMAND,
+        command_rules=(
+            CommandRule(("pytest",)),
+            CommandRule(("python", "-m", "pytest")),
+            CommandRule(("ruff",)),
+            CommandRule(("mypy",)),
+        ),
+    )
+    filesystem_capability = Capability(
+        ActionType.FILESYSTEM,
+        path_rules=(PathRule(repo_root),),
+    )
+    return ToolBroker(
+        policy=Policy(
+            (
+                PolicyRule("monitor-supported-agent", DecisionEffect.ALLOW, agent_capability),
+                PolicyRule("monitor-verifier-command", DecisionEffect.ALLOW, command_capability),
+                PolicyRule("monitor-repo-filesystem", DecisionEffect.ALLOW, filesystem_capability),
+            )
+        ),
+        token_authority=TokenAuthority(secrets.token_bytes(32)),
+    )
+
+
 def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
     request = invocation.request
     repo_root = invocation.repo_root
@@ -367,7 +408,9 @@ def default_dependencies(
         run_policy=load_run_policy(repo_root / ".onmc" / "policy.toml"),
         # Advisory by default: the monitor records a decision trace on every run
         # but does not block. Enforced mode is opt-in via an injected factory.
-        reference_monitor_factory=lambda: ReferenceMonitor(_default_policy(), enforced=False),
+        reference_monitor_factory=lambda: ReferenceMonitor(
+            _monitor_policy(repo_root), enforced=False
+        ),
         changes_reader=_git_changes,
     )
 
@@ -859,7 +902,8 @@ class HarnessController:
             return (), False
         monitor = factory()
         decisions = [
-            monitor.guard(Effect.filesystem("write", path)) for path in change_set.changed_files
+            monitor.guard(Effect.filesystem("write", str(self.repo_root / path)))
+            for path in change_set.changed_files
         ]
         verifier_argv = tuple(shlex.split(request.verifier))
         if verifier_argv:
