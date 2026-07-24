@@ -153,6 +153,7 @@ class HarnessResult:
     stages: tuple[StageRecord, ...] = ()
     policy_decision: RunPolicyDecision | None = None
     receipt: HarnessRunReceipt | None = None
+    enforcement_trace: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -171,6 +172,7 @@ class HarnessResult:
                 self.policy_decision.to_dict() if self.policy_decision is not None else None
             ),
             "receipt": self.receipt.to_dict() if self.receipt is not None else None,
+            "enforcement_trace": [dict(record) for record in self.enforcement_trace],
         }
 
     def render_text(self) -> str:
