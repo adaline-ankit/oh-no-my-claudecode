@@ -87,19 +87,20 @@ def _extract_docstring_first_sentence(content: str, symbol: str) -> str | None:
     except SyntaxError:
         return None
 
+    symbol_nodes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if node.name == symbol:
-                docstring = ast.get_docstring(node)
-                if docstring:
-                    # Take the first sentence (up to first period followed by
-                    # whitespace-or-end, or the full first line).
-                    first_line = docstring.splitlines()[0].strip()
-                    # Try sentence boundary
-                    m = re.match(r"^(.+?[.!?])\s", first_line + " ")
-                    if m:
-                        return m.group(1).strip()
-                    return first_line
+        if not isinstance(node, symbol_nodes) or node.name != symbol:
+            continue
+        docstring = ast.get_docstring(node)
+        if docstring:
+            # Take the first sentence (up to first period followed by
+            # whitespace-or-end, or the full first line).
+            first_line = docstring.splitlines()[0].strip()
+            # Try sentence boundary
+            m = re.match(r"^(.+?[.!?])\s", first_line + " ")
+            if m:
+                return m.group(1).strip()
+            return first_line
     return None
 
 
