@@ -10,6 +10,10 @@ from typing import Any, Literal
 from oh_no_my_claudecode.context_engine import EvidencePacket
 from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
 
+from .receipt import HarnessRunReceipt
+from .run_policy import RunPolicyDecision
+from .stages import StageRecord
+
 AgentName = Literal["claude", "codex", "opencode"]
 
 
@@ -18,6 +22,7 @@ class HarnessStatus(StrEnum):
 
     PLANNED = "planned"
     DENIED = "denied"
+    BLOCKED = "blocked"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -140,6 +145,10 @@ class HarnessResult:
     resumed: bool = False
     resume_run_id: str | None = None
     worktree_path: str | None = None
+    verified: bool = False
+    stages: tuple[StageRecord, ...] = ()
+    policy_decision: RunPolicyDecision | None = None
+    receipt: HarnessRunReceipt | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -147,11 +156,17 @@ class HarnessResult:
             "plan": self.plan.to_dict(),
             "loop_converged": self.loop_converged,
             "proof_complete": self.proof_complete,
+            "verified": self.verified,
             "stop_reason": self.stop_reason,
             "proof_reasons": list(self.proof_reasons),
             "resumed": self.resumed,
             "resume_run_id": self.resume_run_id,
             "worktree_path": self.worktree_path,
+            "stages": [stage.to_dict() for stage in self.stages],
+            "policy_decision": (
+                self.policy_decision.to_dict() if self.policy_decision is not None else None
+            ),
+            "receipt": self.receipt.to_dict() if self.receipt is not None else None,
         }
 
     def render_text(self) -> str:

@@ -17,6 +17,12 @@ subprocess boundary used by ClaudeCliAdapter in the loop engine). It uses the
 Claude CLI's configured authentication, including subscription login. The
 baseline is real, not simulated or auto-failed.
 
+Live mode is DISABLED BY DEFAULT: it runs the agent with
+``--dangerously-skip-permissions`` (autonomous, approvals off, isolated only by
+a temp directory). It refuses to run unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set
+to ``1``/``true``/``yes`` — an explicit, informed opt-in intended to be used
+inside a container/VM. Fixture mode (the default) needs no opt-in.
+
 ONMC grounding (cc_onmc condition)
 ------------------------------------
 In the cc_onmc condition, the task's prior lesson is stored in an isolated ONMC
@@ -204,6 +210,17 @@ def _run_gate(task: ABTask, repo_root: Path) -> tuple[bool, str]:
         return False, "[gate timed out]"
 
 
+def _write_hidden_gate_test(task: ABTask, repo_root: Path) -> None:
+    """Write task.hidden_gate_test to test_gate.py inside repo_root.
+
+    Called AFTER the agent has finished — the agent never sees this file during
+    setup.  When hidden_gate_test is empty, this is a no-op.
+    """
+    if not task.hidden_gate_test:
+        return
+    (repo_root / "test_gate.py").write_text(textwrap.dedent(task.hidden_gate_test))
+
+
 def _compile_onmc_context(task: ABTask) -> str:
     """Seed one repo-memory item and retrieve it through ONMC's real recall path."""
     from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
@@ -236,11 +253,52 @@ def _compile_onmc_context(task: ABTask) -> str:
     return context
 
 
+def _compile_onmc_auto_context(task: ABTask) -> str:
+    """Seed a temp ONMC brain by ingesting task.grounding_doc and recall via real pipeline.
+
+    This exercises the real doc-ingest → recall path (no hand-written hint).
+    The grounding_doc is written to a temp file, ingested via
+    ``extract_doc_memories``, stored in a temporary SQLite brain, and then
+    retrieved through the production ``compile_prompt_recall`` path.
+
+    Returns "" when ``task.grounding_doc`` is empty (condition behaves like cc_alone).
+    """
+    if not task.grounding_doc.strip():
+        return ""
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_ab_auto_") as brain_dir:
+        # Resolve the path so relative_to() works on macOS (/var → /private/var symlink).
+        brain_root = Path(brain_dir).resolve()
+        # Write the grounding doc as a markdown file inside the temp brain dir.
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(task.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        # Use the real doc-ingest path to extract memories from the artifact.
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        if memories:
+            storage.upsert_memories(memories)
+
+        context, _ = compile_prompt_recall(storage, task.description, terse=False)
+    return context
+
+
 def _build_prompt(task: ABTask, condition: ABCondition) -> str:
     """Build the agent prompt for the given condition."""
     if condition == "cc_onmc":
         context = _compile_onmc_context(task)
         return f"{context}\n\n## Task\n\n{task.description}"
+    if condition == "cc_onmc_auto":
+        context = _compile_onmc_auto_context(task)
+        if context:
+            return f"{context}\n\n## Task\n\n{task.description}"
+        return task.description
     return task.description
 
 
@@ -253,17 +311,22 @@ def _run_claude_agent(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> _AgentOutcome:
-    """Shell out to Claude Code with identical, isolated settings per condition."""
+    """Shell out to Claude Code with identical, isolated settings per condition.
+
+    ``--dangerously-skip-permissions`` is passed so the agent acts autonomously
+    in the throwaway temp repo without stalling on approval prompts.  This is
+    only reached after the ``ONMC_EVAL_ALLOW_DANGEROUS`` opt-in gate in
+    ``_run_suite_live`` — the agent is unsandboxed apart from the temp directory,
+    so callers must opt in explicitly (ideally in a container/VM).
+    """
     cmd = [
         "claude",
         "-p",
         prompt,
         "--output-format",
         "json",
-        "--safe-mode",
+        "--dangerously-skip-permissions",
         "--no-session-persistence",
-        "--permission-mode",
-        "acceptEdits",
         "--model",
         model,
         "--effort",
@@ -402,14 +465,31 @@ def run_ab(
     tmpdir_obj: tempfile.TemporaryDirectory[str] | None = None
     if repo_root is None:
         tmpdir_obj = tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_")
-        active_root = Path(tmpdir_obj.name)
+        # Resolve symlinks so the agent cwd, gate, and diff all use the
+        # same real path (on macOS /var/... resolves to /private/var/...).
+        active_root = Path(tmpdir_obj.name).resolve()
     else:
         active_root = repo_root
 
     try:
         baseline_sha = _prepare_task(task, active_root)
+
+        # Fix 3: baseline precheck — run gate before touching the stub so we can
+        # record whether the task has signal.  For hidden-gate tasks the hidden
+        # test is NOT yet written, so the gate only sees the gate_command on the
+        # plain stub (which should fail; if it passes, the task has no signal).
         pre_gate_passed, pre_gate_output = _run_gate(task, active_root)
+        stub_fails_precheck: bool = not pre_gate_passed
+
         if pre_gate_passed:
+            import warnings
+
+            warnings.warn(
+                f"Task {task.id!r}: stub already passes the gate before the agent runs — "
+                "this task has no signal (stub_fails_precheck=False).  The result is "
+                "recorded but the task should be repaired or excluded.",
+                stacklevel=2,
+            )
             return ABTaskResult(
                 task_id=task.id,
                 condition=condition,
@@ -417,11 +497,12 @@ def run_ab(
                 tokens=None,
                 duration_s=0.0,
                 agent_output="",
-                error="invalid benchmark: fail-to-pass gate already passes",
+                error="invalid benchmark: stub already passes gate (no signal)",
                 gate_output=pre_gate_output,
                 repo_url=task.repo_url,
                 repo_commit=task.repo_commit,
                 prompt_sha256="",
+                stub_fails_precheck=False,
             )
 
         # Build prompt
@@ -439,17 +520,29 @@ def run_ab(
         )
         duration_s = round(time.monotonic() - t0, 2)
 
-        passed, gate_output = _run_gate(task, active_root)
-        pass_to_pass, pass_to_pass_output = _run_pass_to_pass(task, active_root)
-        passed = passed and pass_to_pass
-        if outcome.error and not outcome.output:
-            passed = False
+        # Fix 3: compute the diff and protected-path check BEFORE writing the
+        # hidden gate test.  _write_hidden_gate_test() creates test_gate.py after
+        # the agent finishes; it is never in the baseline commit.  If the diff
+        # runs after that write, git sees test_gate.py as an untracked new file
+        # and the protected-path guard fires a false positive, forcing passed=False
+        # even when the agent made the correct edit and the gate actually passed.
+        # Computing the diff first ensures only agent-written changes are audited.
         changed_files, additions, deletions = _diff_metrics(active_root, baseline_sha)
         protected_changes = sorted(
             path
             for path in changed_files
             if any(fnmatch.fnmatch(path, pattern) for pattern in task.protected_paths)
         )
+
+        # Fix 2: write the hidden gate test (withheld during setup) now that the
+        # agent has finished.  If hidden_gate_test is empty this is a no-op.
+        _write_hidden_gate_test(task, active_root)
+
+        passed, gate_output = _run_gate(task, active_root)
+        pass_to_pass, pass_to_pass_output = _run_pass_to_pass(task, active_root)
+        passed = passed and pass_to_pass
+        if outcome.error and not outcome.output:
+            passed = False
         if protected_changes:
             passed = False
             violations = "\n".join(
@@ -477,6 +570,7 @@ def run_ab(
             repo_url=task.repo_url,
             repo_commit=task.repo_commit,
             prompt_sha256=hashlib.sha256(prompt.encode()).hexdigest(),
+            stub_fails_precheck=stub_fails_precheck,
         )
     finally:
         if tmpdir_obj is not None:
@@ -547,6 +641,7 @@ def _run_suite_fixture(tasks: list[ABTask]) -> ABReport:
     for task in tasks:
         alone_key = (task.id, "cc_alone")
         onmc_key = (task.id, "cc_onmc")
+        auto_key = (task.id, "cc_onmc_auto")
 
         alone = fixture_map.get(
             alone_key,
@@ -574,7 +669,9 @@ def _run_suite_fixture(tasks: list[ABTask]) -> ABReport:
                 fixture=True,
             ),
         )
-        comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc))
+        # auto fixture is optional — only populated when a cc_onmc_auto fixture exists.
+        auto = fixture_map.get(auto_key)
+        comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto))
 
     return ABReport(comparisons=comparisons, fixture=True)
 
@@ -586,20 +683,49 @@ def _run_suite_live(
     effort: str = _DEFAULT_EFFORT,
     max_budget_usd: float = _DEFAULT_BUDGET_USD,
 ) -> ABReport:
-    """Run all tasks live using Claude Code's configured auth."""
+    """Run all tasks live using Claude Code's configured auth.
+
+    Refuses unless ``ONMC_EVAL_ALLOW_DANGEROUS`` is set. Live mode spawns a real
+    Claude Code agent with ``--dangerously-skip-permissions`` (autonomous,
+    approvals OFF, isolated only by a temp directory — no container). It is OFF
+    by default; opt in only inside an isolated environment (container/VM).
+    """
+    import warnings
+
+    if os.environ.get("ONMC_EVAL_ALLOW_DANGEROUS", "").strip().lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
+        raise RuntimeError(
+            "Live A/B eval is disabled by default: it spawns a REAL Claude Code agent "
+            "with --dangerously-skip-permissions (autonomous, approvals off, isolated "
+            "only by a temp directory — no container isolation). Set "
+            "ONMC_EVAL_ALLOW_DANGEROUS=1 to run it, ideally inside a container/VM. "
+            "Fixture mode (the default, without --live) needs no opt-in."
+        )
+    warnings.warn(
+        "onmc eval live mode: spawning an unsandboxed autonomous Claude agent "
+        "(--dangerously-skip-permissions) per task/condition. Ensure you are running "
+        "in an isolated environment.",
+        stacklevel=2,
+    )
 
     comparisons: list[ABTaskComparison] = []
 
     for task in tasks:
-        # Each condition gets its own isolated tmpdir so repo state is fresh
+        # Each condition gets its own isolated tmpdir so repo state is fresh.
         with (
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_alone_") as alone_dir,
             tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_onmc_") as onmc_dir,
+            tempfile.TemporaryDirectory(prefix=f"onmc_ab_{task.id}_auto_") as auto_dir,
         ):
+            # Resolve symlinks so agent cwd, gate, and diff all share the same
+            # real path (on macOS /var/folders/... -> /private/var/folders/...).
             alone = run_ab(
                 task,
                 "cc_alone",
-                repo_root=Path(alone_dir),
+                repo_root=Path(alone_dir).resolve(),
                 timeout=timeout,
                 model=model,
                 effort=effort,
@@ -608,12 +734,24 @@ def _run_suite_live(
             onmc = run_ab(
                 task,
                 "cc_onmc",
-                repo_root=Path(onmc_dir),
+                repo_root=Path(onmc_dir).resolve(),
                 timeout=timeout,
                 model=model,
                 effort=effort,
                 max_budget_usd=max_budget_usd,
             )
-            comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc))
+            # Run the auto-capture condition only when a grounding_doc is provided.
+            auto: ABTaskResult | None = None
+            if task.grounding_doc.strip():
+                auto = run_ab(
+                    task,
+                    "cc_onmc_auto",
+                    repo_root=Path(auto_dir).resolve(),
+                    timeout=timeout,
+                    model=model,
+                    effort=effort,
+                    max_budget_usd=max_budget_usd,
+                )
+            comparisons.append(ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto))
 
     return ABReport(comparisons=comparisons, fixture=False)
