@@ -257,9 +257,9 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
 │ retrieval-eval  Run the offline retrieval quality evaluation harness. Scores │
-│                 the current retrieval surfaces (recall, guard) against a     │
-│                 frozen labeled dataset using Recall@5/10, MRR@10, nDCG@10,   │
-│                 and P@5. OFFLINE, DETERMINISTIC — no LLM calls, no network.  │
+│                 the current retrieval surfaces against frozen labeled        │
+│                 datasets using Recall@5/10, MRR@10, nDCG@10, and P@5.        │
+│                 OFFLINE, DETERMINISTIC — no LLM calls, no network.           │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
 │                 a transcript and propose memory updates for human approval.  │
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
@@ -6452,14 +6452,19 @@ Usage: onmc report [OPTIONS]
 Usage: onmc retrieval-eval [OPTIONS] COMMAND [ARGS]...
 
  Run the offline retrieval quality evaluation harness. Scores the current
- retrieval surfaces (recall, guard) against a frozen labeled dataset using
- Recall@5/10, MRR@10, nDCG@10, and P@5. OFFLINE, DETERMINISTIC — no LLM calls,
- no network.
+ retrieval surfaces against frozen labeled datasets using Recall@5/10, MRR@10,
+ nDCG@10, and P@5. OFFLINE, DETERMINISTIC — no LLM calls, no network.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json          Output the full report as JSON instead of a Markdown         │
-│                 scorecard.                                                   │
-│ --help          Show this message and exit.                                  │
+│ --json                            Output the full report as JSON instead of  │
+│                                   a Markdown scorecard.                      │
+│ --split        [memory|code|all]  Which retrieval split to evaluate.         │
+│                                   'memory' (default): recall + guard         │
+│                                   surfaces from the memory dataset. 'code':  │
+│                                   code-bm25 and code-hybrid surfaces from    │
+│                                   the code dataset. 'all': run both splits.  │
+│                                   [default: memory]                          │
+│ --help                            Show this message and exit.                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
