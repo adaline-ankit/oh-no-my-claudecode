@@ -6132,6 +6132,17 @@ def eval_ab_command(
         str,
         typer.Option("--task", help="Run only the task with this id (for debugging)."),
     ] = "",
+    suite: Annotated[
+        str,
+        typer.Option(
+            "--suite",
+            help=(
+                "Task suite to run: 'builtin' (synthetic mini-repo bugs, default), "
+                "'private' (private-knowledge tasks requiring repo-specific facts), "
+                "or 'all' (both suites combined)."
+            ),
+        ),
+    ] = "builtin",
     public_repo: Annotated[
         bool,
         typer.Option(
@@ -6170,6 +6181,7 @@ def eval_ab_command(
 
     Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
     Use live mode to collect fresh results with the Claude CLI's configured auth.
+    Use --suite to select which task collection to run (builtin, private, or all).
     Use --public-repo for pinned third-party commits and upstream regression tests.
 
     Honesty note: a positive ONMC delta only counts on tasks where the cc_alone
@@ -6178,25 +6190,45 @@ def eval_ab_command(
 
     Examples:
 
-      onmc eval ab --fixture            # CI-safe offline comparison
+      onmc eval ab --fixture                         # CI-safe offline comparison (builtin suite)
 
-      onmc eval ab --fixture --json     # machine-readable output
+      onmc eval ab --fixture --suite private         # private-knowledge suite
+
+      onmc eval ab --fixture --suite all             # both suites combined
+
+      onmc eval ab --fixture --json                  # machine-readable output
 
       onmc eval ab --fixture --task list_slice_fix   # single task
 
-      onmc eval ab --public-repo        # live public-repo evidence
+      onmc eval ab --public-repo                     # live public-repo evidence
     """
     import json as _json
 
+    from oh_no_my_claudecode.evals.ab.private_tasks import PRIVATE_KNOWLEDGE_TASKS
     from oh_no_my_claudecode.evals.ab.runner import run_suite
     from oh_no_my_claudecode.evals.ab.tasks import BUILTIN_TASKS, PUBLIC_REPO_TASKS
+
+    _valid_suites = ("builtin", "private", "all")
+    if suite not in _valid_suites:
+        raise typer.Exit(
+            code=_fatal(
+                f"--suite must be one of {_valid_suites!r}; got {suite!r}"
+            )
+        )
 
     if fixture and public_repo:
         raise typer.Exit(
             code=_fatal("--fixture cannot be combined with --public-repo; public evidence is live")
         )
 
-    tasks = PUBLIC_REPO_TASKS if public_repo else BUILTIN_TASKS
+    if public_repo:
+        tasks = PUBLIC_REPO_TASKS
+    elif suite == "private":
+        tasks = PRIVATE_KNOWLEDGE_TASKS
+    elif suite == "all":
+        tasks = BUILTIN_TASKS + PRIVATE_KNOWLEDGE_TASKS
+    else:
+        tasks = BUILTIN_TASKS
 
     try:
         report = run_suite(

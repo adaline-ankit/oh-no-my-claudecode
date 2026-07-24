@@ -107,6 +107,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ flywheel        Mine verified run trajectories to recommend winning          │
 │                 approaches.                                                  │
 │ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
+│ run             Plan safely by default, or execute ONMC's memory-grounded    │
+│                 loop.                                                        │
 │ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
 │                 activity.                                                    │
 │ highlight       Curated highlight reel: the best moments from your verified  │
@@ -201,6 +203,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ coach           Live hype/roast session commentator + streaks. Reacts to     │
 │                 coding-session events with personality-driven quips and      │
 │                 tracks your green/red streak.                                │
+│ codeindex       Incremental code-intelligence index (blob-SHA keyed, AST     │
+│                 chunks).                                                     │
 │ connect         Bidirectional ecosystem adapter: OpenClaw transport + Hermes │
 │                 memory.                                                      │
 │ contract        Spec-as-contract: generate a failing test + stub from an     │
@@ -252,6 +256,10 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │                 at a time.                                                   │
 │ registry        Agent reputation trust ledger — aggregate signed             │
 │                 attestations into a queryable, rankable track record.        │
+│ retrieval-eval  Run the offline retrieval quality evaluation harness. Scores │
+│                 the current retrieval surfaces against frozen labeled        │
+│                 datasets using Recall@5/10, MRR@10, nDCG@10, and P@5.        │
+│                 OFFLINE, DETERMINISTIC — no LLM calls, no network.           │
 │ selfimprove     After-turn learning review -- extract durable learnings from │
 │                 a transcript and propose memory updates for human approval.  │
 │ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
@@ -1763,6 +1771,139 @@ Usage: onmc codegraph summary [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc codeindex`
+
+```text
+Usage: onmc codeindex [OPTIONS] COMMAND [ARGS]...
+
+ Incremental code-intelligence index (blob-SHA keyed, AST chunks).
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ build   Atomically rebuild the full code-intelligence index.                 │
+│ update  Incrementally update one file in the code index.                     │
+│ stats   Print code index statistics.                                         │
+│ query   Look up a symbol by name and print its indexed chunks.               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex build`
+
+```text
+Usage: onmc codeindex build [OPTIONS]
+
+ Atomically rebuild the full code-intelligence index.
+
+ Walks all indexable source files, chunks them by AST symbols, and
+ stores chunks + edges in ``.onmc/codeindex.db``.  Unchanged files
+ are always re-indexed during a full build (use ``update`` for
+ incremental).
+
+ Exits 0 on success with a stats summary, 1 on error.
+
+ Examples:
+
+     onmc codeindex build
+
+     onmc codeindex build --json
+
+     onmc codeindex build --repo /path/to/project
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                 Emit stats as JSON.                                   │
+│ --repo           PATH  Repository root.                                      │
+│ --quiet  -q            Suppress progress output.                             │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex query`
+
+```text
+Usage: onmc codeindex query [OPTIONS] SYMBOL
+
+ Look up a symbol by name and print its indexed chunks.
+
+ By default performs a case-insensitive substring search.  Pass
+ ``--exact`` for an exact-match lookup.
+
+ Exits 0 with results (or empty), 1 on error.
+
+ Examples:
+
+     onmc codeindex query invalidate_cache
+
+     onmc codeindex query cache --json
+
+     onmc codeindex query MyClass.method --exact
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    symbol      TEXT  Symbol name (exact) or substring to search.           │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json               Emit results as JSON.                                   │
+│ --exact              Exact symbol match (default: substring).                │
+│ --repo         PATH  Repository root.                                        │
+│ --help               Show this message and exit.                             │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex stats`
+
+```text
+Usage: onmc codeindex stats [OPTIONS]
+
+ Print code index statistics.
+
+ Shows chunk and edge counts, file count, language breakdown, and the
+ HEAD commit SHA at last build.  Exits 1 when no index has been built
+ yet.
+
+ Examples:
+
+     onmc codeindex stats
+
+     onmc codeindex stats --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit stats as JSON.                                      │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc codeindex update`
+
+```text
+Usage: onmc codeindex update [OPTIONS] CHANGED_PATH
+
+ Incrementally update one file in the code index.
+
+ Re-chunks *path* only if its git blob SHA has changed since the last
+ index.  If the file is unchanged the command exits 0 with no output.
+
+ Exits 0 on success, 1 on error.
+
+ Examples:
+
+     onmc codeindex update src/cache.py
+
+     onmc codeindex update src/cache.py --json
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    changed_path      TEXT  Repo-relative path of the file to re-index.     │
+│                              [required]                                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json              Emit result as JSON.                                     │
+│ --repo        PATH  Repository root.                                         │
+│ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc commands`
 
 ```text
@@ -2500,6 +2641,7 @@ Usage: onmc eval ab [OPTIONS]
 
  Use --fixture for CI (pre-recorded results, deterministic, no LLM calls).
  Use live mode to collect fresh results with the Claude CLI's configured auth.
+ Use --suite to select which task collection to run (builtin, private, or all).
  Use --public-repo for pinned third-party commits and upstream regression
  tests.
 
@@ -2509,13 +2651,18 @@ Usage: onmc eval ab [OPTIONS]
 
  Examples:
 
-   onmc eval ab --fixture            # CI-safe offline comparison
+   onmc eval ab --fixture                         # CI-safe offline comparison
+ (builtin suite)
 
-   onmc eval ab --fixture --json     # machine-readable output
+   onmc eval ab --fixture --suite private         # private-knowledge suite
+
+   onmc eval ab --fixture --suite all             # both suites combined
+
+   onmc eval ab --fixture --json                  # machine-readable output
 
    onmc eval ab --fixture --task list_slice_fix   # single task
 
-   onmc eval ab --public-repo        # live public-repo evidence
+   onmc eval ab --public-repo                     # live public-repo evidence
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --fixture                                   Replay pre-recorded fixture      │
@@ -2526,6 +2673,13 @@ Usage: onmc eval ab [OPTIONS]
 │ --json                                      Output results as JSON.          │
 │ --task               TEXT                   Run only the task with this id   │
 │                                             (for debugging).                 │
+│ --suite              TEXT                   Task suite to run: 'builtin'     │
+│                                             (synthetic mini-repo bugs,       │
+│                                             default), 'private'              │
+│                                             (private-knowledge tasks         │
+│                                             requiring repo-specific facts),  │
+│                                             or 'all' (both suites combined). │
+│                                             [default: builtin]               │
 │ --public-repo                               Run pinned third-party           │
 │                                             repository tasks instead of      │
 │                                             synthetic mini-repos.            │
@@ -6292,6 +6446,28 @@ Usage: onmc report [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc retrieval-eval`
+
+```text
+Usage: onmc retrieval-eval [OPTIONS] COMMAND [ARGS]...
+
+ Run the offline retrieval quality evaluation harness. Scores the current
+ retrieval surfaces against frozen labeled datasets using Recall@5/10, MRR@10,
+ nDCG@10, and P@5. OFFLINE, DETERMINISTIC — no LLM calls, no network.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                            Output the full report as JSON instead of  │
+│                                   a Markdown scorecard.                      │
+│ --split        [memory|code|all]  Which retrieval split to evaluate.         │
+│                                   'memory' (default): recall + guard         │
+│                                   surfaces from the memory dataset. 'code':  │
+│                                   code-bm25 and code-hybrid surfaces from    │
+│                                   the code dataset. 'all': run both splits.  │
+│                                   [default: memory]                          │
+│ --help                            Show this message and exit.                │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc reuse`
 
 ```text
@@ -6393,6 +6569,56 @@ Usage: onmc route [OPTIONS] TASK
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the decision as JSON.                                   │
 │ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc run`
+
+```text
+Usage: onmc run [OPTIONS] TASK
+
+ Plan safely by default, or execute ONMC's memory-grounded loop.
+
+ Without ``--execute`` this command is plan-only and never launches an
+ agent or verifier subprocess. Execution is denied unless the tool broker
+ allows both declared capabilities. Durable state can be revisited with
+ ``--execute --resume RUN_ID``.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    task      TEXT  Task for the execution harness. [required]              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --plan-only                                   Emit the deterministic plan    │
+│                                               without invoking an agent or   │
+│                                               verifier.                      │
+│ --execute                                     Explicitly allow the harness   │
+│                                               to invoke an agent and mutate  │
+│                                               the worktree.                  │
+│ --agent                 TEXT                  Agent CLI: claude, codex, or   │
+│                                               opencode.                      │
+│                                               [default: claude]              │
+│ --model                 TEXT                  Model selector passed to the   │
+│                                               chosen agent adapter.          │
+│                                               [default: default]             │
+│ --verifier              TEXT                  Verifier command run by the    │
+│                                               existing loop engine.          │
+│                                               [default: pytest]              │
+│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
+│                                               [default: 10]                  │
+│ --max-cost-usd          FLOAT RANGE [x>=0.0]  Optional agent cost ceiling in │
+│                                               USD.                           │
+│ --isolate                                     Run agent changes in the loop  │
+│                                               engine's worktree.             │
+│ --risk                  TEXT                  Execution risk: low, medium,   │
+│                                               high, or critical.             │
+│                                               [default: medium]              │
+│ --context-budget        INTEGER RANGE [x>=1]  Maximum context packet tokens. │
+│                                               [default: 4000]                │
+│ --resume                TEXT                  Resume or inspect the durable  │
+│                                               state for a run ID.            │
+│ --json                                        Emit the plan and result as    │
+│                                               canonical JSON.                │
+│ --help                                        Show this message and exit.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

@@ -5,8 +5,8 @@ Methodology (honest description)
 This harness measures whether ONMC memory context (cc_onmc) produces better
 coding outcomes than a bare Claude Code agent (cc_alone).
 
-Two conditions
---------------
+Three conditions
+----------------
 cc_alone:
     Claude CLI invoked with only the task prompt.  No ONMC context, no
     prior-failure hints.  This is the REAL cold baseline — NOT simulated.
@@ -14,7 +14,15 @@ cc_alone:
 
 cc_onmc:
     Claude CLI invoked with context retrieved from a temporary ONMC brain via
-    the production compile_prompt_recall() path.
+    the production compile_prompt_recall() path.  The brain is seeded with the
+    hand-authored ``onmc_hint`` string.
+
+cc_onmc_auto:
+    Claude CLI invoked with context retrieved from a temporary ONMC brain that
+    was seeded by INGESTING a realistic repository artifact (``grounding_doc``)
+    through the real doc-ingest → recall pipeline — no hand-written hint.
+    This condition tests whether onmc's OWN capture→recall reproduces the
+    hand-hint win (the product-loop question).
 
 Gate
 ----
@@ -90,13 +98,27 @@ class ABTask:
     setup_commands: tuple[tuple[str, ...], ...] = ()
     pass_to_pass_commands: tuple[tuple[str, ...], ...] = ()
     protected_paths: tuple[str, ...] = ()
+    hidden_gate_test: str = ""
+    """When non-empty, this pytest source is WITHHELD during setup (the agent never
+    sees it) and written to the working dir only after the agent finishes, before
+    the gate is evaluated.  This preserves info-asymmetry: the private rule encoded
+    in the test is not leakable by reading the test file.  When empty, behaves
+    exactly like the old setup_script-includes-test path (backward compatible)."""
+
+    grounding_doc: str = ""
+    """A realistic repository artifact (prose excerpt from a doc, postmortem, or
+    DESIGN.md) that CONTAINS the private rule the way a real codebase document
+    would state it.  Used by the ``cc_onmc_auto`` condition: this text is ingested
+    into a temporary ONMC brain via the real doc-ingest pipeline, then recall is
+    compiled from it — no hand-written hint.  When empty, ``cc_onmc_auto`` returns
+    an empty context (effectively a cold run)."""
 
 
 # ---------------------------------------------------------------------------
 # Per-task per-condition result
 # ---------------------------------------------------------------------------
 
-ABCondition = Literal["cc_alone", "cc_onmc"]
+ABCondition = Literal["cc_alone", "cc_onmc", "cc_onmc_auto"]
 
 
 @dataclass
@@ -143,6 +165,10 @@ class ABTaskResult:
     repo_url: str | None = None
     repo_commit: str | None = None
     prompt_sha256: str = ""
+    stub_fails_precheck: bool | None = None
+    """True when the stub (pre-agent) fails the gate — as expected.
+    False when the stub already passes (task has no signal — surfaces as a warning).
+    None means the precheck was not performed (e.g. fixture mode)."""
 
     def to_dict(self) -> dict[str, object]:
         """Serialise for JSON storage."""
@@ -166,6 +192,7 @@ class ABTaskResult:
             "repo_url": self.repo_url,
             "repo_commit": self.repo_commit,
             "prompt_sha256": self.prompt_sha256,
+            "stub_fails_precheck": self.stub_fails_precheck,
         }
 
     @classmethod
@@ -185,6 +212,8 @@ class ABTaskResult:
         evidence_kind: Literal["fixture", "live"] = (
             "fixture" if bool(d.get("fixture", False)) else "live"
         )
+        stub_raw = d.get("stub_fails_precheck")
+        stub_fails_precheck: bool | None = bool(stub_raw) if stub_raw is not None else None
         return cls(
             task_id=str(d["task_id"]),
             condition=d["condition"],  # type: ignore[arg-type]
@@ -205,6 +234,7 @@ class ABTaskResult:
             repo_url=str(d["repo_url"]) if d.get("repo_url") is not None else None,
             repo_commit=(str(d["repo_commit"]) if d.get("repo_commit") is not None else None),
             prompt_sha256=str(d.get("prompt_sha256", "")),
+            stub_fails_precheck=stub_fails_precheck,
         )
 
 
@@ -215,7 +245,7 @@ class ABTaskResult:
 
 @dataclass
 class ABTaskComparison:
-    """Side-by-side result for one task across both conditions.
+    """Side-by-side result for one task across all conditions.
 
     Attributes
     ----------
@@ -224,17 +254,32 @@ class ABTaskComparison:
     alone:
         Result for the cc_alone (cold, no ONMC) condition.
     onmc:
-        Result for the cc_onmc (ONMC-grounded) condition.
+        Result for the cc_onmc (ONMC hand-hint) condition.
+    auto:
+        Result for the cc_onmc_auto condition (auto-captured from grounding_doc),
+        or None when the condition was not run (e.g. no grounding_doc).
     """
 
     task: ABTask
     alone: ABTaskResult
     onmc: ABTaskResult
+    auto: ABTaskResult | None = None
 
     @property
     def onmc_wins(self) -> bool:
         """True when ONMC passed but cc_alone failed — meaningful delta."""
         return self.onmc.passed and not self.alone.passed
+
+    @property
+    def auto_wins(self) -> bool:
+        """True when cc_onmc_auto passed but cc_alone failed — product-loop win.
+
+        This property answers the question: does the REAL ingest→recall pipeline
+        supply enough context (without a hand-written hint) to change the outcome?
+        """
+        if self.auto is None:
+            return False
+        return self.auto.passed and not self.alone.passed
 
     @property
     def both_pass(self) -> bool:
@@ -363,6 +408,11 @@ class ABReport:
         return sum(1 for c in self.comparisons if c.efficiency_win)
 
     @property
+    def auto_wins(self) -> int:
+        """Tasks where cc_onmc_auto passed but cc_alone failed (product-loop wins)."""
+        return sum(1 for c in self.comparisons if c.auto_wins)
+
+    @property
     def onmc_pass_rate(self) -> float:
         """Fraction of tasks where cc_onmc passed."""
         if not self.total_tasks:
@@ -382,6 +432,7 @@ class ABReport:
             "fixture": self.fixture,
             "total_tasks": self.total_tasks,
             "onmc_wins": self.onmc_wins,
+            "auto_wins": self.auto_wins,
             "alone_wins": self.alone_wins,
             "efficiency_wins": self.efficiency_wins,
             "both_pass": self.both_pass,
@@ -394,7 +445,9 @@ class ABReport:
                     "task_note": c.task.note,
                     "alone": c.alone.to_dict(),
                     "onmc": c.onmc.to_dict(),
+                    "auto": c.auto.to_dict() if c.auto is not None else None,
                     "onmc_wins": c.onmc_wins,
+                    "auto_wins": c.auto_wins,
                     "both_pass": c.both_pass,
                     "both_fail": c.both_fail,
                     "token_delta": c.token_delta,
@@ -417,9 +470,9 @@ class ABReport:
             f"**Mode:** {mode}",
             f"**Tasks:** {self.total_tasks}",
             "",
-            "| Task | cc_alone | cc_onmc | Outcome | Token reduction | "
+            "| Task | cc_alone | cc_onmc | cc_auto | Outcome | Token reduction | "
             "Cost reduction | Time reduction |",
-            "|---|---|---|---|---|---|---|",
+            "|---|---|---|---|---|---|---|---|",
         ]
         for c in self.comparisons:
             outcome = (
@@ -430,6 +483,13 @@ class ABReport:
                 else "tie-fail"
                 if c.both_fail
                 else "REGRESSION"
+            )
+            auto_cell = (
+                "pass"
+                if c.auto is not None and c.auto.passed
+                else "fail"
+                if c.auto is not None
+                else "n/r"  # not run
             )
             token_reduction = (
                 f"{c.token_reduction_pct:.1f}%" if c.token_reduction_pct is not None else "n/a"
@@ -446,12 +506,16 @@ class ABReport:
                 f"| {c.task.id}"
                 f" | {'pass' if c.alone.passed else 'fail'}"
                 f" | {'pass' if c.onmc.passed else 'fail'}"
+                f" | {auto_cell}"
                 f" | {outcome}"
                 f" | {token_reduction}"
                 f" | {cost_reduction}"
                 f" | {time_reduction}"
                 f" |"
             )
+        auto_wins_str = (
+            f"- **Auto wins (cc_alone failed, cc_onmc_auto passed):** {self.auto_wins}\n"
+        )
         lines += [
             "",
             "### Aggregate",
@@ -461,6 +525,7 @@ class ABReport:
             f"- **cc_onmc pass rate:** {self.onmc_pass_rate:.0%}"
             f" ({sum(1 for c in self.comparisons if c.onmc.passed)}/{self.total_tasks})",
             f"- **ONMC wins (cc_alone failed, cc_onmc passed):** {self.onmc_wins}",
+            auto_wins_str.rstrip(),
             f"- **Regressions (cc_alone passed, cc_onmc failed):** {self.alone_wins}",
             "- **Efficiency wins (both pass, all measured resources improve):** "
             f"{self.efficiency_wins}",
@@ -472,5 +537,7 @@ class ABReport:
             "> does not regress on easy tasks but contribute no signal about ONMC value.",
             "> The fixture baseline is pre-recorded, NOT auto-fail — results reflect",
             "> realistic agent behaviour on these tasks.",
+            "> cc_auto (auto-capture) tests whether the REAL ingest→recall pipeline",
+            "> can surface the rule without a hand-written hint.",
         ]
         return "\n".join(lines)

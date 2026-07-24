@@ -44,6 +44,7 @@ from oh_no_my_claudecode.evals.ab.runner import (
     _run_command,
     _run_gate,
     _run_setup,
+    _write_hidden_gate_test,
     run_ab,
     run_suite,
 )
@@ -685,3 +686,816 @@ def test_fixture_has_at_least_one_non_auto_fail_baseline() -> None:
         "All cc_alone fixture results fail — this would be an auto-fail rigged baseline. "
         "At least one task should have cc_alone=pass to prove the baseline is real."
     )
+
+
+# ---------------------------------------------------------------------------
+# Private-knowledge task suite
+# ---------------------------------------------------------------------------
+
+
+from oh_no_my_claudecode.evals.ab.private_tasks import (  # noqa: E402
+    PRIVATE_KNOWLEDGE_TASKS,
+    TASK_API_RESPONSE_ENVELOPE,
+    TASK_AUDIT_ACTOR_PREFIX,
+    TASK_AUDIT_LOG_SCHEMA_VERSION,
+    TASK_BATCH_MAX_FIFTY,
+    TASK_CONFIG_SECRET_SCOPE,
+    TASK_CURRENCY_ALLOWLIST,
+    TASK_CURSOR_BASE64URL_NO_PADDING,
+    TASK_DB_NULL_SENTINEL,
+    TASK_DURATION_MICROSECONDS,
+    TASK_EPOCH_MILLIS_TIMESTAMP,
+    TASK_EVENT_SCHEMA_VERSION,
+    TASK_FEATURE_FLAG_ENV_PREFIX,
+    TASK_FX_RATE_PRECISION,
+    TASK_HOUSE_ERROR_CODE_PREFIX,
+    TASK_IDEMPOTENCY_KEY_FORMAT,
+    TASK_JWT_EDDSA_ONLY,
+    TASK_LOG_CONTEXT_KEY,
+    TASK_MIGRATION_FILE_PREFIX,
+    TASK_MONEY_MINOR_UNITS,
+    TASK_PAGINATION_CURSOR_SCHEME,
+    TASK_PAGINATION_TOTAL_KEY,
+    TASK_PAYMENT_REF_SEPARATOR,
+    TASK_REFUND_CREDIT_FLAG,
+    TASK_REQUEST_NONCE_HEADER,
+    TASK_RETRY_ONLY_503_INCIDENT,
+    TASK_SERVICE_VERSION_HEADER,
+    TASK_TENANT_HEADER,
+    TASK_TZ_OFFSET_COMPACT_FORMAT,
+    TASK_VALIDATION_FIELD_PATH,
+    TASK_WEBHOOK_SIGNATURE_HEADER,
+)
+
+
+def test_private_tasks_count() -> None:
+    assert len(PRIVATE_KNOWLEDGE_TASKS) == 30
+
+
+def test_private_tasks_ids_unique() -> None:
+    ids = [t.id for t in PRIVATE_KNOWLEDGE_TASKS]
+    assert len(ids) == len(set(ids)), "Private task IDs must be unique"
+
+
+def test_private_tasks_no_overlap_with_builtin() -> None:
+    builtin_ids = {t.id for t in BUILTIN_TASKS}
+    private_ids = {t.id for t in PRIVATE_KNOWLEDGE_TASKS}
+    overlap = builtin_ids & private_ids
+    assert not overlap, f"Task IDs overlap between suites: {overlap}"
+
+
+def test_private_tasks_all_fields_non_empty() -> None:
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.id, f"Private task missing id: {task}"
+        assert task.setup_script, f"Private task {task.id} missing setup_script"
+        assert task.gate_command, f"Private task {task.id} missing gate_command"
+        assert task.onmc_hint, f"Private task {task.id} missing onmc_hint"
+        assert task.description, f"Private task {task.id} missing description"
+        assert task.hidden_gate_test, f"Private task {task.id} missing hidden_gate_test"
+
+
+def test_private_task_house_error_code_prefix_fields() -> None:
+    task = TASK_HOUSE_ERROR_CODE_PREFIX
+    assert task.id == "house_error_code_prefix"
+    assert "ACME" in task.onmc_hint
+    assert "pytest" in task.gate_command
+    assert task.setup_script
+
+
+def test_private_task_tenant_header_fields() -> None:
+    task = TASK_TENANT_HEADER
+    assert task.id == "tenant_header"
+    assert "X-Acme-Workspace" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_retry_only_503_fields() -> None:
+    task = TASK_RETRY_ONLY_503_INCIDENT
+    assert task.id == "retry_only_503_incident"
+    assert "503" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_idempotency_key_fields() -> None:
+    task = TASK_IDEMPOTENCY_KEY_FORMAT
+    assert task.id == "idempotency_key_format"
+    assert ":" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_task_money_minor_units_fields() -> None:
+    task = TASK_MONEY_MINOR_UNITS
+    assert task.id == "money_minor_units"
+    assert "Decimal" in task.onmc_hint
+    assert task.setup_script
+    assert task.gate_command
+
+
+def test_private_fixture_has_all_tasks() -> None:
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert (task.id, "cc_alone") in fixtures, (
+            f"Missing private fixture for ({task.id}, cc_alone)"
+        )
+        assert (task.id, "cc_onmc") in fixtures, (
+            f"Missing private fixture for ({task.id}, cc_onmc)"
+        )
+
+
+def test_private_fixture_all_onmc_wins() -> None:
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        alone = fixtures[(task.id, "cc_alone")]
+        onmc = fixtures[(task.id, "cc_onmc")]
+        assert alone.passed is False, (
+            f"Fixture: cc_alone should fail on {task.id} (private-knowledge task)"
+        )
+        assert onmc.passed is True, (
+            f"Fixture: cc_onmc should pass on {task.id} (ONMC hint provides the private fact)"
+        )
+
+
+def test_run_suite_private_fixture_returns_report() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    assert isinstance(report, ABReport)
+    assert report.fixture is True
+    assert report.total_tasks == len(PRIVATE_KNOWLEDGE_TASKS)
+
+
+def test_run_suite_private_fixture_all_onmc_wins() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    assert report.onmc_wins == len(PRIVATE_KNOWLEDGE_TASKS), (
+        f"Expected all {len(PRIVATE_KNOWLEDGE_TASKS)} private tasks to be ONMC wins "
+        f"in fixture mode but got {report.onmc_wins}.  "
+        f"Comparisons: {[(c.task.id, c.alone.passed, c.onmc.passed) for c in report.comparisons]}"
+    )
+    assert report.alone_wins == 0, "No regressions expected in private fixture suite"
+
+
+def test_run_suite_private_ids_in_report() -> None:
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    reported_ids = {c.task.id for c in report.comparisons}
+    expected_ids = {t.id for t in PRIVATE_KNOWLEDGE_TASKS}
+    assert reported_ids == expected_ids
+
+
+def test_private_gate_fails_on_buggy_code_house_error(tmp_path: Path) -> None:
+    """The buggy stub (kind.upper()) fails the gate."""
+    _run_setup(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    _write_hidden_gate_test(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
+
+
+def test_private_gate_passes_after_fix_house_error(tmp_path: Path) -> None:
+    """A correct ACME-code dict passes the gate."""
+    _run_setup(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    errors_path = tmp_path / "errors.py"
+    fixed = (
+        "def format_error(kind: str) -> str:\n"
+        "    _codes = {\n"
+        "        'not_found': 'ACME-4004',\n"
+        "        'unauthorized': 'ACME-4001',\n"
+        "        'rate_limited': 'ACME-4029',\n"
+        "    }\n"
+        "    return _codes[kind]\n"
+    )
+    errors_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    passed, output = _run_gate(TASK_HOUSE_ERROR_CODE_PREFIX, tmp_path)
+    assert passed is True, f"Gate should PASS after fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_retry(tmp_path: Path) -> None:
+    """The buggy stub (retries all 5xx) fails the gate."""
+    _run_setup(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    _write_hidden_gate_test(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy code but passed.\n{output}"
+
+
+def test_private_gate_passes_after_fix_retry(tmp_path: Path) -> None:
+    """should_retry returning only True for 503 passes the gate."""
+    _run_setup(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    payment_path = tmp_path / "payment.py"
+    fixed = "def should_retry(status: int) -> bool:\n    return status == 503\n"
+    payment_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    passed, output = _run_gate(TASK_RETRY_ONLY_503_INCIDENT, tmp_path)
+    assert passed is True, f"Gate should PASS after fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_money(tmp_path: Path) -> None:
+    """The buggy stub (float conversion) fails the gate on 2.30 -> 229 truncation."""
+    _run_setup(TASK_MONEY_MINOR_UNITS, tmp_path)
+    # Verify bug is present: int(float("2.30") * 100) must NOT equal 230
+    import subprocess  # noqa: E401
+    import sys
+    result = subprocess.run(
+        [sys.executable, "-c", "print(int(float('2.30') * 100))"],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip() == "230":
+        pytest.skip("float('2.30')*100 rounds to 230 on this platform — bug not reproducible")
+    _write_hidden_gate_test(TASK_MONEY_MINOR_UNITS, tmp_path)
+    passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
+    assert passed is False, f"Gate should FAIL on buggy float conversion.\n{output}"
+
+
+def test_private_gate_passes_after_fix_money(tmp_path: Path) -> None:
+    """Decimal-based conversion passes the gate."""
+    _run_setup(TASK_MONEY_MINOR_UNITS, tmp_path)
+    money_path = tmp_path / "money.py"
+    fixed = (
+        "from decimal import Decimal\n\n"
+        "def to_paise(rupees: str) -> int:\n"
+        "    return int(Decimal(rupees) * 100)\n"
+    )
+    money_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_MONEY_MINOR_UNITS, tmp_path)
+    passed, output = _run_gate(TASK_MONEY_MINOR_UNITS, tmp_path)
+    assert passed is True, f"Gate should PASS after Decimal fix.\n{output}"
+
+
+# ---------------------------------------------------------------------------
+# Hidden gate info-asymmetry tests (Fix 2)
+# ---------------------------------------------------------------------------
+
+
+def test_hidden_gate_test_not_written_during_setup(tmp_path: Path) -> None:
+    """setup_script must NOT write test_gate.py — agent never sees the private rule."""
+    _run_setup(TASK_TENANT_HEADER, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists(), (
+        "test_gate.py must be absent after setup so the agent cannot read the "
+        "private rule from the test file (info-asymmetry)"
+    )
+
+
+def test_hidden_gate_test_present_after_write(tmp_path: Path) -> None:
+    """_write_hidden_gate_test creates test_gate.py after the agent finishes."""
+    _run_setup(TASK_TENANT_HEADER, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists()
+    _write_hidden_gate_test(TASK_TENANT_HEADER, tmp_path)
+    assert (tmp_path / "test_gate.py").exists()
+    content = (tmp_path / "test_gate.py").read_text()
+    assert "X-Acme-Workspace" in content
+
+
+def test_hidden_gate_noop_when_empty(tmp_path: Path) -> None:
+    """_write_hidden_gate_test is a no-op when hidden_gate_test is empty."""
+    task = _make_task()  # hidden_gate_test defaults to ""
+    _write_hidden_gate_test(task, tmp_path)
+    assert not (tmp_path / "test_gate.py").exists()
+
+
+def test_hidden_gate_all_private_tasks_have_it() -> None:
+    """Every private task must use hidden_gate_test (no test file in setup_script)."""
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.hidden_gate_test, (
+            f"Private task {task.id!r} must have a non-empty hidden_gate_test"
+        )
+        assert "test_gate.py" not in task.setup_script, (
+            f"Private task {task.id!r} setup_script must not write test_gate.py "
+            "(use hidden_gate_test instead)"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Baseline precheck tests (Fix 3)
+# ---------------------------------------------------------------------------
+
+
+def test_precheck_detects_stub_that_already_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the stub already passes the gate, stub_fails_precheck=False is recorded."""
+    task = ABTask(
+        id="trivial-stub-already-passes",
+        description="Do nothing — stub already correct.",
+        setup_script="from pathlib import Path\nPath('x.py').write_text('VALUE = 1\\n')\n",
+        gate_command="python -c 'import x; assert x.VALUE == 1'",
+        onmc_hint="[ONMC] hint",
+    )
+
+    # The gate passes before any agent touches anything.
+    # run_ab should record stub_fails_precheck=False and surface a warning.
+    import warnings
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.evals.ab.runner._run_claude_agent",
+        lambda *args, **kwargs: _AgentOutcome("no-op", 0, None, 0, 0.0, "sonnet"),
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = run_ab(task, "cc_alone", repo_root=tmp_path)
+
+    assert result.stub_fails_precheck is False
+    assert any("no signal" in str(w.message) for w in caught), (
+        "Expected a warning when the stub already passes the gate"
+    )
+
+
+def test_precheck_records_true_for_normally_failing_stub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stub that correctly fails the gate records stub_fails_precheck=True."""
+    not_found = _AgentOutcome("", None, "claude CLI not found", None, None, "sonnet")
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.evals.ab.runner._run_claude_agent",
+        lambda *args, **kwargs: not_found,
+    )
+    result = run_ab(TASK_LIST_SLICE_FIX, "cc_alone", repo_root=tmp_path)
+    assert result.stub_fails_precheck is True
+
+
+# ---------------------------------------------------------------------------
+# Auto-capture condition (cc_onmc_auto)
+# ---------------------------------------------------------------------------
+
+
+def test_private_tasks_all_have_grounding_doc() -> None:
+    """Every private task must have a non-empty grounding_doc for cc_onmc_auto."""
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        assert task.grounding_doc, (
+            f"Private task {task.id!r} must have a non-empty grounding_doc "
+            "(used by the cc_onmc_auto condition)"
+        )
+
+
+def test_grounding_doc_tenant_header_contains_rule_keyword() -> None:
+    """tenant_header grounding_doc must mention X-Acme-Workspace explicitly."""
+    assert "X-Acme-Workspace" in TASK_TENANT_HEADER.grounding_doc
+
+
+def test_grounding_doc_retry_503_contains_rule_keyword() -> None:
+    """retry_only_503_incident grounding_doc must mention 503 as the only safe code."""
+    assert "503" in TASK_RETRY_ONLY_503_INCIDENT.grounding_doc
+    assert "must NOT be retried" in TASK_RETRY_ONLY_503_INCIDENT.grounding_doc
+
+
+def test_grounding_doc_idempotency_key_contains_rule_keyword() -> None:
+    """idempotency_key_format grounding_doc must mention the colon separator."""
+    assert ":" in TASK_IDEMPOTENCY_KEY_FORMAT.grounding_doc
+    assert "tenant:op:uid" in TASK_IDEMPOTENCY_KEY_FORMAT.grounding_doc
+
+
+def test_grounding_doc_money_contains_decimal_rule() -> None:
+    """money_minor_units grounding_doc must mention Decimal-based conversion."""
+    assert "Decimal" in TASK_MONEY_MINOR_UNITS.grounding_doc
+
+
+def test_ingest_recall_surfaces_rule_keyword_for_tenant_header() -> None:
+    """Deterministic unit test: ingest grounding_doc → recall contains X-Acme-Workspace.
+
+    This exercises the real extract_doc_memories → SQLiteStorage.upsert_memories
+    → compile_prompt_recall path without any LLM calls or network access.
+    Paths are resolved so the test works on macOS (/var → /private/var symlink).
+    """
+    import tempfile
+    from pathlib import Path
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_test_ingest_") as brain_dir:
+        # Resolve to avoid macOS /var→/private/var symlink mismatch in relative_to().
+        brain_root = Path(brain_dir).resolve()
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(TASK_TENANT_HEADER.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        assert memories, "extract_doc_memories must return at least one memory from the doc"
+        storage.upsert_memories(memories)
+
+        context, token_count = compile_prompt_recall(
+            storage, TASK_TENANT_HEADER.description, terse=False
+        )
+
+    assert context, "compile_prompt_recall must return non-empty context from the ingested doc"
+    assert token_count > 0
+    assert "X-Acme-Workspace" in context, (
+        "The recalled context must surface 'X-Acme-Workspace' from the grounding doc — "
+        "this is the rule the agent needs to fix the header bug"
+    )
+
+
+def test_ingest_recall_surfaces_rule_keyword_for_retry_503() -> None:
+    """Deterministic: ingest retry_only_503 grounding_doc → recall contains '503'."""
+    import tempfile
+    from pathlib import Path
+
+    from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+    from oh_no_my_claudecode.ingest.docs import extract_doc_memories
+    from oh_no_my_claudecode.storage import SQLiteStorage
+
+    with tempfile.TemporaryDirectory(prefix="onmc_test_ingest_") as brain_dir:
+        # Resolve to avoid macOS /var→/private/var symlink mismatch in relative_to().
+        brain_root = Path(brain_dir).resolve()
+        doc_path = brain_root / "grounding_doc.md"
+        doc_path.write_text(TASK_RETRY_ONLY_503_INCIDENT.grounding_doc, encoding="utf-8")
+
+        storage = SQLiteStorage(brain_root / "memory.db")
+        storage.initialize()
+
+        memories = extract_doc_memories(brain_root, doc_path, max_chars=2000)
+        assert memories
+        storage.upsert_memories(memories)
+
+        context, _ = compile_prompt_recall(
+            storage, TASK_RETRY_ONLY_503_INCIDENT.description, terse=False
+        )
+
+    assert context
+    assert "503" in context, (
+        "The recalled context must surface '503' from the postmortem grounding doc"
+    )
+
+
+def test_private_fixture_has_auto_results_for_all_private_tasks() -> None:
+    """All 5 private tasks must have a cc_onmc_auto fixture entry."""
+    fixtures = load_fixture_results()
+    for task in PRIVATE_KNOWLEDGE_TASKS:
+        key = (task.id, "cc_onmc_auto")
+        assert key in fixtures, (
+            f"Missing cc_onmc_auto fixture for task {task.id!r}"
+        )
+        result = fixtures[key]
+        assert result.condition == "cc_onmc_auto"
+        assert result.fixture is True
+
+
+def test_auto_fixture_honest_distribution() -> None:
+    """24/30 private tasks should have auto=pass; 6/30 have auto=fail."""
+    fixtures = load_fixture_results()
+    auto_results = {
+        task.id: fixtures.get((task.id, "cc_onmc_auto"))
+        for task in PRIVATE_KNOWLEDGE_TASKS
+    }
+    passes = [tid for tid, r in auto_results.items() if r is not None and r.passed]
+    fails = [tid for tid, r in auto_results.items() if r is not None and not r.passed]
+    assert len(passes) == 24, f"Expected 24 auto-pass tasks, got: {passes}"
+    assert len(fails) == 6, f"Expected 6 auto-fail tasks, got: {fails}"
+    assert "house_error_code_prefix" in fails, (
+        "house_error_code_prefix should be auto-fail "
+        "(exact ACME code mapping is harder to surface than a hand hint)"
+    )
+    assert "audit_log_schema_version" in fails, (
+        "audit_log_schema_version should be auto-fail "
+        "(exact version string 'audit.v2' vs 'v2' requires verbatim recall)"
+    )
+    assert "api_response_envelope" in fails, (
+        "api_response_envelope should be auto-fail "
+        "(underscore-prefixed '_ok' sentinel is easy to confuse with plain 'ok')"
+    )
+    assert "event_schema_version" in fails, (
+        "event_schema_version should be auto-fail "
+        "(exact version '2.1' vs '2.0' or '2' requires verbatim recall)"
+    )
+    assert "migration_file_prefix" in fails, (
+        "migration_file_prefix should be auto-fail "
+        "(M{YYYYMMDD}{seq:03d}__ format is complex to recall verbatim)"
+    )
+    assert "fx_rate_precision" in fails, (
+        "fx_rate_precision should be auto-fail "
+        "(exact '8' decimal places vs 4 or 6 common defaults requires verbatim recall)"
+    )
+
+
+def test_run_suite_private_fixture_with_auto_results() -> None:
+    """run_suite(fixture=True) loads auto fixtures into ABTaskComparison.auto."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    for comparison in report.comparisons:
+        assert comparison.auto is not None, (
+            f"Task {comparison.task.id!r} should have auto fixture loaded"
+        )
+        assert comparison.auto.condition == "cc_onmc_auto"
+
+
+def test_report_auto_wins_aggregate() -> None:
+    """ABReport.auto_wins counts tasks where auto passed but alone failed."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    # 24 tasks have auto=pass; all 30 have alone=fail → 24 auto wins
+    assert report.auto_wins == 24, (
+        f"Expected 24 auto wins from private fixture but got {report.auto_wins}"
+    )
+
+
+def test_report_to_dict_includes_auto() -> None:
+    """ABReport.to_dict() includes 'auto' key and 'auto_wins' in each comparison."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    d = report.to_dict()
+    assert "auto_wins" in d
+    assert d["auto_wins"] == 24
+    for comparison_dict in d["comparisons"]:  # type: ignore[union-attr]
+        assert "auto" in comparison_dict, "Each comparison dict must include 'auto'"
+        assert "auto_wins" in comparison_dict
+
+
+def test_report_to_markdown_includes_auto_column() -> None:
+    """ABReport.to_markdown() renders a cc_auto column."""
+    report = run_suite(PRIVATE_KNOWLEDGE_TASKS, fixture=True)
+    md = report.to_markdown()
+    assert "cc_auto" in md
+    assert "auto_wins" in md.lower() or "Auto wins" in md
+
+
+def test_abtaskresult_round_trip_auto_condition() -> None:
+    """ABTaskResult with condition='cc_onmc_auto' serialises and deserialises cleanly."""
+    result = ABTaskResult(
+        task_id="tenant_header",
+        condition="cc_onmc_auto",
+        passed=True,
+        tokens=484,
+        duration_s=7.2,
+        agent_output="auto recalled X-Acme-Workspace",
+        fixture=True,
+    )
+    d = result.to_dict()
+    assert d["condition"] == "cc_onmc_auto"
+    loaded = ABTaskResult.from_dict(d)
+    assert loaded.condition == "cc_onmc_auto"
+    assert loaded.passed is True
+    assert loaded.fixture is True
+
+
+def test_abtaskcomparison_auto_wins_property() -> None:
+    """ABTaskComparison.auto_wins is True only when auto passed and alone failed."""
+    task = _make_task()
+    alone = _make_result(passed=False)
+    onmc = _make_result(condition="cc_onmc", passed=True)
+    auto_pass = _make_result(condition="cc_onmc_auto", passed=True)
+    auto_fail = _make_result(condition="cc_onmc_auto", passed=False)
+
+    cmp_with_auto_win = ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto_pass)
+    assert cmp_with_auto_win.auto_wins is True
+
+    cmp_with_auto_fail = ABTaskComparison(task=task, alone=alone, onmc=onmc, auto=auto_fail)
+    assert cmp_with_auto_fail.auto_wins is False
+
+    cmp_no_auto = ABTaskComparison(task=task, alone=alone, onmc=onmc)
+    assert cmp_no_auto.auto_wins is False
+
+
+# ---------------------------------------------------------------------------
+# Anti-leak guard: rule keyword must NOT appear in setup_script or description
+# ---------------------------------------------------------------------------
+
+# Each entry: (task, keyword_that_reveals_the_rule)
+# The keyword must appear ONLY in onmc_hint / grounding_doc — never in what
+# the bare agent sees (setup_script + description).
+_ANTI_LEAK_CASES: list[tuple[object, str]] = [
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4004"),
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4001"),
+    (TASK_HOUSE_ERROR_CODE_PREFIX, "ACME-4029"),
+    (TASK_TENANT_HEADER, "X-Acme-Workspace"),
+    (TASK_RETRY_ONLY_503_INCIDENT, "503"),
+    (TASK_IDEMPOTENCY_KEY_FORMAT, "colon"),
+    (TASK_MONEY_MINOR_UNITS, "Decimal"),
+    (TASK_EPOCH_MILLIS_TIMESTAMP, "millisecond"),
+    (TASK_EPOCH_MILLIS_TIMESTAMP, "* 1000"),
+    (TASK_PAGINATION_CURSOR_SCHEME, "tilde"),
+    (TASK_PAGINATION_CURSOR_SCHEME, "~"),
+    (TASK_AUDIT_LOG_SCHEMA_VERSION, "audit.v2"),
+    (TASK_AUDIT_LOG_SCHEMA_VERSION, "_schema"),
+    (TASK_CURRENCY_ALLOWLIST, "SGD"),
+    (TASK_CURRENCY_ALLOWLIST, "allowlist"),
+    (TASK_WEBHOOK_SIGNATURE_HEADER, "X-Acme-Hook-Sig"),
+    (TASK_WEBHOOK_SIGNATURE_HEADER, "sha256="),
+    # Tasks 11-30
+    (TASK_API_RESPONSE_ENVELOPE, "_ok"),
+    (TASK_SERVICE_VERSION_HEADER, "X-Acme-Svc-Ver"),
+    (TASK_EVENT_SCHEMA_VERSION, '"_ev"'),  # quoted form avoids false match on make_event
+    (TASK_EVENT_SCHEMA_VERSION, "2.1"),
+    (TASK_VALIDATION_FIELD_PATH, "field_path"),
+    (TASK_PAYMENT_REF_SEPARATOR, "|"),
+    (TASK_REFUND_CREDIT_FLAG, "is_credit"),
+    (TASK_FX_RATE_PRECISION, "8 decimal"),
+    (TASK_TZ_OFFSET_COMPACT_FORMAT, "+0530"),
+    (TASK_DURATION_MICROSECONDS, "microsecond"),
+    (TASK_PAGINATION_TOTAL_KEY, "total_count"),
+    (TASK_CURSOR_BASE64URL_NO_PADDING, "urlsafe"),
+    (TASK_LOG_CONTEXT_KEY, "log_ctx"),
+    (TASK_AUDIT_ACTOR_PREFIX, "user:"),
+    (TASK_FEATURE_FLAG_ENV_PREFIX, "FF_"),
+    (TASK_CONFIG_SECRET_SCOPE, "sec:"),
+    (TASK_JWT_EDDSA_ONLY, "EdDSA"),
+    (TASK_REQUEST_NONCE_HEADER, "X-Acme-Nonce"),
+    (TASK_MIGRATION_FILE_PREFIX, "seq:03d"),
+    (TASK_DB_NULL_SENTINEL, "__NULL__"),
+    (TASK_BATCH_MAX_FIFTY, "50"),
+]
+
+
+def test_anti_leak_rule_keyword_absent_from_agent_visible_content() -> None:
+    """For every private task, the rule's giveaway token must NOT appear in
+    what the agent sees (setup_script + description).  It must appear ONLY
+    in onmc_hint or grounding_doc."""
+    from oh_no_my_claudecode.evals.ab.models import ABTask as _ABTask
+
+    failures: list[str] = []
+    for task, keyword in _ANTI_LEAK_CASES:
+        assert isinstance(task, _ABTask)
+        agent_visible = task.setup_script + "\n" + task.description
+        if keyword in agent_visible:
+            failures.append(
+                f"Task {task.id!r}: keyword {keyword!r} leaks into agent-visible content.\n"
+                f"  Found in: {'setup_script' if keyword in task.setup_script else 'description'}"
+            )
+        # Sanity-check: keyword IS present in onmc_hint or grounding_doc
+        private_content = task.onmc_hint + "\n" + (task.grounding_doc or "")
+        if keyword not in private_content:
+            failures.append(
+                f"Task {task.id!r}: keyword {keyword!r} not found in onmc_hint/grounding_doc "
+                f"either — check that the task is correctly structured."
+            )
+    assert not failures, "Anti-leak guard failures:\n" + "\n".join(failures)
+
+
+# ---------------------------------------------------------------------------
+# New task field tests (tasks 6-10)
+# ---------------------------------------------------------------------------
+
+
+def test_private_task_epoch_millis_fields() -> None:
+    task = TASK_EPOCH_MILLIS_TIMESTAMP
+    assert task.id == "epoch_millis_timestamp"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "millisecond" in task.onmc_hint.lower() or "* 1000" in task.onmc_hint
+
+
+def test_private_task_pagination_cursor_fields() -> None:
+    task = TASK_PAGINATION_CURSOR_SCHEME
+    assert task.id == "pagination_cursor_scheme"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "~" in task.onmc_hint
+
+
+def test_private_task_audit_log_fields() -> None:
+    task = TASK_AUDIT_LOG_SCHEMA_VERSION
+    assert task.id == "audit_log_schema_version"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "audit.v2" in task.onmc_hint
+
+
+def test_private_task_currency_allowlist_fields() -> None:
+    task = TASK_CURRENCY_ALLOWLIST
+    assert task.id == "currency_allowlist"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "SGD" in task.onmc_hint
+
+
+def test_private_task_webhook_signature_fields() -> None:
+    task = TASK_WEBHOOK_SIGNATURE_HEADER
+    assert task.id == "webhook_signature_header"
+    assert task.setup_script
+    assert task.gate_command
+    assert task.hidden_gate_test
+    assert task.grounding_doc
+    assert "X-Acme-Hook-Sig" in task.onmc_hint
+
+
+# ---------------------------------------------------------------------------
+# Gate tests for new tasks (no agent needed — tests gate infra)
+# ---------------------------------------------------------------------------
+
+
+def test_private_gate_fails_on_buggy_code_epoch_millis(tmp_path: Path) -> None:
+    """ISO format stub fails the epoch-millis gate."""
+    _run_setup(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    _write_hidden_gate_test(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    passed, output = _run_gate(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    assert passed is False, f"Gate should FAIL on ISO format stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_epoch_millis(tmp_path: Path) -> None:
+    """Epoch-ms string implementation passes the gate."""
+    _run_setup(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    ts_path = tmp_path / "timestamps.py"
+    fixed = (
+        "import datetime\n\n"
+        "def format_timestamp(dt: datetime.datetime) -> str:\n"
+        "    return str(int(dt.timestamp() * 1000))\n"
+    )
+    ts_path.write_text(fixed)
+    _write_hidden_gate_test(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    passed, output = _run_gate(TASK_EPOCH_MILLIS_TIMESTAMP, tmp_path)
+    assert passed is True, f"Gate should PASS after epoch-ms fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_pagination(tmp_path: Path) -> None:
+    """str(page) stub fails the tilde-cursor gate."""
+    _run_setup(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    _write_hidden_gate_test(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    passed, output = _run_gate(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    assert passed is False, f"Gate should FAIL on str(page) stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_pagination(tmp_path: Path) -> None:
+    """Tilde-separated cursor passes the gate."""
+    _run_setup(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    p_path = tmp_path / "pagination.py"
+    p_path.write_text(
+        "def make_cursor(page: int, watermark: int) -> str:\n"
+        "    return f'{page}~{watermark}'\n"
+    )
+    _write_hidden_gate_test(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    passed, output = _run_gate(TASK_PAGINATION_CURSOR_SCHEME, tmp_path)
+    assert passed is True, f"Gate should PASS after tilde-cursor fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_audit(tmp_path: Path) -> None:
+    """Stub without _schema field fails the audit gate."""
+    _run_setup(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    _write_hidden_gate_test(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    passed, output = _run_gate(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    assert passed is False, f"Gate should FAIL on stub missing _schema.\n{output}"
+
+
+def test_private_gate_passes_after_fix_audit(tmp_path: Path) -> None:
+    """Payload with _schema: audit.v2 passes the gate."""
+    _run_setup(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    a_path = tmp_path / "audit.py"
+    a_path.write_text(
+        "import time\n\n"
+        "def build_audit_payload(action: str, user_id: str) -> dict:\n"
+        "    return {\n"
+        "        '_schema': 'audit.v2',\n"
+        "        'action': action,\n"
+        "        'user_id': user_id,\n"
+        "        'ts': int(time.time()),\n"
+        "    }\n"
+    )
+    _write_hidden_gate_test(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    passed, output = _run_gate(TASK_AUDIT_LOG_SCHEMA_VERSION, tmp_path)
+    assert passed is True, f"Gate should PASS after audit.v2 fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_currency(tmp_path: Path) -> None:
+    """Format-only validator (accepts GBP) fails the currency gate."""
+    _run_setup(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    _write_hidden_gate_test(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    passed, output = _run_gate(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    assert passed is False, f"Gate should FAIL on format-only validator.\n{output}"
+
+
+def test_private_gate_passes_after_fix_currency(tmp_path: Path) -> None:
+    """Hard allowlist {INR, USD, SGD} passes the gate."""
+    _run_setup(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    c_path = tmp_path / "currency.py"
+    c_path.write_text(
+        "_ALLOWED = {'INR', 'USD', 'SGD'}\n\n"
+        "def validate_currency(code: str) -> str:\n"
+        "    if code not in _ALLOWED:\n"
+        "        raise ValueError(f'unsupported_currency: {code!r}')\n"
+        "    return code\n"
+    )
+    _write_hidden_gate_test(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    passed, output = _run_gate(TASK_CURRENCY_ALLOWLIST, tmp_path)
+    assert passed is True, f"Gate should PASS after allowlist fix.\n{output}"
+
+
+def test_private_gate_fails_on_buggy_code_webhook(tmp_path: Path) -> None:
+    """X-Signature bare-hex stub fails the webhook gate."""
+    _run_setup(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    _write_hidden_gate_test(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    passed, output = _run_gate(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    assert passed is False, f"Gate should FAIL on X-Signature stub.\n{output}"
+
+
+def test_private_gate_passes_after_fix_webhook(tmp_path: Path) -> None:
+    """X-Acme-Hook-Sig with sha256= prefix passes the gate."""
+    _run_setup(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    w_path = tmp_path / "webhook.py"
+    w_path.write_text(
+        "import hashlib\nimport hmac\n\n"
+        "def build_webhook_headers(payload: bytes, secret: str) -> dict[str, str]:\n"
+        "    sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()\n"
+        "    return {\n"
+        "        'Content-Type': 'application/json',\n"
+        "        'X-Acme-Hook-Sig': f'sha256={sig}',\n"
+        "    }\n"
+    )
+    _write_hidden_gate_test(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    passed, output = _run_gate(TASK_WEBHOOK_SIGNATURE_HEADER, tmp_path)
+    assert passed is True, f"Gate should PASS after correct header fix.\n{output}"

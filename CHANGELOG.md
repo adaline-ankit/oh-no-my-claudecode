@@ -4,6 +4,40 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.107.0] — 2026-07-22
+
+### Added
+
+- **`onmc run TASK` adaptive execution harness** — safely previews a deterministic plan by
+  default, then composes task compilation, cited repository context, policy decisions, durable
+  execution, verifier-backed proof, and resume behind explicit `--execute`.
+- **Typed task DAG compiler** — normalizes work into risk-aware understand, retrieve, plan, claim,
+  execute, verify, repair, prove, and learn nodes with deterministic topology.
+- **Code Intelligence RAG planner** — retrieves bounded, cited source context with hybrid scoring,
+  token packing, exclusions, and provenance. The public harness defaults to a 4,000-token ceiling
+  and excludes secret-like, binary, generated-state, dependency, and oversized files.
+- **Durable event-sourced runtime** — append-only node transitions, idempotent replay, recovery,
+  pause/resume, leases, approvals, and corruption detection (#355).
+- **Verifier synthesis and proof graph** — completion requires verifier evidence connected to
+  explicit claims; agent assertions alone cannot produce a successful result.
+- **Deny-by-default tool broker** — scoped capabilities, verifier-only grants, expiring signed
+  tokens, redacted tamper-evident audit records, and explicit policy decisions.
+
+### Changed
+
+- Codex loop adapters now pass explicit `--model` selections through to `codex exec`.
+- Verifier capability grants are bound to verifier actions and cannot authorize ordinary commands.
+
+### Fixed
+
+- `onmc run --isolate` now creates the worktree before binding both agent and verifier, fails closed
+  if setup fails, preserves successful worktrees, cleans failed worktrees, and reports the path.
+- Loop verifiers execute parsed argument vectors without `shell=True`, closing shell-injection risk.
+- Execution policies reject invalid budgets and risk values early; proof diagnostics name duplicate
+  IDs; context evidence rejects duplicate metadata keys.
+
+## [0.106.0] — 2026-07-22
+
 ### Added
 
 - **Pinned public-repository A/B evidence** — `onmc eval ab --public-repo` now checks out a full

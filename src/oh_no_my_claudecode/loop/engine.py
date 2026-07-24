@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import shlex
 import subprocess
 import time
 from collections.abc import Callable
@@ -164,9 +165,11 @@ def _default_verify_runner(command: str) -> VerifyOutcome:
     instead of calling this function.
     """
     try:
+        argv = shlex.split(command)
+        if not argv:
+            return VerifyOutcome(passed=False, output="[verify error: empty command]")
         result = subprocess.run(  # noqa: S602, S603
-            command,
-            shell=True,  # noqa: S602
+            argv,
             capture_output=True,
             text=True,
             timeout=_VERIFY_TIMEOUT,
@@ -175,7 +178,7 @@ def _default_verify_runner(command: str) -> VerifyOutcome:
         return VerifyOutcome(passed=result.returncode == 0, output=output)
     except subprocess.TimeoutExpired:
         return VerifyOutcome(passed=False, output="[verify timed out]")
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, ValueError) as exc:
         return VerifyOutcome(passed=False, output=f"[verify error: {exc}]")
 
 

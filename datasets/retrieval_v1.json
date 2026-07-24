@@ -1,0 +1,472 @@
+{
+  "version": "1.0",
+  "description": "Frozen labeled retrieval dataset v1. DO NOT edit to improve scores — that defeats the purpose. Add a new version file instead.",
+  "dataset_sha": "eeff58b47d051e58351fa048f778d12cd16d974c3014da62dac586277ae6c42d",
+  "corpus": [
+    {
+      "id": "mem-001",
+      "kind": "failed_approach",
+      "title": "SQLite WAL mode deadlock with multiple writers",
+      "summary": "Enabling WAL mode does not prevent deadlocks when multiple processes open the same database concurrently without timeouts.",
+      "details": "Attempted to run two background workers both writing to the SQLite database simultaneously. Both blocked indefinitely. Root cause: SQLite WAL still serialises writes at the database level. Fix: set a busy_timeout of 5000ms via PRAGMA busy_timeout=5000 before any write.",
+      "tags": ["sqlite", "wal", "deadlock", "concurrency", "database"]
+    },
+    {
+      "id": "mem-002",
+      "kind": "gotcha",
+      "title": "FTS5 MATCH expressions must double-quote each token",
+      "summary": "Raw user input passed directly to FTS5 MATCH causes OperationalError when input contains special characters like hyphens or parentheses.",
+      "details": "FTS5 treats hyphens as negation operators and parentheses as grouping. User queries like 'KeyError: key-not-found' break the MATCH expression. Each token must be individually double-quoted: \"KeyError\" \"key\" \"not\" \"found\".",
+      "tags": ["fts5", "sqlite", "search", "sql", "tokenization"]
+    },
+    {
+      "id": "mem-003",
+      "kind": "failed_approach",
+      "title": "Using sqlite3 row_factory=dict breaks ON CONFLICT DO UPDATE",
+      "summary": "Setting conn.row_factory = lambda c, r: dict(zip([d[0] for d in c.description], r)) causes ON CONFLICT DO UPDATE clauses to fail silently.",
+      "details": "Discovered during upsert testing: dict row_factory changes column ordering assumptions. Switched to sqlite3.Row which preserves column access by name without breaking conflict resolution.",
+      "tags": ["sqlite", "upsert", "row_factory", "conflict"]
+    },
+    {
+      "id": "mem-004",
+      "kind": "decision",
+      "title": "Memory IDs are SHA256-derived from content+source for deduplication",
+      "summary": "Memory entry IDs are computed as stable_id(kind, title, summary, source_ref, prefix=prefix) so that re-ingesting the same content produces the same ID.",
+      "details": "Decision made 2025-03: deterministic IDs allow safe ON CONFLICT DO UPDATE upserts and prevent duplicate entries across repeated ingestion runs. Changing the ID derivation formula would invalidate all existing stored IDs.",
+      "tags": ["memory", "id", "sha256", "deduplication", "ingest"]
+    },
+    {
+      "id": "mem-005",
+      "kind": "invariant",
+      "title": "All embedding vectors must be L2-normalised (unit norm)",
+      "summary": "Cosine similarity computation in the reranker assumes unit-norm vectors. Un-normalised vectors produce incorrect similarity scores.",
+      "details": "Violated once when a custom embedder returned raw TF counts. The cosine similarity function does not re-normalise its inputs for performance reasons. Every Embedder implementation MUST return L2-normalised vectors.",
+      "tags": ["embedding", "l2", "normalisation", "cosine", "invariant"]
+    },
+    {
+      "id": "mem-006",
+      "kind": "failed_approach",
+      "title": "Importing typer at module load time breaks --help latency",
+      "summary": "Placing heavyweight imports (torch, sentence_transformers) at module top level increased CLI startup time from 80ms to 4200ms.",
+      "details": "All optional ML dependencies must use lazy imports guarded inside functions. The CLI --help path must complete in under 200ms. Pattern: 'from oh_no_my_claudecode.embeddings.core import get_embedder' inside the function body, never at module level.",
+      "tags": ["typer", "cli", "startup", "import", "performance", "lazy"]
+    },
+    {
+      "id": "mem-007",
+      "kind": "gotcha",
+      "title": "Pydantic BaseModel datetime fields lose timezone info on JSON round-trip",
+      "summary": "datetime fields serialised with model_dump() and then parsed back may lose UTC timezone info, causing comparison bugs.",
+      "details": "Use model_dump(mode='json') which serialises datetimes to ISO strings with Z suffix. Alternatively use model_dump_json() + model_validate_json(). Never use plain json.loads(model.model_dump_json()) — it returns strings, not datetime objects.",
+      "tags": ["pydantic", "datetime", "timezone", "serialization", "json"]
+    },
+    {
+      "id": "mem-008",
+      "kind": "failed_approach",
+      "title": "Using git stash in subprocess during pre-commit hook causes hook failure",
+      "summary": "Running git stash inside a pre-commit hook script creates a deadlock because git already holds a lock on the index.",
+      "details": "Attempted to stash unstaged changes before running type-check in the pre-commit hook. Git raised 'fatal: Unable to create .git/index.lock: File exists'. Solution: use git diff --name-only HEAD to identify changed files and lint only those.",
+      "tags": ["git", "pre-commit", "hook", "stash", "lock"]
+    },
+    {
+      "id": "mem-009",
+      "kind": "invariant",
+      "title": "CLI commands must complete in under 200ms for the happy path",
+      "summary": "Any onmc command that does not require LLM calls or network access must return in under 200ms measured on a cold process start.",
+      "details": "Enforced by performance tests. The limit exists because onmc is invoked from shell hooks where latency is user-visible. Heavy work must be deferred to background threads or async tasks.",
+      "tags": ["cli", "performance", "latency", "startup", "benchmark"]
+    },
+    {
+      "id": "mem-010",
+      "kind": "decision",
+      "title": "FTS5 is preferred over LIKE scan for memory search",
+      "summary": "SQLite FTS5 provides BM25-ranked full-text search with tokenisation, prefix matching, and phrase search. LIKE scan is kept as a fallback when FTS5 is unavailable.",
+      "details": "Decision 2025-01: FTS5 is always preferred when available because BM25 ranking is significantly better than simple substring match for multi-keyword queries. The LIKE fallback ensures the module works with read-only SQLite builds that lack FTS5.",
+      "tags": ["fts5", "bm25", "search", "sqlite", "decision"]
+    },
+    {
+      "id": "mem-011",
+      "kind": "failed_approach",
+      "title": "Hashing user queries before FTS lookup strips important search signal",
+      "summary": "Normalising error text too aggressively (e.g. stripping all digits) removes version numbers that are critical for distinguishing between similar errors in different library versions.",
+      "details": "Tried hashing the normalised query tokens to reduce FTS index size. Recall dropped 40%. Root cause: version numbers like '3.11' are important distinguishers. Reverted normalisation to only strip line numbers and addresses, not all numeric tokens.",
+      "tags": ["fts5", "normalisation", "recall", "search", "tokenization"]
+    },
+    {
+      "id": "mem-012",
+      "kind": "gotcha",
+      "title": "SQLiteStorage.initialize() is not idempotent without IF NOT EXISTS",
+      "summary": "Calling initialize() twice on the same database raises 'table already exists' unless DDL uses IF NOT EXISTS.",
+      "details": "All CREATE TABLE and CREATE INDEX statements in the migration chain must use IF NOT EXISTS. The migration runner tracks applied versions in a schema_version table to avoid re-running migrations.",
+      "tags": ["sqlite", "migration", "idempotent", "ddl", "schema"]
+    },
+    {
+      "id": "mem-013",
+      "kind": "failed_approach",
+      "title": "Running pytest with --forked breaks SQLite in-memory databases",
+      "summary": "pytest-forked forks the process after SQLite connections are opened, causing the child to inherit a corrupted connection state.",
+      "details": "SQLite connections are not fork-safe. Tests that use in-memory databases (:memory:) must open new connections inside each test function. Removed --forked from pytest configuration; use tmp_path fixture for isolation instead.",
+      "tags": ["pytest", "sqlite", "fork", "testing", "fixture"]
+    },
+    {
+      "id": "mem-014",
+      "kind": "decision",
+      "title": "Embeddings are optional and gated by ONMC_EMBEDDER env var",
+      "summary": "The HashNgramEmbedder is always available as a zero-dependency default. Real ML embedders (fastembed, sentence-transformers) are only loaded when ONMC_EMBEDDER is set.",
+      "details": "Decision: never require GPU or ML dependencies at install time. embeddings_enabled() returns False when ONMC_EMBEDDER is unset. The reranker degrades gracefully to lexical-only when embeddings are disabled.",
+      "tags": ["embedding", "optional", "env", "fastembed", "decision"]
+    },
+    {
+      "id": "mem-015",
+      "kind": "gotcha",
+      "title": "HashNgramEmbedder returns zero vector for empty strings",
+      "summary": "Passing an empty string or whitespace-only string to HashNgramEmbedder.embed() returns a zero vector [0.0]*dim, not a unit vector.",
+      "details": "Cosine similarity of zero vector with any other vector is undefined (division by zero). The reranker must guard against zero-vector queries and documents before computing similarity. Check: math.sqrt(sum(v*v for v in vector)) > 0.",
+      "tags": ["embedding", "zero-vector", "cosine", "guard", "edge-case"]
+    },
+    {
+      "id": "mem-016",
+      "kind": "failed_approach",
+      "title": "Storing raw Python tracebacks in memory summary field truncates at 500 chars",
+      "summary": "The summary field has a soft limit enforced by the ingest layer. Long tracebacks stored in summary are silently truncated, losing the 'most recent call last' section.",
+      "details": "Full tracebacks belong in the details field. Summary should contain only the exception type and message (first line). Ingest layer enforces: len(summary) <= 500. Details field allows up to 4000 chars.",
+      "tags": ["traceback", "summary", "truncation", "ingest", "memory"]
+    },
+    {
+      "id": "mem-017",
+      "kind": "invariant",
+      "title": "Memory confidence score must stay in [0.0, 1.0]",
+      "summary": "MemoryEntry.confidence is validated by Pydantic to be in [0.0, 1.0]. Values outside this range raise ValidationError at construction time.",
+      "details": "Invariant enforced by Field(ge=0.0, le=1.0). Any computation that derives confidence from external signals (e.g. git blame age, test pass rate) must clamp the result before constructing MemoryEntry.",
+      "tags": ["confidence", "validation", "pydantic", "invariant", "memory"]
+    },
+    {
+      "id": "mem-018",
+      "kind": "gotcha",
+      "title": "typer==0.12 changed the signature of add_typer, breaking existing plugins",
+      "summary": "typer 0.12 deprecated the 'callback' parameter in add_typer and raises a deprecation warning that becomes an error in 0.13.",
+      "details": "All add_typer() calls must use invoke_without_command=True instead of callback for the parent command group. Detected when CI started failing on typer upgrade. Pin to typer>=0.9,<0.14 in pyproject.toml to avoid silent breakage.",
+      "tags": ["typer", "plugin", "upgrade", "breaking-change", "cli"]
+    },
+    {
+      "id": "mem-019",
+      "kind": "failed_approach",
+      "title": "Using threading.Lock for SQLite connection pool causes deadlock under pytest-xdist",
+      "summary": "A module-level threading.Lock guarding the SQLite connection pool deadlocks when pytest-xdist runs tests in the same process with multiple threads.",
+      "details": "Replaced connection pool with per-call contextmanager that opens and closes SQLite connections. The performance cost is acceptable for a CLI tool that does not hold connections across requests.",
+      "tags": ["threading", "sqlite", "lock", "deadlock", "pytest-xdist"]
+    },
+    {
+      "id": "mem-020",
+      "kind": "decision",
+      "title": "CLI command names must be lowercase with hyphens, not underscores",
+      "summary": "Typer maps Python function names with underscores to CLI names with hyphens by default. We follow this convention explicitly.",
+      "details": "Decision: function def record_memory maps to 'onmc record-memory'. Never override name= in @app.command() to use underscores. This ensures consistent tab-completion behaviour across shells.",
+      "tags": ["cli", "naming", "typer", "convention", "decision"]
+    },
+    {
+      "id": "mem-021",
+      "kind": "failed_approach",
+      "title": "HDBSCAN with min_cluster_size=3 over-segments small corpora",
+      "summary": "Setting min_cluster_size=3 on a corpus of fewer than 30 points produces 15+ singleton clusters (noise points), defeating the clustering purpose.",
+      "details": "For corpora under 50 points, min_cluster_size should be at least max(5, corpus_size // 10). Discovered during a behaviours pipeline run on a 22-span bench that produced 18 clusters of size 1.",
+      "tags": ["hdbscan", "clustering", "min_cluster_size", "behaviours", "embedding"]
+    },
+    {
+      "id": "mem-022",
+      "kind": "gotcha",
+      "title": "pathlib.Path.stat() raises FileNotFoundError on dangling symlinks",
+      "summary": "Path.stat() follows symlinks and raises FileNotFoundError when the symlink target does not exist, even though Path.exists() returns True for the symlink itself.",
+      "details": "Use Path.lstat() to stat the symlink inode itself, or Path.is_symlink() before calling stat(). Discovered when ingesting a repository with broken symlinks in node_modules.",
+      "tags": ["pathlib", "symlink", "stat", "filenotfound", "ingest"]
+    },
+    {
+      "id": "mem-023",
+      "kind": "invariant",
+      "title": "Background task results must be written before process exit",
+      "summary": "Any background thread or task that writes to SQLite must be joined before the process exits, or writes may be lost without error.",
+      "details": "Python's atexit handlers run after daemon threads are killed. All SQLite writes from background threads must complete before main thread exits. Use threading.Event or Queue with a sentinel to drain background workers.",
+      "tags": ["threading", "sqlite", "atexit", "background", "data-loss"]
+    },
+    {
+      "id": "mem-024",
+      "kind": "decision",
+      "title": "Staleness labels are assigned at read time, not write time",
+      "summary": "Memory staleness (fresh/stale/orphaned/unanchored) is computed when memories are listed, not when they are stored.",
+      "details": "Decision: computing staleness at write time would require re-writing all memories whenever the git graph changes. Instead, staleness is derived from the memory source_ref against the current git state each time list_memories() is called.",
+      "tags": ["staleness", "memory", "git", "decision", "performance"]
+    },
+    {
+      "id": "mem-025",
+      "kind": "failed_approach",
+      "title": "Using os.getenv inside Pydantic validator causes test isolation failures",
+      "summary": "Pydantic validators that call os.getenv() read the real environment at validation time, making tests that mock environment variables flaky.",
+      "details": "Tests that monkeypatch os.environ must patch before the Pydantic model is constructed. Alternatively, pass env values as explicit parameters to the model rather than reading from os.getenv inside the validator.",
+      "tags": ["pydantic", "env", "testing", "monkeypatch", "isolation"]
+    },
+    {
+      "id": "mem-026",
+      "kind": "gotcha",
+      "title": "Rich console.print with markup=False required for user content",
+      "summary": "Passing user-controlled strings to rich console.print() without markup=False can cause Rich markup injection if the string contains square brackets.",
+      "details": "A memory title containing '[deprecated]' was rendered as an empty string because Rich interpreted it as an unknown markup tag and silently dropped it. Always use markup=False for any string that comes from user data or the database.",
+      "tags": ["rich", "markup", "injection", "cli", "display", "security"]
+    },
+    {
+      "id": "mem-027",
+      "kind": "failed_approach",
+      "title": "Concurrent pytest workers corrupt shared SQLite database",
+      "summary": "Running pytest-xdist with 4 workers all writing to the same tmp_path/db.sqlite causes SQLITE_BUSY and data corruption.",
+      "details": "Each xdist worker must use its own database file. Use the worker_id fixture from pytest-xdist to suffix the database path: db_path = tmp_path / f'onmc-{worker_id}.sqlite'. Confirmed fix: tests pass reliably with -n4.",
+      "tags": ["pytest", "xdist", "sqlite", "concurrent", "isolation"]
+    },
+    {
+      "id": "mem-028",
+      "kind": "decision",
+      "title": "Token overlap scoring normalises by query token count, not document token count",
+      "summary": "Relevance score = |query_tokens ∩ doc_tokens| / |query_tokens|, not IDF-weighted.",
+      "details": "Decision: normalising by query token count ensures that a short precise query with high overlap beats a long noisy query with incidental matches. Document length does not penalise or reward long memories.",
+      "tags": ["scoring", "token-overlap", "normalisation", "recall", "decision"]
+    },
+    {
+      "id": "mem-029",
+      "kind": "failed_approach",
+      "title": "Pickle-caching embedding vectors between sessions breaks on model upgrade",
+      "summary": "Caching embedding vectors as pickle files keyed only by memory ID causes stale vectors after the embedder model is upgraded.",
+      "details": "Cache keys must include the embedder_id (e.g. 'hash-ngram-v1', 'fastembed-v1'). The memory_vectors table in SQLite stores (memory_id, embedder_id, content_hash, vector). Cache invalidation on model upgrade is automatic because embedder_id changes.",
+      "tags": ["embedding", "cache", "pickle", "invalidation", "upgrade"]
+    },
+    {
+      "id": "mem-030",
+      "kind": "gotcha",
+      "title": "uv run and python -m pytest disagree on sys.path when using src layout",
+      "summary": "uv run pytest finds the package because uv installs it editably, but python -m pytest may not find it if the virtual env is not activated.",
+      "details": "Always run tests with 'uv run python -m pytest' or 'uv run pytest', never with bare 'python -m pytest' in a src-layout project. The src/ directory is only on sys.path when the package is installed editably.",
+      "tags": ["uv", "pytest", "sys-path", "src-layout", "virtualenv"]
+    },
+    {
+      "id": "mem-031",
+      "kind": "invariant",
+      "title": "generate-cli-reference.py must be regenerated after any CLI change",
+      "summary": "docs/cli-reference.md is auto-generated from the CLI surface. Any PR that adds/removes/renames a command must regenerate it or CI quality check fails.",
+      "details": "Script: scripts/generate-cli-reference.py --check verifies the current docs match the CLI. Run: python scripts/generate-cli-reference.py to regenerate. This file is a merge conflict magnet — serialize command-adding PRs.",
+      "tags": ["cli", "docs", "cli-reference", "ci", "invariant"]
+    },
+    {
+      "id": "mem-032",
+      "kind": "failed_approach",
+      "title": "Storing memory tags as comma-separated string loses tags containing commas",
+      "summary": "Tags like 'foo, bar' stored as a comma-separated string in SQLite cannot be reliably split back because some tags contain commas.",
+      "details": "Tags are now stored as a JSON array in the tags_json column. The FTS index over tags concatenates them with spaces for search. Migration v3 backfilled all existing tag columns to JSON format.",
+      "tags": ["tags", "sqlite", "json", "storage", "migration"]
+    },
+    {
+      "id": "mem-033",
+      "kind": "decision",
+      "title": "Memory confidence decays exponentially with age, halving every 90 days",
+      "summary": "The decay factor formula is: max(DECAY_FLOOR=0.3, 2^(-age_days / DECAY_HALF_LIFE=90)). Positive feedback reduces effective age.",
+      "details": "Decision: memories should lose confidence over time to prevent stale data from dominating search results. Positive user feedback (onmc memory confirm) halves the effective age. The 0.3 floor prevents old-but-important memories from disappearing entirely.",
+      "tags": ["confidence", "decay", "age", "feedback", "decision"]
+    },
+    {
+      "id": "mem-034",
+      "kind": "gotcha",
+      "title": "ruff check --fix modifies files that are staged but not committed",
+      "summary": "Running ruff --fix in a pre-commit hook modifies staged files on disk without re-staging them, causing 'partially staged' warnings in git.",
+      "details": "Pre-commit hooks that auto-fix must re-stage modified files with 'git add <files>' after fixing, or use pre-commit framework's auto-stage feature. Without re-staging, the commit contains the unfixed version.",
+      "tags": ["ruff", "pre-commit", "git", "auto-fix", "staging"]
+    },
+    {
+      "id": "mem-035",
+      "kind": "failed_approach",
+      "title": "Using asyncio.run() inside a Typer command breaks event loop on Python 3.10",
+      "summary": "Calling asyncio.run() from within a Typer command raises RuntimeError: 'Event loop is already running' on Python 3.10 when the CLI is invoked from an async context.",
+      "details": "Typer does not run commands in an async context, but some test harnesses do. Use anyio.from_thread.run_sync() or restructure the command to be synchronous. Confirmed on Python 3.10.12 and 3.11.4.",
+      "tags": ["asyncio", "typer", "python", "event-loop", "testing"]
+    },
+    {
+      "id": "mem-036",
+      "kind": "invariant",
+      "title": "SQLiteStorage must be initialised before first use",
+      "summary": "Calling any SQLiteStorage method before initialize() raises 'no such table: memories' because the schema has not been created.",
+      "details": "initialize() creates all tables and runs migrations. It is safe to call multiple times (idempotent). Tests must call storage.initialize() in setup. Production code initialises in the service constructor.",
+      "tags": ["sqlite", "storage", "initialization", "schema", "invariant"]
+    }
+  ],
+  "cases": [
+    {
+      "query_id": "q001",
+      "surface": "recall",
+      "query": "OperationalError: table memories already exists\nTraceback (most recent call last):\n  File 'storage/sqlite.py', line 42, in initialize\n    conn.execute(CREATE_MEMORIES_TABLE)",
+      "relevant_ids": ["mem-012", "mem-036"],
+      "graded": {"mem-012": 3, "mem-036": 2}
+    },
+    {
+      "query_id": "q002",
+      "surface": "recall",
+      "query": "SQLite database is locked\nBUSY error after 0ms\nsqlite3.OperationalError: database is locked\nFile db.py line 88 in write_batch",
+      "relevant_ids": ["mem-001", "mem-019", "mem-027"],
+      "graded": {"mem-001": 3, "mem-019": 2, "mem-027": 1}
+    },
+    {
+      "query_id": "q003",
+      "surface": "recall",
+      "query": "FTS5 OperationalError: fts5: syntax error near '-'\nMATCH expression error at position 12",
+      "relevant_ids": ["mem-002", "mem-010"],
+      "graded": {"mem-002": 3, "mem-010": 1}
+    },
+    {
+      "query_id": "q004",
+      "surface": "recall",
+      "query": "CLI startup time 4200ms, slow import torch sentence_transformers at module top level",
+      "relevant_ids": ["mem-006", "mem-009"],
+      "graded": {"mem-006": 3, "mem-009": 1}
+    },
+    {
+      "query_id": "q005",
+      "surface": "recall",
+      "query": "pydantic ValidationError: confidence value is not a valid float\nvalue is not a valid float (type=type_error.float)\nField: confidence",
+      "relevant_ids": ["mem-017", "mem-007"],
+      "graded": {"mem-017": 3, "mem-007": 1}
+    },
+    {
+      "query_id": "q006",
+      "surface": "recall",
+      "query": "git pre-commit hook failed: Unable to create .git/index.lock File exists\nfatal: Unable to create index lock",
+      "relevant_ids": ["mem-008", "mem-034"],
+      "graded": {"mem-008": 3, "mem-034": 2}
+    },
+    {
+      "query_id": "q007",
+      "surface": "recall",
+      "query": "cosine similarity returns nan for zero vector\nZeroDivisionError in reranker\nmath.sqrt(0) dot product undefined",
+      "relevant_ids": ["mem-015", "mem-005"],
+      "graded": {"mem-015": 3, "mem-005": 2}
+    },
+    {
+      "query_id": "q008",
+      "surface": "recall",
+      "query": "pytest FAILED: xdist worker0 SQLITE_BUSY concurrent write database locked\nworker1 and worker2 sharing same database path",
+      "relevant_ids": ["mem-027", "mem-013", "mem-019"],
+      "graded": {"mem-027": 3, "mem-013": 2, "mem-019": 1}
+    },
+    {
+      "query_id": "q009",
+      "surface": "recall",
+      "query": "Rich markup square brackets silent empty output [deprecated] tag stripped",
+      "relevant_ids": ["mem-026"],
+      "graded": {"mem-026": 3}
+    },
+    {
+      "query_id": "q010",
+      "surface": "recall",
+      "query": "FileNotFoundError: symlink target does not exist Path.stat() dangling symlink",
+      "relevant_ids": ["mem-022"],
+      "graded": {"mem-022": 3}
+    },
+    {
+      "query_id": "q011",
+      "surface": "recall",
+      "query": "pickle cache stale embedding vectors after model upgrade wrong cosine scores",
+      "relevant_ids": ["mem-029", "mem-005", "mem-014"],
+      "graded": {"mem-029": 3, "mem-005": 1, "mem-014": 1}
+    },
+    {
+      "query_id": "q012",
+      "surface": "recall",
+      "query": "asyncio RuntimeError event loop already running inside typer command python 3.11",
+      "relevant_ids": ["mem-035"],
+      "graded": {"mem-035": 3}
+    },
+    {
+      "query_id": "q013",
+      "surface": "guard",
+      "query": "add a new CLI command for retrieval evaluation",
+      "relevant_ids": ["mem-006", "mem-031", "mem-020"],
+      "graded": {"mem-031": 3, "mem-006": 2, "mem-020": 1}
+    },
+    {
+      "query_id": "q014",
+      "surface": "guard",
+      "query": "implement concurrent SQLite writes with threading",
+      "relevant_ids": ["mem-001", "mem-019", "mem-027"],
+      "graded": {"mem-001": 3, "mem-019": 2, "mem-027": 2}
+    },
+    {
+      "query_id": "q015",
+      "surface": "guard",
+      "query": "cache embedding vectors on disk between sessions for faster startup",
+      "relevant_ids": ["mem-029", "mem-006"],
+      "graded": {"mem-029": 3, "mem-006": 1}
+    },
+    {
+      "query_id": "q016",
+      "surface": "guard",
+      "query": "run FTS5 search with user-provided query text directly in MATCH expression",
+      "relevant_ids": ["mem-002", "mem-011"],
+      "graded": {"mem-002": 3, "mem-011": 2}
+    },
+    {
+      "query_id": "q017",
+      "surface": "guard",
+      "query": "use threading.Lock to serialise SQLite connection pool access",
+      "relevant_ids": ["mem-019", "mem-001"],
+      "graded": {"mem-019": 3, "mem-001": 1}
+    },
+    {
+      "query_id": "q018",
+      "surface": "guard",
+      "query": "store memory tags as comma-separated string in a single text column",
+      "relevant_ids": ["mem-032"],
+      "graded": {"mem-032": 3}
+    },
+    {
+      "query_id": "q019",
+      "surface": "guard",
+      "query": "use HDBSCAN with min_cluster_size=3 for clustering a small set of spans",
+      "relevant_ids": ["mem-021"],
+      "graded": {"mem-021": 3}
+    },
+    {
+      "query_id": "q020",
+      "surface": "guard",
+      "query": "call asyncio.run inside a typer CLI command handler",
+      "relevant_ids": ["mem-035"],
+      "graded": {"mem-035": 3}
+    },
+    {
+      "query_id": "q021",
+      "surface": "guard",
+      "query": "run git stash inside pre-commit hook to save unstaged changes",
+      "relevant_ids": ["mem-008"],
+      "graded": {"mem-008": 3}
+    },
+    {
+      "query_id": "q022",
+      "surface": "guard",
+      "query": "use asyncio event loop for background database writes to avoid blocking",
+      "relevant_ids": ["mem-023", "mem-035"],
+      "graded": {"mem-023": 2, "mem-035": 2}
+    },
+    {
+      "query_id": "q023",
+      "surface": "recall",
+      "query": "uv run pytest ModuleNotFoundError no module named oh_no_my_claudecode\npython -m pytest cannot find package",
+      "relevant_ids": ["mem-030"],
+      "graded": {"mem-030": 3}
+    },
+    {
+      "query_id": "q024",
+      "surface": "recall",
+      "query": "memory title with brackets [deprecated] displayed as empty string in terminal output",
+      "relevant_ids": ["mem-026"],
+      "graded": {"mem-026": 3}
+    },
+    {
+      "query_id": "q025",
+      "surface": "recall",
+      "query": "typer add_typer callback deprecated DeprecationWarning version 0.12 upgrade broke plugin",
+      "relevant_ids": ["mem-018", "mem-006"],
+      "graded": {"mem-018": 3, "mem-006": 1}
+    }
+  ]
+}
