@@ -174,3 +174,20 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["langchain_community", "langchain_community.*", "langchain_text_splitters", "langchain_text_splitters.*"]
 ignore_missing_imports = true
+
+[tool.uv]
+# Security overrides for transitive deps pulled in only by the optional `crewai`
+# extra (never installed by default; see [project.optional-dependencies]).
+#
+# json-repair: crewai pins `~=0.25.2`, but that range is vulnerable
+# (GHSA-xf7x-x43h-rpqh, high). Force the patched line — json_repair's
+# `repair_json` API is stable across this bump, so crewai interop is unaffected.
+#
+# NOTE: chromadb (GHSA-f4j7-r4q5-qw2c, critical, CVE-2026-45829) is also pulled
+# in transitively by crewai (`~=1.1.0`) and has NO patched release upstream
+# (latest 1.5.9 is still in the vulnerable range). The advisory is a
+# pre-authentication code-injection in the ChromaDB *server*; onmc never runs
+# that server (crewai uses chromadb only as an embedded local client), so the
+# vulnerable code path is not reachable. Tracked via a dismissed Dependabot
+# alert; revisit if crewai ships a chromadb bump with a fixed release.
+override-dependencies = ["json-repair>=0.60.1"]
