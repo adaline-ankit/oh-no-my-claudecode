@@ -1,0 +1,60 @@
+{
+  "schema_version": "1",
+  "description": "SCHEMA DEMONSTRATOR ONLY — not a real external corpus. audit_status is deliberately 'suspect' so no one mistakes this fixture for an audited external claim. The three tasks are synthetic and their repos are non-resolvable example.invalid URLs. Populate a real VALID-audited corpus before citing any result as external.",
+  "experiment": {
+    "experiment_id": "portfolio-starter",
+    "task_set_revision": "starter-rev-0",
+    "conditions": ["bare-agent", "onmc-current", "onmc-candidate"],
+    "trials": 2,
+    "seed": 20260724,
+    "environment": {
+      "code_sha": "0000000000000000000000000000000000000000",
+      "config_hash": "starter-config",
+      "model": "fixture-model",
+      "provider": "fixture",
+      "image": "local"
+    },
+    "audit_status": "suspect",
+    "leakage_notes": "Synthetic tasks authored in-repo; no provenance audit performed. Treat as demonstrator."
+  },
+  "audit_status": "suspect",
+  "leakage_notes": "SUSPECT on purpose: tasks are hand-written examples, not drawn from an audited benchmark, and may overlap training data. This starter exists to demonstrate the PortfolioManifest schema and drive fixture tests — it must never back an external claim.",
+  "tasks": [
+    {
+      "task_id": "starter-bugfix-off-by-one",
+      "repo": {
+        "name": "toy-ledger",
+        "url": "https://example.invalid/toy-ledger.git",
+        "pinned_sha": "0000000000000000000000000000000000000001"
+      },
+      "prompt": "The running balance is off by one row because the accumulator is updated after the row is emitted. Fix the ordering so each emitted row reflects the transaction on that row.",
+      "verifier_argv": ["pytest", "-q", "tests/test_balance.py"],
+      "task_kind": "bugfix",
+      "expected_outcome": "tests/test_balance.py passes; emitted balances match the expected cumulative totals."
+    },
+    {
+      "task_id": "starter-feature-csv-export",
+      "repo": {
+        "name": "toy-ledger",
+        "url": "https://example.invalid/toy-ledger.git",
+        "pinned_sha": "0000000000000000000000000000000000000002"
+      },
+      "prompt": "Add a `--csv` flag to the report command that writes the ledger to a CSV file with a header row, without changing the default table output.",
+      "verifier_argv": ["pytest", "-q", "tests/test_csv_export.py"],
+      "task_kind": "feature",
+      "expected_outcome": "tests/test_csv_export.py passes; default output is unchanged and --csv produces a valid header + rows."
+    },
+    {
+      "task_id": "starter-ambiguity-clarify-scope",
+      "repo": {
+        "name": "toy-notes",
+        "url": "https://example.invalid/toy-notes.git",
+        "pinned_sha": "0000000000000000000000000000000000000003"
+      },
+      "prompt": "Make search better.",
+      "verifier_argv": ["pytest", "-q", "tests/test_search.py"],
+      "task_kind": "ambiguity",
+      "expected_outcome": "Agent narrows the under-specified request to a concrete, verifiable change and tests/test_search.py passes for that change."
+    }
+  ]
+}
