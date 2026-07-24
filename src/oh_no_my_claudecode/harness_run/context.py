@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from oh_no_my_claudecode.context_engine import Candidate, RetrievalMode
+from oh_no_my_claudecode.context_engine import Candidate, RetrievalMode, TrustLevel
 from oh_no_my_claudecode.ingest.repo_tree import scan_repository_files
 from oh_no_my_claudecode.retrieval import HybridRetriever
 
@@ -89,23 +89,53 @@ def _is_secret_path(path: str) -> bool:
     )
 
 
-def _excerpt(text: str, query_tokens: set[str]) -> str:
-    if len(text) <= _MAX_CONTENT_CHARS:
-        return text
+# Documentation / prose / vendored trees are prompt-injection-prone: their
+# contents are treated as untrusted data, never instructions.
+_UNTRUSTED_EXTENSIONS = frozenset({".md", ".markdown", ".rst", ".txt", ".html"})
+_UNTRUSTED_DIR_PARTS = frozenset(
+    {"docs", "doc", "examples", "example", "vendor", "third_party", "generated", "fixtures"}
+)
+
+
+def _trust_for_path(path: str) -> TrustLevel:
+    """Classify a repo path as trusted (first-party source) or untrusted."""
+    posix = path.replace("\\", "/").lower()
+    parts = frozenset(posix.split("/"))
+    if parts & _UNTRUSTED_DIR_PARTS:
+        return TrustLevel.UNTRUSTED
+    if Path(posix).suffix in _UNTRUSTED_EXTENSIONS:
+        return TrustLevel.UNTRUSTED
+    return TrustLevel.TRUSTED
+
+
+def _excerpt_with_span(text: str, query_tokens: set[str]) -> tuple[str, int, int]:
+    """Return a bounded excerpt plus its 1-based inclusive line span.
+
+    For short files the whole text is returned spanning the entire file.  For
+    long files, windows around query-matching lines are selected and the span
+    is the min/max selected line so the citation points at real line numbers.
+    """
     lines = text.splitlines()
-    matching = [
-        index
-        for index, line in enumerate(lines)
-        if query_tokens & _tokens(line)
-    ]
+    total = len(lines)
+    if len(text) <= _MAX_CONTENT_CHARS:
+        return text, 1, max(total, 1)
+    matching = [index for index, line in enumerate(lines) if query_tokens & _tokens(line)]
     if not matching:
-        return text[:_MAX_CONTENT_CHARS]
+        head = text[:_MAX_CONTENT_CHARS]
+        return head, 1, max(len(head.splitlines()), 1)
     selected: set[int] = set()
     for index in matching:
-        selected.update(range(max(0, index - 4), min(len(lines), index + 5)))
+        selected.update(range(max(0, index - 4), min(total, index + 5)))
         if sum(len(lines[item]) + 1 for item in selected) >= _MAX_CONTENT_CHARS:
             break
-    return "\n".join(lines[index] for index in sorted(selected))[:_MAX_CONTENT_CHARS]
+    ordered = sorted(selected)
+    excerpt = "\n".join(lines[index] for index in ordered)[:_MAX_CONTENT_CHARS]
+    return excerpt, ordered[0] + 1, ordered[-1] + 1
+
+
+def _excerpt(text: str, query_tokens: set[str]) -> str:
+    excerpt, _start, _end = _excerpt_with_span(text, query_tokens)
+    return excerpt
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,11 +172,12 @@ class RepositoryCandidateProvider:
             except (OSError, UnicodeDecodeError):
                 continue
             path_tokens = _tokens(path)
-            content = _excerpt(text, query_tokens)
+            content, start_line, end_line = _excerpt_with_span(text, query_tokens)
             if not query_tokens & (path_tokens | _tokens(content)):
                 continue
             structural = 1.0 if query_tokens & path_tokens else 0.35
             token_count = max(1, (len(content) + 3) // 4)
+            trust = _trust_for_path(path)
             items.append(
                 Candidate(
                     id=f"repo:{path}",
@@ -156,7 +187,15 @@ class RepositoryCandidateProvider:
                     provenance=(f"repo:{path}",),
                     structural_score=structural,
                     dedupe_key=path,
-                    metadata=(("path", path), ("kind", "repository-file")),
+                    path=path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    trust=trust,
+                    metadata=(
+                        ("path", path),
+                        ("kind", "repository-file"),
+                        ("trust", trust.value),
+                    ),
                 )
             )
         return tuple(items)
@@ -257,9 +296,10 @@ class HybridRepositoryCandidateProvider:
             path = hit.doc_id.removeprefix("repo:")
             path_tokens = _tokens(path)
             structural = 1.0 if query_tokens & path_tokens else 0.35
-            content = _excerpt(hit.evidence, query_tokens)
+            content, start_line, end_line = _excerpt_with_span(hit.evidence, query_tokens)
             token_count = max(1, (len(content) + 3) // 4)
             semantic = min(1.0, hit.score / norm)
+            trust = _trust_for_path(path)
             items.append(
                 Candidate(
                     id=hit.doc_id,
@@ -270,10 +310,15 @@ class HybridRepositoryCandidateProvider:
                     structural_score=structural,
                     semantic_score=semantic,
                     dedupe_key=path,
+                    path=path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    trust=trust,
                     metadata=(
                         ("path", path),
                         ("kind", "repository-file"),
                         ("retrieval_rank", str(hit.rank)),
+                        ("trust", trust.value),
                     ),
                 )
             )
