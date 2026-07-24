@@ -25,17 +25,17 @@ hybrid. dataset_sha `8e8f6d52…`.
 | Context/RAG: citations, taint, budget modes, BM25-first | merged **#375** (= HEAD) | — | baseline above | held-out end-task success on external repos | implemented / internal |
 | Loop vacuous-pass gate + `ChangeProbe` | merged **#318/#351/#358** | #339 (superseded) | tests on main | swarm-orchestrator port; permissions hint | implemented |
 | Golden path (`run`/`explain`/`doctor`) + release `--check` | **in flight #378** | — | none yet | fresh-user smoke; adapter conformance | (pending) |
-| Shared experiment contracts | **PR #379** (this effort) | — | 13 unit tests | consumed by kernel/envelope/learning | implemented |
-| Experiment kernel (M1) | **PR #381** (stacks #379) | — | 17 unit tests | real-adapter trials; external portfolio | implemented |
-| Complete run envelope (M1) | **PR #382** (stacks #379) | reuses `trace/`+`tool_broker.redaction`+`harness_run.receipt` | 8 unit tests (+46 trace unaffected) | live-run capture at scale | implemented |
-| Eval-gated repository learning (M3) | **PR #383** (stacks #379) | — | 15 unit + challenge sets | wired through memory/loop; held-out promotion | implemented |
+| Shared experiment contracts | **merged #379** | — | 13 unit tests | consumed by kernel/envelope/learning | implemented |
+| Experiment kernel (M1) | **merged #381** | — | 17 unit tests | real-adapter trials; external portfolio | implemented |
+| Complete run envelope (M1) | **merged #382** | reuses `trace/`+`tool_broker.redaction`+`harness_run.receipt` | 8 unit tests (+46 trace unaffected) | live-run capture at scale | implemented |
+| Eval-gated repository learning (M3) | **merged #383** | — | 15 unit + challenge sets | wired through memory/loop; held-out promotion | implemented |
 
-**Integration cross-check (coordinator, independent — not worker self-report):**
-locally stacking #379+#381+#382+#383 merges **conflict-free** (disjoint files by
-design); combined `ruff` + `mypy --strict` (14 files) clean and **53/53** focused
-tests pass together. Merge order must be **#379 first**, then #381/#382/#383. All
-draft, awaiting review + full `quality` CI before any merge (rule 3: green tests
-= implementation-green, not validated; rule 14: no merge without resolved review).
+**Integration (landed 2026-07-24, main `330b77e`).** Merged in order
+#379→#381→#382→#383 via the ruleset lander (update-branch → 7 required checks
+green → squash `--admin`). Re-verified from a **fresh `main` checkout**: `ruff`
+clean, `mypy --strict` clean (14 files), **53/53** focused tests pass. No
+benchmark regression (additive new modules; retrieval baseline unchanged). This
+is `implemented`/`internal` — not yet external or reproducible product evidence.
 | Enforced capability + independent verifier (M4) | advisory only | — | — | broker/proxy enforcement; injection suite | not started |
 | Experiment kernel real adapters + external portfolio (M6) | — | — | — | ≥3 repos, ≥3 trials, CIs, controls | not started |
 
