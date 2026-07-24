@@ -11,6 +11,7 @@ import typer
 from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.harness import RiskLevel
 
+from .budget_modes import BudgetMode, resolve_budget_profile
 from .controller import HarnessController
 from .models import HarnessStatus, RunRequest
 
@@ -63,10 +64,21 @@ def register(app: typer.Typer) -> None:
             str,
             typer.Option("--risk", help="Execution risk: low, medium, high, or critical."),
         ] = RiskLevel.MEDIUM.value,
+        budget_mode: Annotated[
+            str,
+            typer.Option(
+                "--budget-mode",
+                help="Context budget preset: tiny, standard, or deep.",
+            ),
+        ] = BudgetMode.STANDARD.value,
         context_budget: Annotated[
-            int,
-            typer.Option("--context-budget", min=1, help="Maximum context packet tokens."),
-        ] = 4_000,
+            int | None,
+            typer.Option(
+                "--context-budget",
+                min=1,
+                help="Override the budget mode's context-token ceiling.",
+            ),
+        ] = None,
         resume_run_id: Annotated[
             str | None,
             typer.Option("--resume", help="Resume or inspect the durable state for a run ID."),
@@ -91,6 +103,9 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(code=2)
         try:
             resolved_risk = RiskLevel(risk)
+            resolved_mode = BudgetMode(budget_mode)
+            profile = resolve_budget_profile(resolved_mode)
+            resolved_budget = context_budget if context_budget is not None else profile.token_budget
             repo_root = discover_repo_root(Path.cwd())
             request = RunRequest(
                 task=task,
@@ -103,7 +118,8 @@ def register(app: typer.Typer) -> None:
                 max_cost_usd=max_cost_usd,
                 isolation=isolate,
                 risk=resolved_risk,
-                context_budget=context_budget,
+                context_budget=resolved_budget,
+                budget_mode=resolved_mode,
                 resume_run_id=resume_run_id,
             )
             result = HarnessController(repo_root).run(request)

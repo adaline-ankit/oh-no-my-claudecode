@@ -61,6 +61,7 @@ from oh_no_my_claudecode.tool_broker import (
     ToolBroker,
 )
 
+from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
 from .context import HybridRepositoryCandidateProvider
 from .models import (
     ExecutionPlan,
@@ -259,13 +260,31 @@ def _verify_runner_for(repo_root: Path) -> VerifyRunner:
     return _run
 
 
-def default_dependencies(repo_root: Path) -> ControllerDependencies:
-    """Build production dependencies for one repository."""
+def default_dependencies(
+    repo_root: Path, profile: BudgetProfile | None = None
+) -> ControllerDependencies:
+    """Build production dependencies for one repository under *profile*.
+
+    The budget profile pins the planner quality gates + packer strategy and the
+    retriever's ``top_k`` / fusion mode (BM25-first for code by default).
+    """
+    resolved = profile or resolve_budget_profile(BudgetMode.STANDARD)
     runtime_root = repo_root / ".onmc" / "harness-runtime"
     return ControllerDependencies(
         context_engine=ContextEngine(
-            PlannerConfig(min_context_roi=0.00025),
-            candidate_providers=(HybridRepositoryCandidateProvider(repo_root),),
+            PlannerConfig(
+                min_context_roi=resolved.min_context_roi,
+                min_freshness=resolved.min_freshness,
+                min_confidence=resolved.min_confidence,
+                utility_first=resolved.utility_first,
+            ),
+            candidate_providers=(
+                HybridRepositoryCandidateProvider(
+                    repo_root,
+                    top_k=resolved.top_k,
+                    retrieval_mode=resolved.retrieval_mode,
+                ),
+            ),
         ),
         runtime_store=RuntimeStore(runtime_root),
         policy_decider=_default_policy(),
@@ -283,10 +302,27 @@ class HarnessController:
         dependencies: ControllerDependencies | None = None,
     ) -> None:
         self.repo_root = Path(repo_root).resolve()
+        self._injected_dependencies = dependencies
+        # Lazily resolved per request budget mode when not explicitly injected.
         self.dependencies = dependencies or default_dependencies(self.repo_root)
+
+    def _resolve_dependencies(self, request: RunRequest) -> ControllerDependencies:
+        """Bind budget-mode-aware dependencies for this request.
+
+        Injected dependencies (tests) are always honoured verbatim; otherwise
+        the production dependencies are rebuilt for the request's budget mode so
+        ``top_k``, fusion mode, and planner gates match the preset.
+        """
+        if self._injected_dependencies is not None:
+            self.dependencies = self._injected_dependencies
+            return self.dependencies
+        profile = resolve_budget_profile(request.budget_mode)
+        self.dependencies = default_dependencies(self.repo_root, profile)
+        return self.dependencies
 
     def run(self, request: RunRequest) -> HarnessResult:
         """Return a deterministic plan or explicitly execute it."""
+        self._resolve_dependencies(request)
         plan = self.plan(request)
         if not request.execute:
             return HarnessResult(HarnessStatus.PLANNED, plan)
@@ -301,6 +337,7 @@ class HarnessController:
 
     def plan(self, request: RunRequest) -> ExecutionPlan:
         """Build a byte-stable plan without invoking an agent or verifier."""
+        self._resolve_dependencies(request)
         verifier_argv = tuple(shlex.split(request.verifier))
         if not verifier_argv:
             raise ValueError("verifier must contain a command")

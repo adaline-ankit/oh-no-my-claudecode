@@ -235,6 +235,7 @@ class HybridRepositoryCandidateProvider:
     top_k: int = 20
     min_score: float = 0.0
     token_budget: int | None = None
+    retrieval_mode: str = "bm25"  # BM25-first for code; "hybrid"/"dense" opt-in
 
     def candidates(self, query: str, mode: RetrievalMode) -> tuple[Candidate, ...]:
         try:
@@ -283,7 +284,7 @@ class HybridRepositoryCandidateProvider:
             min_score=self.min_score,
             token_budget=self.token_budget,
         )
-        hits = retriever.retrieve(query, k=self.top_k)
+        hits = retriever.retrieve(query, k=self.top_k, mode=self.retrieval_mode)
         if not hits:
             return ()
 
