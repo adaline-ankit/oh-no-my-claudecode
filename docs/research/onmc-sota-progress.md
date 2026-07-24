@@ -36,7 +36,18 @@ green → squash `--admin`). Re-verified from a **fresh `main` checkout**: `ruff
 clean, `mypy --strict` clean (14 files), **53/53** focused tests pass. No
 benchmark regression (additive new modules; retrieval baseline unchanged). This
 is `implemented`/`internal` — not yet external or reproducible product evidence.
-| Enforced capability + independent verifier (M4) | advisory only | — | — | broker/proxy enforcement; injection suite | not started |
+
+**M4 landed (2026-07-24).** `enforcement/` (#385) + `verifier/` (#384) merged via
+the ruleset lander; re-verified fresh `main`: ruff+mypy clean (7 files), **52**
+M4 tests pass, and 131 existing enforcement + 45 verifier tests unaffected. The
+ReferenceMonitor *composes* `tool_broker`/`mcp_trust` (never loosens a broker
+DENY; provenance is recorded but never consulted in a verdict, so injected prose
+cannot flip a decision). Still `implemented`, not external: the monitor and
+verifier are libraries — wiring them into live `onmc run` execution and real
+coverage/mutant-runner adapters is the next behavioral-change workstream.
+| Enforced capability path (M4-E) | **merged #385** — `enforcement/` ReferenceMonitor composes `tool_broker`+`mcp_trust` | — | 21 tests (monitor + injection/attack suite) | live wiring into `onmc run` execution; container isolation profile | implemented |
+| Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
+| Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |
 | Experiment kernel real adapters + external portfolio (M6) | — | — | — | ≥3 repos, ≥3 trials, CIs, controls | not started |
 
 ## Open-PR reconciliation
