@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from oh_no_my_claudecode.codeindex.exclusions import redact_secrets
 from oh_no_my_claudecode.context_engine import Candidate, RetrievalMode, TrustLevel
 from oh_no_my_claudecode.harness_run.repo_signals import (
     CodeOwners,
@@ -118,6 +119,16 @@ def _trust_for_path(path: str) -> TrustLevel:
     if Path(posix).suffix in _UNTRUSTED_EXTENSIONS:
         return TrustLevel.UNTRUSTED
     return TrustLevel.TRUSTED
+
+
+def _trust_after_redaction(base: TrustLevel, redactions: int) -> TrustLevel:
+    """A file that carried inline secrets is treated as untrusted."""
+    return TrustLevel.UNTRUSTED if redactions > 0 else base
+
+
+def _redaction_metadata(redactions: int) -> tuple[tuple[str, str], ...]:
+    """Metadata recording how many secrets were masked (omitted when none)."""
+    return (("redacted", str(redactions)),) if redactions > 0 else ()
 
 
 def _excerpt_with_span(text: str, query_tokens: set[str]) -> tuple[str, int, int]:
@@ -224,10 +235,11 @@ class RepositoryCandidateProvider:
             content, start_line, end_line = _excerpt_with_span(text, query_tokens)
             if not query_tokens & (path_tokens | _tokens(content)):
                 continue
+            content, redactions = redact_secrets(content)
             structural = 1.0 if query_tokens & path_tokens else 0.35
             structural = signals.structural_boost(path, structural)
             token_count = max(1, (len(content) + 3) // 4)
-            trust = _trust_for_path(path)
+            trust = _trust_after_redaction(_trust_for_path(path), redactions)
             items.append(
                 Candidate(
                     id=f"repo:{path}",
@@ -245,6 +257,7 @@ class RepositoryCandidateProvider:
                         ("path", path),
                         ("kind", "repository-file"),
                         ("trust", trust.value),
+                        *_redaction_metadata(redactions),
                         *signals.metadata_for(path),
                     ),
                 )
@@ -351,9 +364,10 @@ class HybridRepositoryCandidateProvider:
             structural = 1.0 if query_tokens & path_tokens else 0.35
             structural = signals.structural_boost(path, structural)
             content, start_line, end_line = _excerpt_with_span(hit.evidence, query_tokens)
+            content, redactions = redact_secrets(content)
             token_count = max(1, (len(content) + 3) // 4)
             semantic = min(1.0, hit.score / norm)
-            trust = _trust_for_path(path)
+            trust = _trust_after_redaction(_trust_for_path(path), redactions)
             items.append(
                 Candidate(
                     id=hit.doc_id,
@@ -373,6 +387,7 @@ class HybridRepositoryCandidateProvider:
                         ("kind", "repository-file"),
                         ("retrieval_rank", str(hit.rank)),
                         ("trust", trust.value),
+                        *_redaction_metadata(redactions),
                         *signals.metadata_for(path),
                     ),
                 )
