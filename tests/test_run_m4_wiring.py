@@ -169,3 +169,13 @@ def test_no_monitor_and_no_checker_is_behavior_preserving(tmp_path: Path) -> Non
     assert result.status is HarnessStatus.COMPLETED
     assert result.verified is True
     assert result.enforcement_trace == ()
+
+
+def test_default_dependencies_monitor_is_enforced_by_default(tmp_path: Path) -> None:
+    # Production wiring now enforces: the default monitor blocks denied effects.
+    from oh_no_my_claudecode.harness_run.controller import default_dependencies
+
+    deps = default_dependencies(tmp_path)
+    assert deps.reference_monitor_factory is not None
+    monitor = deps.reference_monitor_factory()
+    assert monitor.enforced is True
