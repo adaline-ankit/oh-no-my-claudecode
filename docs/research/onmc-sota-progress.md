@@ -83,10 +83,47 @@ surfaces Codex is not on** (`experiment/`, `learning/`, additive `trace/`
 files) and freezes shared contracts (#379) rather than re-implementing merged
 P0 work.
 
+## Wave 3 — non-paid infrastructure complete (2026-07-24, main `508a129`)
+
+All buildable (non-paid) blueprint infrastructure is now on `main`, additive and
+green:
+
+| PR | Capability | Evidence |
+|---|---|---|
+| #387/#388 | M4 monitor + verifier **wired into `onmc run`** (advisory default; enforced-DENY blocks; verifier false-green downgrade) | 5 wiring tests; 44 harness tests unchanged |
+| #389 | enforced-**viable** monitor policy (`_monitor_policy`: repo-scoped fs + verifier cmd allowed) + headless-writable claude adapter | enables real enforced mode |
+| #390 | M3 **live** — opt-in gated memory ingestion through the promotion gate (no active memory without a promotion record) | 10 tests |
+| #391 | M4-F **adapters** — coverage → reachability + subprocess mutant-runner (plug into the `verifier_false_green_check` seam) | 15 tests |
+| #392 | M6 **harness** — external-portfolio runner + audited corpus schema, fixture-tested, **zero paid calls** (`CliAgentAdapter` raises `CredentialsRequiredError`) | 17 tests |
+
+Fresh-`main` re-verify: ruff + `mypy --strict` clean (18 files), **153 mission
+tests pass**. No benchmark regression (retrieval baseline unchanged).
+
+## M6 handoff — the one boundary autonomy cannot cross
+
+M6 external proof is **built and ready to run** but deliberately **not executed
+autonomously**, for two hard reasons:
+
+1. **Cost** — a real portfolio (≥3 repos × ≥3 trials × 3 conditions ≈ 270 live
+   agent runs ≈ **~$100+**) exceeds the blueprint's ">$10 → estimate + approve"
+   rule.
+2. **Credentials** — real runs need agent CLIs + API keys, which are never
+   entered autonomously.
+
+To run it: populate a **VALID-audited** corpus (real external-repo tasks with
+leakage metadata), implement `CliAgentAdapter` against the agent CLIs with
+credentials present, and invoke `PortfolioRunner`. Results are labeled `external`
+**only** when `audit_status == VALID` and `trials > 1`; otherwise they stay
+`internal`. Until then every claim in this doc is `implemented` / `internal` —
+**no "SOTA" or "improves Claude Code" claim is made.**
+
 ## Reproduce
 
 ```bash
 uv sync
 uv run onmc retrieval-eval --split code --json   # re-measure the baseline
-uv run pytest tests/test_experiment_contracts.py -q
+uv run pytest tests/test_experiment_contracts.py tests/test_experiment_kernel.py \
+  tests/test_experiment_portfolio.py tests/test_learning_gate.py \
+  tests/test_learning_ingest.py tests/test_enforcement_monitor.py \
+  tests/test_verifier_adapters.py tests/test_run_m4_wiring.py -q
 ```
