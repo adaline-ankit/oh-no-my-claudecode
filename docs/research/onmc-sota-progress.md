@@ -26,9 +26,16 @@ hybrid. dataset_sha `8e8f6d52…`.
 | Loop vacuous-pass gate + `ChangeProbe` | merged **#318/#351/#358** | #339 (superseded) | tests on main | swarm-orchestrator port; permissions hint | implemented |
 | Golden path (`run`/`explain`/`doctor`) + release `--check` | **in flight #378** | — | none yet | fresh-user smoke; adapter conformance | (pending) |
 | Shared experiment contracts | **PR #379** (this effort) | — | 13 unit tests | consumed by kernel/envelope/learning | implemented |
-| Experiment kernel (M1) | PR (feat/sota-experiment-kernel) | — | unit tests | real-adapter trials; external portfolio | implemented |
-| Complete run envelope (M1) | PR (feat/sota-run-envelope) | reuses `trace/` | unit tests | live-run capture at scale | implemented |
-| Eval-gated repository learning (M3) | PR (feat/sota-learning-gate) | — | unit + challenge sets | wired through memory/loop; held-out promotion | implemented |
+| Experiment kernel (M1) | **PR #381** (stacks #379) | — | 17 unit tests | real-adapter trials; external portfolio | implemented |
+| Complete run envelope (M1) | **PR #382** (stacks #379) | reuses `trace/`+`tool_broker.redaction`+`harness_run.receipt` | 8 unit tests (+46 trace unaffected) | live-run capture at scale | implemented |
+| Eval-gated repository learning (M3) | **PR #383** (stacks #379) | — | 15 unit + challenge sets | wired through memory/loop; held-out promotion | implemented |
+
+**Integration cross-check (coordinator, independent — not worker self-report):**
+locally stacking #379+#381+#382+#383 merges **conflict-free** (disjoint files by
+design); combined `ruff` + `mypy --strict` (14 files) clean and **53/53** focused
+tests pass together. Merge order must be **#379 first**, then #381/#382/#383. All
+draft, awaiting review + full `quality` CI before any merge (rule 3: green tests
+= implementation-green, not validated; rule 14: no merge without resolved review).
 | Enforced capability + independent verifier (M4) | advisory only | — | — | broker/proxy enforcement; injection suite | not started |
 | Experiment kernel real adapters + external portfolio (M6) | — | — | — | ≥3 repos, ≥3 trials, CIs, controls | not started |
 
