@@ -158,6 +158,69 @@ _SECRET_CONTENT_RE = re.compile(
 # Maximum bytes to scan for content-based secret detection.
 _SECRET_SCAN_BYTES = 4096
 
+# Placeholder substituted for redacted secret material.
+REDACTION_PLACEHOLDER = "***redacted-secret***"
+
+# Standalone high-signal credential token shapes (provider key prefixes, JWTs).
+# Conservative: each shape is specific enough that false positives on ordinary
+# code are rare.
+_SECRET_TOKEN_RE = re.compile(
+    r"""(?x)
+    (
+        sk-[A-Za-z0-9]{16,}                         # OpenAI-style
+      | gh[pousr]_[A-Za-z0-9]{20,}                  # GitHub tokens
+      | github_pat_[A-Za-z0-9_]{20,}                # GitHub fine-grained PAT
+      | xox[baprs]-[A-Za-z0-9-]{10,}                # Slack tokens
+      | AKIA[0-9A-Z]{16}                            # AWS access key id
+      | AIza[0-9A-Za-z_\-]{30,}                     # Google API key
+      | eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}  # JWT
+    )
+    """
+)
+
+# PEM private-key blocks (redact the whole body, keep the framing readable).
+_PEM_BLOCK_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
+
+
+def redact_secrets(text: str) -> tuple[str, int]:
+    """Mask secret material in *text*, returning ``(redacted_text, count)``.
+
+    Redacts three shapes without dropping surrounding context:
+    - ``key = "value"`` assignments (api_key/password/token/… ) — the *value*
+      is replaced, the key name is kept so the context still reads sensibly.
+    - Standalone provider tokens / JWTs anywhere in a line.
+    - PEM ``PRIVATE KEY`` blocks (body replaced by the placeholder).
+
+    Deterministic and side-effect free. ``count`` is the number of redactions
+    applied (0 when the text is clean).
+    """
+    count = 0
+
+    def _assign_sub(match: re.Match[str]) -> str:
+        nonlocal count
+        count += 1
+        return match.group(0).replace(match.group(1), REDACTION_PLACEHOLDER)
+
+    redacted = _SECRET_CONTENT_RE.sub(_assign_sub, text)
+
+    def _token_sub(_match: re.Match[str]) -> str:
+        nonlocal count
+        count += 1
+        return REDACTION_PLACEHOLDER
+
+    redacted = _SECRET_TOKEN_RE.sub(_token_sub, redacted)
+
+    def _pem_sub(_match: re.Match[str]) -> str:
+        nonlocal count
+        count += 1
+        return f"-----BEGIN PRIVATE KEY-----\n{REDACTION_PLACEHOLDER}\n-----END PRIVATE KEY-----"
+
+    redacted = _PEM_BLOCK_RE.sub(_pem_sub, redacted)
+    return redacted, count
+
 
 def is_excluded_dir(dirname: str) -> bool:
     """Return True if a directory name should never be walked."""

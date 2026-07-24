@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 from oh_no_my_claudecode.context_engine import EvidencePacket
 from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
+from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode
 
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
@@ -42,6 +43,7 @@ class RunRequest:
     isolation: bool = False
     risk: RiskLevel = RiskLevel.MEDIUM
     context_budget: int = 4_000
+    budget_mode: BudgetMode = BudgetMode.STANDARD
     resume_run_id: str | None = None
 
     def __post_init__(self) -> None:
@@ -63,6 +65,8 @@ class RunRequest:
             raise ValueError("context_budget must be positive")
         if not isinstance(self.risk, RiskLevel):
             raise ValueError("risk must be a RiskLevel")
+        if not isinstance(self.budget_mode, BudgetMode):
+            raise ValueError("budget_mode must be a BudgetMode")
 
 
 @dataclass(frozen=True, slots=True)

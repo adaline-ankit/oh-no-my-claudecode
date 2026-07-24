@@ -70,7 +70,28 @@ def _build_retriever(corpus: list[CodeCorpusEntry]) -> HybridRetriever:
     return HybridRetriever(doc_ids=doc_ids, texts=texts, evidence_texts=evidence)
 
 
-class CodeLexicalAdapter(BaselineAdapter):
+def _token_map(corpus: list[CodeCorpusEntry]) -> dict[str, int]:
+    """Per-chunk token estimate (~chars/4) for context-token accounting."""
+    return {e.id: max(1, len(e.content) // 4) for e in corpus}
+
+
+class _CodeAdapterBase(BaselineAdapter):
+    """Shared corpus + real context-token accounting for code adapters."""
+
+    def __init__(self) -> None:
+        self._retriever: HybridRetriever | None = None
+        self._tokens: dict[str, int] = {}
+
+    def context_tokens(self, ranked_ids: list[str]) -> int:
+        """Sum the real per-chunk token estimates for the retrieved chunks."""
+        return sum(self._tokens.get(doc_id, 0) for doc_id in ranked_ids)
+
+    def teardown(self) -> None:
+        self._retriever = None
+        self._tokens = {}
+
+
+class CodeLexicalAdapter(_CodeAdapterBase):
     """BM25-only adapter for the ``"code-bm25"`` evaluation surface.
 
     Indexes all code corpus chunks with BM25 and scores the 40 labeled
@@ -82,12 +103,11 @@ class CodeLexicalAdapter(BaselineAdapter):
 
     surface_name = "code-bm25"
 
-    def __init__(self) -> None:
-        self._retriever: HybridRetriever | None = None
-
     def setup(self, dataset: CodeRetrievalDataset) -> None:  # type: ignore[override]
         """Build BM25 index over all code corpus chunks."""
-        self._retriever = _build_retriever(list(dataset.corpus))
+        corpus = list(dataset.corpus)
+        self._retriever = _build_retriever(corpus)
+        self._tokens = _token_map(corpus)
 
     def retrieve(self, query: str, k: int) -> list[str]:
         """Return up to *k* chunk IDs ranked by BM25 score (lexical only)."""
@@ -96,11 +116,8 @@ class CodeLexicalAdapter(BaselineAdapter):
         hits = self._retriever.retrieve(query, k, mode="bm25")
         return [h.doc_id for h in hits]
 
-    def teardown(self) -> None:
-        self._retriever = None
 
-
-class CodeHybridAdapter(BaselineAdapter):
+class CodeHybridAdapter(_CodeAdapterBase):
     """BM25 + dense + RRF adapter for the ``"code-hybrid"`` evaluation surface.
 
     Identical corpus to :class:`CodeLexicalAdapter` but uses full hybrid
@@ -114,12 +131,11 @@ class CodeHybridAdapter(BaselineAdapter):
 
     surface_name = "code-hybrid"
 
-    def __init__(self) -> None:
-        self._retriever: HybridRetriever | None = None
-
     def setup(self, dataset: CodeRetrievalDataset) -> None:  # type: ignore[override]
         """Build BM25 + dense index over all code corpus chunks."""
-        self._retriever = _build_retriever(list(dataset.corpus))
+        corpus = list(dataset.corpus)
+        self._retriever = _build_retriever(corpus)
+        self._tokens = _token_map(corpus)
 
     def retrieve(self, query: str, k: int) -> list[str]:
         """Return up to *k* chunk IDs ranked by BM25+dense+RRF score."""
@@ -127,9 +143,6 @@ class CodeHybridAdapter(BaselineAdapter):
             return []
         hits = self._retriever.retrieve(query, k, mode="hybrid")
         return [h.doc_id for h in hits]
-
-    def teardown(self) -> None:
-        self._retriever = None
 
 
 def code_adapters() -> list[BaselineAdapter]:
