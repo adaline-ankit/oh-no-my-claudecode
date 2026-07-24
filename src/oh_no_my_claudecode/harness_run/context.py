@@ -17,8 +17,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from oh_no_my_claudecode.context_engine import Candidate, RetrievalMode, TrustLevel
+from oh_no_my_claudecode.harness_run.repo_signals import (
+    CodeOwners,
+    changed_paths,
+    detect_conventions,
+)
 from oh_no_my_claudecode.ingest.repo_tree import scan_repository_files
 from oh_no_my_claudecode.retrieval import HybridRetriever
+
+# Bounded relevance boost applied to files with uncommitted changes so
+# retrieval is git-diff-aware (what the developer is editing is likely relevant).
+_DIFF_BOOST = 0.25
+_MANIFEST_NAMES = frozenset(
+    {"pyproject.toml", "package.json", "go.mod", "Cargo.toml", "pom.xml", "Gemfile", "setup.py"}
+)
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
 _TEXT_EXTENSIONS = frozenset(
@@ -139,6 +151,42 @@ def _excerpt(text: str, query_tokens: set[str]) -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class _RepoSignals:
+    """Precomputed, repo-wide signals shared across all candidates in one call."""
+
+    changed: frozenset[str]
+    owners: CodeOwners
+    conventions: str
+
+    @classmethod
+    def collect(cls, root: Path) -> _RepoSignals:
+        conv = detect_conventions(root)
+        return cls(
+            changed=changed_paths(root),
+            owners=CodeOwners.load(root),
+            conventions=";".join(f"{key}={value}" for key, value in conv),
+        )
+
+    def structural_boost(self, path: str, structural: float) -> float:
+        """Apply the git-diff boost when *path* has uncommitted changes."""
+        if path in self.changed:
+            return min(1.0, structural + _DIFF_BOOST)
+        return structural
+
+    def metadata_for(self, path: str) -> tuple[tuple[str, str], ...]:
+        """Ownership / diff / convention metadata for *path* (unique keys)."""
+        extra: list[tuple[str, str]] = []
+        if path in self.changed:
+            extra.append(("changed", "true"))
+        owners = self.owners.owners_for(path)
+        if owners:
+            extra.append(("owners", ",".join(owners)))
+        if self.conventions and Path(path).name in _MANIFEST_NAMES:
+            extra.append(("conventions", self.conventions))
+        return tuple(extra)
+
+
+@dataclass(frozen=True, slots=True)
 class RepositoryCandidateProvider:
     """Build bounded, cited candidates from safe text files in one repository."""
 
@@ -149,6 +197,7 @@ class RepositoryCandidateProvider:
         root = self.repo_root.resolve()
         query_tokens = _tokens(query)
         records = scan_repository_files(root, exclude_dirs=_EXCLUDED_DIRS)
+        signals = _RepoSignals.collect(root)
         items: list[Candidate] = []
         for record in records:
             if len(items) >= _MAX_CANDIDATES:
@@ -176,6 +225,7 @@ class RepositoryCandidateProvider:
             if not query_tokens & (path_tokens | _tokens(content)):
                 continue
             structural = 1.0 if query_tokens & path_tokens else 0.35
+            structural = signals.structural_boost(path, structural)
             token_count = max(1, (len(content) + 3) // 4)
             trust = _trust_for_path(path)
             items.append(
@@ -195,6 +245,7 @@ class RepositoryCandidateProvider:
                         ("path", path),
                         ("kind", "repository-file"),
                         ("trust", trust.value),
+                        *signals.metadata_for(path),
                     ),
                 )
             )
@@ -291,12 +342,14 @@ class HybridRepositoryCandidateProvider:
         query_tokens = _tokens(query)
         top_score = hits[0].score
         norm = top_score if top_score > 0.0 else 1.0
+        signals = _RepoSignals.collect(root)
 
         items: list[Candidate] = []
         for hit in hits:
             path = hit.doc_id.removeprefix("repo:")
             path_tokens = _tokens(path)
             structural = 1.0 if query_tokens & path_tokens else 0.35
+            structural = signals.structural_boost(path, structural)
             content, start_line, end_line = _excerpt_with_span(hit.evidence, query_tokens)
             token_count = max(1, (len(content) + 3) // 4)
             semantic = min(1.0, hit.score / norm)
@@ -320,6 +373,7 @@ class HybridRepositoryCandidateProvider:
                         ("kind", "repository-file"),
                         ("retrieval_rank", str(hit.rank)),
                         ("trust", trust.value),
+                        *signals.metadata_for(path),
                     ),
                 )
             )
