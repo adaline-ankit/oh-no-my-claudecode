@@ -233,6 +233,12 @@ def _parse_claude_json(raw: str) -> tuple[str, int | None, float | None]:
     return text, tokens, cost_usd
 
 
+#: Claude `-p` result subtypes that set is_error=true but are *soft* — the run
+#: may have applied useful edits (ran out of turns, or a non-edit tool blocked).
+#: These are not fatal agent errors; ONMC's own verifier grades the outcome.
+_CLAUDE_SOFT_SUBTYPES = frozenset({"error_max_turns", "error_during_execution"})
+
+
 def _detect_claude_error(raw: str) -> str | None:
     """Return an error message when the Claude CLI JSON signals an API failure.
 
@@ -258,13 +264,24 @@ def _detect_claude_error(raw: str) -> str | None:
         return None
 
     api_status = data.get("api_error_status")
-    if data.get("is_error") is True or (api_status not in (None, 0, False)):
+    api_failure = api_status not in (None, 0, False)
+    # Claude also sets is_error=true for *soft* terminal subtypes (ran out of
+    # turns, or a non-edit tool was blocked under acceptEdits). Those runs often
+    # still applied useful edits, so treating them as a fatal agent error hides
+    # real work from ONMC's own verifier and trips the loop's repeated-error
+    # breaker. Grade the repository outcome, not the agent's completion state:
+    # only genuine API/auth failures are fatal here; soft subtypes flow through
+    # so the independent verifier decides.
+    hard_is_error = (
+        data.get("is_error") is True and data.get("subtype") not in _CLAUDE_SOFT_SUBTYPES
+    )
+    if api_failure or hard_is_error:
         # Prefer the human-readable result/error text; fall back to the status.
         for key in ("result", "error", "message"):
             val = data.get(key)
             if isinstance(val, str) and val.strip():
                 return val.strip()
-        if api_status not in (None, 0, False):
+        if api_failure:
             return f"Claude API error (status {api_status})"
         return "Claude reported is_error=true with no message"
     return None
