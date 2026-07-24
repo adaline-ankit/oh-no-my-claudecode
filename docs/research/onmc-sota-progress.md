@@ -29,6 +29,7 @@ hybrid. dataset_sha `8e8f6d52…`.
 | Experiment kernel (M1) | **merged #381** | — | 17 unit tests | real-adapter trials; external portfolio | implemented |
 | Complete run envelope (M1) | **merged #382** | reuses `trace/`+`tool_broker.redaction`+`harness_run.receipt` | 8 unit tests (+46 trace unaffected) | live-run capture at scale | implemented |
 | Eval-gated repository learning (M3) | **merged #383** | — | 15 unit + challenge sets | wired through memory/loop; held-out promotion | implemented |
+| **`onmc run` vertical wiring** (monitor + verifier live) | **merged #387** | — | 5 wiring tests + 44 harness unchanged | live wiring of real adapters + enforced-by-default where safe | implemented / wired |
 
 **Integration (landed 2026-07-24, main `330b77e`).** Merged in order
 #379→#381→#382→#383 via the ruleset lander (update-branch → 7 required checks
@@ -45,7 +46,18 @@ DENY; provenance is recorded but never consulted in a verdict, so injected prose
 cannot flip a decision). Still `implemented`, not external: the monitor and
 verifier are libraries — wiring them into live `onmc run` execution and real
 coverage/mutant-runner adapters is the next behavioral-change workstream.
-| Enforced capability path (M4-E) | **merged #385** — `enforcement/` ReferenceMonitor composes `tool_broker`+`mcp_trust` | — | 21 tests (monitor + injection/attack suite) | live wiring into `onmc run` execution; container isolation profile | implemented |
+
+**M4 wired into `onmc run` (#387, main `82f6ad7`).** The `ReferenceMonitor` now
+runs on every executing run — guarding the observed change-set effects and
+recording its decision trace on `HarnessResult.enforcement_trace` — and the
+independent verifier is folded into `proof_complete` as an extra false-green
+gate. **Additive and behavior-preserving by default:** advisory monitor (records,
+never blocks) + dormant verifier (no-op without coverage/contract evidence), so
+the 44 existing harness tests are unchanged; 5 new wiring tests prove advisory
+recording, enforced-mode blocking (opt-in → `BLOCKED`, never verified), and a
+false-green downgrade. Enforced enforcement + real coverage/mutant adapters
+remain opt-in/next. Still `implemented`/`internal`.
+| Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |
 | Experiment kernel real adapters + external portfolio (M6) | — | — | — | ≥3 repos, ≥3 trials, CIs, controls | not started |
