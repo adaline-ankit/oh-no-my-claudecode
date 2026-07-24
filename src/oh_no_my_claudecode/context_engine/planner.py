@@ -38,6 +38,8 @@ class PlannerConfig:
     max_graph_depth: int = 2
     max_graph_nodes: int = 32
     freshness_weight: float = 0.2
+    min_confidence: float = 0.0
+    utility_first: bool = False
 
     def __post_init__(self) -> None:
         if self.min_context_roi < 0:
@@ -48,6 +50,8 @@ class PlannerConfig:
             raise ValueError("graph bounds must be non-negative and non-zero")
         if not 0.0 <= self.freshness_weight <= 1.0:
             raise ValueError("freshness_weight must be between 0 and 1")
+        if self.min_confidence < 0:
+            raise ValueError("min_confidence must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +134,15 @@ class ContextEngine:
             citations = duplicate_citations.by_winner[item.id]
             ranked.append(_Ranked(item, score, roi, depth, signals, citations))
 
-        ranked.sort(key=lambda item: (-item.score, -item.roi, item.candidate.id))
+        # Packing order. Default: relevance-first (absolute score), ROI as
+        # tiebreak — preserves historical behaviour.  ``utility_first`` selects
+        # a marginal-utility (utility-per-token) greedy knapsack: highest ROI
+        # first, so the budget buys the most relevance per token.  Both are
+        # deterministic (candidate id breaks ties).
+        if self.config.utility_first:
+            ranked.sort(key=lambda item: (-item.roi, -item.score, item.candidate.id))
+        else:
+            ranked.sort(key=lambda item: (-item.score, -item.roi, item.candidate.id))
         packed: list[Evidence] = []
         used = 0
         for ranked_item in ranked:
@@ -151,8 +163,14 @@ class ContextEngine:
                     signals=ranked_item.signals,
                     citations=ranked_item.citations,
                     metadata=ranked_item.candidate.metadata,
+                    trust=ranked_item.candidate.trust,
                 )
             )
+
+        # Confidence = strongest packed relevance score; low_confidence gates an
+        # explicit "weak evidence" result even when some context was packed.
+        confidence = _stable_float(max((item.score for item in packed), default=0.0))
+        low_confidence = not packed or confidence < self.config.min_confidence
 
         return EvidencePacket(
             query=query,
@@ -162,6 +180,8 @@ class ContextEngine:
             evidence=tuple(packed),
             exclusions=tuple(exclusions[key] for key in sorted(exclusions)),
             no_op=not packed,
+            confidence=confidence,
+            low_confidence=low_confidence,
         )
 
     def _scope(
@@ -258,7 +278,19 @@ class ContextEngine:
             )
             winner = group[0]
             winners.append(winner)
-            citations = [Citation(item.id, item.source, item.provenance) for item in group]
+            citations = [
+                Citation(
+                    candidate_id=item.id,
+                    source=item.source,
+                    provenance=item.provenance,
+                    path=item.path,
+                    symbol=item.symbol,
+                    start_line=item.start_line,
+                    end_line=item.end_line,
+                    trust=item.trust,
+                )
+                for item in group
+            ]
             by_winner[winner.id] = tuple(
                 sorted(citations, key=lambda citation: (citation.source, citation.candidate_id))
             )
