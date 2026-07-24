@@ -407,6 +407,21 @@ def _verify_output_head(output: str, *, chars: int = 200) -> str:
     return output[:chars]
 
 
+#: Markers a verify runner prepends when the command could not RUN (as opposed
+#: to running and failing). These signal a verifier-infrastructure problem, not
+#: a test result, so the loop stops with a distinct ``verifier-unavailable``.
+_VERIFIER_UNAVAILABLE_PREFIXES = ("[verify error:", "[verify timed out]")
+
+
+def _verifier_unavailable(output: str) -> bool:
+    """True when the verify output signals the command could not run at all.
+
+    Uses a leading-marker check (not substring) so a test that merely prints one
+    of these phrases is never misclassified as an infrastructure failure.
+    """
+    return output.lstrip().startswith(_VERIFIER_UNAVAILABLE_PREFIXES)
+
+
 def run_loop(
     storage: SQLiteStorage,
     repo_root: Path,
@@ -493,7 +508,8 @@ def run_loop(
     LoopResult
         stop_reason is one of:
         'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
-        'wall-time' | 'duplicate-action' | 'repeated-error' | 'no-changes' |
+        'wall-time' | 'duplicate-action' | 'repeated-error' | 'verifier-unavailable' |
+        'no-changes' |
         'aborted' | 'agent-error'.
     """
     import logging as _logging
@@ -707,6 +723,34 @@ def run_loop(
 
         # Verify.
         verify_outcome: VerifyOutcome = verify_runner(config.verify_command)
+
+        # --- Verifier-infrastructure failure ---
+        # The verify command could not RUN (missing test runner, command not
+        # found, timeout) — distinct from "tests failed". Treating it as a normal
+        # loss makes the identical error repeat until the repeated-error breaker
+        # fires, hiding the real cause and burning iterations/cost. Stop loudly
+        # with a distinct, actionable reason instead (truth: record the real
+        # failure, never mislabel infra as agent failure or a test result).
+        if _verifier_unavailable(verify_outcome.output):
+            infra_contract = IterationContract(
+                iteration=i,
+                prediction=agent_result.prediction,
+                action_summary=agent_result.output[:400],
+                files_touched=list(agent_result.files_touched),
+                verify_passed=False,
+                verify_output=verify_outcome.output[:_MAX_VERIFY_OUTPUT],
+                outcome="loss",
+                tokens=agent_result.tokens,
+            )
+            iterations.append(infra_contract)
+            # Still record the dead-end: a verifier that cannot run (missing
+            # runner, timeout) is worth remembering so the next attempt does not
+            # repeat the same unrunnable verification.
+            mid = _record_loss(storage, spec.goal, infra_contract, ref_now)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
+            _save_checkpoint()
+            return _make_result(False, "verifier-unavailable")
 
         # --- Vacuous-pass gate ---
         # Determine whether the agent actually changed the working tree.  A

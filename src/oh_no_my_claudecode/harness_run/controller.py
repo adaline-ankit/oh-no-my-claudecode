@@ -349,6 +349,21 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
             )
 
 
+def _runner_module_missing(argv: list[str], output: str) -> bool:
+    """True when ``python -m <mod>`` failed because <mod> is not importable.
+
+    Distinguishes a missing test-runner (infrastructure) from a real test
+    failure so the loop can report it distinctly rather than looping on it.
+    """
+    if "-m" not in argv:
+        return False
+    idx = argv.index("-m")
+    if idx + 1 >= len(argv):
+        return False
+    module = argv[idx + 1].split(".", 1)[0]
+    return f"No module named {module}" in output or f"No module named '{module}'" in output
+
+
 def _verify_runner_for(repo_root: Path) -> VerifyRunner:
     """Return an argv-only verifier bound to the execution worktree."""
 
@@ -364,10 +379,17 @@ def _verify_runner_for(repo_root: Path) -> VerifyRunner:
                 text=True,
                 timeout=120,
             )
-            return VerifyOutcome(
-                completed.returncode == 0,
-                (completed.stdout + completed.stderr)[:2000],
-            )
+            combined = (completed.stdout + completed.stderr)[:2000]
+            # `python -m <mod>` where the runner module itself is not installed
+            # is an infrastructure failure, not a test result. Flag it as a
+            # verify error so the loop stops with `verifier-unavailable` instead
+            # of looping on an identical, misleading "test failure".
+            if completed.returncode != 0 and _runner_module_missing(argv, combined):
+                return VerifyOutcome(
+                    False,
+                    f"[verify error: verify command could not run — {combined.strip()[:300]}]",
+                )
+            return VerifyOutcome(completed.returncode == 0, combined)
         except subprocess.TimeoutExpired:
             return VerifyOutcome(False, "[verify timed out]")
         except (OSError, ValueError) as exc:
