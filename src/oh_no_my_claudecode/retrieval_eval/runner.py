@@ -28,6 +28,10 @@ from oh_no_my_claudecode.retrieval_eval.metrics import (
     recall_at_k,
 )
 
+# Protocol for cases accepted by _score_surface — any object with these fields.
+# Both EvalCase and CodeEvalCase satisfy this at runtime.
+_CaseLike = Any
+
 # Type alias for a retrieve callable: (query: str, k: int) -> list[ranked_ids]
 RetrieveFn = Callable[[str, int], list[str]]
 
@@ -298,5 +302,55 @@ def run_evaluation(
 
     return RetrievalReport(
         dataset_sha=dataset.dataset_sha,
+        surface_reports=surface_reports,
+    )
+
+
+def run_code_evaluation(
+    adapters: list[BaselineAdapter],
+    *,
+    k: int = 10,
+) -> RetrievalReport:
+    """Run the evaluation harness over the frozen CODE retrieval split.
+
+    Loads ``datasets/retrieval_code_v1.json`` and scores each adapter against
+    its surface (``"code-bm25"`` or ``"code-hybrid"``).  Both
+    :class:`~oh_no_my_claudecode.retrieval_eval.code_adapters.CodeLexicalAdapter`
+    and
+    :class:`~oh_no_my_claudecode.retrieval_eval.code_adapters.CodeHybridAdapter`
+    implement the same interface as :class:`BaselineAdapter` and can be passed
+    here.
+
+    Args:
+        adapters: List of :class:`BaselineAdapter` instances to evaluate.
+            Typically ``code_adapters()`` from
+            :mod:`oh_no_my_claudecode.retrieval_eval.code_adapters`.
+        k: Maximum rank cutoff for retrieval (used for all metrics).
+
+    Returns:
+        A :class:`RetrievalReport` with per-surface aggregate metrics,
+        dataset_sha set to the code dataset SHA.
+    """
+    from oh_no_my_claudecode.retrieval_eval.code_dataset import load_code_dataset  # noqa: PLC0415
+
+    code_dataset = load_code_dataset(verify_sha=True)
+    surface_reports: list[SurfaceReport] = []
+
+    for adapter in adapters:
+        cases = code_dataset.cases_for_surface(adapter.surface_name)
+        if not cases:
+            sr = SurfaceReport(
+                surface_name=adapter.surface_name,
+                skipped=True,
+                skip_reason=f"no cases for surface '{adapter.surface_name}' in code dataset",
+            )
+            surface_reports.append(sr)
+            continue
+        # _score_surface works with any cases duck-typed like EvalCase.
+        sr = _score_surface(adapter, cases, code_dataset, k)  # type: ignore[arg-type]
+        surface_reports.append(sr)
+
+    return RetrievalReport(
+        dataset_sha=code_dataset.dataset_sha,
         surface_reports=surface_reports,
     )
