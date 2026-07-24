@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     )
     from oh_no_my_claudecode.profile.compiler import UserProfile
     from oh_no_my_claudecode.recall.compiler import RecallResult
-    from oh_no_my_claudecode.release import ReleaseDraft
+    from oh_no_my_claudecode.release import ReleaseDraft, ReleaseValidation
     from oh_no_my_claudecode.replay.models import ReplayComparison, ReplayReport
     from oh_no_my_claudecode.reuse.astgrep import StructuralMatch
     from oh_no_my_claudecode.reuse.radar import ReuseHit
@@ -476,6 +476,56 @@ class OnmcService:
             global_settings_path=user_settings_path(home),
         )
         return self.hooks_status(home=home)
+
+    def uninstall_all(self, *, home: Path | None = None) -> dict[str, object]:
+        """Remove every onmc integration from this repo in one safe pass.
+
+        The clean inverse of the ``setup`` → ``wrap``/``slash`` golden path:
+
+        - base onmc hooks + MCP registration (``uninstall_claude_hooks``),
+        - the ``onmc wrap`` layer hooks (``uninstall_wrap_hooks``),
+        - the wrap CLAUDE.md stanza and ``.onmc/wrap.json`` state,
+        - onmc-generated project slash-command files.
+
+        Each step only removes onmc-authored entries — user hooks, servers,
+        CLAUDE.md prose, and hand-written commands are left untouched. Safe to
+        run when nothing is installed (every step is a no-op) and safe to run
+        repeatedly. The ``.claude/settings.json.onmc-backup`` is intentionally
+        kept as a recovery artifact. Returns a summary of what was removed.
+        """
+        from oh_no_my_claudecode.hooks.installer import (
+            uninstall_claude_hooks,
+            uninstall_wrap_hooks,
+        )
+        from oh_no_my_claudecode.slash.installer import (
+            commands_dir,
+            uninstall_slash_commands,
+        )
+        from oh_no_my_claudecode.wrap.state import (
+            remove_claude_md_stanza,
+            remove_wrap_state,
+        )
+
+        repo_root = discover_repo_root(self.cwd)
+        # Remove the wrap layer first so its flag reflects reality — the base
+        # uninstall below also strips the wrap commands (they are onmc hooks),
+        # which would otherwise make this report a no-op.
+        wrap_removed = uninstall_wrap_hooks(repo_root=repo_root)
+        uninstall_claude_hooks(
+            repo_root=repo_root,
+            global_settings_path=user_settings_path(home),
+        )
+        stanza_removed = remove_claude_md_stanza(repo_root)
+        state_removed = remove_wrap_state(repo_root)
+        slash_result = uninstall_slash_commands(commands_dir(user=False, repo_root=repo_root))
+        return {
+            "repo_root": repo_root.as_posix(),
+            "hooks_removed": True,
+            "wrap_removed": wrap_removed,
+            "wrap_stanza_removed": stanza_removed,
+            "wrap_state_removed": state_removed,
+            "slash_removed": list(slash_result.removed),
+        }
 
     def hooks_status(self, *, home: Path | None = None) -> HookStatus:
         """Return the project-scoped hook installation and snapshot status."""
@@ -971,6 +1021,53 @@ class OnmcService:
             log_path=self._llm_log_path(repo_root, config),
             write=write,
         )
+
+    def setup_claude_md(self, *, no_llm: bool = False) -> tuple[str, Path | None]:
+        """Write CLAUDE.md for `onmc setup` without ever clobbering user content.
+
+        Decision:
+
+        - **No CLAUDE.md yet** → generate a fresh one (``action="generated"``).
+        - **onmc-managed CLAUDE.md** (a section-hash meta exists) → refresh via
+          :func:`update_claude_md`, which preserves user-written sections
+          (``action="updated"``). This is the safe repeated-``setup`` path.
+        - **Pre-existing, non-onmc CLAUDE.md** (no meta — the user wrote it) →
+          copy it to ``CLAUDE.md.onmc-backup`` once, then merge via
+          ``update_claude_md`` so the original is always recoverable
+          (``action="merged"``).
+
+        Returns ``(action, backup_path)`` where *backup_path* is the created
+        ``.onmc-backup`` (only on the ``"merged"`` path, and only the first time).
+        """
+        repo_root, config, storage = self._load_context()
+        path = claude_md_path(repo_root)
+        provider = self._optional_provider(config=config, no_llm=no_llm)
+        log_path = self._llm_log_path(repo_root, config)
+
+        if not path.exists():
+            generate_claude_md(
+                repo_root=repo_root,
+                storage=storage,
+                provider=provider,
+                log_path=log_path,
+                write=True,
+            )
+            return "generated", None
+
+        managed = bool(load_claude_md_meta(repo_root).get("section_hashes"))
+        backup_path: Path | None = None
+        if not managed:
+            backup_path = path.with_name(f"{path.name}.onmc-backup")
+            if not backup_path.exists():
+                backup_path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        update_claude_md(
+            repo_root=repo_root,
+            storage=storage,
+            provider=provider,
+            log_path=log_path,
+            write=True,
+        )
+        return ("merged" if backup_path is not None else "updated"), backup_path
 
     def watch_claude_md(self, *, no_llm: bool = False) -> None:
         """Watch the ONMC state directory and regenerate CLAUDE.md on updates."""
@@ -2213,7 +2310,24 @@ class OnmcService:
     def status(self) -> dict[str, str]:
         repo_root, config, storage = self._load_context()
         meta = storage.all_meta()
+        from oh_no_my_claudecode.hooks.installer import (
+            hooks_installed,
+            mcp_registered,
+            project_settings_path,
+            wrap_hooks_installed,
+        )
+
+        settings_path = project_settings_path(repo_root)
+        hooks_on = hooks_installed(settings_path=settings_path)
+        mcp_on = mcp_registered(mcp_path=mcp_config_path(repo_root))
+        wrap_on = wrap_hooks_installed(settings_path=settings_path)
+        # "Active" == the base Claude Code hooks are installed for this repo;
+        # wrap/MCP are reported as additive layers.
         return {
+            "onmc_active": "yes" if hooks_on else "no",
+            "hooks_installed": "yes" if hooks_on else "no",
+            "mcp_registered": "yes" if mcp_on else "no",
+            "wrap_active": "yes" if wrap_on else "no",
             "repo_root": repo_root.as_posix(),
             "memories": str(storage.memory_count()),
             "tasks": str(storage.task_count()),
@@ -2282,9 +2396,7 @@ class OnmcService:
                     sug.suggested_title,
                     prefix=sug.suggested_kind.value,
                 )
-                summary = (
-                    f"[coverage-stub] {sug.suggested_title}. {sug.rationale}"
-                )
+                summary = f"[coverage-stub] {sug.suggested_title}. {sug.rationale}"
                 entries.append(
                     MemoryEntry(
                         id=mem_id,
@@ -2631,6 +2743,7 @@ class OnmcService:
                     MemoryRecord,
                     run_benchmark,
                 )
+
                 repo_memories = [
                     MemoryRecord(kind=m.kind.value, summary=m.summary, relevant_to=[])
                     for m in storage.list_memories()
@@ -2644,9 +2757,7 @@ class OnmcService:
                 )
                 _bench = run_benchmark(_scenario)
                 ctx_pct = _bench.context_tokens_pct_reduction
-                mem_segment = (
-                    f" · {skills_count} skills · ~{ctx_pct:.0f}% ctx saved (sim)"
-                )
+                mem_segment = f" · {skills_count} skills · ~{ctx_pct:.0f}% ctx saved (sim)"
             except Exception:  # noqa: BLE001
                 mem_segment = ""
 
@@ -3603,9 +3714,7 @@ class OnmcService:
                 repo_root = discover_repo_root(self.cwd)
             except (FileNotFoundError, RepoDiscoveryError):
                 repo_root = self.cwd
-        return run_preflight(
-            repo_root, steps=steps, executor=executor, provision=provision
-        )
+        return run_preflight(repo_root, steps=steps, executor=executor, provision=provision)
 
     def preflight_exact(
         self,
@@ -3871,6 +3980,30 @@ class OnmcService:
         if write:
             write_release(repo_root, draft)
         return repo_root, draft
+
+    def release_check(
+        self,
+        *,
+        repo_root: Path | None = None,
+    ) -> tuple[Path, ReleaseValidation]:
+        """Validate the release contract offline, before any tag is pushed.
+
+        Mirrors the CI ``release-contract`` job (tag ⇔ pyproject alignment) but
+        runs against the local repo so version/tag drift is caught before
+        publishing.  Reports whether the current ``pyproject`` version is ready
+        to tag, already released, missing a CHANGELOG entry, or a regression.
+        Offline and read-only — never tags, pushes, writes, or hits the network.
+
+        Returns
+        -------
+        tuple[Path, ReleaseValidation]
+            ``(repo_root, validation)``.
+        """
+        from oh_no_my_claudecode.release import validate_release
+
+        if repo_root is None:
+            repo_root = discover_repo_root(self.cwd)
+        return repo_root, validate_release(repo_root)
 
     # ------------------------------------------------------------------
     # Eval harness

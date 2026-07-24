@@ -4,6 +4,38 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`onmc release --check`** — offline release-contract validation you can run
+  before pushing a tag. Mirrors the CI `release-contract` gate: it verifies the
+  `pyproject` version is tag-able (no existing `vX.Y.Z` tag, a matching
+  `CHANGELOG.md` entry, no version regression), prints the exact `git tag`
+  command when ready, and exits non-zero otherwise. Surfaces version/tag drift
+  (a bumped `pyproject` with no matching tag) at the desk instead of in CI.
+- **`onmc uninstall`** — one-shot, surgical teardown that is the inverse of the
+  `setup` → `wrap`/`slash` golden path: removes the base hooks + MCP
+  registration, the `onmc wrap` layer (hooks, CLAUDE.md stanza, wrap state), and
+  onmc-generated slash commands, while leaving your own hooks, servers,
+  CLAUDE.md prose, and hand-written commands untouched. Safe to run repeatedly
+  and when nothing is installed.
+
+### Changed
+
+- **`onmc status`** now leads with a clear **ONMC active** indicator (base hooks
+  installed) plus `hooks`/`mcp`/`wrap` layer flags, so it is obvious at a glance
+  whether onmc is wired into the repo.
+
+### Fixed
+
+- **Hook install no longer discards a malformed `settings.json`.** When the
+  existing `.claude/settings.json` is unparseable JSON, its raw bytes are now
+  copied to `settings.json.onmc-corrupt` before a fresh, valid file is written —
+  previously the broken file was silently treated as empty and overwritten.
+- **`onmc setup` never clobbers a user-authored `CLAUDE.md`.** A pre-existing,
+  non-onmc `CLAUDE.md` is copied to `CLAUDE.md.onmc-backup` and merged
+  (preserving user sections) instead of being overwritten; a fresh file is only
+  generated when none exists.
+
 ## [0.107.0] — 2026-07-22
 
 ### Added

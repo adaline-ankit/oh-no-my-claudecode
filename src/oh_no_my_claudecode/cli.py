@@ -71,6 +71,7 @@ from oh_no_my_claudecode.rendering.console import (
     render_preflight_report,
     render_pull_all_summary,
     render_release_draft,
+    render_release_validation,
     render_reuse_hits,
     render_review_output,
     render_savings_card,
@@ -275,6 +276,39 @@ def setup_command(
                 "and run [bold]onmc setup[/bold]."
             )
         ) from None
+
+
+@app.command("uninstall")
+def uninstall_command(
+    as_json: Annotated[
+        bool,
+        typer.Option("--json", help="Emit the uninstall summary as JSON."),
+    ] = False,
+) -> None:
+    """Remove all onmc integrations from this repo (the inverse of setup).
+
+    Surgically strips the base onmc hooks + MCP registration, the `onmc wrap`
+    layer (hooks, CLAUDE.md stanza, and wrap state), and onmc-generated slash
+    commands — leaving your own hooks, MCP servers, CLAUDE.md prose, and
+    hand-written commands untouched. Safe to run repeatedly and when nothing is
+    installed. The .claude/settings.json.onmc-backup is kept for recovery.
+    """
+    try:
+        summary = _service().uninstall_all()
+    except RepoDiscoveryError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    if as_json:
+        sys.stdout.write(json.dumps(summary, indent=2) + "\n")
+        return
+    console.print("[green]✓ onmc uninstalled from this repo.[/green]")
+    slash_removed = summary.get("slash_removed")
+    slash_count = len(slash_removed) if isinstance(slash_removed, list) else 0
+    console.print(
+        "  hooks + MCP removed"
+        + ("  ·  wrap layer removed" if summary.get("wrap_removed") else "")
+        + (f"  ·  {slash_count} slash command(s) removed" if slash_count else "")
+    )
+    console.print("  [dim].claude/settings.json.onmc-backup kept for recovery.[/dim]")
 
 
 def main() -> None:
@@ -5682,9 +5716,17 @@ def release_command(
             help="Edit pyproject.toml + CHANGELOG.md (default: dry-run).",
         ),
     ] = False,
+    check: Annotated[
+        bool,
+        typer.Option(
+            "--check",
+            help="Validate the release contract (tag ⇔ pyproject ⇔ CHANGELOG) "
+            "and exit non-zero if not ready to tag. Offline; writes nothing.",
+        ),
+    ] = False,
     as_json: Annotated[
         bool,
-        typer.Option("--json", help="Emit the drafted release as JSON."),
+        typer.Option("--json", help="Emit the drafted release (or --check report) as JSON."),
     ] = False,
     git_cliff: Annotated[
         bool,
@@ -5705,8 +5747,26 @@ def release_command(
     renderer is used — pass --no-git-cliff to force the built-in one. Dry-run by
     default — pass --write to bump pyproject.toml and prepend the entry to
     CHANGELOG.md. Never tags or pushes.
+
+    Pass --check to validate release readiness before publishing: it mirrors
+    the CI release-contract gate (the pyproject version must be tag-able — no
+    existing tag, a matching CHANGELOG entry, and no version regression) and
+    exits non-zero when the release is not ready. Use it before `git tag`.
     """
     import dataclasses
+
+    if check:
+        if write:
+            raise typer.Exit(code=_fatal("--check cannot be combined with --write."))
+        try:
+            _, validation = _service().release_check()
+        except (FileNotFoundError, ValueError, RepoDiscoveryError) as exc:
+            raise typer.Exit(code=_fatal(str(exc))) from exc
+        if as_json:
+            sys.stdout.write(json.dumps(dataclasses.asdict(validation), indent=2) + "\n")
+        else:
+            render_release_validation(validation)
+        raise typer.Exit(code=0 if validation.ready else 1)
 
     try:
         _, draft = _service().release_draft(write=write, use_git_cliff=git_cliff)
@@ -6210,11 +6270,7 @@ def eval_ab_command(
 
     _valid_suites = ("builtin", "private", "all")
     if suite not in _valid_suites:
-        raise typer.Exit(
-            code=_fatal(
-                f"--suite must be one of {_valid_suites!r}; got {suite!r}"
-            )
-        )
+        raise typer.Exit(code=_fatal(f"--suite must be one of {_valid_suites!r}; got {suite!r}"))
 
     if fixture and public_repo:
         raise typer.Exit(

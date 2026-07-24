@@ -21,6 +21,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ tui             Open the interactive terminal brain-browser for memory       │
 │                 curation.                                                    │
 │ setup           Run the interactive ONMC onboarding wizard.                  │
+│ uninstall       Remove all onmc integrations from this repo (the inverse of  │
+│                 setup).                                                      │
 │ init            Initialize ONMC state in the current git repository.         │
 │ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
@@ -6364,11 +6366,21 @@ Usage: onmc release [OPTIONS]
  default — pass --write to bump pyproject.toml and prepend the entry to
  CHANGELOG.md. Never tags or pushes.
 
+ Pass --check to validate release readiness before publishing: it mirrors
+ the CI release-contract gate (the pyproject version must be tag-able — no
+ existing tag, a matching CHANGELOG entry, and no version regression) and
+ exits non-zero when the release is not ready. Use it before `git tag`.
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --write        --dry-run           Edit pyproject.toml + CHANGELOG.md        │
 │                                    (default: dry-run).                       │
 │                                    [default: dry-run]                        │
-│ --json                             Emit the drafted release as JSON.         │
+│ --check                            Validate the release contract (tag ⇔      │
+│                                    pyproject ⇔ CHANGELOG) and exit non-zero  │
+│                                    if not ready to tag. Offline; writes      │
+│                                    nothing.                                  │
+│ --json                             Emit the drafted release (or --check      │
+│                                    report) as JSON.                          │
 │ --git-cliff    --no-git-cliff      Use git-cliff to render the CHANGELOG     │
 │                                    when its binary is on PATH (default: on;  │
 │                                    falls back to the built-in renderer when  │
@@ -8247,6 +8259,25 @@ Usage: onmc ui [OPTIONS]
 │                                                    [env var: ONMC_UI_TOKEN]  │
 │ --help                                             Show this message and     │
 │                                                    exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc uninstall`
+
+```text
+Usage: onmc uninstall [OPTIONS]
+
+ Remove all onmc integrations from this repo (the inverse of setup).
+
+ Surgically strips the base onmc hooks + MCP registration, the `onmc wrap`
+ layer (hooks, CLAUDE.md stanza, and wrap state), and onmc-generated slash
+ commands — leaving your own hooks, MCP servers, CLAUDE.md prose, and
+ hand-written commands untouched. Safe to run repeatedly and when nothing is
+ installed. The .claude/settings.json.onmc-backup is kept for recovery.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the uninstall summary as JSON.                          │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

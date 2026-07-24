@@ -66,7 +66,23 @@ Edit these in a single PR merged to `main` before tagging:
 - **`README.md`** — update if commands, install steps, or integrations changed
 - **`docs/cli-reference.md`** — regenerate if CLI help changed (`python scripts/generate-cli-reference.py`)
 
-### 4. Tag and push
+### 4. Validate release readiness (dry-run the contract)
+
+Before tagging, run the offline release-contract check. It mirrors the CI
+`release-contract` job — the `pyproject` version must be tag-able (no existing
+`vX.Y.Z` tag, a matching `CHANGELOG.md` entry, no version regression) — and
+prints the exact tag command when ready:
+
+```bash
+onmc release --check
+```
+
+Exit code `0` means ready to tag; non-zero means it is not (the output lists the
+blocking issue, e.g. the version is already tagged or the CHANGELOG entry is
+missing). This is also where version/tag **drift** shows up: when `main` is ahead
+of the last tag, `--check` reports the pending `vX.Y.Z` and how to publish it.
+
+### 5. Tag and push
 
 ```bash
 git tag vX.Y.Z
@@ -79,7 +95,7 @@ The pipeline starts automatically. Monitor progress:
 gh run watch --repo adaline-ankit/oh-no-my-claudecode
 ```
 
-### 5. Confirm the release
+### 6. Confirm the release
 
 - PyPI: https://pypi.org/project/oh-no-my-claudecode/
 - GitHub Release: https://github.com/adaline-ankit/oh-no-my-claudecode/releases
