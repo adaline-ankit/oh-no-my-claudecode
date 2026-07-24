@@ -406,10 +406,13 @@ def default_dependencies(
         policy_decider=_default_policy(),
         loop_executor=_default_loop_executor,
         run_policy=load_run_policy(repo_root / ".onmc" / "policy.toml"),
-        # Advisory by default: the monitor records a decision trace on every run
-        # but does not block. Enforced mode is opt-in via an injected factory.
+        # Enforced by default: `_monitor_policy` allows the effects a legitimate
+        # in-repo run performs (repo-scoped writes + allowlisted verifier
+        # commands) and denies the rest (out-of-repo/path-traversal writes,
+        # non-allowlisted commands), so a denied effect blocks completion
+        # (status BLOCKED, never verified) instead of merely being recorded.
         reference_monitor_factory=lambda: ReferenceMonitor(
-            _monitor_policy(repo_root), enforced=False
+            _monitor_policy(repo_root), enforced=True
         ),
         changes_reader=_git_changes,
     )
