@@ -152,6 +152,48 @@ three fixes are reported above.
 bootstrap CIs and per-task pairing (~$21+ at observed per-run cost) -- above the
 blueprint's $10 auto-spend ceiling, so it requires explicit budget approval.
 
+
+## Full A/B benchmark with CIs — SIGNIFICANT win, internal evidence (2026-07-24)
+
+90 live runs: **15 frozen private-knowledge tasks x 2 conditions x 3 trials**,
+seeded-randomized execution order, real `claude` (sonnet), objective HIDDEN gate
+written only after the agent finishes, real bare-agent control, 0 exclusions.
+Statistics computed with ONMC's own `experiment.stats` (bootstrap CI + paired
+deltas). Total cost **$32.38**.
+
+| Condition | pass@1 | 95% CI (bootstrap) | mean cost/run |
+|---|---|---|---|
+| `cc_alone` (bare Claude Code) | **9/45 = 0.200** | [0.089, 0.311] | $0.4138 |
+| `cc_onmc` (ONMC memory context) | **21/45 = 0.467** | [0.311, 0.622] | $0.3056 |
+
+**Paired per-task delta: +0.267, 95% CI [+0.022, +0.489] — the CI excludes zero,
+so the effect is statistically significant.** ONMC also reduced cost ~26%.
+Per-task consistency: **8 improved, 5 unchanged, 2 regressed** (not an outlier
+artifact).
+
+### Honest scope of this claim
+
+* Evidence level: **`internal`, statistically significant** — NOT `external` and
+  NOT `reproducible` per the blueprint protocol.
+* The corpus is **authored in-repo** and is *designed* to require private
+  repository conventions an agent cannot know a priori. It is a fair test of the
+  **memory-transfer** claim, but it is favorable by construction and is **not** a
+  general coding-ability benchmark. It does **not** establish "ONMC improves
+  Claude Code" in general.
+* Reaching `external` still requires >=3 real outside repositories with a
+  VALID-audited corpus (the `PortfolioRunner` from #392 is built for exactly
+  this).
+* The lower CI bound (+0.022) is close to zero, so the effect *size* remains
+  uncertain (somewhere between ~+2pp and ~+49pp) even though its *direction* is
+  significant.
+
+### Correction to the earlier pilot
+
+The earlier N=3/N=6 single-trial pilots reported 3/9 vs 1/9 (null-to-negative)
+and the prediction was "no accuracy win". That was **underpowered and wrong** —
+at 3 trials with paired analysis the direction reverses and becomes significant.
+Recorded as a correction rather than quietly replaced.
+
 ## Reproduce
 
 ```bash
