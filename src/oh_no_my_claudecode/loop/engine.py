@@ -743,6 +743,12 @@ def run_loop(
                 tokens=agent_result.tokens,
             )
             iterations.append(infra_contract)
+            # Still record the dead-end: a verifier that cannot run (missing
+            # runner, timeout) is worth remembering so the next attempt does not
+            # repeat the same unrunnable verification.
+            mid = _record_loss(storage, spec.goal, infra_contract, ref_now)
+            if mid is not None:
+                recorded_memory_ids.append(mid)
             _save_checkpoint()
             return _make_result(False, "verifier-unavailable")
 
