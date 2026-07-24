@@ -7,6 +7,7 @@ import json
 import secrets
 import shlex
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -20,6 +21,7 @@ from oh_no_my_claudecode.context_engine import (
 )
 from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
 from oh_no_my_claudecode.durable_runtime import NodeState, RunSnapshot, RunState, RuntimeStore
+from oh_no_my_claudecode.enforcement import Effect, ReferenceMonitor
 from oh_no_my_claudecode.harness import (
     CompilerConfig,
     NodeKind,
@@ -187,6 +189,8 @@ class ControllerDependencies:
     loop_executor: LoopExecutor
     compiler: TaskCompiler = compile_task
     run_policy: RunPolicy = field(default_factory=RunPolicy.permissive)
+    reference_monitor_factory: Callable[[], ReferenceMonitor] | None = None
+    verifier_false_green_check: Callable[..., bool] | None = None
     changes_reader: ChangesReader = _git_changes
 
 
@@ -361,6 +365,9 @@ def default_dependencies(
         policy_decider=_default_policy(),
         loop_executor=_default_loop_executor,
         run_policy=load_run_policy(repo_root / ".onmc" / "policy.toml"),
+        # Advisory by default: the monitor records a decision trace on every run
+        # but does not block. Enforced mode is opt-in via an injected factory.
+        reference_monitor_factory=lambda: ReferenceMonitor(_default_policy(), enforced=False),
         changes_reader=_git_changes,
     )
 
@@ -573,11 +580,26 @@ class HarnessController:
                 verifier_signals=signals,
             )
 
-            # Proof is complete only when it is both complete AND not false-green.
+            # M4 wiring: run the reference monitor over the observed effects and
+            # the independent verifier over the observed signals. Advisory by
+            # default (records a trace, never blocks); an enforced monitor DENY
+            # blocks completion, and a verifier false-green downgrades the proof.
+            enforcement_trace, monitor_block = self._run_reference_monitor(request, change_set)
+            verifier_false_green = self._verifier_false_green(request, signals, change_set)
+
+            # Proof is complete only when it is complete AND not false-green — as
+            # judged by the proof graph OR the independent verifier.
             proof_complete = (
-                loop_result.converged and assessment.complete and not assessment.false_green
+                loop_result.converged
+                and assessment.complete
+                and not assessment.false_green
+                and not verifier_false_green
             )
-            policy_ok = policy_decision.allowed and not policy_decision.approvals_required
+            policy_ok = (
+                policy_decision.allowed
+                and not policy_decision.approvals_required
+                and not monitor_block
+            )
 
             if not loop_result.converged:
                 store.fail_node(
@@ -611,6 +633,7 @@ class HarnessController:
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
+                    enforcement_trace=enforcement_trace,
                 )
 
             snapshot = store.complete_node(
@@ -655,6 +678,7 @@ class HarnessController:
                     proof_reasons=assessment.reasons,
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
+                    enforcement_trace=enforcement_trace,
                 )
 
             if not policy_ok:
@@ -700,6 +724,7 @@ class HarnessController:
                     proof_reasons=tuple(v.message for v in policy_decision.violations),
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
+                    enforcement_trace=enforcement_trace,
                 )
 
             for kind in (NodeKind.VERIFY, NodeKind.REPAIR, NodeKind.PROVE, NodeKind.LEARN):
@@ -725,6 +750,7 @@ class HarnessController:
                 proof_reasons=(),
                 resumed=resumed,
                 worktree_path=loop_result.worktree_path,
+                enforcement_trace=enforcement_trace,
             )
         except Exception as exc:
             current = store.load(plan.run_id)
@@ -788,6 +814,7 @@ class HarnessController:
         proof_reasons: tuple[str, ...],
         resumed: bool,
         worktree_path: str | None,
+        enforcement_trace: tuple[dict[str, object], ...] = (),
     ) -> HarnessResult:
         """Assemble the receipt (the sole ``verified`` authority) and result."""
         receipt = HarnessRunReceipt.build(
@@ -813,7 +840,51 @@ class HarnessController:
             stages=stages,
             policy_decision=policy,
             receipt=receipt,
+            enforcement_trace=enforcement_trace,
         )
+
+    def _run_reference_monitor(
+        self,
+        request: RunRequest,
+        change_set: ChangeSet,
+    ) -> tuple[tuple[dict[str, object], ...], bool]:
+        """Guard the observed effects through the reference monitor.
+
+        Returns the decision trace plus whether an *enforced* monitor blocked any
+        effect. A fresh monitor is built per run so its trace never bleeds across
+        runs. When no monitor factory is configured this is a no-op.
+        """
+        factory = self.dependencies.reference_monitor_factory
+        if factory is None:
+            return (), False
+        monitor = factory()
+        decisions = [
+            monitor.guard(Effect.filesystem("write", path)) for path in change_set.changed_files
+        ]
+        verifier_argv = tuple(shlex.split(request.verifier))
+        if verifier_argv:
+            decisions.append(monitor.guard(Effect.command(verifier_argv)))
+        blocked = monitor.enforced and any(
+            decision.effect is not DecisionEffect.ALLOW for decision in decisions
+        )
+        return tuple(monitor.trace_dicts()), blocked
+
+    def _verifier_false_green(
+        self,
+        request: RunRequest,
+        signals: tuple[VerifierSignal, ...],
+        change_set: ChangeSet,
+    ) -> bool:
+        """Ask the independent verifier whether this pass is a false green.
+
+        Dormant by default (no check configured → ``False``), so a run without
+        coverage/contract evidence is never downgraded. Returns ``True`` only on
+        positive false-green evidence — it can fail a pass, never bless one.
+        """
+        check = self.dependencies.verifier_false_green_check
+        if check is None:
+            return False
+        return bool(check(request, signals, change_set))
 
 
 def _proof_graph(task: str, verifier_argv: tuple[str, ...]) -> ProofGraph:
