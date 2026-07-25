@@ -483,9 +483,33 @@ Frozen split `dataset_sha 8e8f6d52…`, 40 cases, offline, free.
 | code-dense | 0.750 | 0.825 | 0.6198 | 0.6683 | — |
 | code-graph | — | — | — | — | **SKIPPED** |
 
-**The cheapest retriever wins outright and fusion actively hurts.** Dense is the
-weakest of the three measured surfaces. The shipped default is correct; both of our
-"smarter" retrieval additions lose to plain lexical search on this split.
+**CORRECTED 2026-07-25 (same day, after a literature check).** The original wording
+here — "the cheapest retriever wins outright and fusion actively hurts" — was an
+overclaim, and it is the same error this project polices in everyone else's work:
+
+* **The dense arm is a straw man.** It uses `hash-ngram-v1-d512`, a hash-based
+  fallback embedder, NOT a neural code embedding model. On CoIR-style benchmarks a
+  real code embedder (voyage-code-002) scores ~56 nDCG@10 against BM25's ~30 —
+  dense *wins* decisively on NL→code semantic matching. Our number says nothing
+  about dense retrieval; it says a hash embedder loses to BM25 on symbol-heavy
+  queries, which is unsurprising.
+* **"Fusion hurts" is a known bug, not a result.** Unweighted RRF gives every arm an
+  equal vote regardless of quality — the documented "weakest-link effect". Fusing a
+  strong lexical arm with a weak hash arm at equal weight is *expected* to underperform
+  the strong arm. The literature's fix is weighted fusion or a reranker.
+* **The hybrid gap is not significant.** Δ=0.049 at n=40, with typical IR
+  paired-difference SD, is t≈1.0–1.2. TREC-derived guidance puts 40 queries at or
+  below the contested *minimum* (later work argues 100+). No hybrid-vs-BM25 claim is
+  supported by this split.
+
+**What survives:** BM25 beating a *generic/hash* embedder on symbol-heavy code queries
+is real, literature-consistent (BRIGHT: dense collapses from ~59 nDCG on BEIR to ~18-22;
+GrepRAG finds naive grep comparable to graph baselines), and mechanistically sound —
+code queries usually contain the literal identifier, which is exactly BM25's strength.
+BM25 remains the correct default at 25x the speed.
+
+**What does NOT survive:** any claim that dense or fused retrieval is worse than
+lexical *in general*, and any claim of significance from this 40-case split.
 
 `code-graph` is skipped with `skip_code: "no_graph_query_ranker"`, for three verified
 reasons: every graph primitive takes a *seed* rather than a query; the only
