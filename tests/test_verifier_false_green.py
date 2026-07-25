@@ -31,7 +31,9 @@ from oh_no_my_claudecode.proof_graph import (
     evaluate_proof,
 )
 from oh_no_my_claudecode.verifier import (
+    CHALLENGE_SET,
     BehaviorRequirement,
+    CaseProvenance,
     ChangedRegion,
     ContractVerdict,
     ForbiddenRegression,
@@ -41,10 +43,13 @@ from oh_no_my_claudecode.verifier import (
     MutationOperator,
     TaskContract,
     TestExecution,
+    VerifierConfig,
     assess_reachability,
     is_false_green,
     review_contract,
+    run_components,
     run_mutation_campaign,
+    source_tests,
 )
 
 _FUNCTION = FunctionUnderTest(
@@ -378,3 +383,36 @@ def test_control_real_fix_is_reported_verified() -> None:
     review = review_contract(contract, verifier_evidence)
     assert review.verdict is ContractVerdict.SATISFIED
     assert review.satisfied is True
+
+
+# --------------------------------------------------------------------------- #
+# Machine-readable form — this battery is also encoded as data in
+# ``oh_no_my_claudecode.verifier.challenges`` so the component ablation
+# (``tests/test_verifier_ablation.py``) can replay it under any component
+# subset. These two tests keep the encoding honest: same coverage, same labels.
+# --------------------------------------------------------------------------- #
+def test_every_challenge_here_is_encoded_in_the_challenge_set() -> None:
+    written_here = {
+        name
+        for name in globals()
+        if name.startswith(("test_challenge_", "test_control_")) and callable(globals()[name])
+    }
+    encoded = set(source_tests())
+    assert written_here - encoded == set(), "challenge not encoded for the ablation"
+    assert encoded - written_here == set(), "encoded case names a test that no longer exists"
+
+
+def test_encoded_repo_cases_reproduce_this_battery_verdicts() -> None:
+    """Every encoded repo case must agree with its hand-written twin's label."""
+    repo_cases = [
+        entry for entry in CHALLENGE_SET if entry.provenance is CaseProvenance.REPO_BATTERY
+    ]
+    assert repo_cases
+    for entry in repo_cases:
+        verdict = run_components(entry.case, VerifierConfig.full())
+        assert verdict.flagged is entry.case.expected_false_green, entry.case.case_id
+        # A repo case only supplies the components its source test supplies; the
+        # rest must be skipped, never counted as having found nothing.
+        supplied = set(entry.case.supplied_components())
+        for finding in verdict.findings:
+            assert finding.skipped is (finding.component not in supplied), finding.component

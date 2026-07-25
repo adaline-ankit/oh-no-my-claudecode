@@ -18,8 +18,12 @@ from oh_no_my_claudecode.skill.promoter import (
     promote_playbook_to_skill,
     rank_skills,
 )
-from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS, SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -161,7 +165,7 @@ class TestMigrationV7:
         db_path = tmp_path / "memory.db"
         storage = SQLiteStorage(db_path)
         storage.initialize()
-        assert storage.get_meta("schema_version") == "7"
+        assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
     def test_migration_v7_is_idempotent(self, tmp_path: Path) -> None:
         """Re-initializing must not fail or duplicate the table."""
@@ -169,7 +173,7 @@ class TestMigrationV7:
         storage = SQLiteStorage(db_path)
         storage.initialize()
         storage.initialize()  # second call must be a no-op
-        assert storage.get_meta("schema_version") == "7"
+        assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
     def test_skills_table_columns(self, tmp_path: Path) -> None:
         db_path = tmp_path / "memory.db"

@@ -15,8 +15,12 @@ from oh_no_my_claudecode.models import MemoryKind, SourceType
 from oh_no_my_claudecode.models.memory import MemoryEntry
 from oh_no_my_claudecode.models.playbook import Playbook, PlaybookProvenanceItem
 from oh_no_my_claudecode.playbook.compiler import compile_playbooks
-from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS, SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -194,14 +198,14 @@ class TestPlaybookStorage:
         db_path = tmp_path / "memory.db"
         storage = SQLiteStorage(db_path)
         storage.initialize()
-        assert storage.get_meta("schema_version") == "7"
+        assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
     def test_migration_v4_is_idempotent(self, tmp_path: Path) -> None:
         db_path = tmp_path / "memory.db"
         storage = SQLiteStorage(db_path)
         storage.initialize()
         storage.initialize()  # second call must not fail
-        assert storage.get_meta("schema_version") == "7"
+        assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
     def test_upsert_and_list_playbooks(
         self, tmp_path: Path, seeded_memories: list[MemoryEntry]

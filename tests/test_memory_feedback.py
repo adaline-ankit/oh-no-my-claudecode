@@ -11,7 +11,12 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.rendering.console import console, render_memory_list
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 
 def test_confirm_and_reject_adjust_feedback_score(sample_repo: Path, monkeypatch: object) -> None:
@@ -153,7 +158,7 @@ def test_feedback_score_migration_is_idempotent(tmp_path: Path) -> None:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(memories)")}
 
     assert "feedback_score" in columns
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
 
 def test_memory_cli_feedback_and_mine_hint(

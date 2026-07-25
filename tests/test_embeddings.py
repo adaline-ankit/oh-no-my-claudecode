@@ -31,8 +31,12 @@ from oh_no_my_claudecode.embeddings.rerank import (
 )
 from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
-from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS, SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -201,7 +205,7 @@ def test_cosine_similarity_dimension_mismatch_raises() -> None:
 
 def test_migration_v6_creates_memory_vectors_table(tmp_path: Path) -> None:
     storage = _store(tmp_path)
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
     # Table must exist and be queryable.
     count = storage.memory_vector_count()
     assert count == 0
@@ -211,7 +215,7 @@ def test_migration_v6_is_idempotent(tmp_path: Path) -> None:
     """Calling initialize() twice must not raise and must leave schema stable."""
     storage = _store(tmp_path)
     storage.initialize()  # second call
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
     assert storage.memory_vector_count() == 0
 
 

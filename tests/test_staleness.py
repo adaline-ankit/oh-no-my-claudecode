@@ -23,7 +23,12 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.memory.staleness import classify_staleness, extract_anchor_path
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.storage import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -212,7 +217,7 @@ def test_migration_v3_idempotent(tmp_path: Path) -> None:
 
     assert "staleness" in columns
     assert "last_verified_at" in columns
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
 
 def test_migration_v3_upgrades_existing_v2_db(tmp_path: Path) -> None:
@@ -249,7 +254,7 @@ def test_migration_v3_upgrades_existing_v2_db(tmp_path: Path) -> None:
 
     assert "staleness" in columns
     assert "last_verified_at" in columns
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
 
 # ---------------------------------------------------------------------------
