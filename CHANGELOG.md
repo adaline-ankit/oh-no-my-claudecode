@@ -4,6 +4,47 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+
+## [0.108.0] — 2026-07-25
+
+### Added
+
+- report iterations, tokens and cost — and pin code for the external portfolio
+- persist the harness receipt so `onmc explain` can read a real run
+- add offline release --check and harden setup/wrap/slash golden path (#378)
+- enforce reference-monitor policy by default in onmc run (#395)
+- m6 external-portfolio runner + audited corpus schema (fixture-tested) (#392)
+- coverage + mutant-runner adapters for reachability/mutation (#391)
+- opt-in gated memory ingestion through the promotion gate (#390)
+- wire reference monitor + independent verifier into onmc run (#387)
+- changed-code reachability, mutation harness, semantic contract review + false-green challenge set (#384)
+- reference monitor over tool_broker + taint/secret-handles + injection challenge suite (#385)
+- eval-gated repository-learning state machine (#383)
+- complete run envelope — provenance, redaction, verified receipt (#382)
+- experiment kernel — manifest runner, seeded trials, bootstrap CIs (#381)
+- freeze shared SOTA contracts (identity, manifest, trial, learning state) (#379)
+
+### Changed
+
+- first external evaluation — vertical path works, accuracy benefit NOT measurable
+- Bump actions/setup-python from 6.2.0 to 7.0.0 (#167)
+- full 90-run A/B with CIs — significant memory-transfer win (internal) (#398)
+- record real-agent A/B pilot — measured null-to-negative, no SOTA claim (#397)
+- wave-3 non-paid infra complete + M6 ready-to-run handoff (#394)
+- record M4 monitor+verifier wired into onmc run (#387) (#388)
+- record M4 enforcement + verifier landed (#384/#385) with fresh-main re-verify (#386)
+- SOTA progress record + re-measured baseline + PR reconciliation (#380)
+
+### Fixed
+
+- stop the harness from zeroing the treatment arm (verifier PATH + monitor policy)
+- real validity gates for the external portfolio — the harness was measuring itself
+- commit-aware change probe + fair external-eval harness
+- dedupe repo scan paths (onmc run crashed on real repos) + external eval harness (#399)
+- distinct verifier-unavailable stop (don't mislabel infra failure as repeated-error) (#396)
+- claude soft subtypes (max-turns/execution) are not fatal agent errors (#393)
+- headless-writable claude adapter + enforced-viable monitor policy (#389)
+
 ### Added
 
 - **`onmc release --check`** — offline release-contract validation you can run

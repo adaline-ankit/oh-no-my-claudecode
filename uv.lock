@@ -2804,7 +2804,7 @@ wheels = [
 
 [[package]]
 name = "oh-no-my-claudecode"
-version = "0.107.0"
+version = "0.108.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
