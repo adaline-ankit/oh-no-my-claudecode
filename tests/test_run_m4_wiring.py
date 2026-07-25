@@ -8,6 +8,7 @@ otherwise-converged run — all through the real HarnessController.
 
 from __future__ import annotations
 
+import json
 import secrets
 from pathlib import Path
 
@@ -179,3 +180,37 @@ def test_default_dependencies_monitor_is_enforced_by_default(tmp_path: Path) -> 
     assert deps.reference_monitor_factory is not None
     monitor = deps.reference_monitor_factory()
     assert monitor.enforced is True
+
+
+def test_executed_run_persists_a_receipt_explain_can_read(tmp_path: Path) -> None:
+    """`onmc run --execute` must leave a receipt where `onmc explain` looks.
+
+    Regression: the receipt was built, returned in memory and dropped, so
+    `onmc explain` reported "No run receipts yet" after a real execution — the
+    receipt -> explain leg of the run contract was never connected.
+    """
+    from oh_no_my_claudecode.explain.analyze import explain_receipt
+
+    controller = _controller(tmp_path, converged=True)
+    result = controller.run(RunRequest(task="fix the adder", execute=True))
+
+    receipts = sorted((tmp_path / ".agent-memory" / "receipts").glob("run-*.json"))
+    assert receipts, "no receipt written for an executed run"
+    payload = json.loads(receipts[-1].read_text(encoding="utf-8"))
+
+    # The persisted receipt agrees with the in-memory authority...
+    assert payload["verified"] is result.verified
+    assert payload["receipt_hash"] == result.receipt.receipt_hash
+    # ...carries the full harness receipt rather than a lossy summary...
+    assert payload["harness"]["run_id"] == result.plan.run_id
+    # ...and is directly consumable by the explain analyser.
+    verdict = explain_receipt(payload)
+    assert verdict.verdict in {"VERIFIED", "NOT VERIFIED"}
+    assert verdict.receipt_hash == result.receipt.receipt_hash
+
+
+def test_plan_only_run_writes_no_receipt(tmp_path: Path) -> None:
+    """A plan-only run executes nothing, so it must not leave a run receipt."""
+    controller = _controller(tmp_path, converged=True)
+    controller.run(RunRequest(task="fix the adder", plan_only=True))
+    assert not list((tmp_path / ".agent-memory" / "receipts").glob("run-*.json"))

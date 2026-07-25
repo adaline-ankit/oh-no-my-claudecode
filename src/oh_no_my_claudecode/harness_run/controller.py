@@ -64,6 +64,7 @@ from oh_no_my_claudecode.tool_broker import (
     TokenAuthority,
     ToolBroker,
 )
+from oh_no_my_claudecode.utils.time import utc_now
 
 from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
 from .context import HybridRepositoryCandidateProvider
@@ -702,6 +703,7 @@ class HarnessController:
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
+                    loop_result=loop_result,
                 )
 
             snapshot = store.complete_node(
@@ -747,6 +749,7 @@ class HarnessController:
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
+                    loop_result=loop_result,
                 )
 
             if not policy_ok:
@@ -793,6 +796,7 @@ class HarnessController:
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
+                    loop_result=loop_result,
                 )
 
             for kind in (NodeKind.VERIFY, NodeKind.REPAIR, NodeKind.PROVE, NodeKind.LEARN):
@@ -819,6 +823,7 @@ class HarnessController:
                 resumed=resumed,
                 worktree_path=loop_result.worktree_path,
                 enforcement_trace=enforcement_trace,
+                loop_result=loop_result,
             )
         except Exception as exc:
             current = store.load(plan.run_id)
@@ -883,6 +888,7 @@ class HarnessController:
         resumed: bool,
         worktree_path: str | None,
         enforcement_trace: tuple[dict[str, object], ...] = (),
+        loop_result: LoopResult | None = None,
     ) -> HarnessResult:
         """Assemble the receipt (the sole ``verified`` authority) and result."""
         receipt = HarnessRunReceipt.build(
@@ -894,6 +900,7 @@ class HarnessController:
             policy=policy,
             proof=assessment,
         )
+        self._persist_receipt(plan, receipt, stop_reason=stop_reason, loop_result=loop_result)
         return HarnessResult(
             status,
             plan,
@@ -910,6 +917,56 @@ class HarnessController:
             receipt=receipt,
             enforcement_trace=enforcement_trace,
         )
+
+    def _persist_receipt(
+        self,
+        plan: ExecutionPlan,
+        receipt: HarnessRunReceipt,
+        *,
+        stop_reason: str,
+        loop_result: LoopResult | None,
+    ) -> None:
+        """Write the receipt where ``onmc explain`` reads it.
+
+        Until this existed the receipt was built, returned in memory, and dropped
+        — so `onmc explain` reported "No run receipts yet" after a real
+        `onmc run --execute`, breaking the receipt → explain leg of the run
+        contract. The payload is a superset of the loop-receipt shape
+        `explain_receipt` consumes, with the full harness receipt nested under
+        ``harness`` so nothing is lost.
+
+        Metrics are copied from the loop result and are **absent rather than
+        zeroed** when the loop never ran, so `explain` cannot report a fabricated
+        cost or iteration count. Persistence never fails a run: a receipt that
+        cannot be written is a reporting problem, not an execution problem.
+        """
+        agent = "unknown"
+        if plan.dag.nodes:
+            agent = plan.dag.nodes[0].policy.agent
+        payload: dict[str, object] = {
+            "kind": "harness-run",
+            "run_id": plan.run_id,
+            "goal": plan.dag.task,
+            "verified": receipt.verified,
+            "stop_reason": stop_reason,
+            "agent": agent,
+            "ended_at": utc_now().isoformat(),
+            "receipt_hash": receipt.receipt_hash,
+            "harness": receipt.to_dict(),
+        }
+        if loop_result is not None:
+            payload["iterations"] = len(loop_result.iterations)
+            payload["tokens_used"] = loop_result.total_tokens
+            payload["cost_usd"] = loop_result.total_cost_usd
+        try:
+            receipts_dir = self.repo_root / ".agent-memory" / "receipts"
+            receipts_dir.mkdir(parents=True, exist_ok=True)
+            target = receipts_dir / f"run-{plan.run_id}.json"
+            target.write_text(
+                json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+        except OSError:
+            return
 
     def _run_reference_monitor(
         self,
