@@ -588,3 +588,79 @@ def test_resumed_iteration_numbers_sequential(tmp_path: Path) -> None:
         assert contract.iteration == idx + 1, (
             f"Expected iteration {idx + 1}, got {contract.iteration}"
         )
+
+
+def test_provider_outage_preserves_the_checkpoint_it_tells_you_to_retry(
+    tmp_path: Path,
+) -> None:
+    """A transient provider failure must leave the checkpoint intact.
+
+    `agent-unavailable` means the provider was throttled or unreachable — no agent
+    work happened — and `onmc explain` tells the user to retry. Clearing the
+    checkpoint would make that advice destructive: the retry would restart from
+    scratch and re-pay for iterations already completed. The run was interrupted,
+    not decided, so it is resumable for the same reason budget/cost/wall-time are.
+    """
+    from oh_no_my_claudecode.loop.adapters import TRANSIENT_ERROR_MARKER
+    from oh_no_my_claudecode.loop.models import AgentRunResult
+
+    store = InMemoryCheckpointStore()
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="provider dies mid-run")
+    config = LoopConfig(max_iterations=3, verify_command="pytest")
+    sha8 = _loop_spec_sha8(spec.goal, config.verify_command)
+
+    def _throttled(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        del prompt, escalation_level
+        return AgentRunResult(
+            output="",
+            prediction="",
+            files_touched=[],
+            error=f"{TRANSIENT_ERROR_MARKER} 503 throttled",
+        )
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_throttled,
+        verify_runner=_always_pass_verify,
+        now=_FIXED_NOW,
+        checkpoint_store=store,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "agent-unavailable"
+    assert store.load(sha8) is not None, "a retryable outage must not destroy the checkpoint"
+
+
+def test_genuine_agent_error_still_clears_the_checkpoint(tmp_path: Path) -> None:
+    """An unmarked agent error is a decided outcome, so it stays terminal."""
+    from oh_no_my_claudecode.loop.models import AgentRunResult
+
+    store = InMemoryCheckpointStore()
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="agent genuinely fails")
+    config = LoopConfig(max_iterations=3, verify_command="pytest")
+    sha8 = _loop_spec_sha8(spec.goal, config.verify_command)
+
+    def _broken(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        del prompt, escalation_level
+        return AgentRunResult(
+            output="", prediction="", files_touched=[], error="model refused the task"
+        )
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_broken,
+        verify_runner=_always_pass_verify,
+        now=_FIXED_NOW,
+        checkpoint_store=store,
+    )
+
+    assert result.stop_reason == "agent-error"
+    assert store.load(sha8) is None

@@ -757,7 +757,20 @@ def run_loop(
         # itself clears only on truly terminal stops (converged, max-iterations,
         # no-progress, duplicate-action, repeated-error).  Resumable stops
         # (budget, cost, wall-time) leave the checkpoint in place.
-        _resumable_stops = {"budget", "cost", "wall-time"}
+        # `agent-unavailable` and `agent-credentials` are provider-side stops: no
+        # agent work happened, and `onmc explain` explicitly tells the user to
+        # retry (or fix auth and retry). Clearing the checkpoint would make that
+        # advice destructive — the retry would restart from scratch and re-pay for
+        # iterations already completed, which is the opposite of what a transient
+        # outage should cost. They are resumable for the same reason
+        # budget/cost/wall-time are: the run was interrupted, not decided.
+        _resumable_stops = {
+            "budget",
+            "cost",
+            "wall-time",
+            "agent-unavailable",
+            "agent-credentials",
+        }
         if stop_reason not in _resumable_stops:
             _clear_checkpoint()
         return LoopResult(
