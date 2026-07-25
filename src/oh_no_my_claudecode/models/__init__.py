@@ -24,7 +24,12 @@ from oh_no_my_claudecode.models.llm import (
     LLMSettings,
     LLMStatus,
 )
-from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
+from oh_no_my_claudecode.models.memory import (
+    MemoryEntry,
+    MemoryKind,
+    PromotionState,
+    SourceType,
+)
 from oh_no_my_claudecode.models.memory_artifact import (
     MemoryArtifactRecord,
     MemoryArtifactType,
@@ -80,6 +85,7 @@ __all__ = [
     "PlaybookProvenanceItem",
     "ProjectConfig",
     "ProjectHints",
+    "PromotionState",
     "RepoFileRecord",
     "ReviewModeOutput",
     "Skill",

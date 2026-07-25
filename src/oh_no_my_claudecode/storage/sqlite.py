@@ -28,6 +28,12 @@ from oh_no_my_claudecode.models import (
     TaskRecord,
     TaskStatus,
 )
+from oh_no_my_claudecode.models.memory import (
+    UNPROMOTED_SOURCE_PREFIX,
+    PromotionState,
+    has_unpromoted_prefix,
+    strip_unpromoted_prefix,
+)
 from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
 from oh_no_my_claudecode.utils.time import isoformat_utc, parse_datetime, utc_now
 
@@ -320,6 +326,67 @@ def _migrate_v7(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_v8(conn: sqlite3.Connection) -> None:
+    """Give memories a first-class ``promotion_state`` column (migration v8).
+
+    Quarantine used to be carried by a reserved ``unpromoted:`` prefix on
+    ``source_ref`` — an authorization bit smuggled inside a provenance pointer.
+    This migration splits the two:
+
+    * ``promotion_state`` holds the authorization bit
+      (:class:`~oh_no_my_claudecode.models.memory.PromotionState`), so
+      "is this injectable?" becomes a plain SQL predicate;
+    * ``source_ref`` goes back to being pure provenance —
+      ``unpromoted:docs/x.md`` is rewritten to ``docs/x.md``.
+
+    Backfill rules:
+
+    * a row whose ``source_ref`` carries the prefix becomes ``quarantined``
+      and has the prefix stripped;
+    * **every other row becomes ``injectable``** (the column default).  That
+      is the safe default here, and it is not a guess: before this migration
+      the prefix was the *only* quarantine marker, so "no prefix" meant
+      "injectable" to every reader in the tree.  Keeping those rows injectable
+      makes the migration behaviour-preserving by construction.  Defaulting
+      them to ``quarantined`` instead would silently empty the recall of every
+      existing user — memory would simply stop being injected, with no error
+      to explain why — while protecting nothing, because anything that ought
+      to be quarantined necessarily carries the prefix and is caught by the
+      first rule.
+
+    No row is deleted and no column is dropped; the only mutation to existing
+    data is removing a constant, reconstructible prefix from ``source_ref``
+    while preserving what it meant in the new column.
+
+    Idempotent: the ALTER is guarded by ``_ensure_memory_column`` and the
+    backfill only matches rows that still carry the prefix, so a second run
+    (or a run against an already-migrated database) is a no-op.
+    """
+    # DEFAULT must stay equal to PromotionState.INJECTABLE.value; it is spelled
+    # out as a literal so no value is interpolated into DDL.  Existing rows are
+    # populated with the default by SQLite itself.
+    _ensure_memory_column(
+        conn,
+        "promotion_state",
+        "ALTER TABLE memories ADD COLUMN promotion_state TEXT NOT NULL "
+        "DEFAULT 'injectable'",
+    )
+
+    legacy_rows = conn.execute(
+        "SELECT id, source_ref FROM memories WHERE substr(source_ref, 1, ?) = ?",
+        (len(UNPROMOTED_SOURCE_PREFIX), UNPROMOTED_SOURCE_PREFIX),
+    ).fetchall()
+    for row in legacy_rows:
+        conn.execute(
+            "UPDATE memories SET source_ref = ?, promotion_state = ? WHERE id = ?",
+            (
+                strip_unpromoted_prefix(str(row["source_ref"])),
+                PromotionState.QUARANTINED.value,
+                row["id"],
+            ),
+        )
+
+
 _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (1, _migrate_v1),
     (2, _migrate_v2),
@@ -328,6 +395,7 @@ _MIGRATIONS: tuple[tuple[int, Callable[[sqlite3.Connection], None]], ...] = (
     (5, _migrate_v5),
     (6, _migrate_v6),
     (7, _migrate_v7),
+    (8, _migrate_v8),
 )
 
 
@@ -470,12 +538,14 @@ class SQLiteStorage:
                     updated_count += 1
                 else:
                     new_count += 1
+                source_ref, promotion_state = self._memory_provenance_values(entry)
                 conn.execute(
                     """
                     INSERT INTO memories (
                         id, kind, title, summary, details, source_type, source_ref,
-                        tags_json, confidence, feedback_score, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tags_json, confidence, feedback_score, created_at, updated_at,
+                        promotion_state
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         kind=excluded.kind,
                         title=excluded.title,
@@ -486,7 +556,8 @@ class SQLiteStorage:
                         tags_json=excluded.tags_json,
                         confidence=excluded.confidence,
                         feedback_score=excluded.feedback_score,
-                        updated_at=excluded.updated_at
+                        updated_at=excluded.updated_at,
+                        promotion_state=excluded.promotion_state
                     """,
                     (
                         entry.id,
@@ -495,12 +566,13 @@ class SQLiteStorage:
                         entry.summary,
                         entry.details,
                         entry.source_type.value,
-                        entry.source_ref,
+                        source_ref,
                         json.dumps(entry.tags),
                         entry.confidence,
                         entry.feedback_score,
                         isoformat_utc(entry.created_at),
                         isoformat_utc(entry.updated_at),
+                        promotion_state,
                     ),
                 )
         return new_count, updated_count
@@ -535,8 +607,9 @@ class SQLiteStorage:
                 """
                 INSERT INTO memories (
                     id, kind, title, summary, details, source_type, source_ref,
-                    tags_json, confidence, feedback_score, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    tags_json, confidence, feedback_score, created_at, updated_at,
+                    promotion_state
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -546,7 +619,7 @@ class SQLiteStorage:
                         entry.summary,
                         entry.details,
                         entry.source_type.value,
-                        entry.source_ref,
+                        self._memory_provenance_values(entry)[0],
                         json.dumps(entry.tags),
                         entry.confidence,
                         previous[entry.id][0] if entry.id in previous else entry.feedback_score,
@@ -556,6 +629,7 @@ class SQLiteStorage:
                             else isoformat_utc(entry.created_at)
                         ),
                         isoformat_utc(entry.updated_at),
+                        self._memory_provenance_values(entry)[1],
                     )
                     for entry in entries
                 ],
@@ -686,6 +760,7 @@ class SQLiteStorage:
         return None if row is None else self._row_to_memory(row)
 
     def update_memory(self, memory: MemoryEntry) -> None:
+        source_ref, promotion_state = self._memory_provenance_values(memory)
         with self._connection() as conn:
             conn.execute(
                 """
@@ -700,7 +775,8 @@ class SQLiteStorage:
                     confidence = ?,
                     feedback_score = ?,
                     created_at = ?,
-                    updated_at = ?
+                    updated_at = ?,
+                    promotion_state = ?
                 WHERE id = ?
                 """,
                 (
@@ -709,12 +785,13 @@ class SQLiteStorage:
                     memory.summary,
                     memory.details,
                     memory.source_type.value,
-                    memory.source_ref,
+                    source_ref,
                     json.dumps(memory.tags),
                     memory.confidence,
                     memory.feedback_score,
                     isoformat_utc(memory.created_at),
                     isoformat_utc(memory.updated_at),
+                    promotion_state,
                     memory.id,
                 ),
             )
@@ -1753,6 +1830,28 @@ class SQLiteStorage:
         return [SourceType.MANUAL.value, SourceType.MANUAL_SEED.value]
 
     @staticmethod
+    def _memory_provenance_values(entry: MemoryEntry) -> tuple[str, str]:
+        """Return the ``(source_ref, promotion_state)`` pair to persist for *entry*.
+
+        ``source_ref`` is written as pure provenance — the legacy
+        ``unpromoted:`` prefix never reaches the column — and the quarantine
+        bit is written to ``promotion_state``.
+
+        While the compat prefix is still in use, the prefix is the tiebreaker
+        when a caller's two representations disagree.  Validated entries can
+        never disagree (``MemoryEntry`` syncs them), but
+        ``model_copy(update={"source_ref": ...})`` skips validation, and that
+        is exactly how ``OnmcService.promote_memory`` /
+        ``promote_memory(revoke=True)`` express approval and re-quarantine
+        today.  Honouring the prefix keeps that path working unchanged.  When
+        the prefix helpers are retired, flip this to trust
+        ``entry.promotion_state`` and update those callers in the same change.
+        """
+        if has_unpromoted_prefix(entry.source_ref):
+            return strip_unpromoted_prefix(entry.source_ref), PromotionState.QUARANTINED.value
+        return entry.source_ref, PromotionState.INJECTABLE.value
+
+    @staticmethod
     def _row_to_memory(row: sqlite3.Row) -> MemoryEntry:
         from oh_no_my_claudecode.models.memory import StalenessLabel
 
@@ -1766,6 +1865,17 @@ class SQLiteStorage:
         staleness: StalenessLabel | None = None
         if raw_staleness in ("fresh", "stale", "orphaned", "unanchored"):
             staleness = raw_staleness  # type: ignore[assignment]
+        # Anything that is not explicitly quarantined is injectable — that
+        # covers NULL (row predates migration v8) and any value a future
+        # ONMC version might add.  A legacy prefixed source_ref that somehow
+        # escaped the migration is still caught: MemoryEntry's validator
+        # derives QUARANTINED from the prefix.
+        raw_promotion: object = row["promotion_state"] if "promotion_state" in keys else None
+        promotion_state = (
+            PromotionState.QUARANTINED
+            if raw_promotion == PromotionState.QUARANTINED.value
+            else PromotionState.INJECTABLE
+        )
         return MemoryEntry(
             id=row["id"],
             kind=MemoryKind(row["kind"]),
@@ -1787,6 +1897,7 @@ class SQLiteStorage:
                 if "last_verified_at" in keys and row["last_verified_at"] is not None
                 else None
             ),
+            promotion_state=promotion_state,
         )
 
     @staticmethod
