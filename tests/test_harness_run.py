@@ -518,3 +518,33 @@ def test_harness_run_context_from_hybrid_retrieval_end_to_end(tmp_path: Path) ->
     evidence = plan.context_packet.evidence[0]
     assert evidence.signals.semantic is not None
     assert 0.0 <= evidence.signals.semantic <= 1.0
+
+
+def test_duplicate_index_records_do_not_collide_candidate_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression (found by the external eval on jd/tenacity): when the repo scan
+    yields the same path twice, the provider must emit ONE candidate for it. Two
+    candidates sharing the id `repo:<path>` with different retrieval scores made
+    the context planner raise "conflicting candidates share id", which crashed
+    `onmc run` before any agent executed."""
+    from oh_no_my_claudecode.harness_run import context as ctx_mod
+
+    (tmp_path / "doc").mkdir()
+    (tmp_path / "doc" / "index.rst").write_text("cache invalidation docs\n", encoding="utf-8")
+    (tmp_path / "cache.py").write_text("def invalidate(): return 1\n", encoding="utf-8")
+
+    class _Rec:
+        def __init__(self, path: str) -> None:
+            self.path = path
+            self.size_bytes = 64
+            self.extension = "." + path.rsplit(".", 1)[-1]
+
+    # The same path twice — exactly what the real repository scan produced.
+    dupes = [_Rec("doc/index.rst"), _Rec("doc/index.rst"), _Rec("cache.py")]
+    monkeypatch.setattr(ctx_mod, "scan_repository_files", lambda *a, **k: dupes)
+
+    provider = ctx_mod.HybridRepositoryCandidateProvider(tmp_path, top_k=10)
+    candidates = provider._hybrid_candidates("cache invalidation")
+    ids = [c.id for c in candidates]
+    assert len(ids) == len(set(ids)), f"duplicate candidate ids: {ids}"

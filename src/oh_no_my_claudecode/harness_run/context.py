@@ -315,8 +315,17 @@ class HybridRepositoryCandidateProvider:
         index_texts: list[str] = []  # path-prefixed for BM25 path-term matching
         full_texts: list[str] = []  # raw content for evidence / excerpt
 
+        seen_paths: set[str] = set()
         for record in records:
             path = record.path
+            # The index can legitimately yield the same path more than once
+            # (re-indexed entries, symlinked docs). Two candidates sharing the
+            # id `repo:<path>` but carrying different retrieval scores make the
+            # context planner raise "conflicting candidates share id", which
+            # crashed `onmc run` on real repositories. Index each path once.
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
             file_path = root / path
             if (
                 _is_secret_path(path)
