@@ -375,6 +375,92 @@ evaluation surface exists — only `code-bm25` and `code-hybrid` are implemented
 retrieval-vs-abstention, memory disabled/candidate/promoted, one-agent vs adaptive
 harness, advisory vs enforced, and per-component verifier isolation.
 
+## Session close: invariants completed, SOTA claim NOT achieved (2026-07-25)
+
+`main` `a023d12`, release **v0.108.0** on PyPI, CI green (ci + codeql + scorecard).
+
+### Stop conditions: 8 of 9 met
+
+| # | Gate | Status |
+|---|---|---|
+| 1 | vertical path for Claude Code **and Codex** | **met** — Codex live: `stop=converged`, real diff, `explain` VERIFIED |
+| 2 | all learning activation eval-gated | **partial** — four worst autonomous paths gated; residual bypasses below |
+| 3 | enforced mode mediates supported effects | met (it denied this benchmark's own out-of-repo verifier) |
+| 4 | independent verification resists false green | met — 0 false greens in 66 paid cells |
+| 5 | complete trace/receipt/explain path | met — receipt persistence was broken and is fixed |
+| 6 | fresh install + released package smoke | met — PyPI 0.108.0, real Claude run verified on the published wheel |
+| 7 | external repeated-trial report | met — two reports, both null |
+| 8 | claims match evidence | met **because no SOTA claim is made** |
+| 9 | P1/P2 documented | met |
+
+All twelve vertical-slice invariants now hold. Two were unmet at session start and
+were built here: **advisory mode now visibly says advisory** (an advisory run was
+otherwise byte-identical to an enforcing one, so a user could believe effects were
+mediated when they were only logged), and **retrieval fallback is now typed and
+visible** (the hybrid provider silently degraded to the basic retriever, so the
+feature under test could switch itself off and still be measured as working).
+
+### Seven bugs found by USING the product, not by testing it
+
+1. `onmc run` crashed on real repositories (duplicate scan paths) — #399.
+2. Retrying a failed task crashed with `InvalidTransitionError`.
+3. A run that changed the repository was scored `no-changes` while the same receipt
+   recorded `files_touched=4, diff_lines=5`. Fired only when an agent needs more
+   than one iteration — **systematically biased against the treatment arm on
+   exactly the harder tasks a benchmark cares about**.
+4. `onmc explain` could not see a real `onmc run` — the receipt was built and dropped.
+5. Run cost/tokens/turns were invisible.
+6. A provider 503 was scored as an agent failure. Fixed in the engine, `explain`
+   AND the benchmark scorer together — shipping the first two alone would have left
+   the bug one hop away.
+7. A learned skill was marked **successful merely for being surfaced**, on every
+   prompt — a closed self-reinforcing loop. **An existing test asserted this
+   behaviour**, encoding the bug as intent; it was rewritten.
+
+### The learning gate had zero production call sites
+
+The headline audit finding: `learning/gate.py` was real, tested code that **nothing
+called**. `GatedIngestor` was never constructed in `src/`. Every activation path in
+the shipped product bypassed it, and `SQLiteStorage` had no gate check on any of its
+ten writers.
+
+Now closed: unearned skill success, unbounded memory injection
+(`ONMC_RECALL_MAX_CHARS` defaulted to `0` = no cap, so the shipped budget was off),
+autopilot writing raw LLM plan text to durable memory, and the MCP tool letting the
+model write arbitrary memories. A kill switch (`ONMC_LEARNING`) and a
+`require_promoted()` assertion API make remaining bypasses **detectable by
+construction**.
+
+**Still open (honest):** `skill/promoter.py` mints `auto_inject=True` for other
+callers; `MemoryEntry` has no promotion column so quarantine uses a `source_ref`
+marker; the `.agent-memory/` exporter can carry unpromoted entries to another repo;
+and there is no `onmc memory promote <id>` for a human to approve a quarantined entry.
+
+### Why the SOTA claim is not made
+
+Three corpora, progressively harder, 66 paid cells, **$41 of an approved ~$320**:
+
+| Corpus | Tasks | Repos | bare | ONMC | paired delta |
+|---|---|---|---|---|---|
+| v1 single-site revert | 3 | 3 | 9/9 | 9/9 | 0.000 [0.000, 0.000] |
+| v3 AST body removal, multi-site | 24 | 6 | 24/24 | 24/24 | 0.000 [0.000, 0.000] |
+
+Bare Claude Code solved everything. ONMC cost +27% to +38%. Remaining budget was
+deliberately not spent: a third trial on a corpus measured 100%/100% buys a more
+precise zero.
+
+**Structural reason, not a tuning problem.** ONMC claims to be better *on a specific
+repository* via repo context and promoted memory. That can only show up where the
+knowledge is not discoverable from the repository — but anything discoverable in a
+public repo is equally discoverable by the bare agent reading it. Manufacturing a
+win requires *injecting* private knowledge, which is the favorable-by-construction
+caveat already attached to the internal 90-run result. **An `external`
+memory-transfer claim requires genuinely private repositories.**
+
+Evidence level reached: **`externally measured`** for the runtime, `internal` for
+the memory-transfer effect. **`reproducible` is not reached** and cannot be
+self-certified — it requires third-party reproduction.
+
 ## Reproduce
 
 ```bash
