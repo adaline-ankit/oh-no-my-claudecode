@@ -166,6 +166,10 @@ def list_onmc_tools() -> list[Tool]:
             title="Record ONMC memory",
             description=(
                 "Write a durable manual memory entry that ingest never overwrites. "
+                "The entry is recorded for human review, NOT activated: it is not "
+                "auto-injected into future prompts until a human promotes it, and the "
+                "response reports that in 'activated'. Content is scanned and refused "
+                "if it embeds injection payloads or credentials. "
                 "Returns the created memory id as JSON."
             ),
             inputSchema={
@@ -623,18 +627,84 @@ def _record_attempt(repo: OnmcRepo, args: dict[str, Any]) -> str:
     )
 
 
+def _scan_model_text(*parts: str) -> tuple[str, ...]:
+    """Scan model-authored *parts* and return tripped sanitizer rule ids.
+
+    Fails closed: if the sanitizer cannot run, the content counts as dirty, so a
+    hostile payload can never be persisted through a broken scanner.  Only rule
+    ids and titles are returned — never the matched text, which may itself be a
+    credential.
+    """
+    try:
+        from oh_no_my_claudecode.learning import sanitize
+
+        content = "\n".join(parts)
+        return tuple(f"{f.rule_id} ({f.title})" for f in sanitize.scan(content))
+    except Exception as exc:  # noqa: BLE001
+        return (f"sanitizer-unavailable: {type(exc).__name__}: {exc}",)
+
+
 def _record_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:
+    """Record a memory entry authored by the *model*.
+
+    This is the one ONMC write path where the content, the kind, the title and
+    the summary are all chosen by the model itself, so all of it is untrusted
+    input and none of it carries a promotion record.  Three gates apply:
+
+    1. **Kill switch.** ``ONMC_LEARNING=0`` refuses the write outright, loudly
+       (the tool returns an error rather than pretending to have saved).  The
+       check fails closed.
+    2. **Untrusted text.** Title and summary are scanned with the learning
+       sanitizer; prompt-injection payloads, chat-template markers and
+       credentials are refused.  Without this, a model (or anything feeding it,
+       such as a poisoned file or web page) could park an instruction payload in
+       durable repo memory for a later agent to read as trusted context.
+    3. **No activation without promotion.** The entry is persisted with the
+       :data:`~oh_no_my_claudecode.hooks.prompt_recall.UNPROMOTED_SOURCE_PREFIX`
+       ``source_ref``, so prompt-recall will not auto-inject it.  It stays fully
+       readable through the deliberate, human-driven surfaces (``onmc memory
+       list``/``show``, ``recall``, ``get_brief``) — recording is allowed,
+       self-activation is not.  The response reports this honestly via
+       ``activated`` / ``activation_reasons`` so the model is not misled into
+       believing it just taught the repo something.
+    """
     kind = _require_str(args, "kind")
     if kind not in MEMORY_KIND_VALUES:
         msg = f"Argument 'kind' must be one of: {', '.join(MEMORY_KIND_VALUES)}."
         raise ValueError(msg)
     title = _require_str(args, "title")
     summary = _require_str(args, "summary")
-    record = repo.memory.add(
-        type=kind,
+    task_id = _optional_str(args, "task_id")
+
+    from oh_no_my_claudecode.hooks.prompt_recall import (
+        learning_enabled,
+        unpromoted_source_ref,
+    )
+
+    if not learning_enabled():
+        msg = (
+            "record_memory refused: learning is disabled (ONMC_LEARNING). "
+            "No memory was written."
+        )
+        raise ValueError(msg)
+
+    findings = _scan_model_text(title, summary)
+    if findings:
+        msg = (
+            "record_memory refused: model-supplied content tripped the learning "
+            f"sanitizer ({'; '.join(findings)}). No memory was written."
+        )
+        raise ValueError(msg)
+
+    source_ref = unpromoted_source_ref(
+        f"mcp:record_memory:{task_id}" if task_id else "mcp:record_memory"
+    )
+    record = repo._service.add_manual_memory(
+        kind=MemoryKind(kind),
         title=title,
         summary=summary,
-        task_id=_optional_str(args, "task_id"),
+        task_id=task_id,
+        source_ref=source_ref,
     )
     if not isinstance(record, MemoryEntry):
         msg = f"Expected a manual memory entry for kind: {kind}"
@@ -644,6 +714,11 @@ def _record_memory(repo: OnmcRepo, args: dict[str, Any]) -> str:
             "memory_id": record.id,
             "kind": record.kind.value,
             "source_type": record.source_type.value,
+            "activated": False,
+            "activation_reasons": (
+                "not-promoted: model-authored memory is recorded for review and is "
+                "not auto-injected into future prompts until a human promotes it"
+            ),
         }
     )
 

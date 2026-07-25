@@ -10,8 +10,21 @@ Terse mode (default for hooks):
 Skills injection:
   When auto_inject skills exist and are relevant to the prompt, a compact
   "Relevant skills" block is appended after the memory block.  The combined
-  output is returned by compile_prompt_recall_safe.  A surfaced skill's
-  use_count is bumped (fire-and-forget; errors are swallowed).
+  output is returned by compile_prompt_recall_safe.  Surfacing a skill records
+  **no** usage or success signal — see :func:`record_skill_outcome`.
+
+Activation gating:
+  This module is the main *activation* path for learned artifacts: whatever it
+  returns is injected into the agent's context.  Two gates apply:
+
+  * the ``ONMC_LEARNING`` kill switch
+    (:func:`oh_no_my_claudecode.learning.activation.is_learning_enabled`) —
+    when it is off, nothing is injected.  The check fails **closed**.
+  * unpromoted provenance — memory an agent wrote autonomously about its own
+    run carries the :data:`UNPROMOTED_SOURCE_PREFIX` ``source_ref`` marker and
+    is never auto-injected.  Such an entry stays fully readable through the
+    explicit, human-driven surfaces (``onmc memory list``, ``onmc recall``);
+    it just cannot silently become part of every future prompt.
 
 Context firewall:
   When memories / skills are recalled, a ``recall_surfaced`` event is emitted
@@ -59,9 +72,58 @@ _ENV_MAX_CHARS = "ONMC_RECALL_MAX_CHARS"
 # with no overlap (rare). 0.0 disables the gate entirely.
 _GATE_MIN_SCORE_DEFAULT: float = 1.5
 
-# Default max injected characters (0 = disabled).  When enabled, entries are
-# kept highest-scored-first; the tail is dropped with a terse trailing note.
-_GATE_MAX_CHARS_DEFAULT: int = 0
+# Default max injected characters.  This is a REAL default cap: injected memory
+# context is bounded unless the user explicitly opts out.  ~4000 chars ≈ 800
+# whitespace tokens, which comfortably fits the default 5-entry recall while
+# still refusing to paste a pathological multi-kilobyte ``details`` field into
+# every prompt.  Set ``ONMC_RECALL_MAX_CHARS=0`` to opt out of the cap entirely
+# (unbounded injection is then the user's explicit choice).  Entries are kept
+# highest-scored-first; the tail is dropped with a terse trailing note.
+_GATE_MAX_CHARS_DEFAULT: int = 4000
+
+# ---------------------------------------------------------------------------
+# Activation gating: kill switch + unpromoted provenance
+# ---------------------------------------------------------------------------
+
+#: Reserved ``source_ref`` prefix marking a memory entry that an agent wrote
+#: autonomously (autopilot LEARN, MCP ``record_memory``, ...) with **no**
+#: promotion record behind it.  Entries carrying this prefix are recorded and
+#: human-reviewable but are never auto-injected into a prompt: activation
+#: requires a promotion, not merely a write.
+UNPROMOTED_SOURCE_PREFIX = "unpromoted:"
+
+
+def unpromoted_source_ref(origin: str) -> str:
+    """Return the quarantined ``source_ref`` an autonomous writer must stamp.
+
+    ``unpromoted_source_ref("autopilot:plan")`` → ``"unpromoted:autopilot:plan"``.
+    Idempotent, so re-stamping an already-marked ref is safe.
+    """
+    cleaned = origin.strip() or "unknown"
+    if cleaned.startswith(UNPROMOTED_SOURCE_PREFIX):
+        return cleaned
+    return f"{UNPROMOTED_SOURCE_PREFIX}{cleaned}"
+
+
+def is_unpromoted_source(source_ref: str) -> bool:
+    """Whether *source_ref* marks autonomously-written, unpromoted content."""
+    return source_ref.startswith(UNPROMOTED_SOURCE_PREFIX)
+
+
+def learning_enabled() -> bool:
+    """Whether learned artifacts may be injected at all — fails **closed**.
+
+    Delegates to the single kill switch
+    (:func:`oh_no_my_claudecode.learning.activation.is_learning_enabled`,
+    ``ONMC_LEARNING``).  Any failure resolving the switch is treated as OFF: a
+    kill switch that fails open is advisory, not a switch.
+    """
+    try:
+        from oh_no_my_claudecode.learning.activation import is_learning_enabled
+
+        return is_learning_enabled()
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _read_min_score(override: float | None) -> float:
@@ -130,12 +192,16 @@ def _score_memory(memory: MemoryEntry, query_tokens: set[str]) -> float:
     - Feedback bonus (×0.2): lightweight human-signal amplifier.
 
     Memories with feedback_score ≤ -0.5 (explicitly rejected) are excluded
-    entirely by returning 0.  Zero-confidence memories are also excluded.
+    entirely by returning 0.  Zero-confidence memories are also excluded, as is
+    anything carrying :data:`UNPROMOTED_SOURCE_PREFIX` provenance — an agent
+    writing a memory about its own run does not thereby promote it.
 
     Stale/orphaned/unanchored memories have their raw score multiplied by
     _STALE_WEIGHT to push them below fresh memories without hiding them
     completely when no fresh alternatives exist.
     """
+    if is_unpromoted_source(memory.source_ref):
+        return 0.0
     if memory.feedback_score <= -0.5:
         return 0.0
     if memory.confidence <= 0.0:
@@ -193,15 +259,21 @@ def compile_prompt_recall(
             disable the gate.
         max_chars: Char budget cap.  Entries are kept highest-scored-first;
             the tail is dropped with a terse trailing note.  ``None`` reads
-            ``ONMC_RECALL_MAX_CHARS`` env (default 0 = disabled).
+            ``ONMC_RECALL_MAX_CHARS`` env (default 4000; set ``0`` to opt out
+            of the cap and allow unbounded injection).
 
     Returns:
         ``(text, token_count)`` where *text* is the formatted block and
         *token_count* is the approximate whitespace-token count.  Returns
-        ``("", 0)`` when no relevant memories are found or the relevance gate
-        rejects the best result.
+        ``("", 0)`` when the ``ONMC_LEARNING`` kill switch is off, when no
+        relevant memories are found, or when the relevance gate rejects the
+        best result.
     """
     if not prompt or not prompt.strip():
+        return "", 0
+
+    # Kill switch — fails closed.  With learning off, nothing is injected.
+    if not learning_enabled():
         return "", 0
 
     # Resolve terse flag — hooks default to terse; callers can override.
@@ -342,12 +414,19 @@ def compile_skills_recall(
 
     Returns:
         ``(text, skill_ids)`` where *text* is the formatted block (may be "")
-        and *skill_ids* are the ids of surfaced skills (for use_count bumping).
-        Returns ``("", [])`` when no relevant auto_inject skills exist.
+        and *skill_ids* are the ids of surfaced skills (for observability only —
+        surfacing records no usage or success signal).  Returns ``("", [])``
+        when the ``ONMC_LEARNING`` kill switch is off or no relevant auto_inject
+        skills exist.
 
     Always safe to call — any exception returns empty result.
     """
     try:
+        # Kill switch — fails closed.  A skill is learned behaviour; with
+        # learning off it must not reach the agent.
+        if not learning_enabled():
+            return "", []
+
         if terse is None:
             from oh_no_my_claudecode.serialize.terse import is_terse
 
@@ -403,14 +482,37 @@ def compile_skills_recall(
         return "", []
 
 
-def _bump_skill_use_counts(storage: SQLiteStorage, skill_ids: list[str]) -> None:
-    """Fire-and-forget: increment use_count for each surfaced skill.
+def record_skill_outcome(
+    storage: SQLiteStorage,
+    skill_ids: list[str],
+    *,
+    success: bool,
+) -> None:
+    """Record an **observed** outcome for skills that were actually applied.
 
-    Errors are silently swallowed — bumping metrics must never break recall.
+    ``storage.record_skill_use`` is the input to ``rank_skills`` and to
+    ``skill_prune`` (which retires a skill once ``use_count >= 3`` and
+    ``success_rate < 0.3``).  Feeding it a fabricated signal turns the skill
+    machinery into a closed self-reinforcing loop, so this function exists only
+    for callers holding real evidence of an outcome:
+
+    * *success* must reflect an observed result — a verify pass, an explicit
+      human thumbs-up — never the mere fact that a skill was retrieved.
+    * There is deliberately **no** call to this function from the recall path.
+      A skill being *shown* to the model is not a skill *working*, and it is not
+      a skill *failing* either: recording either would invent evidence.  The
+      surfacing event is reported through the notify sink instead (see
+      :func:`compile_prompt_recall_safe`), where it stays observability rather
+      than becoming training signal.
+
+    *success* has no default on purpose — a caller that cannot say which
+    outcome it observed has no business calling this.
+
+    Errors are swallowed per-skill; recording metrics must never break a hook.
     """
     for skill_id in skill_ids:
         with contextlib.suppress(Exception):
-            storage.record_skill_use(skill_id, success=True)
+            storage.record_skill_use(skill_id, success=success)
 
 
 # ---------------------------------------------------------------------------
@@ -440,19 +542,22 @@ def compile_prompt_recall_safe(
 
     Skills injection:
       After the memory recall block, a compact "Relevant skills" section is
-      appended when auto_inject skills are relevant to the prompt.  Surfaced
-      skills have their use_count bumped (fire-and-forget).
+      appended when auto_inject skills are relevant to the prompt.  Surfacing a
+      skill records **no** use or success signal — see
+      :func:`record_skill_outcome`.
 
     Context firewall:
       When recall text is produced, a ``recall_surfaced`` event is emitted to
-      the side sink.  Pass *repo_root* to specify the sink target; defaults to
-      ``Path.cwd()``.  Set ``ONMC_FIREWALL=0`` to disable sink emission.
+      the side sink, carrying the count of surfaced skills.  Pass *repo_root* to
+      specify the sink target; defaults to ``Path.cwd()``.  Set
+      ``ONMC_FIREWALL=0`` to disable sink emission.
 
     Args:
         min_score: Passed through to ``compile_prompt_recall``.  ``None`` reads
             the ``ONMC_RECALL_MIN_SCORE`` env var (default 1.5).
         max_chars: Passed through to ``compile_prompt_recall``.  ``None`` reads
-            the ``ONMC_RECALL_MAX_CHARS`` env var (default 0 = disabled).
+            the ``ONMC_RECALL_MAX_CHARS`` env var (default 4000; ``0`` opts out
+            of the cap).
     """
     import threading
 
@@ -464,6 +569,7 @@ def compile_prompt_recall_safe(
 
     result: list[tuple[str, int]] = [("", 0)]
     exc_box: list[BaseException] = []
+    surfaced_skills: list[int] = [0]
 
     def _run() -> None:
         try:
@@ -491,10 +597,10 @@ def compile_prompt_recall_safe(
             combined_tokens = memory_tokens + _count_tokens(skills_text)
             result[0] = (combined, combined_tokens)
 
-            # Bump use counts after building the result (fire-and-forget).
-            if skill_ids:
-                with contextlib.suppress(Exception):
-                    _bump_skill_use_counts(storage, skill_ids)
+            # Surfacing is reported, never recorded as a skill outcome: this
+            # path has no evidence that a surfaced skill was used, let alone
+            # that it worked.  See record_skill_outcome().
+            surfaced_skills[0] = len(skill_ids)
 
         except Exception as exc:  # noqa: BLE001
             exc_box.append(exc)
@@ -523,7 +629,7 @@ def compile_prompt_recall_safe(
                     kind=EventKind.RECALL_SURFACED,
                     severity=EventSeverity.ROUTINE,
                     title="prompt-recall: memories injected into context",
-                    detail=f"tokens≈{tokens}",
+                    detail=f"tokens≈{tokens} skills_surfaced={surfaced_skills[0]}",
                 ),
             )
 

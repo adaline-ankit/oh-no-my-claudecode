@@ -236,7 +236,18 @@ class TestCompilePromptRecallSafe:
         # Memories are present; text should be non-empty.
         assert isinstance(text, str)
 
-    def test_use_count_is_bumped_for_surfaced_skill(self, tmp_path: Path) -> None:
+    def test_surfacing_a_skill_records_no_usage_or_success(self, tmp_path: Path) -> None:
+        """Surfacing a skill must NOT be recorded as having used it successfully.
+
+        This test previously asserted the opposite (`use_count >= 1` after mere
+        surfacing) and so pinned a bug in place: the recall hook marked a learned
+        skill "successful" simply for appearing in a prompt, on every prompt. That
+        is a closed self-reinforcing loop — the skill's own success_rate rose with
+        no evidence that it ever helped, and that rate feeds `rank_skills` and
+        `skill_prune`. Being shown is not the same as having worked.
+
+        Usage is now recorded only through real feedback (`onmc skill feedback`).
+        """
         storage = _make_storage(tmp_path / "memory.db")
         skill = _make_skill(tags=["cache"], use_count=0)
         storage.add_skill(skill)
@@ -244,13 +255,16 @@ class TestCompilePromptRecallSafe:
 
         compile_prompt_recall_safe(storage, "fix cache invalidation bug", terse=True)
 
-        # Give the background thread a moment to commit.
+        # Allow any background writer a moment; there must still be nothing to see.
         import time
+
         time.sleep(0.1)
 
         updated = storage.get_skill(skill.id)
         assert updated is not None
-        assert updated.use_count >= 1, "Expected use_count to be bumped after surfacing skill."
+        assert updated.use_count == 0, "surfacing a skill must not count as using it"
+        assert updated.success_count == 0, "surfacing a skill must not count as a success"
+        assert updated.last_used_at is None
 
     def test_hook_returns_memories_even_when_skills_raise(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
