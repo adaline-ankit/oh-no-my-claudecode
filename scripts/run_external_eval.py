@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import shlex
 import subprocess
@@ -114,13 +115,16 @@ class EvalConfig:
     max_iterations: int = 4
     max_cost_usd: float = 1.0
     max_total_usd: float = 10.0
+    onmc_bin: Path | None = None
     extra_env: dict[str, str] = field(default_factory=dict)
 
 
-def _run(argv: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
+def _run(
+    argv: list[str], cwd: Path, timeout: int, env: dict[str, str] | None = None
+) -> tuple[int, str]:
     try:
         proc = subprocess.run(  # noqa: S603
-            argv, cwd=cwd, capture_output=True, text=True, timeout=timeout
+            argv, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=env
         )
     except subprocess.TimeoutExpired:
         return 124, "[timeout]"
@@ -129,52 +133,96 @@ def _run(argv: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr)[-4000:]
 
 
-def prepare_venv(task: TaskSpec, venv_root: Path) -> tuple[Path | None, str | None]:
-    """Build (once per repo) a venv that can actually RUN the repo's own tests.
+#: Directory (inside the cell checkout) holding that cell's verifier interpreter.
+VENV_DIR = ".eval-venv"
 
-    Without this the verifier's bare ``python`` resolved to whatever interpreter
-    happened to be on PATH — in practice ONMC's own uv venv, which cannot import
-    the target repository's test dependencies. Every cell then failed as
-    ``verifier-unavailable`` while the agent's real fix was discarded, so the
-    experiment measured the instrument, not the agents.
+
+def prepare_venv(repo: Path) -> tuple[Path | None, str | None]:
+    """Build a venv, INSIDE the cell checkout, that can run the repo's own tests.
+
+    Two separate failures forced this shape:
+
+    1. The verifier's bare ``python`` resolved to whatever was on PATH — in
+       practice ONMC's own uv venv, which cannot import the target repository's
+       test dependencies. Every cell failed as ``verifier-unavailable`` while the
+       agent's real fix was thrown away.
+    2. Putting that venv *outside* the checkout then made ONMC's reference
+       monitor correctly DENY the verifier capability (it is not repo-scoped), so
+       ``onmc run`` aborted at the policy gate before executing while the bare arm
+       ran unimpeded — a silent asymmetry that penalised the treatment arm. The
+       interpreter therefore has to live under the repository root.
+
+    ``attrs`` uses a ``src/`` layout, so its tests import the *installed*
+    package; the checkout is editable-installed here so the adjudicator sees the
+    agent's edit rather than a cached copy.
 
     Returns ``(python_path, None)`` or ``(None, error)``.
     """
-    venv = venv_root / task.repo.name
+    venv = repo / VENV_DIR
     python = venv / "bin" / "python"
-    if python.exists():
-        return python, None
-    venv_root.mkdir(parents=True, exist_ok=True)
-    code, out = _run(["uv", "venv", str(venv)], venv_root, 300)
+    # Keep the interpreter out of git and out of ONMC's repository scan, so it can
+    # never be mistaken for the agent's change nor bloat the context packet.
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n{VENV_DIR}/\n.onmc/\n.agent-memory/\n")
+    gitignore = repo / ".gitignore"
+    prior = gitignore.read_text(encoding="utf-8") if gitignore.exists() else ""
+    gitignore.write_text(f"{prior}\n{VENV_DIR}/\n", encoding="utf-8")
+
+    code, out = _run(["uv", "venv", str(venv)], repo, 300)
     if code != 0:
         return None, f"uv venv failed: {out[-300:]}"
-    # pytest plus the test-time deps these upstream suites need. Installed once
-    # per repo; the per-cell editable install below re-points it at the clone.
     code, out = _run(
-        ["uv", "pip", "install", "--python", str(python), "pytest", "hypothesis"],
-        venv_root,
+        ["uv", "pip", "install", "--python", str(python), "-q", "pytest", "hypothesis"],
+        repo,
         900,
     )
     if code != 0:
         return None, f"test-dep install failed: {out[-300:]}"
-    return python, None
-
-
-def install_cell(python: Path, repo: Path) -> str | None:
-    """Editable-install the CELL's checkout so the verifier imports the agent's fix.
-
-    ``attrs`` uses a ``src/`` layout, so its tests import the *installed*
-    package. Installing non-editable (or from a shared cache clone) would make
-    the agent's edit invisible to the verifier and score every arm 0.
-    """
     code, out = _run(
         ["uv", "pip", "install", "--python", str(python), "-e", str(repo), "--no-deps", "-q"],
         repo,
         600,
     )
     if code != 0:
-        return f"editable install failed: {out[-300:]}"
-    return None
+        return None, f"editable install failed: {out[-300:]}"
+    return python, None
+
+
+def prepare_onmc_venv(workdir: Path) -> tuple[Path | None, str | None]:
+    """Install ONMC into its own venv and return its ``onmc`` entry point.
+
+    The treatment arm must NOT be launched through ``uv run --project``: uv
+    prepends its own venv to PATH, so the verifier's ``python -m pytest`` would
+    resolve back to ONMC's interpreter instead of the cell's — the original cause
+    of the blanket ``verifier-unavailable`` failures. Calling the entry point
+    directly leaves the cell's PATH (see :func:`cell_env`) intact.
+    """
+    venv = workdir / "onmc-venv"
+    onmc = venv / "bin" / "onmc"
+    if onmc.exists():
+        return onmc, None
+    code, out = _run(["uv", "venv", str(venv)], workdir, 300)
+    if code != 0:
+        return None, f"onmc venv failed: {out[-300:]}"
+    code, out = _run(
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(venv / "bin" / "python"),
+            "-q",
+            "-e",
+            str(REPO_ROOT),
+        ],
+        workdir,
+        1800,
+    )
+    if code != 0:
+        return None, f"onmc install failed: {out[-300:]}"
+    return onmc, None
 
 
 def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
@@ -270,15 +318,36 @@ def verifier_argv(task: TaskSpec, python: Path) -> list[str]:
     A bare ``python`` in the manifest resolves to whatever is on PATH, which is
     how the whole experiment previously collapsed to ``verifier-unavailable``.
     """
-    argv = list(task.verifier_argv)
-    if argv and argv[0] in {"python", "python3"}:
-        argv[0] = str(python)
-    return argv
+    # Deliberately UNCHANGED. ONMC's reference monitor allowlists verifier
+    # commands by argv prefix (`pytest`, `python -m pytest`, `ruff`, `mypy`), so
+    # rewriting argv[0] to an interpreter path makes the monitor correctly DENY
+    # the verifier capability and `onmc run` aborts before executing — while the
+    # bare arm, which has no monitor, runs unimpeded. That asymmetry silently
+    # zeroed the treatment arm. The right fix is to leave the command literal and
+    # bind the interpreter through PATH (see `cell_env`), not to weaken policy.
+    del python
+    return list(task.verifier_argv)
+
+
+def cell_env(repo: Path) -> dict[str, str]:
+    """Environment for every subprocess of a cell: the cell venv first on PATH.
+
+    ``VIRTUAL_ENV``/``UV_*`` are cleared so an outer ``uv run`` cannot re-point
+    ``python`` at ONMC's own interpreter, which is what made the verifier
+    unrunnable in the first place.
+    """
+    env = dict(os.environ)
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    env["PATH"] = f"{repo / VENV_DIR / 'bin'}:{env.get('PATH', '')}"
+    return env
 
 
 def verify(task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path) -> tuple[bool, str]:
     """Adjudicate with the repository's own upstream test suite."""
-    code, out = _run(verifier_argv(task, python), repo, cfg.verifier_timeout_s)
+    code, out = _run(
+        verifier_argv(task, python), repo, cfg.verifier_timeout_s, env=cell_env(repo)
+    )
     return code == 0, out
 
 
@@ -323,7 +392,7 @@ def run_bare_agent(
         "--permission-mode",
         "acceptEdits",
     ]
-    code, out = _run(argv, repo, cfg.timeout_s)
+    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
     cost = _extract_cost(out)
     if code == 127:
         return f"agent CLI unavailable: {out[:200]}", cost
@@ -336,20 +405,12 @@ def run_onmc(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
 ) -> tuple[str | None, float | None]:
     """Treatment arm: the same task through the full `onmc run` vertical path."""
-    # ONMC's own runtime state must never count as the agent's repository change,
-    # or the vacuous-pass gate could pass on ONMC bookkeeping noise instead of a
-    # real fix. The upstream repos do not gitignore `.onmc/`, so exclude it here.
-    exclude = repo / ".git" / "info" / "exclude"
-    exclude.parent.mkdir(parents=True, exist_ok=True)
-    with exclude.open("a", encoding="utf-8") as handle:
-        handle.write("\n.onmc/\n.agent-memory/\n")
-    _run(["uv", "run", "--project", str(REPO_ROOT), "onmc", "init"], repo, 300)
+    if cfg.onmc_bin is None:
+        return "onmc entry point not prepared", None
+    onmc = str(cfg.onmc_bin)
+    _run([onmc, "init"], repo, 300, env=cell_env(repo))
     argv = [
-        "uv",
-        "run",
-        "--project",
-        str(REPO_ROOT),
-        "onmc",
+        onmc,
         "run",
         task.prompt,
         "--execute",
@@ -363,12 +424,18 @@ def run_onmc(
         shlex.join(verifier_argv(task, python)),
         "--json",
     ]
-    code, out = _run(argv, repo, cfg.timeout_s)
+    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
     cost = _extract_cost(out)
     if "[timeout]" in out:
         return "onmc run timeout", cost
     if code == 127:
         return f"onmc unavailable: {out[:200]}", cost
+    # A denied capability or an unavailable verifier means ONMC never executed.
+    # That is an instrument failure, not evidence about the agent — record it
+    # loudly instead of banking a free loss for the treatment arm (rule 13).
+    for marker in ("capability was denied", "verifier=deny", "verifier-unavailable"):
+        if marker in out:
+            return f"onmc did not execute ({marker})", cost
     return None, cost
 
 
@@ -391,19 +458,13 @@ def run_cell(
     def _infra(err: str) -> TrialRecord:
         return TrialRecord(task.task_id, condition.value, trial, False, 0.0, infra_error=err)
 
-    python, err = prepare_venv(task, cfg.workdir / "venvs")
-    if err or python is None:
-        return _infra(err or "venv unavailable")
-
     err = prepare_clone(task, dest, cache)
     if err:
         return _infra(err)
 
-    # The verifier must import the CELL's checkout, not a cached copy, or the
-    # agent's fix would be invisible to the adjudicator (attrs uses a src/ layout).
-    err = install_cell(python, dest)
-    if err:
-        return _infra(err)
+    python, err = prepare_venv(dest)
+    if err or python is None:
+        return _infra(err or "venv unavailable")
 
     # Validity gate 1: pristine tests PASS. Distinguishes "regression broke it"
     # from "the verifier cannot run at all".
@@ -554,6 +615,12 @@ def main() -> int:
         max_cost_usd=args.max_cost_usd,
         max_total_usd=args.max_total_usd,
     )
+
+    onmc_bin, onmc_err = prepare_onmc_venv(workdir)
+    if onmc_err:
+        print(f"FATAL: {onmc_err}", file=sys.stderr)
+        return 1
+    cfg.onmc_bin = onmc_bin
 
     cells: list[tuple[TaskSpec, Condition, int]] = [
         (task, cond, t)
