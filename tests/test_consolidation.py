@@ -13,8 +13,12 @@ from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.memory.consolidation import ConsolidationResult, consolidate_memories
 from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.models.memory_edge import EdgeType, MemoryEdge
-from oh_no_my_claudecode.storage.sqlite import SQLiteStorage
+from oh_no_my_claudecode.storage.sqlite import _MIGRATIONS, SQLiteStorage
 from oh_no_my_claudecode.utils.time import utc_now
+
+#: Newest migration version, derived so adding a migration cannot break these
+#: tests over a stale literal.
+_LATEST_SCHEMA_VERSION = max(version for version, _ in _MIGRATIONS)
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -63,8 +67,10 @@ def test_migration_v5_creates_memory_edges_table(tmp_path: Path) -> None:
     storage = SQLiteStorage(db_path)
     storage.initialize()
 
-    # Schema version after a fresh init (bumped when new migrations are added).
-    assert storage.get_meta("schema_version") == "7"
+    # Derived from _MIGRATIONS, not hardcoded: this was a literal "7" with a
+    # comment saying to bump it, and adding migration v8 duly broke it. The
+    # invariant is "a fresh init lands on the newest migration", not any number.
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
     # The memory_edges table must exist.
     with sqlite3.connect(db_path) as conn:
@@ -83,7 +89,7 @@ def test_migration_v5_idempotent(tmp_path: Path) -> None:
     storage.initialize()
     # Second initialize must not raise and must leave schema_version stable.
     storage.initialize()
-    assert storage.get_meta("schema_version") == "7"
+    assert storage.get_meta("schema_version") == str(_LATEST_SCHEMA_VERSION)
 
 
 # ── edge CRUD ─────────────────────────────────────────────────────────────────
