@@ -548,3 +548,57 @@ def test_duplicate_index_records_do_not_collide_candidate_ids(
     candidates = provider._hybrid_candidates("cache invalidation")
     ids = [c.id for c in candidates]
     assert len(ids) == len(set(ids)), f"duplicate candidate ids: {ids}"
+
+
+def test_retrieval_fallback_is_typed_and_visible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retriever that degrades must SAY so, with the exception type.
+
+    The hybrid provider catches every exception and falls back to the basic
+    lexical provider so a retrieval bug can never block a run — correct. But the
+    fallback used to be silent, so a run whose retrieval had switched itself off
+    was indistinguishable from a healthy one, and a benchmark could measure the
+    degraded path as if the feature under test were working.
+
+    Only the HYBRID path is broken here: the fallback provider shares the same
+    repository scanner, so breaking the scanner module-wide would break the
+    fallback too and prove nothing.
+    """
+    from oh_no_my_claudecode.context_engine import RetrievalMode
+    from oh_no_my_claudecode.harness_run import context as ctx_mod
+
+    (tmp_path / "a.py").write_text("def alpha():\n    return 1\n", encoding="utf-8")
+
+    def _boom(self: object, query: str) -> tuple[object, ...]:
+        del self, query
+        raise RuntimeError("index corrupted")
+
+    monkeypatch.setattr(
+        ctx_mod.HybridRepositoryCandidateProvider, "_hybrid_candidates", _boom
+    )
+
+    seen: list[str] = []
+    provider = ctx_mod.HybridRepositoryCandidateProvider(
+        tmp_path, top_k=5, on_fallback=seen.append
+    )
+    candidates = provider.candidates("alpha", RetrievalMode.LOCAL)
+
+    # The run still produced candidates — the fallback did its job...
+    assert candidates
+    # ...and the degradation is reported with its exception TYPE, not swallowed.
+    assert seen == ["RuntimeError: index corrupted"]
+
+
+def test_context_stage_marks_a_degraded_run(tmp_path: Path) -> None:
+    """The stage record must call a degraded retrieval run DEGRADED."""
+    from oh_no_my_claudecode.context_engine import EvidencePacket
+    from oh_no_my_claudecode.harness_run.stages import context_stage
+
+    packet = EvidencePacket(query="q", mode="local", token_budget=100, used_tokens=0)
+    record = context_stage(packet, ("RuntimeError: index corrupted",))
+    assert "DEGRADED" in record.summary
+    assert any("retrieval-fallback: RuntimeError" in reason for reason in record.reasons)
+
+    healthy = context_stage(packet)
+    assert "DEGRADED" not in healthy.summary

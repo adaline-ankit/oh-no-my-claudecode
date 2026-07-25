@@ -93,19 +93,29 @@ def prepare_stage(dag: TaskDAG, run_id: str, risk: RiskLevel) -> StageRecord:
     )
 
 
-def context_stage(packet: EvidencePacket) -> StageRecord:
+def context_stage(
+    packet: EvidencePacket, retrieval_fallbacks: tuple[str, ...] = ()
+) -> StageRecord:
     """Record retrieved context and quarantine any injected instructions.
 
     Retrieved repository text is untrusted data. Injection patterns are reported
     as ``reasons`` but never fail the stage — they are neutralised by being
     rendered inside an explicit untrusted-data envelope, not by being dropped.
+
+    *retrieval_fallbacks* carries typed reasons for any degradation to the basic
+    lexical provider. A degraded run must not look like a healthy one: the
+    fallback keeps the run alive, but hiding it would let a silently disabled
+    retriever be measured as if it were working.
     """
     joined = "\n".join(item.content for item in packet.evidence)
     findings = injection_findings(joined)
     reasons = tuple(f"quarantined: {finding.rule_id} {finding.title}" for finding in findings)
+    reasons += tuple(f"retrieval-fallback: {reason}" for reason in retrieval_fallbacks)
     summary = f"{len(packet.evidence)} evidence spans, {packet.used_tokens} tokens"
     if findings:
         summary += f"; {len(findings)} injection pattern(s) quarantined"
+    if retrieval_fallbacks:
+        summary += f"; {len(retrieval_fallbacks)} retrieval fallback(s) — DEGRADED"
     return StageRecord(
         name=StageName.CONTEXT,
         status=StageStatus.SUCCEEDED,

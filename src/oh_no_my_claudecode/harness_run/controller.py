@@ -208,6 +208,13 @@ class ControllerDependencies:
     reference_monitor_factory: Callable[[], ReferenceMonitor] | None = None
     verifier_false_green_check: Callable[..., bool] | None = None
     changes_reader: ChangesReader = _git_changes
+    retrieval_fallbacks: list[str] = field(default_factory=list)
+    """Typed reasons the retriever degraded to the basic lexical provider.
+
+    Mutable by design: the provider is frozen, so it appends here through an
+    injected callback. Surfaced on the context stage — a silently degraded
+    retriever must never be measured as a working one.
+    """
 
 
 def _render_context(packet: EvidencePacket) -> str:
@@ -423,6 +430,7 @@ def default_dependencies(
     """
     resolved = profile or resolve_budget_profile(BudgetMode.STANDARD)
     runtime_root = repo_root / ".onmc" / "harness-runtime"
+    retrieval_fallbacks: list[str] = []
     return ControllerDependencies(
         context_engine=ContextEngine(
             PlannerConfig(
@@ -436,6 +444,7 @@ def default_dependencies(
                     repo_root,
                     top_k=resolved.top_k,
                     retrieval_mode=resolved.retrieval_mode,
+                    on_fallback=retrieval_fallbacks.append,
                 ),
             ),
         ),
@@ -452,6 +461,7 @@ def default_dependencies(
             _monitor_policy(repo_root), enforced=True
         ),
         changes_reader=_git_changes,
+        retrieval_fallbacks=retrieval_fallbacks,
     )
 
 
@@ -620,7 +630,9 @@ class HarnessController:
                 snapshot = self._succeed_pending_node(plan.run_id, kind.value, snapshot)
 
             prepare_rec = prepare_stage(plan.dag, plan.run_id, plan.dag.risk)
-            context_rec = context_stage(plan.context_packet)
+            context_rec = context_stage(
+                plan.context_packet, tuple(self.dependencies.retrieval_fallbacks)
+            )
 
             execute_state = snapshot.nodes[NodeKind.EXECUTE.value].state
             if execute_state is NodeState.PENDING:

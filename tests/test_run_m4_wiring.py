@@ -318,3 +318,31 @@ def test_run_without_a_monitor_reports_none_not_advisory(tmp_path: Path) -> None
     assert result.enforcement_trace == ()
     assert result.enforcement_mode == "none"
     assert "Enforcement: none" in result.render_text()
+
+
+def test_unverified_run_proposes_candidates_but_promotes_nothing(tmp_path: Path) -> None:
+    """A failed/blocked run must not turn its own output into active learning.
+
+    Today nothing is persisted at all, so this holds trivially — but it holds for
+    the wrong reason (the promotion gate has no production call sites yet). Pinning
+    it now means the invariant is guarded as those call sites get wired, rather
+    than being quietly lost the moment learning becomes live.
+    """
+    monitor = ReferenceMonitor(_broker(DecisionEffect.DENY), enforced=True)  # type: ignore[arg-type]
+    controller = _controller(tmp_path, monitor_factory=lambda: monitor)
+    result = controller.run(RunRequest(task="blocked run", execute=True))
+
+    assert result.verified is False
+    learn = [stage for stage in result.stages if stage.name.value == "learn-candidate"]
+    assert learn, "the learn stage must still run and record what it observed"
+    # Candidates are PROPOSALS. The summary must say so, and nothing may claim
+    # promotion off an unverified run.
+    for stage in learn:
+        assert "not persisted" in stage.summary
+        joined = " ".join(value for _, value in stage.facts).lower()
+        assert "promoted" not in joined
+
+    # No learned artefact may be activated as a side effect of the run either.
+    from oh_no_my_claudecode.learning.activation import active_candidates
+
+    assert active_candidates((), now_ms=0) == ()

@@ -13,6 +13,7 @@ Two providers are exported:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -290,9 +291,15 @@ class HybridRepositoryCandidateProvider:
 
     Fallback behaviour
     ------------------
-    Any unexpected exception during corpus construction or retrieval causes a
-    transparent fallback to :class:`RepositoryCandidateProvider` so the run
-    is never blocked by a retrieval error.
+    Any unexpected exception during corpus construction or retrieval falls back to
+    :class:`RepositoryCandidateProvider` so a retrieval bug can never block a run.
+
+    That fallback is **typed and reported**, not silent. Previously the ``except``
+    swallowed the exception whole, so a run whose retrieval had degraded to the
+    basic lexical provider was indistinguishable from a healthy one — neither the
+    user nor a benchmark could tell that the feature under test had switched
+    itself off. ``on_fallback`` receives ``"<ExceptionType>: <message>"`` and the
+    controller surfaces it on the context stage.
     """
 
     repo_root: Path
@@ -300,11 +307,14 @@ class HybridRepositoryCandidateProvider:
     min_score: float = 0.0
     token_budget: int | None = None
     retrieval_mode: str = "bm25"  # BM25-first for code; "hybrid"/"dense" opt-in
+    on_fallback: Callable[[str], None] | None = None
 
     def candidates(self, query: str, mode: RetrievalMode) -> tuple[Candidate, ...]:
         try:
             return self._hybrid_candidates(query)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - must never block a run
+            if self.on_fallback is not None:
+                self.on_fallback(f"{type(exc).__name__}: {exc}")
             return RepositoryCandidateProvider(self.repo_root).candidates(query, mode)
 
     def _hybrid_candidates(self, query: str) -> tuple[Candidate, ...]:
