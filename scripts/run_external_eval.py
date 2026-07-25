@@ -137,6 +137,126 @@ REGRESSIONS: dict[str, tuple[tuple[str, str, str], ...]] = {
 }
 
 
+#: Extra test-time dependencies per upstream repo, discovered by actually running
+#: each suite (itsdangerous collection fails without freezegun). Recorded here
+#: rather than guessed, so a cell can never fail as "infra" for a missing dep.
+REPO_TEST_DEPS: dict[str, tuple[str, ...]] = {
+    "six": (),
+    "tenacity": (),
+    "attrs": ("hypothesis",),
+    "jmespath.py": (),
+    "itsdangerous": ("freezegun",),
+    "python-slugify": ("text-unidecode",),
+}
+
+#: Function-body removals: task_id -> ((relative file, dotted function name), ...).
+#: The body is replaced with `raise NotImplementedError`, so the task is "implement
+#: this real upstream function" and the repository's OWN tests adjudicate it.
+#:
+#: This is AST-driven rather than text-anchored on purpose: hand-written text
+#: anchors do not scale to the 20-50 audited tasks the claim protocol requires, and
+#: every hand-written anchor is another chance to seed a silently-vacuous task.
+REMOVALS: dict[str, tuple[tuple[str, str], ...]] = {
+    # --- six (feature/implement: real upstream helpers) ---
+    "six-impl-ensure-binary": (("six.py", "ensure_binary"),),
+    "six-impl-ensure-str": (("six.py", "ensure_str"),),
+    "six-impl-ensure-text": (("six.py", "ensure_text"),),
+    "six-impl-with-metaclass": (("six.py", "with_metaclass"),),
+    # Multi-function: the three ensure_* helpers are related and all tested.
+    "six-impl-ensure-trio": (
+        ("six.py", "ensure_binary"),
+        ("six.py", "ensure_str"),
+        ("six.py", "ensure_text"),
+    ),
+    # --- tenacity ---
+    "tenacity-impl-to-ordinal": (("tenacity/_utils.py", "to_ordinal"),),
+    "tenacity-impl-to-seconds": (("tenacity/_utils.py", "to_seconds"),),
+    "tenacity-impl-ordinal-pair": (
+        ("tenacity/_utils.py", "find_ordinal"),
+        ("tenacity/_utils.py", "to_ordinal"),
+    ),
+    # --- attrs (src/ layout; asdict/astuple share a private helper) ---
+    "attrs-impl-has": (("src/attr/_funcs.py", "has"),),
+    "attrs-impl-assoc": (("src/attr/_funcs.py", "assoc"),),
+    "attrs-impl-asdict": (("src/attr/_funcs.py", "asdict"),),
+    "attrs-impl-serialisation-pair": (
+        ("src/attr/_funcs.py", "asdict"),
+        ("src/attr/_funcs.py", "astuple"),
+    ),
+    # --- jmespath (methods on a class; exercises dotted resolution) ---
+    "jmespath-impl-to-number": (("jmespath/functions.py", "Functions._func_to_number"),),
+    "jmespath-impl-starts-with": (("jmespath/functions.py", "Functions._func_starts_with"),),
+    "jmespath-impl-merge": (("jmespath/functions.py", "Functions._func_merge"),),
+    "jmespath-impl-sort-by": (("jmespath/functions.py", "Functions._func_sort_by"),),
+    "jmespath-impl-by-pair": (
+        ("jmespath/functions.py", "Functions._func_sort_by"),
+        ("jmespath/functions.py", "Functions._func_max_by"),
+    ),
+    # --- itsdangerous ---
+    "itsdangerous-impl-base64-encode": (("src/itsdangerous/encoding.py", "base64_encode"),),
+    "itsdangerous-impl-base64-pair": (
+        ("src/itsdangerous/encoding.py", "base64_encode"),
+        ("src/itsdangerous/encoding.py", "base64_decode"),
+    ),
+    "itsdangerous-impl-int-bytes-pair": (
+        ("src/itsdangerous/encoding.py", "int_to_bytes"),
+        ("src/itsdangerous/encoding.py", "bytes_to_int"),
+    ),
+    "itsdangerous-impl-want-bytes": (("src/itsdangerous/encoding.py", "want_bytes"),),
+    # --- python-slugify ---
+    "slugify-impl-smart-truncate": (("slugify/slugify.py", "smart_truncate"),),
+    "slugify-impl-slugify": (("slugify/slugify.py", "slugify"),),
+}
+
+
+def remove_function_body(source: str, dotted: str) -> tuple[str, str | None]:
+    """Replace the body of *dotted* (``func`` or ``Class.method``) with a raise.
+
+    Returns ``(new_source, None)`` or ``(source, error)``. Uses the AST so the
+    exact line range is authoritative — a regex would mangle nested defs and
+    decorators, which is precisely the kind of silent corpus corruption that
+    produces a confidently wrong benchmark.
+    """
+    import ast
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:  # pragma: no cover - corpus guard
+        return source, f"unparseable source: {exc}"
+
+    parts = dotted.split(".")
+    node: ast.AST = tree
+    target: ast.FunctionDef | ast.AsyncFunctionDef | None = None
+    for depth, name in enumerate(parts):
+        found = None
+        for child in ast.iter_child_nodes(node):
+            if isinstance(
+                child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef
+            ) and child.name == name:
+                found = child
+                break
+        if found is None:
+            return source, f"{dotted}: '{name}' not found"
+        node = found
+        if depth == len(parts) - 1:
+            if not isinstance(found, ast.FunctionDef | ast.AsyncFunctionDef):
+                return source, f"{dotted} is not a function"
+            target = found
+
+    if target is None:  # pragma: no cover - defensive
+        return source, f"{dotted} not resolved"
+
+    lines = source.splitlines(keepends=True)
+    first = target.body[0]
+    start = first.lineno - 1  # 0-based; keeps signature, decorators and docstring line
+    end = target.end_lineno
+    if end is None:  # pragma: no cover - defensive
+        return source, f"{dotted}: missing end_lineno"
+    indent = " " * first.col_offset
+    replacement = f'{indent}raise NotImplementedError("REMOVED")\n'
+    return "".join(lines[:start]) + replacement + "".join(lines[end:]), None
+
+
 @dataclass
 class TrialRecord:
     task_id: str
@@ -197,7 +317,9 @@ def _run(
 VENV_DIR = ".eval-venv"
 
 
-def prepare_venv(repo: Path) -> tuple[Path | None, str | None]:
+def prepare_venv(
+    repo: Path, extra_deps: tuple[str, ...] = ()
+) -> tuple[Path | None, str | None]:
     """Build a venv, INSIDE the cell checkout, that can run the repo's own tests.
 
     Two separate failures forced this shape:
@@ -234,7 +356,16 @@ def prepare_venv(repo: Path) -> tuple[Path | None, str | None]:
     if code != 0:
         return None, f"uv venv failed: {out[-300:]}"
     code, out = _run(
-        ["uv", "pip", "install", "--python", str(python), "-q", "pytest", "hypothesis"],
+        [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            "-q",
+            "pytest",
+            *extra_deps,
+        ],
         repo,
         900,
     )
@@ -317,7 +448,7 @@ def inject_regression(task: TaskSpec, dest: Path) -> str | None:
     of task where a retrieval-and-loop harness could plausibly differ from a
     one-shot agent — so the corpus has to be able to express it.
     """
-    for rel, old, new in REGRESSIONS[task.task_id]:
+    for rel, old, new in REGRESSIONS.get(task.task_id, ()):
         target = dest / rel
         if not target.exists():
             return f"regression target missing: {rel}"
@@ -325,6 +456,18 @@ def inject_regression(task: TaskSpec, dest: Path) -> str | None:
         if old not in text:
             return f"regression anchor not found in {rel}"
         target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    for rel, dotted in REMOVALS.get(task.task_id, ()):
+        target = dest / rel
+        if not target.exists():
+            return f"removal target missing: {rel}"
+        updated, err = remove_function_body(target.read_text(encoding="utf-8"), dotted)
+        if err:
+            return f"{rel}: {err}"
+        target.write_text(updated, encoding="utf-8")
+
+    if not (REGRESSIONS.get(task.task_id) or REMOVALS.get(task.task_id)):
+        return f"no mutation defined for {task.task_id}"
 
     # COMMIT the seeded regression. Leaving it uncommitted made the broken state
     # itself the working diff, so an agent that correctly restored upstream
@@ -537,7 +680,7 @@ def run_cell(
     if err:
         return _infra(err)
 
-    python, err = prepare_venv(dest)
+    python, err = prepare_venv(dest, REPO_TEST_DEPS.get(task.repo.name, ()))
     if err or python is None:
         return _infra(err or "venv unavailable")
 
