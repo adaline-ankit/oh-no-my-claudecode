@@ -29,7 +29,9 @@ _STOP_REASON_BLURB: dict[str, str] = {
     "no-changes": (
         "The verify command passed, but the agent made NO changes to the working tree"
         " — a vacuous pass (often blocked/permission-pending edits). Nothing was"
-        " actually done, so the run is not verified."
+        " actually done, so the run is not verified. If the agent's writes were"
+        " blocked by permission prompts, pre-approve the tools it needs in the"
+        " repo's .claude/settings.json permissions allowlist and re-run."
     ),
     "max-iterations": (
         "The run hit the maximum iteration limit before the verify command passed."

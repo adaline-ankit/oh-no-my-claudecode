@@ -57,15 +57,23 @@ def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
     files created by the agent count as changes — a plain ``git diff`` would miss
     a freshly-written new file and wrongly flag a legitimate run as a no-op.
 
+    The signature also carries the current HEAD sha on a leading ``## head``
+    line, so an agent that edits AND COMMITS inside one iteration (clean tree
+    before, clean tree after) still registers as a change. Status output alone is
+    identical in that case, so a real win would be misclassified as vacuous. The
+    ``##`` prefix is deliberately a porcelain *branch-header* form, which
+    :func:`_files_from_git_status` skips — the sha must never be parsed as a
+    changed path or it would poison the scope gate.
+
     Returns ``None`` when git is unavailable or the path is not a repository, so
     the engine cleanly skips the vacuous-pass gate in non-git environments
     (e.g. unit tests running in a bare tmp dir).
     """
 
-    def _probe() -> str | None:
+    def _git(*args: str) -> subprocess.CompletedProcess[str] | None:
         try:
-            result = subprocess.run(  # noqa: S603
-                ["git", "-C", str(repo_root), "status", "--porcelain"],  # noqa: S607
+            return subprocess.run(  # noqa: S603
+                ["git", "-C", str(repo_root), *args],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=_CHANGE_PROBE_TIMEOUT,
@@ -73,9 +81,16 @@ def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
             )
         except (OSError, subprocess.SubprocessError):
             return None
-        if result.returncode != 0:
+
+    def _probe() -> str | None:
+        status = _git("status", "--porcelain")
+        if status is None or status.returncode != 0:
             return None
-        return result.stdout
+        # HEAD may not exist yet (unborn branch); the repo is still valid, so
+        # fall back to an empty sha rather than disabling the gate entirely.
+        head = _git("rev-parse", "HEAD")
+        head_sha = head.stdout.strip() if head is not None and head.returncode == 0 else ""
+        return f"## head {head_sha}\n{status.stdout}"
 
     return _probe
 
@@ -86,11 +101,17 @@ def _files_from_git_status(status_output: str | None) -> frozenset[str]:
     Handles the common status codes (M, A, D, R, ?, …) and rename entries
     (``old -> new``) by keeping only the new path.  Returns an empty frozenset
     when *status_output* is ``None`` or blank.
+
+    Lines beginning with ``##`` are porcelain *headers*, not entries — the probe
+    uses one to carry the HEAD sha. They are skipped so a commit inside an
+    iteration can never be misread as a changed file path.
     """
     if not status_output:
         return frozenset()
     files: set[str] = set()
     for line in status_output.splitlines():
+        if line.startswith("##"):
+            continue
         if len(line) < 4:
             continue
         path = line[3:].strip()
@@ -156,6 +177,37 @@ def _scope_violation(
                 violations.append(f"out-of-scope file modified: {path!r} (not in allowed_paths)")
 
     return "; ".join(violations) if violations else None
+
+
+#: Case-insensitive substrings in agent output that indicate the agent's file
+#: writes were blocked by interactive permission prompts (which a headless run
+#: can never answer).  Only consulted AFTER an iteration is already classified
+#: as a vacuous pass, so a false match merely adds a hint to an existing loss.
+_PERMISSION_BLOCK_MARKERS: tuple[str, ...] = (
+    "blocked pending your approval",
+    "blocked pending approval",
+    "pending your approval",
+    "requested permissions",
+    "requires approval",
+    "permission to write",
+    "haven't granted",
+)
+
+#: Actionable hint surfaced when a vacuous pass looks permission-blocked.
+PERMISSION_BLOCK_HINT = (
+    "[hint] The agent's output suggests its file writes were blocked by "
+    "permission prompts — a headless agent cannot answer interactive approval "
+    "dialogs, so it completes without changing anything. Pre-approve the tools "
+    "it needs in the repo's .claude/settings.json permissions allowlist, e.g. "
+    '{"permissions": {"allow": ["Edit", "Write", "Bash(pytest:*)"]}}, '
+    "then re-run."
+)
+
+
+def _detect_permission_block(agent_output: str) -> bool:
+    """Return True when *agent_output* contains a known permission-block signature."""
+    lowered = agent_output.lower()
+    return any(marker in lowered for marker in _PERMISSION_BLOCK_MARKERS)
 
 
 def _default_verify_runner(command: str) -> VerifyOutcome:
@@ -769,10 +821,17 @@ def run_loop(
         if vacuous_pass:
             verify_passed = False
             outcome: str = "loss"
+            permission_hint = (
+                f"{PERMISSION_BLOCK_HINT}\n\n"
+                if _detect_permission_block(agent_result.output)
+                else ""
+            )
             verify_output_text = (
                 "[no-op] agent produced no file changes this iteration; the "
                 "verify command passed but the result is vacuous — it reflects "
-                "pre-existing state, not that the goal was addressed.\n\n" + verify_outcome.output
+                "pre-existing state, not that the goal was addressed.\n\n"
+                + permission_hint
+                + verify_outcome.output
             )
         else:
             verify_passed = verify_outcome.passed
@@ -912,13 +971,16 @@ def run_loop(
 
 # Keep utc_now import for callers who might use it.
 __all__ = [
+    "PERMISSION_BLOCK_HINT",
     "_build_brief",
     "_changed_files_delta",
     "_classify_failure_cause",
     "_default_agent_runner",
     "_default_verify_runner",
+    "_detect_permission_block",
     "_files_from_git_status",
     "_iteration_signature",
+    "_make_git_change_probe",
     "_scope_violation",
     "_verify_output_head",
     "run_loop",

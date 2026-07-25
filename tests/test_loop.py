@@ -601,3 +601,111 @@ def test_loop_stops_verifier_unavailable_not_repeated_error(tmp_path: Path) -> N
     assert result.converged is False
     assert result.stop_reason == "verifier-unavailable"
     assert len(result.iterations) == 1
+
+
+# ---------------------------------------------------------------------------
+# Commit-aware change probe + permission-block hint (ported from #339)
+# ---------------------------------------------------------------------------
+
+
+def _init_git_repo(repo: Path) -> None:
+    """Create a real git repo with one commit for probe tests."""
+    import subprocess
+
+    def _git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+    repo.mkdir(exist_ok=True)
+    _git("init")
+    _git("config", "user.email", "test@test.invalid")
+    _git("config", "user.name", "test")
+    (repo / "a.txt").write_text("one", encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-m", "init")
+
+
+def test_default_probe_counts_commits_as_changes(tmp_path: Path) -> None:
+    """An agent that edits AND commits (clean tree before AND after) must still
+    register as a change — ``git status --porcelain`` alone is identical in both
+    states, so the probe must also fold in the HEAD sha."""
+    import subprocess
+
+    from oh_no_my_claudecode.loop.engine import _make_git_change_probe
+
+    repo = tmp_path / "repo"
+    _init_git_repo(repo)
+    probe = _make_git_change_probe(repo)
+
+    before = probe()
+    assert before is not None
+    # No changes → signature is stable.
+    assert probe() == before
+
+    # Edit + commit: working tree is clean again, but HEAD moved.
+    (repo / "a.txt").write_text("two", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-am", "edit"], check=True, capture_output=True
+    )
+    after = probe()
+    assert after is not None
+    assert after != before, "a committed edit must count as a change"
+
+
+def test_probe_head_line_is_not_parsed_as_a_changed_path(tmp_path: Path) -> None:
+    """The ``## head <sha>`` line carries the commit signature and must never be
+    parsed as a file path, or a commit would poison the scope gate."""
+    from oh_no_my_claudecode.loop.engine import _changed_files_delta, _files_from_git_status
+
+    pre = "## head aaaaaaa\n M kept.py\n"
+    post = "## head bbbbbbb\n M kept.py\n M added.py\n"
+    assert _files_from_git_status(post) == frozenset({"kept.py", "added.py"})
+    assert _changed_files_delta(pre, post) == frozenset({"added.py"})
+
+
+def test_vacuous_pass_permission_block_surfaces_hint(tmp_path: Path) -> None:
+    """A vacuous pass whose agent output shows the permission-block signature
+    gets an actionable .claude/settings.json hint in its verify output."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="add a divide() function")
+    config = LoopConfig(max_iterations=1)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent(
+            "I wrote the function, but the file writes are blocked pending your approval."
+        ),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_static_probe(),  # tree never changes
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    iteration = result.iterations[0]
+    assert iteration.outcome == "loss"
+    assert "[no-op]" in iteration.verify_output
+    assert ".claude/settings.json" in iteration.verify_output
+
+
+def test_vacuous_pass_without_permission_signature_has_no_hint(tmp_path: Path) -> None:
+    """A vacuous pass with no permission-block signature stays hint-free."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="add a divide() function")
+    config = LoopConfig(max_iterations=1)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("declared victory, changed nothing"),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_static_probe(),
+        now=_FIXED_NOW,
+    )
+
+    iteration = result.iterations[0]
+    assert "[no-op]" in iteration.verify_output
+    assert ".claude/settings.json" not in iteration.verify_output

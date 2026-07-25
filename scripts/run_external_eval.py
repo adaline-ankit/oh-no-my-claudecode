@@ -48,6 +48,12 @@ from oh_no_my_claudecode.experiment.portfolio import (  # noqa: E402
     PortfolioManifest,
     TaskSpec,
 )
+from oh_no_my_claudecode.experiment.stats import (  # noqa: E402
+    bootstrap_ci,
+    derive_seed,
+    mean,
+    paired_deltas,
+)
 
 #: Seeded regressions: (task_id) -> (relative file, exact old text, broken text).
 #: Each is a single-function revert whose repair is adjudicated by upstream tests.
@@ -79,6 +85,9 @@ class TrialRecord:
     latency_ms: float
     infra_error: str | None = None
     notes: str = ""
+    cost_usd: float | None = None
+    diff_lines: int = 0
+    tests_touched: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -89,6 +98,9 @@ class TrialRecord:
             "latency_ms": round(self.latency_ms, 1),
             "infra_error": self.infra_error,
             "notes": self.notes,
+            "cost_usd": None if self.cost_usd is None else round(self.cost_usd, 4),
+            "diff_lines": self.diff_lines,
+            "tests_touched": self.tests_touched,
         }
 
 
@@ -100,7 +112,8 @@ class EvalConfig:
     timeout_s: int = 900
     verifier_timeout_s: int = 300
     max_iterations: int = 4
-    max_cost_usd: float = 3.0
+    max_cost_usd: float = 1.0
+    max_total_usd: float = 10.0
     extra_env: dict[str, str] = field(default_factory=dict)
 
 
@@ -137,6 +150,65 @@ def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
     if old not in text:
         return f"regression anchor not found in {rel}"
     target.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+    # COMMIT the seeded regression. Leaving it uncommitted made the broken state
+    # itself the working diff, so an agent that correctly restored upstream
+    # behaviour produced an EMPTY diff versus HEAD — which ONMC's vacuous-pass
+    # ChangeProbe reads as "no meaningful change" and blocks. That penalised the
+    # treatment arm for being right. With the regression committed, the repair is
+    # a real diff in both arms and the arms stay equivalent (rule 6).
+    _run(["git", "-c", "user.email=eval@onmc.local", "-c", "user.name=onmc-eval",
+          "commit", "--quiet", "--all", "-m", f"seed regression: {task.task_id}"], dest, 120)
+    code, out = _run(["git", "status", "--porcelain"], dest, 60)
+    if code != 0 or out.strip():
+        return f"regression commit left a dirty tree: {out[:200]}"
+    return None
+
+
+def _observed_change(repo: Path) -> tuple[int, bool]:
+    """Changed-line count and whether any test file was touched, versus the
+    seeded-regression commit. Used to detect a no-op arm and test tampering."""
+    code, out = _run(["git", "diff", "--numstat", "HEAD"], repo, 60)
+    if code != 0:
+        return 0, False
+    lines = 0
+    touched_tests = False
+    for row in out.splitlines():
+        parts = row.split("\t")
+        if len(parts) != 3:
+            continue
+        added, removed, path = parts
+        lines += sum(int(v) for v in (added, removed) if v.isdigit())
+        base = path.rsplit("/", 1)[-1]
+        if base.startswith("test_") or base.endswith("_test.py") or "/tests/" in f"/{path}":
+            touched_tests = True
+    return lines, touched_tests
+
+
+def _extract_cost(out: str) -> float | None:
+    """Best-effort per-run USD cost from the agent/onmc JSON output.
+
+    Never fabricated: returns ``None`` when the run did not report a cost, so the
+    report can say ``n/a`` instead of inventing a number.
+    """
+    for key in ("total_cost_usd", "cost_usd", "total_cost"):
+        marker = f'"{key}"'
+        idx = out.rfind(marker)
+        while idx != -1:
+            tail = out[idx + len(marker) :].lstrip()
+            if tail.startswith(":"):
+                num = tail[1:].strip()
+                buf = ""
+                for ch in num:
+                    if ch.isdigit() or ch in ".-e+":
+                        buf += ch
+                    else:
+                        break
+                try:
+                    return float(buf)
+                except ValueError:
+                    pass
+            idx = out.rfind(marker, 0, idx)
     return None
 
 
@@ -156,7 +228,7 @@ def guard_regression_active(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str 
     return None
 
 
-def run_bare_agent(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str | None:
+def run_bare_agent(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | None, float | None]:
     """Control arm: the agent CLI directly, same prompt/permissions/verifier."""
     argv = [
         "claude",
@@ -169,21 +241,23 @@ def run_bare_agent(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str | None:
         "acceptEdits",
     ]
     code, out = _run(argv, repo, cfg.timeout_s)
+    cost = _extract_cost(out)
     if code == 127:
-        return f"agent CLI unavailable: {out[:200]}"
+        return f"agent CLI unavailable: {out[:200]}", cost
     if "[timeout]" in out:
-        return "agent timeout"
-    return None
+        return "agent timeout", cost
+    return None, cost
 
 
-def run_onmc(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str | None:
+def run_onmc(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | None, float | None]:
     """Treatment arm: the same task through the full `onmc run` vertical path."""
-    if not (repo / ".git").exists():
-        code, out = _run(["git", "init", "--quiet"], repo, 60)
-    else:
-        code, out = 0, ""
-    if code != 0:
-        return f"git init failed: {out[:200]}"
+    # ONMC's own runtime state must never count as the agent's repository change,
+    # or the vacuous-pass gate could pass on ONMC bookkeeping noise instead of a
+    # real fix. The upstream repos do not gitignore `.onmc/`, so exclude it here.
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as handle:
+        handle.write("\n.onmc/\n.agent-memory/\n")
     _run(["uv", "run", "--project", str(REPO_ROOT), "onmc", "init"], repo, 300)
     argv = [
         "uv",
@@ -205,11 +279,12 @@ def run_onmc(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str | None:
         "--json",
     ]
     code, out = _run(argv, repo, cfg.timeout_s)
+    cost = _extract_cost(out)
     if "[timeout]" in out:
-        return "onmc run timeout"
+        return "onmc run timeout", cost
     if code == 127:
-        return f"onmc unavailable: {out[:200]}"
-    return None
+        return f"onmc unavailable: {out[:200]}", cost
+    return None, cost
 
 
 RUNNERS = {
@@ -240,32 +315,102 @@ def run_cell(
             task.task_id, condition.value, trial, False, 0.0, notes="dry-run: agent not invoked"
         )
 
-    infra = RUNNERS[condition](task, dest, cfg)
+    infra, cost = RUNNERS[condition](task, dest, cfg)
+    diff_lines, tests_touched = _observed_change(dest)
     passed, out = verify(task, dest, cfg)
     latency = (time.monotonic() - started) * 1000.0
     note = "" if passed else out.strip().splitlines()[-1][:160] if out.strip() else ""
+    if passed and tests_touched:
+        # The prompt forbids editing tests. A "pass" that edited a test is a
+        # false green, not a repair — score it as a failure and say why.
+        passed = False
+        note = "false green: agent modified a test file"
     return TrialRecord(
-        task.task_id, condition.value, trial, passed, latency, infra_error=infra, notes=note
+        task.task_id,
+        condition.value,
+        trial,
+        passed,
+        latency,
+        infra_error=infra,
+        notes=note,
+        cost_usd=cost,
+        diff_lines=diff_lines,
+        tests_touched=tests_touched,
     )
 
 
-def summarize(records: list[TrialRecord], conditions: list[Condition]) -> dict[str, object]:
+def summarize(
+    records: list[TrialRecord], conditions: list[Condition], *, seed: int
+) -> dict[str, object]:
     summary: dict[str, object] = {}
     for cond in conditions:
         rows = [r for r in records if r.condition == cond.value]
         usable = [r for r in rows if r.infra_error is None]
-        passed = sum(1 for r in usable if r.passed)
+        outcomes = [1.0 if r.passed else 0.0 for r in usable]
+        costs = [r.cost_usd for r in usable if r.cost_usd is not None]
+        ci: tuple[float, float] | None = None
+        if outcomes:
+            ci = bootstrap_ci(outcomes, seed=derive_seed(seed, cond.value, "pass"))
         summary[cond.value] = {
             "cells": len(rows),
             "usable": len(usable),
             "infra_failures": len(rows) - len(usable),
-            "passed": passed,
-            "pass_at_1": round(passed / len(usable), 4) if usable else None,
+            "passed": int(sum(outcomes)),
+            "pass_at_1": round(mean(outcomes), 4) if outcomes else None,
+            "pass_at_1_ci95": None if ci is None else [round(ci[0], 4), round(ci[1], 4)],
+            "pass_hat_k": _pass_hat_k(usable),
             "mean_latency_ms": (
-                round(sum(r.latency_ms for r in usable) / len(usable), 1) if usable else None
+                round(mean([r.latency_ms for r in usable]), 1) if usable else None
             ),
+            "mean_cost_usd": round(mean(costs), 4) if costs else None,
+            "cost_reported_cells": len(costs),
+            "false_greens_blocked": sum(1 for r in rows if r.tests_touched),
         }
     return summary
+
+
+def _pass_hat_k(rows: list[TrialRecord]) -> float | None:
+    """Consistency: the fraction of tasks that passed on EVERY usable trial."""
+    by_task: dict[str, list[bool]] = {}
+    for row in rows:
+        by_task.setdefault(row.task_id, []).append(row.passed)
+    if not by_task:
+        return None
+    return round(mean([1.0 if all(v) else 0.0 for v in by_task.values()]), 4)
+
+
+def paired_analysis(
+    records: list[TrialRecord], baseline: Condition, treatment: Condition, *, seed: int
+) -> dict[str, object]:
+    """Per-task paired delta with a bootstrap CI over the per-task deltas.
+
+    Pairing is per TASK (mean pass-rate across that task's usable trials), so a
+    task that is easy or hard for both arms cannot drive the delta.
+    """
+
+    def rates(cond: Condition) -> dict[str, float]:
+        buckets: dict[str, list[float]] = {}
+        for row in records:
+            if row.condition != cond.value or row.infra_error is not None:
+                continue
+            buckets.setdefault(row.task_id, []).append(1.0 if row.passed else 0.0)
+        return {task: mean(vals) for task, vals in buckets.items() if vals}
+
+    base_rates, treat_rates = rates(baseline), rates(treatment)
+    deltas = paired_deltas(base_rates, treat_rates)
+    if not deltas:
+        return {"paired_tasks": 0, "mean_delta": None, "delta_ci95": None}
+    values = [deltas[key] for key in sorted(deltas)]
+    low, high = bootstrap_ci(values, seed=derive_seed(seed, "paired", "delta"))
+    return {
+        "baseline": baseline.value,
+        "treatment": treatment.value,
+        "paired_tasks": len(values),
+        "per_task_delta": {key: round(deltas[key], 4) for key in sorted(deltas)},
+        "mean_delta": round(mean(values), 4),
+        "delta_ci95": [round(low, 4), round(high, 4)],
+        "significant": bool(low > 0.0 or high < 0.0),
+    }
 
 
 def main() -> int:
@@ -275,6 +420,13 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--trials", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--max-total-usd",
+        type=float,
+        default=10.0,
+        help="Hard spend ceiling. Remaining cells are recorded as budget-stopped, never dropped.",
+    )
+    ap.add_argument("--max-cost-usd", type=float, default=1.0, help="Per-run agent cost cap.")
     args = ap.parse_args()
 
     manifest = PortfolioManifest.from_dict(json.loads(Path(args.manifest).read_text()))
@@ -285,7 +437,13 @@ def main() -> int:
 
     trials = args.trials or manifest.experiment.trials
     conditions = list(manifest.experiment.conditions)
-    cfg = EvalConfig(workdir=workdir, trials=trials, dry_run=args.dry_run)
+    cfg = EvalConfig(
+        workdir=workdir,
+        trials=trials,
+        dry_run=args.dry_run,
+        max_cost_usd=args.max_cost_usd,
+        max_total_usd=args.max_total_usd,
+    )
 
     cells: list[tuple[TaskSpec, Condition, int]] = [
         (task, cond, t)
@@ -297,15 +455,33 @@ def main() -> int:
     rng.shuffle(cells)  # randomized condition order (rule 7)
 
     records: list[TrialRecord] = []
+    spent = 0.0
+    budget_stopped = 0
     for idx, (task, cond, trial) in enumerate(cells, start=1):
+        if spent >= cfg.max_total_usd:
+            budget_stopped += 1
+            records.append(
+                TrialRecord(
+                    task.task_id,
+                    cond.value,
+                    trial,
+                    False,
+                    0.0,
+                    infra_error=f"budget-stopped at ${spent:.2f} of ${cfg.max_total_usd:.2f}",
+                )
+            )
+            continue
         rec = run_cell(task, cond, trial, cfg, cache_root)
         records.append(rec)
+        spent += rec.cost_usd or 0.0
         print(
             f"[{idx}/{len(cells)}] {rec.task_id} {rec.condition} t{rec.trial}: "
-            f"passed={rec.passed} infra={rec.infra_error or '-'}",
+            f"passed={rec.passed} cost=${rec.cost_usd or 0.0:.3f} spent=${spent:.2f} "
+            f"infra={rec.infra_error or '-'}",
             flush=True,
         )
 
+    seed = manifest.experiment.seed
     report = {
         "experiment_id": manifest.experiment.experiment_id.value,
         "task_set_revision": manifest.experiment.task_set_revision,
@@ -315,11 +491,20 @@ def main() -> int:
         "conditions": [c.value for c in conditions],
         "repos": sorted({t.repo.name for t in manifest.tasks}),
         "metric_label": MetricLabel.MEASURED.value,
-        "summary": summarize(records, conditions),
+        "total_cost_usd": round(spent, 4),
+        "budget_ceiling_usd": cfg.max_total_usd,
+        "budget_stopped_cells": budget_stopped,
+        "summary": summarize(records, conditions, seed=seed),
+        "paired": (
+            paired_analysis(records, conditions[0], conditions[1], seed=seed)
+            if len(conditions) >= 2
+            else {}
+        ),
         "records": [r.to_dict() for r in records],
     }
     Path(args.out).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
-    print(json.dumps(report["summary"], indent=2, sort_keys=True))
+    headline = {"summary": report["summary"], "paired": report["paired"]}
+    print(json.dumps(headline, indent=2, sort_keys=True))
     return 0
 
 
