@@ -4503,6 +4503,7 @@ Usage: onmc memory [OPTIONS] COMMAND [ARGS]...
 │ show     Show a single memory entry with provenance.                         │
 │ confirm  Mark a memory record as verified useful.                            │
 │ reject   Mark a memory record as wrong or stale.                             │
+│ promote  Approve one quarantined memory so it can be injected into prompts.  │
 │ edit     Edit a memory summary and reset its feedback score.                 │
 │ verify   Re-check anchored memories against the filesystem and record        │
 │          staleness.                                                          │
@@ -4638,6 +4639,35 @@ Usage: onmc memory list [OPTIONS]
 │                                                        [default: wide]       │
 │ --help                                                 Show this message and │
 │                                                        exit.                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc memory promote`
+
+```text
+Usage: onmc memory promote [OPTIONS] MEMORY_ID
+
+ Approve one quarantined memory so it can be injected into prompts.
+
+ Memory an agent wrote about its own run (autopilot, the MCP record_memory
+ tool) is stored quarantined: readable via `onmc memory list`/`show`, never
+ auto-injected. This is the human approval that lifts that quarantine, one
+ id at a time — there is no bulk form on purpose.
+
+ Use --revoke to put a promoted memory back into quarantine.
+
+
+ Examples
+ --------
+ onmc memory promote mem_abc123
+ onmc memory promote mem_abc123 --revoke
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --revoke          Re-quarantine a promoted memory instead.                   │
+│ --help            Show this message and exit.                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -6876,8 +6906,33 @@ Usage: onmc skill [OPTIONS] COMMAND [ARGS]...
 │ show      Show a single skill with body, trigger, and metadata.              │
 │ feedback  Apply a trust signal to a stored skill.                            │
 │ prune     Disable auto_inject on low-success, long-unused skills.            │
+│ enable    Approve one skill for auto-injection, or turn it back off.         │
 │ export    Export skills as Agent Skills SKILL.md files (agentskills.io       │
 │           standard).                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc skill enable`
+
+```text
+Usage: onmc skill enable [OPTIONS] SKILL_ID
+
+ Approve one skill for auto-injection, or turn it back off.
+
+ Skills promoted autonomously (autopilot LEARN, `skill promote --auto`) are
+ stored inert so nothing an agent taught itself is injected without review.
+ This is the human approval that activates one. It is per-skill on purpose:
+ enabling everything at once would be the same as not gating at all.
+
+ `--disable` is the inverse and is always permitted, even with learned
+ behaviour switched off.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    skill_id      TEXT  Skill id to enable for auto-injection. [required]   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --disable          Turn auto-injection back off instead.                     │
+│ --help             Show this message and exit.                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

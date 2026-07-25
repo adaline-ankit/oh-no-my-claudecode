@@ -1829,6 +1829,81 @@ class OnmcService:
         storage.update_memory(updated)
         return updated
 
+    def promote_memory(self, memory_id: str, *, revoke: bool = False) -> MemoryEntry:
+        """Approve one quarantined memory for injection, or re-quarantine it.
+
+        Autonomous writers (autopilot LEARN, the MCP ``record_memory`` tool)
+        stamp their entries with
+        :data:`~oh_no_my_claudecode.hooks.prompt_recall.UNPROMOTED_SOURCE_PREFIX`,
+        which keeps them readable but never auto-injected.  This is the human
+        approval that removes the marker — the other half of that contract.
+        It is deliberately per-id: there is no bulk form, because approving
+        everything at once is indistinguishable from not gating at all.
+
+        With ``revoke=True`` the inverse is applied: the marker is re-stamped
+        (via
+        :func:`~oh_no_my_claudecode.hooks.prompt_recall.unpromoted_source_ref`)
+        so a memory that should not have been approved goes back into
+        quarantine.
+
+        The ``ONMC_LEARNING`` kill switch gates the *promote* direction only,
+        and fails closed — with learning off, nothing may be approved for
+        injection.  Revoking is always allowed: the safe direction must never
+        be blocked by a switch being off.
+
+        ``updated_at`` is touched either way so the decay clock restarts from
+        the moment of human review.
+
+        Raises:
+            LookupError: When ``memory_id`` does not exist.
+            ValueError: When the entry is already in the requested state, or
+                when promotion is refused because learning is disabled.
+        """
+        from oh_no_my_claudecode.hooks.prompt_recall import (
+            UNPROMOTED_SOURCE_PREFIX,
+            is_unpromoted_source,
+            learning_enabled,
+            unpromoted_source_ref,
+        )
+
+        if not revoke and not learning_enabled():
+            msg = (
+                "Refusing to promote: learned behaviour is disabled "
+                "(ONMC_LEARNING). A promoted memory would still never be "
+                "injected. Re-enable ONMC_LEARNING first."
+            )
+            raise ValueError(msg)
+
+        _, _, storage = self._load_context()
+        memory = self.get_memory(memory_id)
+        if memory is None:
+            msg = f"Memory not found: {memory_id}"
+            raise LookupError(msg)
+
+        quarantined = is_unpromoted_source(memory.source_ref)
+        if revoke:
+            if quarantined:
+                msg = f"Memory is already unpromoted: {memory_id}"
+                raise ValueError(msg)
+            new_source_ref = unpromoted_source_ref(memory.source_ref)
+        else:
+            if not quarantined:
+                msg = f"Memory is already promoted: {memory_id}"
+                raise ValueError(msg)
+            new_source_ref = memory.source_ref
+            while new_source_ref.startswith(UNPROMOTED_SOURCE_PREFIX):
+                new_source_ref = new_source_ref[len(UNPROMOTED_SOURCE_PREFIX) :]
+            new_source_ref = new_source_ref.strip() or "unknown"
+
+        updated = memory.model_copy(
+            update={
+                "source_ref": new_source_ref,
+                "updated_at": utc_now(),
+            }
+        )
+        storage.update_memory(updated)
+        return updated
+
     # Feedback delta constants.
     # ``up`` nudges the memory toward corroborated; ``down`` demotes it.
     # Deltas are intentionally modest so a few votes move the score, not a single one.
@@ -3075,6 +3150,14 @@ class OnmcService:
         clusters across all stored memories and returns new Skills (skipping
         memories already captured by existing skills).
 
+        Activation differs between the two paths, deliberately:
+
+        * the *playbook_id* path is a per-id human decision — the caller named
+          the artifact — so the skill is stored with ``auto_inject=True``;
+        * the *auto* path is bulk pattern detection with no evaluation behind
+          it, so its skills are stored inert (``auto_inject=False``) and are
+          listed by ``onmc skill list`` for review rather than injected.
+
         Returns a list of newly created Skill objects.
         """
         from oh_no_my_claudecode.skill.promoter import (
@@ -3087,7 +3170,10 @@ class OnmcService:
         if auto:
             import contextlib
 
-            skills = auto_promote_recurring(storage)
+            # auto_inject defaults to False in the promoter: bulk detection
+            # never activates itself.  Passed explicitly so the choice is
+            # visible at the call site.
+            skills = auto_promote_recurring(storage, auto_inject=False)
             for sk in skills:
                 with contextlib.suppress(ValueError):
                     storage.add_skill(sk)
@@ -3102,7 +3188,9 @@ class OnmcService:
             msg = f"Playbook not found: {playbook_id}"
             raise LookupError(msg)
 
-        skill = promote_playbook_to_skill(playbook, name=name)
+        # A named playbook id is the explicit human promotion, so this is the
+        # one call site that opts into activation.
+        skill = promote_playbook_to_skill(playbook, name=name, auto_inject=True)
         storage.add_skill(skill)
         return [skill]
 
@@ -3160,6 +3248,54 @@ class OnmcService:
         final = updated.model_copy(update={"confidence": new_conf})
         storage.update_skill(final)
         return final
+
+    def skill_enable(self, skill_id: str, *, disable: bool = False) -> object:
+        """Turn auto-injection on for one skill, or back off.
+
+        The counterpart to :meth:`promote_memory` on the skill side. Autonomous
+        promotion (autopilot LEARN, ``skill promote --auto``) now mints skills
+        with ``auto_inject=False`` so nothing an agent taught itself is injected
+        without review — but until this existed there was no way to ever turn one
+        on again, and :meth:`skill_prune` could only turn them off. A quarantine
+        with no approval path is not a gate, it is a dead end.
+
+        Deliberately per-id: a bulk "enable everything" would be
+        indistinguishable from not gating at all.
+
+        The ``ONMC_LEARNING`` kill switch gates the *enable* direction only and
+        fails closed. Disabling is always allowed — the safe direction must never
+        depend on a switch being on.
+
+        Raises:
+            LookupError: When ``skill_id`` does not exist.
+            ValueError: When the skill is already in the requested state, or when
+                enabling is refused because learned behaviour is disabled.
+        """
+        from oh_no_my_claudecode.hooks.prompt_recall import learning_enabled
+
+        if not disable and not learning_enabled():
+            msg = (
+                "Refusing to enable: learned behaviour is disabled "
+                "(ONMC_LEARNING). An enabled skill would still never be "
+                "injected, so enabling it would be misleading."
+            )
+            raise ValueError(msg)
+
+        _, _, storage = self._load_context()
+        skill = storage.get_skill(skill_id)
+        if skill is None:
+            msg = f"Unknown skill: {skill_id}"
+            raise LookupError(msg)
+
+        target = not disable
+        if skill.auto_inject == target:
+            state = "enabled" if target else "disabled"
+            msg = f"Skill {skill_id} is already {state}"
+            raise ValueError(msg)
+
+        updated = skill.model_copy(update={"auto_inject": target})
+        storage.update_skill(updated)
+        return updated
 
     def skill_prune(self) -> list[object]:
         """Disable auto_inject on skills with low success rate and long disuse.

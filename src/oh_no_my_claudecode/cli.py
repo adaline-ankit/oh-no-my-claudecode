@@ -3486,6 +3486,36 @@ def memory_reject_command(memory_id: str) -> None:
     render_memory_detail(memory)
 
 
+@memory_app.command("promote")
+def memory_promote_command(
+    memory_id: str,
+    revoke: Annotated[
+        bool,
+        typer.Option("--revoke", help="Re-quarantine a promoted memory instead."),
+    ] = False,
+) -> None:
+    """Approve one quarantined memory so it can be injected into prompts.
+
+    Memory an agent wrote about its own run (autopilot, the MCP record_memory
+    tool) is stored quarantined: readable via `onmc memory list`/`show`, never
+    auto-injected. This is the human approval that lifts that quarantine, one
+    id at a time — there is no bulk form on purpose.
+
+    Use --revoke to put a promoted memory back into quarantine.
+
+    \b
+    Examples
+    --------
+    onmc memory promote mem_abc123
+    onmc memory promote mem_abc123 --revoke
+    """
+    try:
+        memory = _service().promote_memory(memory_id, revoke=revoke)
+    except (FileNotFoundError, LookupError, ValueError) as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    render_memory_detail(memory)
+
+
 @memory_app.command("edit")
 def memory_edit_command(memory_id: str) -> None:
     """Edit a memory summary and reset its feedback score."""
@@ -4059,6 +4089,40 @@ def skill_prune_command(
         )
         return
     render_skill_pruned([sk for sk in pruned if isinstance(sk, _Skill)])
+
+
+@skill_app.command("enable")
+def skill_enable_command(
+    skill_id: Annotated[str, typer.Argument(help="Skill id to enable for auto-injection.")],
+    disable: Annotated[
+        bool,
+        typer.Option("--disable", help="Turn auto-injection back off instead."),
+    ] = False,
+) -> None:
+    """Approve one skill for auto-injection, or turn it back off.
+
+    Skills promoted autonomously (autopilot LEARN, `skill promote --auto`) are
+    stored inert so nothing an agent taught itself is injected without review.
+    This is the human approval that activates one. It is per-skill on purpose:
+    enabling everything at once would be the same as not gating at all.
+
+    `--disable` is the inverse and is always permitted, even with learned
+    behaviour switched off.
+    """
+    try:
+        skill = _service().skill_enable(skill_id, disable=disable)
+    except FileNotFoundError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+    except LookupError as exc:
+        raise typer.Exit(code=_fatal(f"Skill not found: {skill_id}")) from exc
+    except ValueError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    from oh_no_my_claudecode.models.skill import Skill as _Skill
+
+    state = "disabled" if disable else "enabled"
+    name = skill.name if isinstance(skill, _Skill) else skill_id
+    typer.echo(f"Skill {state}: {name} ({skill_id})")
 
 
 @skill_app.command("export")

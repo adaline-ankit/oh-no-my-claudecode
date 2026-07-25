@@ -366,7 +366,7 @@ def _record_win_memory(
 def _promote_skills_inactive(service: OnmcService) -> str | None:
     """Auto-promote recurring patterns to skills, stored **inactive**.
 
-    ``service.skill_promote(auto=True)`` mints skills with ``auto_inject=True``
+    ``service.skill_promote(auto=True)`` used to mint skills with ``auto_inject=True``
     and persists them in one shot — an agent deciding on its own that a pattern
     should enter every future prompt.  This calls the same deterministic detector
     (:func:`~oh_no_my_claudecode.skill.promoter.auto_promote_recurring`, a pure

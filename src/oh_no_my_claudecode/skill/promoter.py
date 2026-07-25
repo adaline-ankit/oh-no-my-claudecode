@@ -9,6 +9,16 @@ Public API:
 
 All functions are pure (no side-effects, no DB writes) so the injection agent
 can import them safely.
+
+Activation default:
+  Minting a Skill is *detection*, not promotion.  Both constructors therefore
+  default to ``auto_inject=False``: a freshly-minted skill is durable and
+  fully visible to ``onmc skill list``/``show``, but the injection layer
+  (:mod:`oh_no_my_claudecode.hooks.prompt_recall`,
+  :mod:`oh_no_my_claudecode.hooks.boot_digest`) skips it until a human turns
+  it on.  Callers that *are* the human action pass ``auto_inject=True``
+  explicitly, so every activation is a visible opt-in at the call site rather
+  than a silent default.
 """
 
 from __future__ import annotations
@@ -54,6 +64,7 @@ def promote_playbook_to_skill(
     playbook: Playbook,
     *,
     name: str | None = None,
+    auto_inject: bool = False,
 ) -> Skill:
     """Lift a Playbook into a Skill, deriving all fields from the playbook.
 
@@ -65,6 +76,12 @@ def promote_playbook_to_skill(
     - ``files``  — empty (no file-glob inference at this layer).
     - ``source_memory_ids`` — derived from playbook.grounded_in.
     - ``confidence`` — copied from the playbook.
+    - ``auto_inject`` — ``False`` unless the caller opts in.
+
+    ``auto_inject`` defaults to ``False``: lifting a playbook is a mechanical
+    transform, not evidence that the skill should join every future prompt.
+    Pass ``auto_inject=True`` only from a call site that *is* the explicit
+    human promotion (see :meth:`OnmcService.skill_promote`).
     """
     now = utc_now()
     skill_name = name or playbook.title
@@ -82,7 +99,7 @@ def promote_playbook_to_skill(
         use_count=0,
         success_count=0,
         confidence=playbook.confidence,
-        auto_inject=True,
+        auto_inject=auto_inject,
         created_at=now,
         updated_at=now,
         last_used_at=None,
@@ -94,6 +111,7 @@ def auto_promote_recurring(
     *,
     min_cluster_size: int = _MIN_AUTO_CLUSTER,
     max_skills: int = _MAX_AUTO_SKILLS,
+    auto_inject: bool = False,
 ) -> list[Skill]:
     """Detect recurring fail→fix patterns and high-signal tag clusters.
 
@@ -107,6 +125,11 @@ def auto_promote_recurring(
     6. Deduplicate by stable id; return up to max_skills sorted by confidence.
 
     Excludes memories that are already source_memory_ids of existing skills.
+
+    The returned skills carry ``auto_inject=auto_inject``, which defaults to
+    ``False``.  Clustering is pattern *detection*: nothing here evaluated the
+    skill against a control, so the candidate must not activate itself.  A
+    caller that has a human approval in hand passes ``auto_inject=True``.
     """
     memories = storage.list_memories()
     existing_skills = storage.list_skills()
@@ -171,7 +194,7 @@ def auto_promote_recurring(
                 use_count=0,
                 success_count=0,
                 confidence=confidence,
-                auto_inject=True,
+                auto_inject=auto_inject,
                 created_at=now,
                 updated_at=now,
                 last_used_at=None,

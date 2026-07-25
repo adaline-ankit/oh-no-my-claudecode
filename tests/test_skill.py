@@ -358,12 +358,21 @@ class TestPromotePlaybookToSkill:
         id2 = promote_playbook_to_skill(pb).id
         assert id1 == id2
 
-    def test_promote_auto_inject_defaults_true(
+    def test_promote_auto_inject_defaults_false(
+        self, seeded_memories: list[MemoryEntry]
+    ) -> None:
+        """Minting a skill is detection, not promotion — it must not self-activate."""
+        playbooks = compile_playbooks(seeded_memories, no_llm=True)
+        pb = playbooks[0]
+        skill = promote_playbook_to_skill(pb)
+        assert skill.auto_inject is False
+
+    def test_promote_auto_inject_is_explicit_opt_in(
         self, seeded_memories: list[MemoryEntry]
     ) -> None:
         playbooks = compile_playbooks(seeded_memories, no_llm=True)
         pb = playbooks[0]
-        skill = promote_playbook_to_skill(pb)
+        skill = promote_playbook_to_skill(pb, auto_inject=True)
         assert skill.auto_inject is True
 
 
@@ -428,6 +437,27 @@ class TestAutoPromoteRecurring:
         skills = auto_promote_recurring(storage)
         for sk in skills:
             assert sk.body, f"Skill {sk.id} must have a non-empty body."
+
+    def test_auto_promote_results_are_inert_by_default(
+        self, tmp_path: Path, seeded_memories: list[MemoryEntry]
+    ) -> None:
+        """Bulk pattern detection must never mint an injectable skill."""
+        storage = SQLiteStorage(tmp_path / "memory.db")
+        storage.initialize()
+        storage.upsert_memories(seeded_memories)
+        skills = auto_promote_recurring(storage)
+        assert skills, "Need at least one candidate to assert on."
+        assert all(not sk.auto_inject for sk in skills)
+
+    def test_auto_promote_auto_inject_is_explicit_opt_in(
+        self, tmp_path: Path, seeded_memories: list[MemoryEntry]
+    ) -> None:
+        storage = SQLiteStorage(tmp_path / "memory.db")
+        storage.initialize()
+        storage.upsert_memories(seeded_memories)
+        skills = auto_promote_recurring(storage, auto_inject=True)
+        assert skills
+        assert all(sk.auto_inject for sk in skills)
 
 
 # ── rank_skills tests ──────────────────────────────────────────────────────────
@@ -523,6 +553,44 @@ class TestSkillService:
         storage.upsert_memories(seeded_memories)
         skills = svc.skill_promote(auto=True)
         assert len(skills) >= 1
+
+    def test_skill_promote_from_playbook_is_active(
+        self,
+        initialized_repo: Path,
+        seeded_memories: list[MemoryEntry],
+    ) -> None:
+        """Naming a playbook id IS the human promotion — it stays injectable."""
+        svc = OnmcService(initialized_repo)
+        _, _, storage = svc._load_context()
+        storage.upsert_memories(seeded_memories)
+        _, playbooks, _ = svc.generate_playbooks(no_llm=True, write_artifacts=False)
+        assert playbooks
+        skills = svc.skill_promote(playbooks[0].id)
+        from oh_no_my_claudecode.models.skill import Skill as _Skill
+        first = skills[0]
+        assert isinstance(first, _Skill)
+        assert first.auto_inject is True
+        stored = storage.get_skill(first.id)
+        assert stored is not None
+        assert stored.auto_inject is True
+
+    def test_skill_promote_auto_stores_inactive_skills(
+        self,
+        initialized_repo: Path,
+        seeded_memories: list[MemoryEntry],
+    ) -> None:
+        """`--auto` is bulk detection: nothing it mints may inject itself."""
+        svc = OnmcService(initialized_repo)
+        _, _, storage = svc._load_context()
+        storage.upsert_memories(seeded_memories)
+        promoted = svc.skill_promote(auto=True)
+        assert promoted
+        from oh_no_my_claudecode.models.skill import Skill as _Skill
+        for sk in promoted:
+            assert isinstance(sk, _Skill)
+            stored = storage.get_skill(sk.id)
+            assert stored is not None
+            assert stored.auto_inject is False
 
     def test_skill_promote_missing_playbook_raises(self, initialized_repo: Path) -> None:
         svc = OnmcService(initialized_repo)
@@ -799,3 +867,64 @@ class TestSkillCLI:
         monkeypatch.chdir(initialized_repo)
         result = _runner.invoke(app, ["skill", "promote"], color=False)
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# `onmc skill enable` — the approval path for inert autonomous skills
+# ---------------------------------------------------------------------------
+
+
+def _service_with_skill(repo: Path, *, auto_inject: bool) -> tuple[object, str]:
+    """Init a repo, store one skill, return (service, skill_id)."""
+    from oh_no_my_claudecode.core.service import OnmcService
+
+    service = OnmcService(repo)
+    service.init_project()
+    skill = _make_skill(auto_inject=auto_inject)
+    _, _, storage = service._load_context()
+    storage.add_skill(skill)
+    return service, skill.id
+
+
+def test_skill_enable_activates_an_inert_skill(sample_repo: Path) -> None:
+    """Autonomously promoted skills are stored inert; a human must be able to
+    turn one on. Without this, quarantine is a dead end rather than a gate —
+    `skill_prune` could only ever turn auto_inject OFF."""
+    service, skill_id = _service_with_skill(sample_repo, auto_inject=False)
+    updated = service.skill_enable(skill_id)  # type: ignore[attr-defined]
+    assert updated.auto_inject is True
+    _, _, storage = service._load_context()  # type: ignore[attr-defined]
+    assert storage.get_skill(skill_id).auto_inject is True
+
+
+def test_skill_enable_disable_is_the_inverse(sample_repo: Path) -> None:
+    service, skill_id = _service_with_skill(sample_repo, auto_inject=True)
+    updated = service.skill_enable(skill_id, disable=True)  # type: ignore[attr-defined]
+    assert updated.auto_inject is False
+
+
+def test_skill_enable_refuses_unknown_and_repeat(sample_repo: Path) -> None:
+    service, skill_id = _service_with_skill(sample_repo, auto_inject=False)
+    with pytest.raises(LookupError):
+        service.skill_enable("nope")  # type: ignore[attr-defined]
+    service.skill_enable(skill_id)  # type: ignore[attr-defined]
+    with pytest.raises(ValueError, match="already enabled"):
+        service.skill_enable(skill_id)  # type: ignore[attr-defined]
+
+
+def test_skill_enable_respects_kill_switch_but_disable_always_works(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Enabling is gated by ONMC_LEARNING and fails closed; disabling never is —
+    the safe direction must not depend on a switch being on."""
+    monkeypatch.setenv("ONMC_LEARNING", "0")
+    service, skill_id = _service_with_skill(sample_repo, auto_inject=False)
+    with pytest.raises(ValueError, match="ONMC_LEARNING"):
+        service.skill_enable(skill_id)  # type: ignore[attr-defined]
+
+    # Disabling stays available with the switch off: re-enable the same skill by
+    # flipping it on directly in storage, then prove disable still works.
+    _, _, storage = service._load_context()  # type: ignore[attr-defined]
+    skill = storage.get_skill(skill_id)
+    storage.update_skill(skill.model_copy(update={"auto_inject": True}))
+    assert service.skill_enable(skill_id, disable=True).auto_inject is False  # type: ignore[attr-defined]

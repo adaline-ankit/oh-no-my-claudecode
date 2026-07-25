@@ -431,10 +431,15 @@ model write arbitrary memories. A kill switch (`ONMC_LEARNING`) and a
 `require_promoted()` assertion API make remaining bypasses **detectable by
 construction**.
 
-**Still open (honest):** `skill/promoter.py` mints `auto_inject=True` for other
-callers; `MemoryEntry` has no promotion column so quarantine uses a `source_ref`
-marker; the `.agent-memory/` exporter can carry unpromoted entries to another repo;
-and there is no `onmc memory promote <id>` for a human to approve a quarantined entry.
+**Closed since:** `skill/promoter.py` now defaults `auto_inject=False` (activation
+is an explicit opt-in); `onmc memory promote <id>` and `onmc skill enable <id>` give
+a human the approval path, so quarantine is a gate rather than a dead end; and
+federated inbound memory is force-quarantined regardless of the sender's claimed
+provenance.
+
+**Still open (honest):** `MemoryEntry` has no promotion column, so quarantine is
+carried by a reserved `source_ref` prefix plus an optional export flag rather than
+a first-class field.
 
 ### Why the SOTA claim is not made
 
