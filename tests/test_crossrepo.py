@@ -12,6 +12,7 @@ Covers:
 - federated_recall attributes hits to the right repo
 - recall ranks query matches by token overlap (title weighted highest)
 - recall is graceful when a repo has no export / empty query
+- recall labels cross-repo provenance and origin-repo quarantine (never filters)
 - CLI: scan and recall smoke via CliRunner, incl. --json
 """
 
@@ -25,9 +26,12 @@ from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.crossrepo.crossrepo import (
+    PROVENANCE_CROSS_REPO,
+    PROVENANCE_UNPROMOTED,
     federated_recall,
     scan_repos,
 )
+from oh_no_my_claudecode.hooks.prompt_recall import unpromoted_source_ref
 from oh_no_my_claudecode.models import MemoryEntry
 from oh_no_my_claudecode.models.memory import MemoryKind, SourceType
 from oh_no_my_claudecode.sync.schema import ExportCounts, SyncManifest
@@ -55,12 +59,21 @@ def _make_repo(root: Path, *, modules: list[str], layout: str = "src") -> Path:
     return root
 
 
-def _write_export(root: Path, memories: list[MemoryEntry]) -> None:
+def _write_export(
+    root: Path,
+    memories: list[MemoryEntry],
+    *,
+    unpromoted_ids: set[str] | None = None,
+) -> None:
     """Write a minimal valid ``.agent-memory/`` export into *root*.
 
     Mirrors the real exporter layout: ``manifest.json`` at the export root and
     one ``memories/<kind>/<id>.json`` payload per memory.
+
+    ``unpromoted_ids`` sets the explicit ``unpromoted`` record flag on the named
+    memories, the way the real exporter does for quarantined entries.
     """
+    flagged = unpromoted_ids or set()
     agent_mem = root / ".agent-memory"
     agent_mem.mkdir(parents=True, exist_ok=True)
     manifest = SyncManifest(
@@ -76,11 +89,24 @@ def _write_export(root: Path, memories: list[MemoryEntry]) -> None:
         target = agent_mem / "memories" / memory.kind.value / f"{memory.id}.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
-            json.dumps({"memory": memory.model_dump(mode="json")}), encoding="utf-8"
+            json.dumps(
+                {
+                    "memory": memory.model_dump(mode="json"),
+                    "unpromoted": memory.id in flagged,
+                }
+            ),
+            encoding="utf-8",
         )
 
 
-def _make_memory(mem_id: str, title: str, summary: str, tags: list[str]) -> MemoryEntry:
+def _make_memory(
+    mem_id: str,
+    title: str,
+    summary: str,
+    tags: list[str],
+    *,
+    source_ref: str = "docs/x.md",
+) -> MemoryEntry:
     now = datetime(2024, 1, 1, tzinfo=UTC)
     return MemoryEntry(
         id=mem_id,
@@ -89,7 +115,7 @@ def _make_memory(mem_id: str, title: str, summary: str, tags: list[str]) -> Memo
         summary=summary,
         details=summary,
         source_type=SourceType.DOC,
-        source_ref="docs/x.md",
+        source_ref=source_ref,
         tags=tags,
         confidence=0.9,
         created_at=now,

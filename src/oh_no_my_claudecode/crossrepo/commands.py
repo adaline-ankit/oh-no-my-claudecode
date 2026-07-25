@@ -16,11 +16,16 @@ from typing import Annotated
 import typer
 
 from oh_no_my_claudecode.crossrepo.crossrepo import (
+    CROSSREPO_PROVENANCE_NOTE,
     CrossRepoMap,
     RecallHit,
     federated_recall,
     scan_repos,
 )
+
+#: Inline marker appended to a hit the origin repo had quarantined.  Cross-repo
+#: recall never drops such a hit — it just refuses to show it as reviewed.
+_UNPROMOTED_MARKER = "[unpromoted in origin repo]"
 
 crossrepo_app = typer.Typer(
     name="crossrepo",
@@ -105,14 +110,22 @@ def _render_scan_rich(result: CrossRepoMap) -> bool:
 
 
 def _render_recall_plain(hits: list[RecallHit], query: str) -> None:
-    """Emit federated recall hits as plain text."""
+    """Emit federated recall hits as plain text, provenance first.
+
+    The provenance note precedes the hits so a reader — human or agent — sees
+    that this is unreviewed cross-repo content before reading any of it, and a
+    hit quarantined in its origin repo is marked inline rather than dropped.
+    """
     lines = ["", f"  onmc crossrepo recall — “{query}”", ""]
     if not hits:
         lines.append("  No matching memories across the given repos.")
     else:
+        lines.append(f"  ⚠ {CROSSREPO_PROVENANCE_NOTE}")
+        lines.append("")
         lines.append(f"  {len(hits)} hit(s):")
         for hit in hits:
-            lines.append(f"   [{hit.repo}] ({hit.score}) {hit.title}")
+            marker = f" {_UNPROMOTED_MARKER}" if hit.unpromoted else ""
+            lines.append(f"   [{hit.repo}] ({hit.score}){marker} {hit.title}")
             if hit.summary:
                 lines.append(f"        {hit.summary}")
     lines.append("")
@@ -120,7 +133,12 @@ def _render_recall_plain(hits: list[RecallHit], query: str) -> None:
 
 
 def _render_recall_rich(hits: list[RecallHit], query: str) -> bool:
-    """Render federated recall hits as a Rich table; return False if unavailable."""
+    """Render federated recall hits as a Rich table; return False if unavailable.
+
+    Carries the same provenance as the plain renderer: a standing caption for
+    the whole result set plus a per-row marker for hits their origin repo had
+    quarantined.
+    """
     try:
         from rich.console import Console
         from rich.table import Table
@@ -128,7 +146,12 @@ def _render_recall_rich(hits: list[RecallHit], query: str) -> bool:
         return False
 
     console = Console()
-    table = Table(title=f"onmc crossrepo recall — “{query}”", border_style="green")
+    table = Table(
+        title=f"onmc crossrepo recall — “{query}”",
+        caption=f"⚠ {CROSSREPO_PROVENANCE_NOTE}",
+        caption_style="yellow",
+        border_style="green",
+    )
     table.add_column("repo", style="bold")
     table.add_column("score", justify="right", style="dim")
     table.add_column("memory")
@@ -137,6 +160,8 @@ def _render_recall_rich(hits: list[RecallHit], query: str) -> bool:
     else:
         for hit in hits:
             memory_cell = hit.title
+            if hit.unpromoted:
+                memory_cell = f"[yellow]{_UNPROMOTED_MARKER}[/yellow] {memory_cell}"
             if hit.summary:
                 memory_cell += f"\n[dim]{hit.summary}[/dim]"
             table.add_row(hit.repo, str(hit.score), memory_cell)
@@ -195,6 +220,10 @@ def recall_command(
     Loads each repo's memory export (skipping repos without one), ranks hits by
     deterministic token overlap, and reports the best matches with their source
     repo. Pass repos via ``--repo`` (repeatable) and/or positional paths.
+
+    Results are unreviewed cross-repo content and are labelled as such; a memory
+    quarantined in its origin repo is marked, never silently dropped. ``--json``
+    carries the same signal per hit as ``unpromoted`` / ``provenance``.
     """
     raw = list(repos or []) + list(paths or [])
     if not raw:
