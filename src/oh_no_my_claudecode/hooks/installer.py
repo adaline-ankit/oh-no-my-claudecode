@@ -91,6 +91,39 @@ class HookInstallResult:
     backup_created: bool
     mcp_registered: bool
     legacy_global_cleaned: bool
+    # Set when the pre-existing settings.json was unparseable JSON: its raw
+    # bytes were copied here before onmc wrote a fresh, valid file, so the
+    # user's (broken) content is never silently discarded.
+    corrupt_backup_path: Path | None = None
+
+
+def _preserve_corrupt_settings(settings_path: Path) -> Path | None:
+    """Copy a malformed ``settings.json`` aside before it is overwritten.
+
+    Claude Code (and onmc's own readers) treat an unparseable settings.json as
+    empty, so writing onmc hooks over it would silently discard whatever the
+    user had.  When the file exists and is non-empty but does NOT parse as
+    JSON, its raw bytes are copied to ``settings.json.onmc-corrupt`` (once —
+    an existing corrupt-backup is never clobbered) and that path is returned.
+    Returns ``None`` when the file is absent, empty, or already valid JSON.
+    """
+    if not settings_path.exists():
+        return None
+    try:
+        raw = settings_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    if not raw.strip():
+        return None
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        corrupt_path = settings_path.with_name(f"{settings_path.name}.onmc-corrupt")
+        if not corrupt_path.exists():
+            corrupt_path.parent.mkdir(parents=True, exist_ok=True)
+            corrupt_path.write_text(raw, encoding="utf-8")
+        return corrupt_path
+    return None
 
 
 def install_claude_hooks(
@@ -129,6 +162,7 @@ def install_claude_hooks(
     settings_path = settings_path or project_settings_path(repo_root)
     backup_path = backup_path or project_settings_backup_path(repo_root)
     mcp_path = mcp_path or mcp_config_path(repo_root)
+    corrupt_backup_path = _preserve_corrupt_settings(settings_path)
     settings = _load_json(settings_path)
     backup_created = False
     if not backup_path.exists():
@@ -200,6 +234,7 @@ def install_claude_hooks(
         backup_created=backup_created,
         mcp_registered=register_mcp,
         legacy_global_cleaned=legacy_global_cleaned,
+        corrupt_backup_path=corrupt_backup_path,
     )
 
 
@@ -258,6 +293,7 @@ def install_wrap_hooks(
     """
     settings_path = settings_path or project_settings_path(repo_root)
     backup_path = backup_path or project_settings_backup_path(repo_root)
+    corrupt_backup_path = _preserve_corrupt_settings(settings_path)
     settings = _load_json(settings_path)
     backup_created = False
     if not backup_path.exists():
@@ -291,6 +327,7 @@ def install_wrap_hooks(
         backup_created=backup_created,
         mcp_registered=False,
         legacy_global_cleaned=False,
+        corrupt_backup_path=corrupt_backup_path,
     )
 
 
@@ -504,9 +541,7 @@ def _strip_commands(
     return changed
 
 
-def _remove_commands(
-    hooks: dict[str, Any], event_name: str, commands: frozenset[str]
-) -> bool:
+def _remove_commands(hooks: dict[str, Any], event_name: str, commands: frozenset[str]) -> bool:
     entries = hooks.get(event_name)
     if not isinstance(entries, list):
         return False

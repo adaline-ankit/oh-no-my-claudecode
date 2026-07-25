@@ -384,9 +384,7 @@ def test_cliff_runner_raising_falls_back_to_builtin() -> None:
     def boom(repo_root: Path, next_version: str) -> str:
         raise RuntimeError("git-cliff blew up")
 
-    draft = draft_release(
-        current_version="1.2.3", commits=commits, date=_DATE, cliff_runner=boom
-    )
+    draft = draft_release(current_version="1.2.3", commits=commits, date=_DATE, cliff_runner=boom)
     assert draft.changelog_entry == _builtin_entry(commits)
 
 
@@ -426,9 +424,7 @@ def test_cli_no_git_cliff_flag_uses_builtin(
     """--no-git-cliff forces the deterministic built-in renderer."""
     repo = _seed_git_repo(tmp_path)
     monkeypatch.chdir(repo)
-    result = _runner().invoke(
-        app, ["release", "--no-git-cliff", "--json"], catch_exceptions=False
-    )
+    result = _runner().invoke(app, ["release", "--no-git-cliff", "--json"], catch_exceptions=False)
     assert result.exit_code == 0
     payload = json.loads(result.stdout)
     # Built-in renderer: no commits after the tag -> patch bump, standard heading.
@@ -451,3 +447,133 @@ def test_real_git_cliff_binary_renders_entry(tmp_path: Path) -> None:
     assert runner is not None
     rendered = runner(repo, "1.3.0")
     assert rendered is None or isinstance(rendered, str)
+
+
+# ---------------------------------------------------------------------------
+# Release-contract validation (onmc release --check)
+# ---------------------------------------------------------------------------
+
+from oh_no_my_claudecode.release import (  # noqa: E402
+    changelog_has_version,
+    evaluate_release_readiness,
+    validate_release,
+)
+
+_CHANGELOG_130 = textwrap.dedent(
+    """
+    # Changelog
+
+    ## [Unreleased]
+
+    ## [1.3.0] — 2026-07-01
+
+    ### Added
+
+    - A feature.
+
+    ## [1.2.3] — 2026-01-01
+
+    ### Added
+
+    - Initial release.
+    """
+).strip()
+
+
+def test_changelog_has_version_detects_heading() -> None:
+    assert changelog_has_version(_CHANGELOG_130, "1.3.0") is True
+    assert changelog_has_version(_CHANGELOG_130, "9.9.9") is False
+
+
+def test_evaluate_ready_to_tag() -> None:
+    v = evaluate_release_readiness(
+        current_version="1.3.0",
+        existing_tags=["v1.2.3"],
+        changelog_text=_CHANGELOG_130,
+        last_tag="v1.2.3",
+    )
+    assert v.status == "ready-to-tag"
+    assert v.ready is True
+    assert not v.issues
+    assert any("git tag v1.3.0" in note for note in v.notes)
+
+
+def test_evaluate_already_released() -> None:
+    v = evaluate_release_readiness(
+        current_version="1.2.3",
+        existing_tags=["v1.2.3"],
+        changelog_text=_CHANGELOG_130,
+        last_tag="v1.2.3",
+    )
+    assert v.status == "already-released"
+    assert v.ready is False
+    assert v.issues
+
+
+def test_evaluate_no_changelog_entry() -> None:
+    v = evaluate_release_readiness(
+        current_version="1.3.0",
+        existing_tags=["v1.2.3"],
+        changelog_text="# Changelog\n\n## [Unreleased]\n",
+        last_tag="v1.2.3",
+    )
+    assert v.status == "no-changelog-entry"
+    assert v.ready is False
+
+
+def test_evaluate_regression() -> None:
+    v = evaluate_release_readiness(
+        current_version="1.1.0",
+        existing_tags=["v1.2.3"],
+        changelog_text="## [1.1.0]\n",
+        last_tag="v1.2.3",
+    )
+    assert v.status == "regression"
+    assert v.ready is False
+
+
+def test_validate_release_already_released_on_seed_repo(tmp_path: Path) -> None:
+    # _seed_git_repo tags v1.2.3 and pyproject stays at 1.2.3.
+    repo = _seed_git_repo(tmp_path)
+    v = validate_release(repo)
+    assert v.current_version == "1.2.3"
+    assert v.version_tag_exists is True
+    assert v.status == "already-released"
+    assert v.ready is False
+
+
+def test_cli_release_check_ready_exits_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _seed_repo(
+        tmp_path,
+        pyproject=_PYPROJECT.replace("1.2.3", "1.3.0"),
+        changelog=_CHANGELOG_130,
+    )
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "t@e.com")
+    _git(repo, "config", "user.name", "T")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "chore: seed")
+    _git(repo, "tag", "v1.2.3")
+    monkeypatch.chdir(repo)
+    result = _runner().invoke(app, ["release", "--check"], catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+
+
+def test_cli_release_check_already_released_exits_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _seed_git_repo(tmp_path)  # pyproject 1.2.3, tag v1.2.3
+    monkeypatch.chdir(repo)
+    result = _runner().invoke(app, ["release", "--check"], catch_exceptions=False)
+    assert result.exit_code == 1, result.output
+
+
+def test_cli_release_check_rejects_write_combo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _seed_git_repo(tmp_path)
+    monkeypatch.chdir(repo)
+    result = _runner().invoke(app, ["release", "--check", "--write"])
+    assert result.exit_code == 1, result.output

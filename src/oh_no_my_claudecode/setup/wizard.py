@@ -13,7 +13,6 @@ from rich.progress import Progress as RichProgress
 from rich.progress import SpinnerColumn, TaskID, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
@@ -53,9 +52,7 @@ _TOTAL_STEPS = len(_STEPS)
 def _step_header(index: int, name: str, *, done: bool = False) -> None:
     """Print a step header.  *index* is 1-based."""
     status = "[bold green]✓[/]" if done else "[bold cyan]→[/]"
-    console.print(
-        f"\n{status}  [bold cyan]Step {index}/{_TOTAL_STEPS}[/]  [bold]{name}[/]"
-    )
+    console.print(f"\n{status}  [bold cyan]Step {index}/{_TOTAL_STEPS}[/]  [bold]{name}[/]")
 
 
 @dataclass(slots=True)
@@ -291,8 +288,7 @@ def _prompt_api_key_env_var_name(*, default: str) -> str:
         if _looks_like_api_key(value):
             console.print("[red]⚠  That looks like an API key, not a variable name.[/red]")
             console.print(
-                "Enter the environment variable name "
-                f"(for example {default}), not the key itself."
+                f"Enter the environment variable name (for example {default}), not the key itself."
             )
             continue
         return value or default
@@ -421,8 +417,7 @@ def interactive_seed(console: Console, service: OnmcService) -> int:
                 kind=MemoryKind.HOTSPOT,
                 title=f"Manually flagged hotspot: {path}",
                 summary=(
-                    f"{path} was manually identified as high-risk. "
-                    "Understand it before editing."
+                    f"{path} was manually identified as high-risk. Understand it before editing."
                 ),
                 source_type=SourceType.MANUAL_SEED,
                 source_ref="manual_seed:setup",
@@ -442,10 +437,20 @@ def _claude_md_phase(service: OnmcService, *, yes: bool, no_llm: bool) -> bool:
     )
     if not generate:
         return False
-    markdown = service.generate_claude_md(no_llm=no_llm)
-    console.print("  [green]✓[/green] CLAUDE.md written")
-    preview = "\n".join(markdown.splitlines()[:10])
-    console.print(Panel.fit(Syntax(preview, "markdown", word_wrap=True), title="Preview"))
+    # Never clobber a user-authored CLAUDE.md: setup_claude_md generates fresh
+    # only when none exists, otherwise merges (preserving user sections) and
+    # backs up any non-onmc file to CLAUDE.md.onmc-backup first.
+    action, backup_path = service.setup_claude_md(no_llm=no_llm)
+    if action == "generated":
+        console.print("  [green]✓[/green] CLAUDE.md written")
+    elif action == "merged":
+        backup_name = backup_path.name if backup_path else "CLAUDE.md.onmc-backup"
+        console.print(
+            "  [green]✓[/green] CLAUDE.md updated "
+            f"[dim](your original preserved at {backup_name})[/dim]"
+        )
+    else:
+        console.print("  [green]✓[/green] CLAUDE.md refreshed [dim](user sections preserved)[/dim]")
     return True
 
 
@@ -539,9 +544,7 @@ def _render_first_win(service: OnmcService, detection: EnvironmentDetection) -> 
                 padding=(1, 2),
             )
         )
-        console.print(
-            f"  [dim]Query: \"{query}\" · {len(result.entries)} match(es)[/dim]"
-        )
+        console.print(f'  [dim]Query: "{query}" · {len(result.entries)} match(es)[/dim]')
     except Exception:
         # Never crash the wizard for the first-win flourish
         return
@@ -628,9 +631,7 @@ def _render_summary(
             padding=(0, 2),
         )
     )
-    console.print(
-        "  [dim]Share: github.com/adaline-ankit/oh-no-my-claudecode[/dim]"
-    )
+    console.print("  [dim]Share: github.com/adaline-ankit/oh-no-my-claudecode[/dim]")
 
 
 # ---------------------------------------------------------------------------
@@ -654,9 +655,7 @@ def _ui_handoff(*, yes: bool) -> None:
     # Interactive path
     launch = Confirm.ask("\nOpen your visual memory dashboard now?", default=False)
     if not launch:
-        console.print(
-            "  [dim]Run [bold]onmc ui[/bold] when you're ready.[/dim]"
-        )
+        console.print("  [dim]Run [bold]onmc ui[/bold] when you're ready.[/dim]")
         return
 
     try:

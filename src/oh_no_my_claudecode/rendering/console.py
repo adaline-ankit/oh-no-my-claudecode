@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.pack import ContextPack
     from oh_no_my_claudecode.preflight.runner import PreflightReport
     from oh_no_my_claudecode.profile.compiler import UserProfile
-    from oh_no_my_claudecode.release import ReleaseDraft
+    from oh_no_my_claudecode.release import ReleaseDraft, ReleaseValidation
     from oh_no_my_claudecode.trace.models import TraceReport
     from oh_no_my_claudecode.verifydiff.checker import VerifyReport
 
@@ -337,6 +337,23 @@ def render_memory_artifact_detail(
 
 
 def render_status(status: dict[str, str]) -> None:
+    # Lead with a clear active banner when the integration fields are present.
+    active = status.get("onmc_active")
+    if active is not None:
+        on = active == "yes"
+        layers = []
+        if status.get("mcp_registered") == "yes":
+            layers.append("MCP")
+        if status.get("wrap_active") == "yes":
+            layers.append("wrap")
+        suffix = f"  ·  layers: {', '.join(layers)}" if layers else ""
+        if on:
+            console.print(f"[bold green]● ONMC active[/bold green] (hooks installed){suffix}")
+        else:
+            console.print(
+                "[bold yellow]○ ONMC not active[/bold yellow] "
+                "[dim]— run `onmc setup` or `onmc hooks install`[/dim]"
+            )
     table = Table(title="ONMC Status")
     table.add_column("Field")
     table.add_column("Value")
@@ -1523,9 +1540,7 @@ def render_ask_result(result: AskResult) -> None:
             )
         )
     elif result.entries:
-        console.print(
-            "[dim]No LLM synthesis — showing ranked memory entries.[/dim]"
-        )
+        console.print("[dim]No LLM synthesis — showing ranked memory entries.[/dim]")
 
     if not result.entries:
         return
@@ -2001,8 +2016,7 @@ def render_autopilot_result(result: object) -> None:
     de_tag = f" · {r.know_dead_ends_count} dead-ends blocked" if r.know_dead_ends_count else ""
     console.print(
         Panel.fit(
-            f"[bold]Brief:[/bold] {r.know_brief_summary or '(compiled)'}"
-            f"{de_tag}{profile_tag}",
+            f"[bold]Brief:[/bold] {r.know_brief_summary or '(compiled)'}{de_tag}{profile_tag}",
             title="[bold cyan]🧠 KNOW[/bold cyan]",
             border_style="cyan",
         )
@@ -2042,9 +2056,7 @@ def render_autopilot_result(result: object) -> None:
         prove_status = f"[bold yellow]NOT VERIFIED[/bold yellow] — {r.stop_reason}"
 
     cost_str = f"  cost ${r.cost_usd:.2f}" if r.cost_usd is not None else ""
-    receipt_str = (
-        f"\nReceipt: {r.receipt_path}" if r.receipt_path else "\nReceipt: (none)"
-    )
+    receipt_str = f"\nReceipt: {r.receipt_path}" if r.receipt_path else "\nReceipt: (none)"
     console.print(
         Panel.fit(
             f"{prove_status}{cost_str}{receipt_str}",
@@ -2110,9 +2122,7 @@ def render_autopilot_result(result: object) -> None:
 def render_nomistakes_result(result: NoMistakesResult) -> None:
     """Render the No-Mistakes gate result."""
     status = (
-        "[bold green]APPROVED[/bold green]"
-        if result.approved
-        else "[bold red]BLOCKED[/bold red]"
+        "[bold green]APPROVED[/bold green]" if result.approved else "[bold red]BLOCKED[/bold red]"
     )
     mode = "dry-run" if result.dry_run else "active"
     lines = [
@@ -2397,6 +2407,7 @@ def render_preflight_report(report: PreflightReport) -> None:
         names = ", ".join(step.label for step in report.failed)
         console.print(f"[bold red]preflight failed:[/bold red] {names}")
 
+
 def render_verify_report(report: VerifyReport) -> None:
     """Render an ``onmc verify-diff`` adversarial gate result.
 
@@ -2505,9 +2516,7 @@ def _render_eval_report(report: object) -> None:
             "[green]✓[/green]" if r.passed else "[red]✗[/red]",
         )
     console.print(table)
-    console.print(
-        f"\n[dim]Mean injected chars: {report.mean_injected_chars:.0f}[/dim]"
-    )
+    console.print(f"\n[dim]Mean injected chars: {report.mean_injected_chars:.0f}[/dim]")
 
 
 def _render_eval_comparison(comparison: object) -> None:
@@ -2734,9 +2743,7 @@ def _render_replay_single(report: object) -> None:
             f"[green]{step.recall_hits}[/green]" if step.recall_hits > 0 else "[dim]0[/dim]"
         )
         deadend_str = (
-            f"[yellow]{step.deadend_hits}[/yellow]"
-            if step.deadend_hits > 0
-            else "[dim]0[/dim]"
+            f"[yellow]{step.deadend_hits}[/yellow]" if step.deadend_hits > 0 else "[dim]0[/dim]"
         )
         table.add_row(
             str(step.index),
@@ -2828,9 +2835,7 @@ def _render_replay_comparison(comparison: object) -> None:
     console.print(table)
     console.print()
     console.print("[dim]Methodology: deterministic, offline — no LLM calls.[/dim]")
-    console.print(
-        "[dim]without-memory baseline: all retrieval results treated as empty.[/dim]"
-    )
+    console.print("[dim]without-memory baseline: all retrieval results treated as empty.[/dim]")
 
 
 def render_evolution_card(report: object) -> None:
@@ -3181,6 +3186,36 @@ def render_release_draft(draft: ReleaseDraft, *, written: bool = False) -> None:
         console.print("[green]Wrote pyproject.toml + CHANGELOG.md.[/green]")
     else:
         console.print("[dim]Dry run — nothing written. Pass --write to apply.[/dim]")
+
+
+def render_release_validation(v: ReleaseValidation) -> None:
+    """Render the offline release-contract check produced by ``release --check``.
+
+    Shows the version/tag/CHANGELOG facts, the verdict, and either the exact
+    tag command (when ready) or the blocking issues (when not).
+    """
+    _status_style = {
+        "ready-to-tag": "green",
+        "already-released": "yellow",
+        "no-changelog-entry": "yellow",
+        "regression": "red",
+    }
+    style = _status_style.get(v.status, "white")
+    table = Table(title="Release Contract Check")
+    table.add_column("Field")
+    table.add_column("Value", justify="right")
+    table.add_row("pyproject version", v.current_version)
+    table.add_row("Release tag", v.version_tag)
+    table.add_row("Last tag", v.last_tag or "—")
+    table.add_row("Tag already exists", "yes" if v.version_tag_exists else "no")
+    table.add_row("CHANGELOG entry", "yes" if v.changelog_has_entry else "no")
+    table.add_row("Status", f"[{style}]{v.status}[/{style}]")
+    table.add_row("Ready to tag", "[green]yes[/green]" if v.ready else "[red]no[/red]")
+    console.print(table)
+    for note in v.notes:
+        console.print(Panel(note, border_style="green", title="Next step"))
+    for issue in v.issues:
+        console.print(f"[red]✗ {issue}[/red]")
 
 
 def render_conventions(conv: Conventions, *, path: Path | None = None) -> None:

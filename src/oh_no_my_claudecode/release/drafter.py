@@ -80,6 +80,174 @@ class ReleaseDraft:
     commits_by_type: dict[str, list[str]] = field(default_factory=dict)
 
 
+ReleaseStatus = Literal[
+    "ready-to-tag",
+    "already-released",
+    "no-changelog-entry",
+    "regression",
+]
+
+
+@dataclass(frozen=True)
+class ReleaseValidation:
+    """Offline pre-publish check of the release contract.
+
+    Mirrors the CI ``release-contract`` job (tag ⇔ pyproject alignment) but is
+    runnable locally *before* a tag is pushed, so version/tag drift is caught
+    at the desk instead of in the publish pipeline.  Pure and deterministic:
+    :func:`evaluate_release_readiness` takes the version, the existing tags,
+    and the CHANGELOG text as inputs — no git, network, or LLM.
+
+    Attributes
+    ----------
+    current_version:
+        The version declared in ``pyproject.toml``.
+    version_tag:
+        The tag that *would* release this version (``f"v{current_version}"``).
+    last_tag:
+        The most recent ``vX.Y.Z`` tag, or ``None`` when the repo has none.
+    version_tag_exists:
+        Whether *version_tag* already exists (i.e. this version was released).
+    changelog_has_entry:
+        Whether ``CHANGELOG.md`` has a ``## [current_version]`` heading.
+    status:
+        The single most-important verdict (see :data:`ReleaseStatus`).
+    ready:
+        ``True`` only when it is safe to cut ``version_tag`` right now.
+    issues:
+        Blocking problems (empty when *ready*).
+    notes:
+        Non-blocking, informational lines (e.g. the exact tag command).
+    """
+
+    current_version: str
+    version_tag: str
+    last_tag: str | None
+    version_tag_exists: bool
+    changelog_has_entry: bool
+    status: ReleaseStatus
+    ready: bool
+    issues: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+def changelog_has_version(changelog_text: str, version: str) -> bool:
+    """True when ``CHANGELOG.md`` has a ``## [<version>]`` heading."""
+    pattern = re.compile(rf"^## \[{re.escape(version)}\]", re.MULTILINE)
+    return pattern.search(changelog_text) is not None
+
+
+def evaluate_release_readiness(
+    *,
+    current_version: str,
+    existing_tags: list[str],
+    changelog_text: str,
+    last_tag: str | None,
+) -> ReleaseValidation:
+    """Classify release readiness from injected inputs (pure, offline).
+
+    Decision order (first match wins):
+
+    1. ``regression`` — the pyproject version is *older* than the last tag.
+    2. ``already-released`` — ``v{version}`` is already a tag.
+    3. ``no-changelog-entry`` — no ``## [version]`` section in CHANGELOG.md.
+    4. ``ready-to-tag`` — version bumped, no tag yet, CHANGELOG entry present.
+    """
+    version_tag = f"v{current_version}"
+    version_tag_exists = version_tag in set(existing_tags)
+    has_entry = changelog_has_version(changelog_text, current_version)
+    issues: list[str] = []
+    notes: list[str] = []
+
+    last_tag_version = last_tag[1:] if last_tag and last_tag.startswith("v") else last_tag
+    is_regression = (
+        last_tag_version is not None
+        and not version_tag_exists
+        and _parse_version(current_version) < _parse_version(last_tag_version)
+    )
+
+    status: ReleaseStatus
+    if is_regression:
+        status = "regression"
+        issues.append(
+            f"pyproject version {current_version} is older than the last tag "
+            f"{last_tag}. Bump the version forward before releasing."
+        )
+    elif version_tag_exists:
+        status = "already-released"
+        issues.append(
+            f"{version_tag} is already tagged — version {current_version} was "
+            "released. Run `onmc release --write` to bump before tagging again."
+        )
+    elif not has_entry:
+        status = "no-changelog-entry"
+        issues.append(
+            f"CHANGELOG.md has no `## [{current_version}]` entry. "
+            "Run `onmc release --write` to add it before tagging."
+        )
+    else:
+        status = "ready-to-tag"
+        drift = f" (main is ahead of the last tag {last_tag})" if last_tag else ""
+        notes.append(
+            f"Ready to release {version_tag}{drift}. To publish:\n"
+            f"    git tag {version_tag} && git push origin {version_tag}"
+        )
+
+    return ReleaseValidation(
+        current_version=current_version,
+        version_tag=version_tag,
+        last_tag=last_tag,
+        version_tag_exists=version_tag_exists,
+        changelog_has_entry=has_entry,
+        status=status,
+        ready=status == "ready-to-tag",
+        issues=issues,
+        notes=notes,
+    )
+
+
+def all_tags(repo_root: Path) -> list[str]:
+    """Return all ``vX.Y.Z`` tags in the repo (unordered). Empty on git failure."""
+    try:
+        result = subprocess.run(
+            ["git", "tag", "--list", "v*"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def validate_release(repo_root: Path) -> ReleaseValidation:
+    """Wire the live repo into :func:`evaluate_release_readiness`.
+
+    Reads the current version from ``pyproject.toml``, the existing tags and
+    last reachable tag from git, and the ``CHANGELOG.md`` text.  Offline; never
+    touches the network.
+
+    Raises
+    ------
+    FileNotFoundError
+        When ``pyproject.toml`` does not exist.
+    ValueError
+        When the ``[project] version`` key is absent.
+    """
+    version = current_version(repo_root)
+    changelog = repo_root / "CHANGELOG.md"
+    changelog_text = changelog.read_text(encoding="utf-8") if changelog.exists() else ""
+    return evaluate_release_readiness(
+        current_version=version,
+        existing_tags=all_tags(repo_root),
+        changelog_text=changelog_text,
+        last_tag=_last_tag(repo_root),
+    )
+
+
 def _parse_version(version: str) -> tuple[int, int, int]:
     """Parse ``"X.Y.Z"`` into an ``(major, minor, patch)`` tuple.
 
@@ -453,7 +621,7 @@ def write_release(repo_root: Path, draft: ReleaseDraft) -> tuple[Path, Path]:
         rf'\1"{draft.next_version}"', pyproject_text, count=1
     )
     if count == 0:
-        msg = "No `version = \"...\"` line found in pyproject.toml."
+        msg = 'No `version = "..."` line found in pyproject.toml.'
         raise ValueError(msg)
     pyproject.write_text(new_pyproject, encoding="utf-8")
 
