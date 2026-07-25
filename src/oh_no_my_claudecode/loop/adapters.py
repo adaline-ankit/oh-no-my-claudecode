@@ -6,8 +6,10 @@ Three adapters are provided:
   and parses the structured JSON response to extract text, tokens, and cost.
 - ``CodexCliAdapter`` — shells out to
   ``codex exec --sandbox workspace-write [--model <model>] <prompt>`` (headless mode) and returns
-  the raw stdout as output; token usage is not available from the Codex CLI in
-  headless mode.
+  the raw stdout as output.  Codex emits no machine-readable usage in headless
+  mode, so tokens are recovered *best-effort* from the human-readable
+  ``tokens used: N`` line and are ``None`` whenever that line is absent or
+  malformed.  Cost is never available and is always ``None``.
 - ``OpenCodeCliAdapter`` — shells out to
   ``opencode run --format json [--model <provider/model>] <prompt>``
   and parses the JSON event stream defensively for text and token usage.
@@ -34,6 +36,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from collections.abc import Callable
@@ -393,6 +396,144 @@ class ClaudeCliAdapter:
 
 
 # ---------------------------------------------------------------------------
+# Codex: best-effort token capture
+# ---------------------------------------------------------------------------
+
+#: Codex CLI prints a human-readable usage total on a successful headless run,
+#: e.g. ``tokens used: 14,678``.  Some versions omit the colon or put the number
+#: on the next line, so ``\s`` (which matches newlines) separates the words.
+#: The capture group deliberately cannot end on a comma.
+_CODEX_TOKENS_RE = re.compile(r"tokens\s+used\s*:?\s*(\d[\d,]*\d|\d)", re.IGNORECASE)
+
+#: A count is only accepted when it is a plain integer or correctly comma-grouped.
+#: Anything else (``14,67``, ``1,2,3``) is malformed and yields ``None``.
+_CODEX_COUNT_RE = re.compile(r"^(?:\d{1,3}(?:,\d{3})+|\d+)$")
+
+
+def _parse_codex_tokens(raw: str) -> int | None:
+    """Best-effort extraction of Codex's human-readable token total.
+
+    The Codex CLI exposes **no** machine-readable usage or cost in headless
+    ``exec`` mode.  It does, however, print a human-readable total such as
+    ``tokens used: 14,678``, which is real data worth keeping when present.
+
+    This parse is strictly best-effort and fails closed: an absent line, a
+    non-numeric value, a badly grouped number, or a non-positive count all
+    return ``None``.  A metric is never fabricated — absence is ``None``, never
+    ``0``.  When Codex prints the line more than once the last occurrence wins,
+    since Codex reports a cumulative total.
+    """
+    if not raw:
+        return None
+    matches = _CODEX_TOKENS_RE.findall(raw)
+    if not matches:
+        return None
+    candidate = matches[-1]
+    if not _CODEX_COUNT_RE.match(candidate):
+        return None
+    try:
+        value = int(candidate.replace(",", ""))
+    except ValueError:  # pragma: no cover - guarded by _CODEX_COUNT_RE
+        return None
+    return value if value > 0 else None
+
+
+# ---------------------------------------------------------------------------
+# Codex: provider-failure classification
+# ---------------------------------------------------------------------------
+
+# The loop already has exactly one channel for "the agent invocation itself
+# failed rather than doing work": ``AgentRunResult.error``.  ``run_loop`` turns a
+# non-None ``error`` into a forced loss, stops with ``stop_reason='agent-error'``
+# and writes ``[agent-error] <error>`` into that iteration's *verify_output* —
+# the harness-controlled field that ``engine._classify_failure_cause`` reads.
+# ``[agent-error]`` is itself one of the engine's ``_ENV_PATTERNS``, so every
+# adapter error is already classified ``'environment'`` and is never stored as a
+# FAILED_APPROACH dead-end.
+#
+# What that contract does *not* yet express is *why* the invocation failed.  A
+# provider 503/throttle is transient infrastructure and a 401 is a missing
+# credential; neither is the agent deciding it cannot do the work, and a
+# benchmark must not score them as agent losses.  Rather than add a competing
+# field or a second error concept, these markers are prefixed onto the existing
+# ``error`` string so they land inside ``verify_output`` — following the same
+# bracketed-marker convention the loop already uses there (``[agent-error]``,
+# ``[verify error:``, ``[no-op]``, ``[scope-unverifiable]``).
+
+#: Provider was reachable-but-unwilling (throttled, overloaded, unavailable) or
+#: the transport gave up.  Transient infrastructure, not an agent failure.
+TRANSIENT_ERROR_MARKER = "[transient-infra]"
+
+#: No usable credentials, so the run never reached a model at all.
+CREDENTIALS_ERROR_MARKER = "[credentials-error]"
+
+#: Lowercase substrings that identify a *credentials* failure.  Codex emits
+#: ``401 Unauthorized: Missing bearer`` when no auth is configured.
+_CODEX_CREDENTIAL_PATTERNS: tuple[str, ...] = (
+    "401 unauthorized",
+    "status 401",
+    "error 401",
+    "missing bearer",
+    "invalid bearer",
+    "unauthorized",
+    "authentication failed",
+    "invalid api key",
+    "incorrect api key",
+    "missing api key",
+    "invalid_api_key",
+    "not logged in",
+    "codex login",
+)
+
+#: Lowercase substrings that identify a *transient* provider/infrastructure
+#: failure.  Codex surfaces throttling as
+#: ``ERROR: unexpected status 503 ... "code":"throttled"`` followed by reconnect
+#: attempts that eventually give up.
+_CODEX_TRANSIENT_PATTERNS: tuple[str, ...] = (
+    "status 503",
+    "error 503",
+    "503 service unavailable",
+    "service unavailable",
+    "throttled",
+    "rate limit",
+    "rate-limit",
+    "too many requests",
+    "status 429",
+    "error 429",
+    "status 502",
+    "status 504",
+    "bad gateway",
+    "gateway timeout",
+    "overloaded",
+    "temporarily unavailable",
+    "connection reset",
+    "connection refused",
+    "stream disconnected",
+    "reconnect attempts exhausted",
+    "retries exhausted",
+    "retry limit",
+)
+
+
+def _classify_codex_failure(text: str) -> str | None:
+    """Return a provider-failure marker for *text*, or ``None``.
+
+    Credentials are checked first: when a run failed to authenticate and then
+    retried into a 503, the missing credential is the actionable root cause.
+
+    ``None`` means "no recognised provider signature" — i.e. treat it as a
+    genuine agent failure.  That is deliberately the default, so an unfamiliar
+    error is never quietly excused as infrastructure.
+    """
+    lowered = text.lower()
+    if any(pat in lowered for pat in _CODEX_CREDENTIAL_PATTERNS):
+        return CREDENTIALS_ERROR_MARKER
+    if any(pat in lowered for pat in _CODEX_TRANSIENT_PATTERNS):
+        return TRANSIENT_ERROR_MARKER
+    return None
+
+
+# ---------------------------------------------------------------------------
 # CodexCliAdapter
 # ---------------------------------------------------------------------------
 
@@ -400,13 +541,35 @@ class ClaudeCliAdapter:
 class CodexCliAdapter:
     """Agent adapter that drives the Codex CLI in headless exec mode.
 
-    Calls ``codex exec --sandbox workspace-write [--model <model>] <prompt>``. Token usage is not
-    available from the Codex CLI in headless mode; ``tokens`` is always ``None``.
+    Calls ``codex exec --sandbox workspace-write [--model <model>] <prompt>``.
 
-    Codex CLI defaults to a read-only sandbox for non-interactive ``exec`` on
-    this machine.  ONMC loops are already isolated in git worktrees, so
-    ``workspace-write`` is the least-privilege mode that still lets the agent
-    make the requested edits.
+    Sandbox
+    -------
+    Codex CLI's non-interactive ``exec`` defaults to a read-only sandbox.  ONMC
+    loops are already isolated in git worktrees, so ``workspace-write`` is the
+    least-privilege mode that still lets the agent make the requested edits.
+
+    Authentication
+    --------------
+    This adapter configures **no** authentication of its own: the argv it builds
+    carries no credential flag, and it neither sets nor filters environment
+    variables (``command_runner`` inherits the ambient process environment).
+    Which credential Codex uses — its own stored login or an environment
+    variable such as ``OPENAI_API_KEY`` — is therefore entirely the Codex CLI's
+    decision and is not observable from here.  The consequence for callers is
+    that a missing or rejected credential shows up only as text in Codex's
+    output (``401 Unauthorized: Missing bearer``), which
+    :func:`_classify_codex_failure` labels with
+    :data:`CREDENTIALS_ERROR_MARKER` so it is not mistaken for the agent failing
+    the task.
+
+    Usage and cost
+    --------------
+    Codex reports no machine-readable usage or cost in headless mode.  ``tokens``
+    is parsed best-effort from the human-readable ``tokens used: N`` line and is
+    ``None`` when that line is absent, malformed, or the invocation failed.
+    ``cost_usd`` is always ``None`` — Codex never reports it, and it is never
+    fabricated as ``0``.
 
     Parameters
     ----------
@@ -451,11 +614,32 @@ class CodexCliAdapter:
         files_touched = _compute_files_touched(before, after)
 
         output = proc.stdout.strip()
+        stderr_text = proc.stderr.strip()
+        tokens = _parse_codex_tokens(proc.stdout)
+
+        if proc.returncode == 127 or (not output and stderr_text):
+            output = stderr_text or "[codex: no output]"
+
+        # Classify provider-side failures across *both* streams, since Codex
+        # writes throttle/auth errors to stderr while still printing reconnect
+        # chatter to stdout.  Only a non-zero exit is eligible: a successful run
+        # must never be reclassified just because the agent's own narration
+        # mentioned "503" or "unauthorized" (agent output is untrusted input).
+        failure_marker: str | None = None
+        if proc.returncode != 0:
+            failure_marker = _classify_codex_failure(f"{proc.stdout}\n{proc.stderr}")
+
         error: str | None = None
-        if proc.returncode == 127 or (not output and proc.stderr):
-            output = proc.stderr.strip() or "[codex: no output]"
-        if proc.returncode != 0 and not proc.stdout.strip():
+        if proc.returncode != 0 and (not proc.stdout.strip() or failure_marker is not None):
+            # A recognised provider failure is fatal even when Codex managed to
+            # print something to stdout first — that chatter is not agent work.
             error = output
+            if failure_marker is not None:
+                if stderr_text and stderr_text not in error:
+                    error = f"{error}\n{stderr_text}"
+                error = f"{failure_marker} {error}"
+            # Never credit token usage to an invocation that failed.
+            tokens = None
 
         prediction = _first_line(output)
 
@@ -463,7 +647,8 @@ class CodexCliAdapter:
             output=output,
             prediction=prediction,
             files_touched=files_touched,
-            tokens=None,  # Codex headless does not emit usage
+            tokens=tokens,
+            cost_usd=None,  # Codex reports no cost in headless exec mode
             error=error,
         )
 

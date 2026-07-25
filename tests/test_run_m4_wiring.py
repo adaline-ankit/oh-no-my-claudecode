@@ -214,3 +214,56 @@ def test_plan_only_run_writes_no_receipt(tmp_path: Path) -> None:
     controller = _controller(tmp_path, converged=True)
     controller.run(RunRequest(task="fix the adder", plan_only=True))
     assert not list((tmp_path / ".agent-memory" / "receipts").glob("run-*.json"))
+
+
+def test_retrying_a_failed_task_starts_a_new_attempt(tmp_path: Path) -> None:
+    """Re-running the SAME task after a failure must not crash.
+
+    Regression found by dogfooding a real Codex run: `run_id` is derived
+    deterministically from the task, so a retry reused the id of the terminal
+    (failed) durable run. `store.start()` then raised `InvalidTransitionError`,
+    which reached the user as `stop=error:InvalidTransitionError` — the most
+    obvious action after a failure was an internal crash.
+    """
+    controller = _controller(tmp_path, converged=False)
+    first = controller.run(RunRequest(task="fix the adder", execute=True))
+    assert first.status is HarnessStatus.FAILED
+
+    # Same task, same repo → same derived id. Must become attempt 2, not explode.
+    second = controller.run(RunRequest(task="fix the adder", execute=True))
+    assert "error:" not in second.stop_reason, second.stop_reason
+    assert second.plan.run_id != first.plan.run_id
+    assert second.plan.run_id.startswith(first.plan.run_id)
+    # The earlier attempt's durable history is preserved, not overwritten.
+    store = controller.dependencies.runtime_store
+    assert store.load(first.plan.run_id).state is not None
+    assert store.load(second.plan.run_id).state is not None
+    # The plan's state path follows the new id so envelopes cannot collide.
+    assert second.plan.run_id in second.plan.state_path
+
+
+def test_live_run_is_not_silently_double_executed(tmp_path: Path) -> None:
+    """A non-terminal run must be refused with an actionable reason, not resumed.
+
+    Implicitly resuming would risk executing effects the first run already
+    performed; the user is told to pass --resume explicitly instead.
+    """
+    from oh_no_my_claudecode.durable_runtime import RunState
+
+    controller = _controller(tmp_path, converged=True)
+    plan = controller.plan(RunRequest(task="fix the adder", execute=True))
+    store = controller.dependencies.runtime_store
+    store.create_run(
+        plan.run_id,
+        node_ids=tuple(node.node_id for node in plan.dag.nodes),
+        repo=tmp_path,
+        idempotency_key="harness:create",
+    )
+    store.start(plan.run_id, idempotency_key="harness:start")
+    assert store.load(plan.run_id).state is RunState.RUNNING
+
+    result = controller.run(RunRequest(task="fix the adder", execute=True))
+    assert result.status is HarnessStatus.FAILED
+    assert result.stop_reason == "run-already-in-progress"
+    assert result.resume_run_id == plan.run_id
+    assert any("--resume" in reason for reason in result.proof_reasons)

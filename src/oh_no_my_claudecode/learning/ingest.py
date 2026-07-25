@@ -18,7 +18,12 @@ Design goals:
 * **Additive & opt-in.** The default memory path is untouched. Nothing here
   wraps or replaces the existing store; a caller must explicitly build a
   :class:`GatedIngestor` and route writes through it. Code that keeps writing to
-  the store directly is unaffected.
+  the store directly is unaffected — and therefore ungated, which is why
+  :func:`~.activation.require_promoted` exists: an activation site that cannot
+  produce a promotion record is a detectable bypass rather than a silent one.
+* **Honours the kill switch.** ``ONMC_LEARNING=0`` (see
+  :func:`~.activation.is_learning_enabled`) short-circuits :meth:`ingest` before
+  the sink is ever consulted, whatever gate was injected.
 * **Store-agnostic seam.** The destination is an injected :class:`MemorySink`
   (a small Protocol) — a memory-write callable — so tests need no real store and
   any adapter (SQLite, in-memory, remote) can be plugged in.
@@ -37,6 +42,7 @@ from typing import Protocol
 
 from oh_no_my_claudecode.experiment.contracts import CandidateState, is_legal_transition
 
+from .activation import LEARNING_ENABLED_ENV, is_learning_enabled
 from .gate import (
     AdvanceEvent,
     LearningError,
@@ -195,10 +201,24 @@ class GatedIngestor:
         """Route a proposed memory write through the promotion gate.
 
         Returns an :class:`IngestResult`. The sink is called **exactly once**
-        iff the candidate is promoted; on any rejection (illegal state,
-        sanitizer finding, empty scope, missing/failing held-out evidence) the
-        sink is never called and ``reasons`` explains why.
+        iff the candidate is promoted; on any rejection (kill switch off,
+        illegal state, sanitizer finding, empty scope, missing/failing held-out
+        evidence) the sink is never called and ``reasons`` explains why.
         """
+        if not is_learning_enabled():
+            # The global kill switch outranks the injected gate: no learned
+            # artifact reaches a store while ONMC_LEARNING is off.
+            reasons = (
+                f"kill-switch: {LEARNING_ENABLED_ENV} is disabled — "
+                "all learned behaviour is inert",
+            )
+            return IngestResult(
+                ingested=False,
+                candidate=candidate,
+                decision=PromotionDecision(eligible=False, reasons=reasons),
+                reasons=reasons,
+            )
+
         at_ms = int(self._clock())
 
         try:

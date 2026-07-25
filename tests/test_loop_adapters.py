@@ -12,13 +12,17 @@ from pathlib import Path
 import pytest
 
 from oh_no_my_claudecode.loop.adapters import (
+    CREDENTIALS_ERROR_MARKER,
+    TRANSIENT_ERROR_MARKER,
     ClaudeCliAdapter,
     CodexCliAdapter,
     CommandRunner,
     CompletedProc,
     OpenCodeCliAdapter,
+    _classify_codex_failure,
     _detect_claude_error,
     _parse_claude_json,
+    _parse_codex_tokens,
     _parse_opencode_json,
     make_agent_runner,
 )
@@ -986,3 +990,275 @@ def test_codex_adapter_nonzero_with_no_stdout_sets_error(tmp_path: Path) -> None
     res = adapter("do the thing", escalation_level=0)
     assert res.error is not None
     assert "boom" in res.error
+
+
+# ---------------------------------------------------------------------------
+# Codex best-effort token capture (absence must be None, NEVER 0)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_codex_tokens_comma_grouped() -> None:
+    """The real shape Codex prints on a successful headless run."""
+    assert _parse_codex_tokens("Done.\ntokens used: 14,678\n") == 14678
+
+
+def test_parse_codex_tokens_plain_integer_and_no_colon() -> None:
+    """Colon is optional and the count need not be comma-grouped."""
+    assert _parse_codex_tokens("tokens used 14678") == 14678
+
+
+def test_parse_codex_tokens_number_on_next_line() -> None:
+    """Some versions put the number on the following line."""
+    assert _parse_codex_tokens("tokens used\n14,678\n") == 14678
+
+
+def test_parse_codex_tokens_case_insensitive() -> None:
+    """Casing of the label must not matter."""
+    assert _parse_codex_tokens("Tokens Used: 512") == 512
+
+
+def test_parse_codex_tokens_absent_returns_none() -> None:
+    """No usage line at all → None (never 0)."""
+    assert _parse_codex_tokens("Patched the service layer.\nAll tests pass.") is None
+    assert _parse_codex_tokens("") is None
+
+
+def test_parse_codex_tokens_malformed_returns_none() -> None:
+    """Non-numeric or badly grouped counts are malformed → None, never 0."""
+    for raw in (
+        "tokens used: many",
+        "tokens used:",
+        "tokens used: 14,67",  # bad comma grouping
+        "tokens used: 1,2,3",  # bad comma grouping
+        "tokens used: -5",
+        "tokens: 14678",  # not the label we anchor on
+    ):
+        assert _parse_codex_tokens(raw) is None, raw
+
+
+def test_parse_codex_tokens_zero_returns_none() -> None:
+    """A reported zero is indistinguishable from 'unknown' → None, never 0."""
+    assert _parse_codex_tokens("tokens used: 0") is None
+
+
+def test_parse_codex_tokens_last_occurrence_wins() -> None:
+    """Codex reports a cumulative total, so the final line is authoritative."""
+    assert _parse_codex_tokens("tokens used: 100\n...\ntokens used: 2,500\n") == 2500
+
+
+def test_parse_codex_tokens_trailing_comma_still_parsed() -> None:
+    """A trailing separator after the count must not defeat the parse."""
+    assert _parse_codex_tokens("tokens used: 14,678, done") == 14678
+
+
+def test_codex_adapter_captures_tokens_when_present(tmp_path: Path) -> None:
+    """CodexCliAdapter surfaces the best-effort token total on success."""
+    runner = _simple_codex_runner("Patched src/a.py.\ntokens used: 14,678\n")
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("Fix the service", escalation_level=0)
+
+    assert res.tokens == 14678
+    assert res.cost_usd is None  # Codex never reports cost — never fabricate it
+    assert res.error is None
+
+
+def test_codex_adapter_tokens_none_when_absent_or_malformed(tmp_path: Path) -> None:
+    """No usage line, or a malformed one, leaves tokens None (never 0)."""
+    for stdout in ("Patched src/a.py.", "Patched src/a.py.\ntokens used: lots\n"):
+        adapter = CodexCliAdapter(tmp_path, command_runner=_simple_codex_runner(stdout))
+        res = adapter("Fix the service", escalation_level=0)
+        assert res.tokens is None, stdout
+        assert res.cost_usd is None, stdout
+
+
+# ---------------------------------------------------------------------------
+# Codex provider-failure classification
+#
+# A provider 503/throttle is transient infrastructure and a 401 is a missing
+# credential — neither is the agent deciding it cannot do the work, so a
+# benchmark must never score them as agent losses.  Classification reuses the
+# loop's single existing failure channel (AgentRunResult.error, which run_loop
+# renders into the harness-controlled verify_output as "[agent-error] <error>")
+# and the same bracketed-marker convention the engine already uses there.
+# ---------------------------------------------------------------------------
+
+#: Verbatim shape Codex emits when the provider throttles the session.
+_CODEX_503 = (
+    'ERROR: unexpected status 503 Service Unavailable: {"detail":'
+    '{"message":"Service temporarily overloaded","code":"throttled"}}'
+)
+
+#: Verbatim shape Codex emits when no credential is configured.
+_CODEX_401 = (
+    "ERROR: unexpected status 401 Unauthorized: Missing bearer or basic "
+    "authentication in header"
+)
+
+
+def test_classify_codex_failure_503_throttled_is_transient() -> None:
+    """503 / throttled is transient provider infrastructure."""
+    assert _classify_codex_failure(_CODEX_503) == TRANSIENT_ERROR_MARKER
+
+
+def test_classify_codex_failure_service_unavailable_is_transient() -> None:
+    """Bare 'service unavailable' phrasing is also transient."""
+    assert _classify_codex_failure("stream error: Service Unavailable") == (
+        TRANSIENT_ERROR_MARKER
+    )
+
+
+def test_classify_codex_failure_reconnect_exhausted_is_transient() -> None:
+    """Reconnect spam that finally gives up is transport, not agent, failure."""
+    text = "reconnecting (3/3)...\nERROR: reconnect attempts exhausted"
+    assert _classify_codex_failure(text) == TRANSIENT_ERROR_MARKER
+
+
+def test_classify_codex_failure_401_missing_bearer_is_credentials() -> None:
+    """401 / missing bearer is a credentials problem, not throttling."""
+    assert _classify_codex_failure(_CODEX_401) == CREDENTIALS_ERROR_MARKER
+
+
+def test_classify_codex_failure_credentials_wins_over_transient() -> None:
+    """When auth failed then retried into a 503, the credential is root cause."""
+    assert _classify_codex_failure(f"{_CODEX_401}\n{_CODEX_503}") == (
+        CREDENTIALS_ERROR_MARKER
+    )
+
+
+def test_classify_codex_failure_unrecognised_is_none() -> None:
+    """Unrecognised errors default to 'genuine agent failure' — never excused."""
+    assert _classify_codex_failure("") is None
+    assert _classify_codex_failure("thread 'main' panicked at src/main.rs") is None
+    assert _classify_codex_failure("I could not find the file you asked about.") is None
+
+
+def test_codex_adapter_503_classified_transient(tmp_path: Path) -> None:
+    """A throttled provider is fatal but tagged transient-infra, not agent loss."""
+    runner = _make_runner(
+        {"codex": CompletedProc(returncode=1, stdout="", stderr=_CODEX_503)},
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error is not None
+    assert res.error.startswith(TRANSIENT_ERROR_MARKER)
+    assert CREDENTIALS_ERROR_MARKER not in res.error
+    assert "throttled" in res.error
+    assert res.tokens is None
+
+
+def test_codex_adapter_401_classified_credentials(tmp_path: Path) -> None:
+    """Missing bearer is reported as a credentials error, not as throttling."""
+    runner = _make_runner(
+        {"codex": CompletedProc(returncode=1, stdout="", stderr=_CODEX_401)},
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error is not None
+    assert res.error.startswith(CREDENTIALS_ERROR_MARKER)
+    assert TRANSIENT_ERROR_MARKER not in res.error
+    assert "Missing bearer" in res.error
+
+
+def test_codex_adapter_provider_failure_with_stdout_is_still_fatal(tmp_path: Path) -> None:
+    """Reconnect chatter on stdout is not agent work — a 503 stays fatal.
+
+    Without the provider-signature check a non-zero exit that printed anything
+    to stdout would return error=None and the throttle text would be graded as
+    ordinary agent output.
+    """
+    runner = _make_runner(
+        {
+            "codex": CompletedProc(
+                returncode=1,
+                stdout="reconnecting to session...\n",
+                stderr=_CODEX_503,
+            )
+        },
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error is not None
+    assert res.error.startswith(TRANSIENT_ERROR_MARKER)
+    # The stderr detail is folded in so the receipt shows the real cause.
+    assert "throttled" in res.error
+
+
+def test_codex_adapter_genuine_failure_gets_no_provider_marker(tmp_path: Path) -> None:
+    """An unrecognised failure stays an ordinary agent error (no marker)."""
+    runner = _make_runner(
+        {"codex": CompletedProc(returncode=1, stdout="", stderr="panic: bad input")},
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error == "panic: bad input"
+    assert TRANSIENT_ERROR_MARKER not in res.error
+    assert CREDENTIALS_ERROR_MARKER not in res.error
+
+
+def test_codex_adapter_success_is_not_reclassified_by_narration(tmp_path: Path) -> None:
+    """Agent output is untrusted: mentioning 503 must not fake a transient failure."""
+    stdout = "Made should_retry return status == 503 (throttled requests).\ntokens used: 900\n"
+    adapter = CodexCliAdapter(tmp_path, command_runner=_simple_codex_runner(stdout))
+    res = adapter("fix retry policy", escalation_level=0)
+
+    assert res.error is None
+    assert res.tokens == 900
+
+
+def test_codex_adapter_provider_failure_drops_tokens(tmp_path: Path) -> None:
+    """A failed invocation is never credited with token usage."""
+    runner = _make_runner(
+        {
+            "codex": CompletedProc(
+                returncode=1,
+                stdout="tokens used: 1,200\n",
+                stderr=_CODEX_503,
+            )
+        },
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error is not None
+    assert res.tokens is None  # None, never 0
+    assert res.cost_usd is None
+
+
+def test_codex_provider_failure_is_environment_not_a_dead_end(tmp_path: Path) -> None:
+    """The marker rides the EXISTING contract: run_loop renders .error into
+    verify_output as "[agent-error] <error>", which the engine's own
+    _classify_failure_cause already treats as 'environment' — so a throttled
+    provider is never stored as a FAILED_APPROACH dead-end.  This asserts the
+    reuse rather than a parallel mechanism."""
+    from oh_no_my_claudecode.loop.engine import _classify_failure_cause
+
+    runner = _make_runner(
+        {"codex": CompletedProc(returncode=1, stdout="", stderr=_CODEX_503)},
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res = adapter("do the thing", escalation_level=0)
+
+    assert res.error is not None
+    assert _classify_failure_cause(f"[agent-error] {res.error}") == "environment"
+
+
+def test_codex_adapter_normal_success_unchanged(tmp_path: Path) -> None:
+    """Regression guard: a healthy Codex run is untouched by the new logic."""
+    runner = _simple_codex_runner(
+        "Patched the service layer.\nAll tests pass.",
+        git_before=" M src/a.py\n",
+        git_after=" M src/a.py\n M src/b.py\n",
+    )
+    adapter = CodexCliAdapter(tmp_path, command_runner=runner)
+    res: AgentRunResult = adapter("Fix the service", escalation_level=0)
+
+    assert res.error is None
+    assert res.output == "Patched the service layer.\nAll tests pass."
+    assert res.prediction == "Patched the service layer."
+    assert res.files_touched == ["src/b.py"]
+    assert res.tokens is None
+    assert res.cost_usd is None

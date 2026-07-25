@@ -602,6 +602,22 @@ def run_loop(
         change_probe if change_probe is not None else _make_git_change_probe(_effective_repo_root)
     )
 
+    # Signature of the repository as the RUN began, captured from the FIRST
+    # iteration's pre-agent probe rather than an extra call, so the probe is
+    # invoked exactly as often as before.
+    #
+    # Vacuity is a RUN-level question, not a last-iteration question: an agent
+    # that fixes the code in iteration 1 and then correctly idles in iteration 2
+    # produced no per-iteration delta on its final pass, and judging only that
+    # iteration converted a genuine win into a loss. Observed live — a real Codex
+    # run implemented the requested function, ONMC itself recorded
+    # `files_touched=4, diff_lines=5`, and the verdict still read "agent produced
+    # no file changes". Comparing against the run baseline still catches the real
+    # false-green this guards (edits blocked, verifier green on pre-existing
+    # state) AND an agent that reverts its own earlier change.
+    _run_start_sig: str | None = None
+    _run_start_seen = False
+
     # --- Checkpoint / resume setup ---
     _ckpt_sha8: str | None = None
     if checkpoint_store is not None:
@@ -741,6 +757,9 @@ def run_loop(
         # Capture the working-tree signature BEFORE the agent acts, so we can
         # tell whether this iteration actually changed anything.
         pre_sig = _probe()
+        if not _run_start_seen:
+            _run_start_sig = pre_sig
+            _run_start_seen = True
 
         # Agent acts.
         agent_result: AgentRunResult = agent_runner(prompt, escalation_level=escalation_level)
@@ -817,7 +836,21 @@ def run_loop(
         else:
             made_changes = post_sig != pre_sig
 
-        vacuous_pass = verify_outcome.passed and made_changes is False
+        # Net change across the whole run, not just this iteration. `None` when
+        # the probe is unavailable, in which case the gate stays disabled exactly
+        # as before rather than guessing.
+        if _run_start_sig is None or post_sig is None:
+            run_made_changes: bool | None = None
+        else:
+            run_made_changes = post_sig != _run_start_sig
+
+        # A pass is vacuous only when the RUN as a whole changed nothing. This
+        # keeps the false-green guarantee (no net change + green verifier can
+        # never be a win) while no longer punishing an agent for idling on its
+        # final iteration after having already done the work.
+        vacuous_pass = verify_outcome.passed and (
+            run_made_changes is False if run_made_changes is not None else made_changes is False
+        )
         if vacuous_pass:
             verify_passed = False
             outcome: str = "loss"
@@ -827,7 +860,7 @@ def run_loop(
                 else ""
             )
             verify_output_text = (
-                "[no-op] agent produced no file changes this iteration; the "
+                "[no-op] this run produced no net file changes; the "
                 "verify command passed but the result is vacuous — it reflects "
                 "pre-existing state, not that the goal was addressed.\n\n"
                 + permission_hint

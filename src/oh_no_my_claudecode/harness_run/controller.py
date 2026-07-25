@@ -8,7 +8,7 @@ import secrets
 import shlex
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -20,7 +20,13 @@ from oh_no_my_claudecode.context_engine import (
     RetrievalMode,
 )
 from oh_no_my_claudecode.core.repo import WorktreeIsolationProvider
-from oh_no_my_claudecode.durable_runtime import NodeState, RunSnapshot, RunState, RuntimeStore
+from oh_no_my_claudecode.durable_runtime import (
+    NodeState,
+    RunNotFoundError,
+    RunSnapshot,
+    RunState,
+    RuntimeStore,
+)
 from oh_no_my_claudecode.enforcement import Effect, ReferenceMonitor
 from oh_no_my_claudecode.harness import (
     CompilerConfig,
@@ -94,6 +100,14 @@ from .stages import (
     proof_stage,
     verify_stage,
 )
+
+#: Terminal run states: a run in one of these can never legally transition to
+#: running again, so a same-task retry must become a new attempt.
+_TERMINAL_RUN_STATES = frozenset({RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED})
+
+#: Upper bound on retry attempts sharing one derived run id, so a scripted loop
+#: cannot grow the durable store without bound.
+_MAX_RUN_ATTEMPTS = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,6 +604,9 @@ class HarnessController:
                     worktree_path=None,
                 )
         else:
+            plan, blocked = self._resolve_fresh_run_id(plan)
+            if blocked is not None:
+                return blocked
             store.create_run(
                 plan.run_id,
                 node_ids=tuple(node.node_id for node in plan.dag.nodes),
@@ -919,6 +936,70 @@ class HarnessController:
             iterations=None if loop_result is None else len(loop_result.iterations),
             tokens_used=None if loop_result is None else loop_result.total_tokens,
             cost_usd=None if loop_result is None else loop_result.total_cost_usd,
+        )
+
+    def _resolve_fresh_run_id(
+        self, plan: ExecutionPlan
+    ) -> tuple[ExecutionPlan, HarnessResult | None]:
+        """Give a retry its own run, or refuse to double-execute a live one.
+
+        ``run_id`` is derived deterministically from the task/DAG, so re-running
+        the SAME task in the same repo produces the SAME id. That collided with
+        the durable store:
+
+        * a terminal prior run (``failed``/``completed``/``cancelled``) made
+          ``start()`` raise ``InvalidTransitionError``, which surfaced to the user
+          as ``stop=error:InvalidTransitionError``. Retrying a failed task — the
+          single most obvious thing a user does after a failure — crashed with an
+          internal exception name.
+        * a still-live prior run would have been resumed implicitly, risking a
+          second execution of effects the first run had already performed.
+
+        A retry now becomes a NEW attempt (``<run_id>-a2``, ``-a3``, …), so the
+        earlier run's events, envelope and receipt are preserved intact rather
+        than being overwritten or replayed. A non-terminal run is refused with a
+        typed, actionable result instead of being silently resumed.
+
+        The plan itself stays byte-stable and side-effect free: this runs at
+        execute time only, so ``--plan-only`` output never depends on run history.
+        """
+        store = self.dependencies.runtime_store
+        base_id = plan.run_id
+        for attempt in range(1, _MAX_RUN_ATTEMPTS + 1):
+            candidate = base_id if attempt == 1 else f"{base_id}-a{attempt}"
+            try:
+                snapshot = store.load(candidate)
+            except RunNotFoundError:
+                if candidate == base_id:
+                    return plan, None
+                return (
+                    replace(
+                        plan,
+                        run_id=candidate,
+                        state_path=state_path_for(store.root, candidate),
+                    ),
+                    None,
+                )
+            if snapshot.state not in _TERMINAL_RUN_STATES:
+                return plan, HarnessResult(
+                    HarnessStatus.FAILED,
+                    plan,
+                    stop_reason="run-already-in-progress",
+                    proof_reasons=(
+                        f"run {candidate} is {snapshot.state.value}; "
+                        f"pass --resume {candidate} to continue it instead of starting a "
+                        "second execution of the same task",
+                    ),
+                    resume_run_id=candidate,
+                )
+        return plan, HarnessResult(
+            HarnessStatus.FAILED,
+            plan,
+            stop_reason="too-many-attempts",
+            proof_reasons=(
+                f"{_MAX_RUN_ATTEMPTS} attempts of this task already exist under "
+                f"{base_id}; inspect them with `onmc explain` before retrying again",
+            ),
         )
 
     def _persist_receipt(

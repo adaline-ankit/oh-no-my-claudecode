@@ -709,3 +709,116 @@ def test_vacuous_pass_without_permission_signature_has_no_hint(tmp_path: Path) -
     iteration = result.iterations[0]
     assert "[no-op]" in iteration.verify_output
     assert ".claude/settings.json" not in iteration.verify_output
+
+
+# ---------------------------------------------------------------------------
+# Vacuity is a RUN-level question, not a last-iteration question
+# ---------------------------------------------------------------------------
+
+
+def _sequence_probe(signatures: list[str | None]) -> object:
+    """Probe returning each signature in turn, repeating the last one forever."""
+    calls = {"n": 0}
+
+    def _probe() -> str | None:
+        idx = min(calls["n"], len(signatures) - 1)
+        calls["n"] += 1
+        return signatures[idx]
+
+    return _probe
+
+
+def test_idle_final_iteration_after_a_real_change_is_a_win(tmp_path: Path) -> None:
+    """An agent that fixes the code early and then idles must not be scored vacuous.
+
+    Regression observed with a real Codex run: it implemented the requested
+    function in iteration 1, made no further edit in iteration 2, and the verify
+    passed. Judging only the final iteration's delta flipped a genuine win into
+    `stop_reason=no-changes` even though the harness itself recorded
+    `files_touched=4, diff_lines=5`.
+
+    Probe sequence: iteration 1 pre "a" (the run baseline) / post "b" (a real
+    change), then iteration 2 pre "b" / post "b" (idle, but "b" != baseline "a").
+    """
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="implement mul")
+    config = LoopConfig(max_iterations=2)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("implemented mul"),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_sequence_probe(["a", "b", "b", "b"]),  # type: ignore[arg-type]
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is True, result.stop_reason
+    assert result.stop_reason == "converged"
+    assert result.iterations[-1].outcome == "win"
+    assert "[no-op]" not in result.iterations[-1].verify_output
+
+
+def test_run_with_no_net_change_is_still_vacuous(tmp_path: Path) -> None:
+    """The false-green guarantee must survive the run-level relaxation.
+
+    Nothing changed at any point, so a green verifier still cannot be a win.
+    """
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="add a divide() function")
+    config = LoopConfig(max_iterations=1)
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("declared victory, changed nothing"),
+        verify_runner=_fake_verify(passes=True, output="2 passed"),
+        change_probe=_static_probe(),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.iterations[-1].outcome == "loss"
+    assert "[no-op]" in result.iterations[-1].verify_output
+
+
+def test_agent_that_reverts_its_own_change_is_vacuous(tmp_path: Path) -> None:
+    """Net-zero across the run is vacuous even though an iteration did change files.
+
+    Iteration 1 changes the tree but the verifier FAILS (so the loop continues).
+    Iteration 2 reverts back to the run baseline and the verifier passes. The
+    repository ends exactly as it started, so a green verifier proves nothing and
+    the run-level check must still call this vacuous.
+    """
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="implement mul")
+    config = LoopConfig(max_iterations=2)
+
+    outcomes = [
+        VerifyOutcome(passed=False, output="1 failed"),
+        VerifyOutcome(passed=True, output="2 passed"),
+    ]
+
+    def _verify(command: str) -> VerifyOutcome:
+        del command
+        return outcomes.pop(0) if outcomes else VerifyOutcome(passed=True, output="2 passed")
+
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("touched then reverted"),
+        verify_runner=_verify,
+        # it1 pre "a" (= run baseline) post "b"; it2 pre "b" post "a" → net zero
+        change_probe=_sequence_probe(["a", "b", "b", "a"]),  # type: ignore[arg-type]
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.iterations[-1].outcome == "loss"
+    assert "[no-op]" in result.iterations[-1].verify_output
