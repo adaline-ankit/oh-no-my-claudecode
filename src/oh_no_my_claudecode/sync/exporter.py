@@ -6,6 +6,7 @@ from importlib.metadata import version
 from pathlib import Path
 
 from oh_no_my_claudecode.config import compiled_dir
+from oh_no_my_claudecode.hooks.prompt_recall import is_unpromoted_source
 from oh_no_my_claudecode.models import ProjectConfig
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.sync.schema import (
@@ -26,7 +27,17 @@ def export_agent_memory(
     storage: SQLiteStorage,
     output_dir: Path,
 ) -> SyncResult:
-    """Export ONMC memory, task state, and skills to a git-portable JSON directory."""
+    """Export ONMC memory, task state, and skills to a git-portable JSON directory.
+
+    Quarantine survives the export boundary.  A memory whose ``source_ref``
+    carries the reserved ``unpromoted:`` prefix (agent-authored, never promoted
+    by a human) is exported *with that prefix intact* and additionally flagged
+    ``"unpromoted": true`` in its record, so a reader — human or tool — can see
+    the quarantine without having to know the prefix convention.  Quarantined
+    entries are deliberately **not** dropped from the export: ``.agent-memory/``
+    is also this repo's own backup, and a restore that silently lost them would
+    be a lossy backup and a misleading record of what the brain contained.
+    """
     _prepare_output_dir(output_dir)
 
     memories = sorted(storage.list_memories(), key=lambda item: item.id)
@@ -38,7 +49,10 @@ def export_agent_memory(
     for memory in memories:
         target = output_dir / "memories" / memory.kind.value / f"{memory.id}.json"
         target.parent.mkdir(parents=True, exist_ok=True)
-        exported = ExportedMemoryRecord(memory=memory)
+        exported = ExportedMemoryRecord(
+            memory=memory,
+            unpromoted=is_unpromoted_source(memory.source_ref),
+        )
         target.write_text(
             json.dumps(exported.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",

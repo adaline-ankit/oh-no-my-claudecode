@@ -25,7 +25,25 @@ class SyncManifest(BaseModel):
 
 
 class ExportedMemoryRecord(BaseModel):
+    """A single memory exported to .agent-memory/memories/<kind>/<id>.json.
+
+    ``unpromoted`` mirrors, as an explicit and human-readable boolean, the
+    quarantine state that ONMC otherwise encodes only in the reserved
+    ``unpromoted:`` ``source_ref`` prefix
+    (:data:`~oh_no_my_claudecode.hooks.prompt_recall.UNPROMOTED_SOURCE_PREFIX`).
+    A quarantined entry was written autonomously by an agent about its own run
+    and has never been promoted by a human; it is recorded and reviewable but
+    is never auto-injected into a prompt.
+
+    The flag is additive and optional, so an export produced by an older
+    version of ONMC (which has no such key) still validates.  Readers MUST
+    treat the flag and the ``source_ref`` prefix as two independent signals and
+    quarantine when *either* says so — see
+    :func:`~oh_no_my_claudecode.sync.importer.restore_agent_memory`.
+    """
+
     memory: MemoryEntry
+    unpromoted: bool = False
 
 
 class ExportedTaskRecord(BaseModel):

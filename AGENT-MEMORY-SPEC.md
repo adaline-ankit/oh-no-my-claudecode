@@ -397,6 +397,42 @@ Each memory entry carries:
   entries typically start at 1.0; LLM-extracted entries are calibrated by the extractor
   (commonly 0.6–0.9).
 
+### Quarantine (`unpromoted`)
+
+Some memory is written by an agent about its own work, or supplied by a model,
+with no human ever having reviewed it. Such an entry is **quarantined**: it is
+stored, listed and recallable, but it is never silently auto-injected into an
+agent's prompt until a human promotes it.
+
+Quarantine is expressed two ways, and a reader MUST treat them as a **union** —
+quarantined if *either* says so:
+
+- the optional record-level `"unpromoted": true` flag (sibling of `memory`), and
+- the reserved `unpromoted:` prefix on `source_ref`, which preserves the original
+  provenance pointer behind it (`docs/x.md` → `unpromoted:docs/x.md`).
+
+```json
+{ "memory": { "...": "...", "source_ref": "unpromoted:mcp:record_memory" },
+  "unpromoted": true }
+```
+
+Rules:
+
+- The flag may only ever **add** quarantine. `"unpromoted": false` MUST NOT
+  un-quarantine an entry whose `source_ref` already carries the prefix, or the
+  flag would become a laundering channel.
+- The field is optional and additive. An export written before it existed simply
+  omits it, and readers fall back to the prefix alone — so old exports restore
+  unchanged. Per the forward-compatibility rules below this needs no `version`
+  bump.
+- **Cross-repo imports do not inherit trust.** A `.agent-memory/` payload arriving
+  from another repository is untrusted input: nothing in it is verifiable by the
+  receiver, so a sender can present model-authored content under a benign
+  `source_ref`. A conformant reader importing across a repository boundary MUST
+  quarantine every incoming entry regardless of what the sender claimed, rather
+  than believing the sender's provenance. Human review is what promotes, and that
+  review does not cross the boundary with the file.
+
 ---
 
 ## Confidence and Feedback Semantics
