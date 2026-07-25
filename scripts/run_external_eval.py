@@ -129,8 +129,56 @@ def _run(argv: list[str], cwd: Path, timeout: int) -> tuple[int, str]:
     return proc.returncode, (proc.stdout + proc.stderr)[-4000:]
 
 
+def prepare_venv(task: TaskSpec, venv_root: Path) -> tuple[Path | None, str | None]:
+    """Build (once per repo) a venv that can actually RUN the repo's own tests.
+
+    Without this the verifier's bare ``python`` resolved to whatever interpreter
+    happened to be on PATH — in practice ONMC's own uv venv, which cannot import
+    the target repository's test dependencies. Every cell then failed as
+    ``verifier-unavailable`` while the agent's real fix was discarded, so the
+    experiment measured the instrument, not the agents.
+
+    Returns ``(python_path, None)`` or ``(None, error)``.
+    """
+    venv = venv_root / task.repo.name
+    python = venv / "bin" / "python"
+    if python.exists():
+        return python, None
+    venv_root.mkdir(parents=True, exist_ok=True)
+    code, out = _run(["uv", "venv", str(venv)], venv_root, 300)
+    if code != 0:
+        return None, f"uv venv failed: {out[-300:]}"
+    # pytest plus the test-time deps these upstream suites need. Installed once
+    # per repo; the per-cell editable install below re-points it at the clone.
+    code, out = _run(
+        ["uv", "pip", "install", "--python", str(python), "pytest", "hypothesis"],
+        venv_root,
+        900,
+    )
+    if code != 0:
+        return None, f"test-dep install failed: {out[-300:]}"
+    return python, None
+
+
+def install_cell(python: Path, repo: Path) -> str | None:
+    """Editable-install the CELL's checkout so the verifier imports the agent's fix.
+
+    ``attrs`` uses a ``src/`` layout, so its tests import the *installed*
+    package. Installing non-editable (or from a shared cache clone) would make
+    the agent's edit invisible to the verifier and score every arm 0.
+    """
+    code, out = _run(
+        ["uv", "pip", "install", "--python", str(python), "-e", str(repo), "--no-deps", "-q"],
+        repo,
+        600,
+    )
+    if code != 0:
+        return f"editable install failed: {out[-300:]}"
+    return None
+
+
 def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
-    """Clone the pinned repo into *dest* and inject the seeded regression."""
+    """Clone the pinned repo into *dest*, PRISTINE (no regression yet)."""
     if not cache.exists():
         code, out = _run(
             ["git", "clone", "--quiet", task.repo.url, str(cache)], cache.parent, 600
@@ -143,7 +191,11 @@ def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
     code, out = _run(["git", "checkout", "--quiet", task.repo.pinned_sha], dest, 120)
     if code != 0:
         return f"checkout {task.repo.pinned_sha[:8]} failed: {out[-300:]}"
+    return None
 
+
+def inject_regression(task: TaskSpec, dest: Path) -> str | None:
+    """Seed the single-function regression and COMMIT it."""
     rel, old, new = REGRESSIONS[task.task_id]
     target = dest / rel
     text = target.read_text(encoding="utf-8")
@@ -212,15 +264,44 @@ def _extract_cost(out: str) -> float | None:
     return None
 
 
-def verify(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[bool, str]:
+def verifier_argv(task: TaskSpec, python: Path) -> list[str]:
+    """The task's verifier argv, bound to the repo's own venv interpreter.
+
+    A bare ``python`` in the manifest resolves to whatever is on PATH, which is
+    how the whole experiment previously collapsed to ``verifier-unavailable``.
+    """
+    argv = list(task.verifier_argv)
+    if argv and argv[0] in {"python", "python3"}:
+        argv[0] = str(python)
+    return argv
+
+
+def verify(task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path) -> tuple[bool, str]:
     """Adjudicate with the repository's own upstream test suite."""
-    code, out = _run(list(task.verifier_argv), repo, cfg.verifier_timeout_s)
+    code, out = _run(verifier_argv(task, python), repo, cfg.verifier_timeout_s)
     return code == 0, out
 
 
-def guard_regression_active(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str | None:
-    """The verifier MUST fail before the agent runs, or the task proves nothing."""
-    passed, out = verify(task, repo, cfg)
+def guard_pristine_verifier(
+    task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
+) -> str | None:
+    """The verifier MUST pass on the PRISTINE checkout before any regression.
+
+    This is the real validity gate. Without it, a verifier that simply cannot run
+    looks identical to "the regression broke the tests", so every arm scored 0 and
+    the experiment silently measured the harness instead of the agents.
+    """
+    passed, out = verify(task, repo, cfg, python)
+    if not passed:
+        return f"pristine verifier did not pass — cell unusable: {out[-300:]}"
+    return None
+
+
+def guard_regression_active(
+    task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
+) -> str | None:
+    """The verifier MUST fail after the regression, or the task proves nothing."""
+    passed, out = verify(task, repo, cfg, python)
     if passed:
         return "regression did not break the verifier (task would be vacuous)"
     if "[timeout]" in out or "[oserror]" in out:
@@ -228,13 +309,15 @@ def guard_regression_active(task: TaskSpec, repo: Path, cfg: EvalConfig) -> str 
     return None
 
 
-def run_bare_agent(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | None, float | None]:
+def run_bare_agent(
+    task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
+) -> tuple[str | None, float | None]:
     """Control arm: the agent CLI directly, same prompt/permissions/verifier."""
     argv = [
         "claude",
         "-p",
         f"{task.prompt}\n\nThe adjudicating test command is: "
-        f"{shlex.join(task.verifier_argv)}",
+        f"{shlex.join(verifier_argv(task, python))}",
         "--output-format",
         "json",
         "--permission-mode",
@@ -249,7 +332,9 @@ def run_bare_agent(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | N
     return None, cost
 
 
-def run_onmc(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | None, float | None]:
+def run_onmc(
+    task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
+) -> tuple[str | None, float | None]:
     """Treatment arm: the same task through the full `onmc run` vertical path."""
     # ONMC's own runtime state must never count as the agent's repository change,
     # or the vacuous-pass gate could pass on ONMC bookkeeping noise instead of a
@@ -275,7 +360,7 @@ def run_onmc(task: TaskSpec, repo: Path, cfg: EvalConfig) -> tuple[str | None, f
         "--max-cost-usd",
         str(cfg.max_cost_usd),
         "--verifier",
-        shlex.join(task.verifier_argv),
+        shlex.join(verifier_argv(task, python)),
         "--json",
     ]
     code, out = _run(argv, repo, cfg.timeout_s)
@@ -302,22 +387,47 @@ def run_cell(
     cache = cache_root / task.repo.name
 
     started = time.monotonic()
-    err = prepare_clone(task, dest, cache)
-    if err:
+
+    def _infra(err: str) -> TrialRecord:
         return TrialRecord(task.task_id, condition.value, trial, False, 0.0, infra_error=err)
 
-    err = guard_regression_active(task, dest, cfg)
+    python, err = prepare_venv(task, cfg.workdir / "venvs")
+    if err or python is None:
+        return _infra(err or "venv unavailable")
+
+    err = prepare_clone(task, dest, cache)
     if err:
-        return TrialRecord(task.task_id, condition.value, trial, False, 0.0, infra_error=err)
+        return _infra(err)
+
+    # The verifier must import the CELL's checkout, not a cached copy, or the
+    # agent's fix would be invisible to the adjudicator (attrs uses a src/ layout).
+    err = install_cell(python, dest)
+    if err:
+        return _infra(err)
+
+    # Validity gate 1: pristine tests PASS. Distinguishes "regression broke it"
+    # from "the verifier cannot run at all".
+    err = guard_pristine_verifier(task, dest, cfg, python)
+    if err:
+        return _infra(err)
+
+    err = inject_regression(task, dest)
+    if err:
+        return _infra(err)
+
+    # Validity gate 2: the regression actually breaks the verifier.
+    err = guard_regression_active(task, dest, cfg, python)
+    if err:
+        return _infra(err)
 
     if cfg.dry_run:
         return TrialRecord(
             task.task_id, condition.value, trial, False, 0.0, notes="dry-run: agent not invoked"
         )
 
-    infra, cost = RUNNERS[condition](task, dest, cfg)
+    infra, cost = RUNNERS[condition](task, dest, cfg, python)
     diff_lines, tests_touched = _observed_change(dest)
-    passed, out = verify(task, dest, cfg)
+    passed, out = verify(task, dest, cfg, python)
     latency = (time.monotonic() - started) * 1000.0
     note = "" if passed else out.strip().splitlines()[-1][:160] if out.strip() else ""
     if passed and tests_touched:

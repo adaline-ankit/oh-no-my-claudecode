@@ -3,7 +3,10 @@
     "schema_version": "1",
     "experiment_id": "external-v1",
     "task_set_revision": "external-v1-2026-07-24",
-    "conditions": ["bare-agent", "onmc-current"],
+    "conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
     "trials": 3,
     "seed": 20260724,
     "environment": {
@@ -27,7 +30,13 @@
         "pinned_sha": "c8e394065cd541a16c040515dc0afb85cf22a7c3"
       },
       "prompt": "A regression was introduced in six.py: the PY2/PY3 integer_types definition is wrong. Fix six.py so the full upstream test suite in test_six.py passes again. Do not edit or delete any test.",
-      "verifier_argv": ["python", "-m", "pytest", "-q", "test_six.py"],
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test_six.py"
+      ],
       "task_kind": "bugfix",
       "expected_outcome": "test_six.py passes (198 passed, 2 skipped) with the upstream integer_types behaviour restored and no test modified."
     },
@@ -39,7 +48,13 @@
         "pinned_sha": "c650fb45204635f07910948d5fc59a8c551ffdda"
       },
       "prompt": "A regression was introduced in tenacity/_utils.py: find_ordinal returns incorrect suffixes. Fix tenacity/_utils.py so tests/test_utils.py passes again. Do not edit or delete any test.",
-      "verifier_argv": ["python", "-m", "pytest", "-q", "tests/test_utils.py"],
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_utils.py"
+      ],
       "task_kind": "bugfix",
       "expected_outcome": "tests/test_utils.py passes with correct ordinal suffixes restored and no test modified."
     },
@@ -50,10 +65,16 @@
         "url": "https://github.com/python-attrs/attrs.git",
         "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
       },
-      "prompt": "A regression was introduced in src/attr/_funcs.py: asdict no longer applies its `filter` argument, so filtered attributes are incorrectly included. Fix src/attr/_funcs.py so tests/test_make.py passes again. Do not edit or delete any test.",
-      "verifier_argv": ["python", "-m", "pytest", "-q", "tests/test_make.py"],
+      "prompt": "A regression was introduced in src/attr/_funcs.py: asdict no longer applies its `filter` argument, so filtered attributes are incorrectly included. Fix src/attr/_funcs.py so tests/test_funcs.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
       "task_kind": "bugfix",
-      "expected_outcome": "tests/test_make.py passes with upstream asdict filter behaviour restored and no test modified (5 tests fail while the regression is present)."
+      "expected_outcome": "tests/test_funcs.py passes with upstream asdict filter behaviour restored and no test modified."
     }
   ]
 }
