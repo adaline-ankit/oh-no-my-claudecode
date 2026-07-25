@@ -206,23 +206,28 @@ def prepare_onmc_venv(workdir: Path) -> tuple[Path | None, str | None]:
     code, out = _run(["uv", "venv", str(venv)], workdir, 300)
     if code != 0:
         return None, f"onmc venv failed: {out[-300:]}"
+    # NON-editable, deliberately. An editable install would let any source edit
+    # made while the portfolio is running change the code under later cells, so
+    # `code_sha` would no longer describe the whole run — the pinned-code
+    # requirement would be silently violated mid-experiment.
     code, out = _run(
-        [
-            "uv",
-            "pip",
-            "install",
-            "--python",
-            str(venv / "bin" / "python"),
-            "-q",
-            "-e",
-            str(REPO_ROOT),
-        ],
+        ["uv", "pip", "install", "--python", str(venv / "bin" / "python"), "-q", str(REPO_ROOT)],
         workdir,
         1800,
     )
     if code != 0:
         return None, f"onmc install failed: {out[-300:]}"
     return onmc, None
+
+
+def code_sha() -> str:
+    """The exact ONMC revision under test, recorded in the report."""
+    code, out = _run(["git", "rev-parse", "HEAD"], REPO_ROOT, 60)
+    sha = out.strip() if code == 0 else "unknown"
+    dirty, dirty_out = _run(["git", "status", "--porcelain"], REPO_ROOT, 60)
+    if dirty == 0 and dirty_out.strip():
+        sha += "-dirty"
+    return sha
 
 
 def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
@@ -664,6 +669,7 @@ def main() -> int:
         "task_set_revision": manifest.experiment.task_set_revision,
         "audit_status": manifest.audit_status.value,
         "code_sha": manifest.experiment.environment.code_sha,
+        "code_sha_under_test": code_sha(),
         "trials_per_cell": trials,
         "conditions": [c.value for c in conditions],
         "repos": sorted({t.repo.name for t in manifest.tasks}),

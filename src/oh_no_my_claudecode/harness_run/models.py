@@ -154,9 +154,22 @@ class HarnessResult:
     policy_decision: RunPolicyDecision | None = None
     receipt: HarnessRunReceipt | None = None
     enforcement_trace: tuple[dict[str, Any], ...] = ()
+    iterations: int | None = None
+    """Loop iterations actually executed; ``None`` when no loop ran (plan-only)."""
+    tokens_used: int | None = None
+    """Agent tokens consumed; ``None`` when the run did not report them."""
+    cost_usd: float | None = None
+    """Agent spend in USD; ``None`` when the provider did not report a cost.
+
+    Never defaulted to ``0.0`` — "cost unknown" and "cost was zero" are different
+    facts, and a fabricated zero would make a run look free.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "iterations": self.iterations,
+            "tokens_used": self.tokens_used,
+            "cost_usd": self.cost_usd,
             "status": self.status.value,
             "plan": self.plan.to_dict(),
             "loop_converged": self.loop_converged,
@@ -197,6 +210,13 @@ class HarnessResult:
                 f"Outcome: loop_converged={self.loop_converged}, "
                 f"proof_complete={self.proof_complete}, stop={self.stop_reason}"
             )
+            # Cost/turns were previously invisible: an executed run reported no
+            # spend at all, so a user could not see what a run had cost them.
+            # "n/a" is used where the provider reported nothing — never $0.00.
+            cost = "n/a" if self.cost_usd is None else f"${self.cost_usd:.4f}"
+            tokens = "n/a" if self.tokens_used is None else str(self.tokens_used)
+            iterations = "n/a" if self.iterations is None else str(self.iterations)
+            lines.append(f"Usage: iterations={iterations}, tokens={tokens}, cost={cost}")
         if self.worktree_path is not None:
             lines.append(f"Worktree: {self.worktree_path}")
         return "\n".join(lines)

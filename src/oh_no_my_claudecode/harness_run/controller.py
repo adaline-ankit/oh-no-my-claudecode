@@ -916,6 +916,9 @@ class HarnessController:
             policy_decision=policy,
             receipt=receipt,
             enforcement_trace=enforcement_trace,
+            iterations=None if loop_result is None else len(loop_result.iterations),
+            tokens_used=None if loop_result is None else loop_result.total_tokens,
+            cost_usd=None if loop_result is None else loop_result.total_cost_usd,
         )
 
     def _persist_receipt(
