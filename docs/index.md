@@ -11,7 +11,7 @@ gates, replay, evals, agent-config security auditing, and tamper-evident receipt
 ```bash
 pipx install oh-no-my-claudecode   # or: pip install oh-no-my-claudecode
 onmc init && onmc ingest           # build a brain from your repo
-onmc benchmark                     # prove it helps (reproducible numbers)
+onmc benchmark                     # measure recall on your repo (labelled MEASURED vs SIM)
 ```
 
 ## Documentation
@@ -20,6 +20,7 @@ onmc benchmark                     # prove it helps (reproducible numbers)
 - [Architecture](architecture.md) — how the pieces fit together
 - [Memory model](memory-model.md) — extraction, provenance, ranking, sync
 - [CLI reference](cli-reference.md) — every command
+- [Environment variables](environment-variables.md) — kill switches and recall tuning
 - [Demo walkthrough](demo.md) — two agents, one brain
 
 ### Workflows

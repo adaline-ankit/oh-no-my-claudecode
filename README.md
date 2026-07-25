@@ -42,7 +42,7 @@ cd your-repo && onmc setup
 
 ## Why ONMC
 
-Coding agents are capable. Their surrounding workflow still has four expensive gaps:
+Coding agents are capable. Their surrounding workflow still has expensive gaps:
 
 | Gap | ONMC answer |
 |---|---|
@@ -420,6 +420,9 @@ refute the claim. Fixture results remain labelled and are never counted as live 
   contain repository details.
 - Autonomous loops edit real files. Use a branch/worktree, a narrow verifier, and explicit budgets.
 - MCP policy classification helps enforce a pipeline policy but is not a process sandbox.
+- `ONMC_LEARNING=0` is the kill switch for active learned behavior: no learned candidate
+  activates and promotion is suppressed. See
+  [environment variables](docs/environment-variables.md) for what it does and does not cover.
 
 ## Command map
 
@@ -455,6 +458,7 @@ repo.sync.commit()
 - [Demo: two agents, one brain](docs/demo.md)
 - [Shipped capabilities](docs/shipped-capabilities.md)
 - [CLI reference](docs/cli-reference.md)
+- [Environment variables](docs/environment-variables.md)
 - [Architecture](docs/architecture.md)
 - [Memory model](docs/memory-model.md)
 - [Dashboard](docs/ui-dashboard.md)

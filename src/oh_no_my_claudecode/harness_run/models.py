@@ -165,11 +165,44 @@ class HarnessResult:
     facts, and a fabricated zero would make a run look free.
     """
 
+    @property
+    def enforcement_mode(self) -> str:
+        """``enforced`` / ``advisory`` / ``none``, derived from the decision trace.
+
+        ``advisory`` means the reference monitor recorded verdicts that blocked
+        nothing. Reporting it explicitly is the difference between "effects were
+        mediated" and "effects were logged" — a distinction the run output
+        previously left invisible. ``none`` means no monitor ran at all, which is
+        deliberately NOT reported as advisory: no trace is a weaker statement than
+        an advisory trace.
+        """
+        if not self.enforcement_trace:
+            return "none"
+        # Mixed traces cannot occur today (one monitor per run) but must not be
+        # silently reported as fully enforced if they ever do.
+        modes = {str(record.get("mode", "advisory")) for record in self.enforcement_trace}
+        if modes == {"enforced"}:
+            return "enforced"
+        if modes == {"advisory"}:
+            return "advisory"
+        return "mixed:" + "+".join(sorted(modes))
+
+    @property
+    def denied_effect_count(self) -> int:
+        """Effects the monitor refused. Non-zero with ``enforced`` means blocked."""
+        return sum(
+            1
+            for record in self.enforcement_trace
+            if str(record.get("outcome", "")).lower() in {"deny", "denied", "escalate"}
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "iterations": self.iterations,
             "tokens_used": self.tokens_used,
             "cost_usd": self.cost_usd,
+            "enforcement_mode": self.enforcement_mode,
+            "denied_effect_count": self.denied_effect_count,
             "status": self.status.value,
             "plan": self.plan.to_dict(),
             "loop_converged": self.loop_converged,
@@ -217,6 +250,17 @@ class HarnessResult:
             tokens = "n/a" if self.tokens_used is None else str(self.tokens_used)
             iterations = "n/a" if self.iterations is None else str(self.iterations)
             lines.append(f"Usage: iterations={iterations}, tokens={tokens}, cost={cost}")
+            # An advisory run looked IDENTICAL to an enforced one: the monitor
+            # recorded a verdict that blocked nothing and said so nowhere. A user
+            # could believe effects were being mediated when they were only being
+            # observed, which is the exact difference between a guarantee and a
+            # log. State the mode, and how many effects were actually guarded.
+            lines.append(
+                f"Enforcement: {self.enforcement_mode} "
+                f"({len(self.enforcement_trace)} effect(s) guarded"
+                + (f", {self.denied_effect_count} denied" if self.denied_effect_count else "")
+                + ")"
+            )
         if self.worktree_path is not None:
             lines.append(f"Worktree: {self.worktree_path}")
         return "\n".join(lines)

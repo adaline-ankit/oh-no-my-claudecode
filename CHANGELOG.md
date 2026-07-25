@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`ONMC_LEARNING` kill switch** — one env var disables all active learned behavior: no learned candidate activates and promotion is suppressed. Default ON; `0` / `false` / `no` / `off` (case-insensitive) turn it OFF, matching the `ONMC_FIREWALL` idiom. Now documented for users in `docs/environment-variables.md`, alongside `ONMC_AUTOCAPTURE`, `ONMC_FIREWALL`, `ONMC_EMBEDDINGS`, `ONMC_RECALL_MIN_SCORE`, and `ONMC_RECALL_MAX_CHARS`. The switch governs the eval-gated learning machinery, which is `implemented` (code plus green tests); routing production memory write paths through the promotion gate is still in progress, so it does not disable ordinary repo-memory ingest or recall.
+
 
 ## [0.108.0] — 2026-07-25
 

@@ -65,6 +65,17 @@ def _loop(*, converged: bool = True) -> LoopResult:
     )
 
 
+def _broker(effect: DecisionEffect) -> object:
+    """Broker stub whose every verdict is *effect* — isolates mode reporting."""
+
+    class _Fixed:
+        def decide(self, action: object, **kwargs: object) -> Decision:
+            del action, kwargs
+            return Decision(effect, f"fixed_{effect.value}")
+
+    return _Fixed()
+
+
 def _deny_all_broker() -> ToolBroker:
     # Empty policy → deny-by-default for every action (incl. filesystem writes).
     return ToolBroker(policy=Policy(()), token_authority=TokenAuthority(secrets.token_bytes(32)))
@@ -267,3 +278,43 @@ def test_live_run_is_not_silently_double_executed(tmp_path: Path) -> None:
     assert result.stop_reason == "run-already-in-progress"
     assert result.resume_run_id == plan.run_id
     assert any("--resume" in reason for reason in result.proof_reasons)
+
+
+def test_advisory_run_says_advisory(tmp_path: Path) -> None:
+    """An advisory run must SAY it is advisory.
+
+    A monitor that records verdicts without blocking produced output identical to
+    a genuinely enforcing run, so a user could believe effects were mediated when
+    they were only observed. That is the difference between a guarantee and a log.
+    """
+    monitor = ReferenceMonitor(_broker(DecisionEffect.ALLOW), enforced=False)  # type: ignore[arg-type]
+    controller = _controller(tmp_path, monitor_factory=lambda: monitor)
+    result = controller.run(RunRequest(task="advisory run", execute=True))
+
+    assert result.enforcement_trace, "advisory monitor still records a trace"
+    assert result.enforcement_mode == "advisory"
+    assert "Enforcement: advisory" in result.render_text()
+    assert result.to_dict()["enforcement_mode"] == "advisory"
+
+
+def test_enforced_run_says_enforced_and_counts_denials(tmp_path: Path) -> None:
+    """An enforced run reports the mode and how many effects were refused."""
+    monitor = ReferenceMonitor(_broker(DecisionEffect.DENY), enforced=True)  # type: ignore[arg-type]
+    controller = _controller(tmp_path, monitor_factory=lambda: monitor)
+    result = controller.run(RunRequest(task="enforced deny", execute=True))
+
+    assert result.enforcement_mode == "enforced"
+    assert result.denied_effect_count > 0
+    assert "Enforcement: enforced" in result.render_text()
+    assert "denied" in result.render_text()
+    # A denied effect must never be reported as verified work.
+    assert result.verified is False
+
+
+def test_run_without_a_monitor_reports_none_not_advisory(tmp_path: Path) -> None:
+    """No monitor is a WEAKER statement than an advisory monitor; don't conflate them."""
+    controller = _controller(tmp_path)
+    result = controller.run(RunRequest(task="unmonitored", execute=True))
+    assert result.enforcement_trace == ()
+    assert result.enforcement_mode == "none"
+    assert "Enforcement: none" in result.render_text()
