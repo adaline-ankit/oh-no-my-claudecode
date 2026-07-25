@@ -466,6 +466,117 @@ Evidence level reached: **`externally measured`** for the runtime, `internal` fo
 the memory-transfer effect. **`reproducible` is not reached** and cannot be
 self-certified — it requires third-party reproduction.
 
+## Ablations built and measured (2026-07-25, main `3c35635`)
+
+The claim protocol's ablation matrix existed only as a requirement. It is now
+built. Three of the four results argue AGAINST ONMC's own additions, which is why
+they are recorded here rather than summarised away.
+
+### Retrieval: BM25 vs dense vs graph vs fused — now runnable at all
+
+Frozen split `dataset_sha 8e8f6d52…`, 40 cases, offline, free.
+
+| Surface | R@5 | R@10 | MRR@10 | nDCG@10 | p50 |
+|---|---|---|---|---|---|
+| **code-bm25** (shipped default) | **0.950** | **1.000** | **0.8101** | **0.8574** | **0.18 ms** |
+| code-hybrid (BM25+dense+RRF) | 0.875 | 0.950 | 0.7637 | 0.8082 | 4.60 ms |
+| code-dense | 0.750 | 0.825 | 0.6198 | 0.6683 | — |
+| code-graph | — | — | — | — | **SKIPPED** |
+
+**The cheapest retriever wins outright and fusion actively hurts.** Dense is the
+weakest of the three measured surfaces. The shipped default is correct; both of our
+"smarter" retrieval additions lose to plain lexical search on this split.
+
+`code-graph` is skipped with `skip_code: "no_graph_query_ranker"`, for three verified
+reasons: every graph primitive takes a *seed* rather than a query; the only
+query-taking function ranks files by path/symbol token overlap without touching a
+graph edge; and only 126 of 149 frozen chunk ids still reproduce (ids embed git blob
+SHAs). Seeding from BM25 would have produced a "graph-only" surface that was secretly
+BM25+graph. `CodeGraphAdapter.retrieve()` raises rather than returning `[]` so no
+code path can turn the absence into a row of zeros. **An honestly skipped surface is
+a result; a fabricated one would have corrupted the whole ablation.**
+
+Known inconsistency, not yet fixed: `code-hybrid` never consults `ONMC_EMBEDDINGS`,
+so with embeddings "disabled" the fused surface keeps using dense vectors while
+`code-dense` honestly skips. Fixing it moves a pinned baseline, so it is recorded
+rather than changed mid-session.
+
+### Verifier components — the pre-existing gate is redundant
+
+Offline, deterministic, no agent, no network, no subprocess, seeded — **the only
+ablation in the protocol that needs zero paid calls**, and it runs in CI on every
+commit. 16 subsets over a 16-case challenge set (13 false-green, 3 legitimate).
+
+| Component | Role | Unique catch lost if removed | False positives |
+|---|---|---|---|
+| `reachability` | load-bearing | passing, evidenced change that never executed | **1** (docs-only diff) |
+| `mutation` | load-bearing | green suite blind to every injected fault | 0 |
+| `contract` | load-bearing | proof plan complete over a plan missing an obligation | 0 |
+| `proof-graph` (pre-existing) | **REDUNDANT** | **none** | 0 |
+
+**`proof-graph` catches nothing the newer detectors miss.** Its only
+multi-component catch — agent-only evidence — is also caught by contract review, so
+that rule is now enforced twice. That is duplicated work, not defence in depth, and
+it is the one rule-20 removal candidate in the package. It was left in place (older,
+cheaper, not verifier scaffolding) but the redundancy is measured and pinned by a
+test rather than assumed away.
+
+Also pinned by a test: the naive tier of the challenge set feeds exactly one
+detector per case, so on that tier *every* component trivially looks load-bearing.
+That circularity is asserted explicitly so nobody can quote it as evidence.
+
+### Condition 3 and the run-level arms
+
+`scripts/run_ablations.py`: 6 arms — bare, current, candidate, retrieval-mode,
+memory-off (`ONMC_LEARNING=0`), single-iteration. Paired deltas against the
+reference arm, dry-run over 432 planned cells with 0 gate failures and 0 paid calls.
+
+`abl-monitor-advisory` is **SKIPPED** (`advisory-monitor-not-reachable-from-cli`):
+`harness_run/controller.py` hardcodes `enforced=True`, no CLI flag or env var
+reaches advisory mode, and patching source would have unpinned `code_sha` mid-run.
+The skip is re-validated at runtime and pinned by a test that fails if a flag ever
+appears.
+
+Where a knob bundles more than one factor (the `--budget-mode` switch also moves
+`top_k` and the planner gates), that is recorded in a machine-readable
+`factor_confounds` list rather than reported as a clean single-factor ablation.
+
+### Task classes: 4 added, 2 refused, and a finding about this harness
+
+`portfolio_external_v4.json` — 28 tasks, 56/56 validity gates clean, 0 infra
+failures, zero paid calls. Added: **cross-file feature** (a deleted helper whose
+import is stripped from three consumers — fixing the obvious site leaves 59 failed /
+229 errors), **misleading context** (a planted docstring asserting the bug is
+deliberate, citing a real checkable fact to stay coherent; the correct fix
+contradicts the repo's own prose), **long-running** (four functions across four
+modules, adjudicated by the full 1384-test attrs suite), and **refactor**.
+
+**refactor is flagged expected-to-saturate and must not be cited as equivalent to a
+bugfix pass** — a behaviour-preserving seed leaves upstream tests green, so the
+discriminating half is a structural checker *this harness wrote*, which ships inside
+the repo where the agent can read exactly what is measured.
+
+Two classes were NOT added, both recorded in `excluded_tasks`:
+
+* **tests — unimplementable, and the reason is a defect in this harness.** The
+  false-green guard forces a failure whenever the final diff touches a test file. It
+  cannot distinguish "tampered with the adjudicator" from "wrote the test it was
+  asked for", so a *correctly solved* tests-class task scores as a failure. Also
+  `_observed_change` uses `git diff --numstat HEAD`, which cannot see an untracked
+  agent-written test at all. Fixing this needs `run_cell` changes.
+* **retrieval-abstention — refused because it rewards inaction.** The gate requires
+  the mutated tree to FAIL, but an abstention task must leave it green. Worse, an
+  agent that does nothing — including one that crashed or ran out of budget — passes
+  it. Any future implementation must report it as a no-op-passes class and never
+  count it toward a pass rate.
+
+### What these ablations do NOT do
+
+Every arm above measures a difference between conditions. On the current corpora both
+arms score 100%, so **each of these will return 0.000 until a discriminating task set
+exists.** They are now buildable, runnable and honest; they are not yet informative.
+Building the instrument did not move the claim.
+
 ## Reproduce
 
 ```bash
