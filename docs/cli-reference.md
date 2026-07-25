@@ -2360,6 +2360,10 @@ Usage: onmc crossrepo recall [OPTIONS] QUERY [PATHS]...
  deterministic token overlap, and reports the best matches with their source
  repo. Pass repos via ``--repo`` (repeatable) and/or positional paths.
 
+ Results are unreviewed cross-repo content and are labelled as such; a memory
+ quarantined in its origin repo is marked, never silently dropped. ``--json``
+ carries the same signal per hit as ``unpromoted`` / ``provenance``.
+
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    query           TEXT  Search query for federated memory recall.         │
 │                            [required]                                        │
@@ -6508,7 +6512,8 @@ Usage: onmc retrieval-eval [OPTIONS] COMMAND [ARGS]...
 │ --split        [memory|code|all]  Which retrieval split to evaluate.         │
 │                                   'memory' (default): recall + guard         │
 │                                   surfaces from the memory dataset. 'code':  │
-│                                   code-bm25 and code-hybrid surfaces from    │
+│                                   the four-way ablation (code-bm25,          │
+│                                   code-hybrid, code-dense, code-graph) from  │
 │                                   the code dataset. 'all': run both splits.  │
 │                                   [default: memory]                          │
 │ --help                            Show this message and exit.                │

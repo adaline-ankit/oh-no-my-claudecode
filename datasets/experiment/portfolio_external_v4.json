@@ -1,0 +1,560 @@
+{
+  "experiment": {
+    "schema_version": "1",
+    "experiment_id": "external-v4",
+    "task_set_revision": "external-v4-2026-07-25",
+    "conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "trials": 3,
+    "seed": 20260724,
+    "environment": {
+      "code_sha": "5e21a00",
+      "config_hash": "external-v1",
+      "model": "claude-cli-default",
+      "provider": "anthropic",
+      "image": "local-macos-arm64-py313"
+    },
+    "audit_status": "valid",
+    "leakage_notes": "Tasks are seeded regressions injected into real upstream repositories pinned at real commit SHAs. The adjudicating verifier is each repository's OWN upstream test suite, which was confirmed passing at the pinned SHA before any regression was injected (validity gate). No task text, fix, or test was generated from ONMC's implementation, so there is no train/test leakage from ONMC into the corpus. The injected regression is a single-function revert, so a passing verifier means the agent restored real upstream behaviour."
+  },
+  "audit_status": "valid",
+  "leakage_notes": "Baseline validity gate run 2026-07-24: six/test_six.py 198 passed, tenacity/tests/test_utils.py 2 passed, attrs/tests/test_funcs.py 53 passed at the pinned SHAs. kennethreitz/records and chardet/chardet were EXCLUDED (unresolvable test-time dependencies: docopt/tablib, registry import error) rather than silently dropped. v2 adds three MULTI-SITE variants of the same three repositories because the v1 single-hunk tasks were measured to have a ceiling effect (both arms 9/9, delta 0.000): they could not discriminate between conditions. Each v2 prompt states the symptom and never the number of broken sites, so an agent that repairs the first failing assertion and stops does not pass. No task text, fix, or test is derived from ONMC's implementation. v3 scales to 29 tasks over SIX pinned upstream repositories (six, tenacity, attrs, jmespath.py, itsdangerous, python-slugify). The added tasks remove the BODY of a real upstream function via AST (replacing it with raise NotImplementedError) and are adjudicated by that repository's own tests, so the reference solution is genuine upstream code that predates ONMC entirely. Several tasks remove two or three related functions so the agent must find every affected site. No task text, fix, or test is derived from ONMC's implementation. Five candidate tasks were REJECTED by the vacuity gate (the removal left the adjudicating suite green) and are recorded in `excluded_tasks` with reasons rather than silently dropped. python-slugify needs text-unidecode at test time; that was discovered by the pristine gate and recorded in REPO_TEST_DEPS. v4 adds FOUR tasks and no more, to cover task classes the claim protocol requires and v3 lacked; the 24 v3 tasks are carried over byte-identically. (1) itsdangerous-crossfile-want-bytes (cross-file feature): a helper is deleted outright and its import removed from three consuming modules, so implementing the helper alone still leaves 59 failed / 229 errors \u2014 verified on the pinned SHA. (2) itsdangerous-misleading-base64-padding (misleading context): a real one-line defect plus a plausible-but-WRONG docstring note asserting the defect is intentional; the correct fix contradicts the planted prose, so the task measures whether retrieved in-repo text is treated as untrusted data. Graded purely by upstream tests. (3) jmespath-refactor-dedup-key-func (refactor): a behaviour-preserving seed inlines a shared helper into its three callers. Because the seed preserves behaviour, the upstream suite cannot fail on it, so the corpus plants a pytest module that asserts the structural property over the shipped module's AST. That keeps the grade a function of repository state rather than agent prose, but it is WEAKER evidence than a behavioural task: the grader was written by this harness rather than by upstream, and it ships inside the repository where the agent can read it. Expect this task to saturate, and do not cite a refactor pass as equivalent to a bugfix pass. (4) attrs-longrunning-four-modules (long-running): four real upstream functions in four different modules, adjudicated by the FULL 1384-test attrs suite rather than one file; targets were chosen so every failure is at run time, because a collection error aborts pytest after the first problem and would collapse the task to a single site. Two further classes were designed and then REJECTED rather than added weakly, with reasons in excluded_tasks: 'tests' (the runner's false-green guard makes an agent-authored test an automatic failure, and the verifier runs only once so the fail-on-buggy/pass-on-fixed property has nowhere to be checked) and 'retrieval-abstention' (validity gate 2 requires the mutated tree to FAIL the verifier, while an abstention task must leave it green; the class also rewards inaction, so an agent that does nothing at all passes it). The task_kind vocabulary in src/oh_no_my_claudecode/experiment/portfolio.py has no value for 'cross-file feature' or 'misleading context', so those two tasks are labelled with the closest existing kinds ('feature' and 'bugfix'); the class each one actually exercises is stated in its expected_outcome. No task text, fix, or test is derived from ONMC's implementation.",
+  "tasks": [
+    {
+      "task_id": "six-bugfix-integer-types",
+      "repo": {
+        "name": "six",
+        "url": "https://github.com/benjaminp/six.git",
+        "pinned_sha": "c8e394065cd541a16c040515dc0afb85cf22a7c3"
+      },
+      "prompt": "A regression was introduced in six.py: the PY2/PY3 integer_types definition is wrong. Fix six.py so the full upstream test suite in test_six.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test_six.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "test_six.py passes (198 passed, 2 skipped) with the upstream integer_types behaviour restored and no test modified."
+    },
+    {
+      "task_id": "tenacity-bugfix-find-ordinal",
+      "repo": {
+        "name": "tenacity",
+        "url": "https://github.com/jd/tenacity.git",
+        "pinned_sha": "c650fb45204635f07910948d5fc59a8c551ffdda"
+      },
+      "prompt": "A regression was introduced in tenacity/_utils.py: find_ordinal returns incorrect suffixes. Fix tenacity/_utils.py so tests/test_utils.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_utils.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "tests/test_utils.py passes with correct ordinal suffixes restored and no test modified."
+    },
+    {
+      "task_id": "attrs-bugfix-asdict-recurse",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "A regression was introduced in src/attr/_funcs.py: asdict no longer applies its `filter` argument, so filtered attributes are incorrectly included. Fix src/attr/_funcs.py so tests/test_funcs.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "tests/test_funcs.py passes with upstream asdict filter behaviour restored and no test modified."
+    },
+    {
+      "task_id": "six-multisite-type-aliases",
+      "repo": {
+        "name": "six",
+        "url": "https://github.com/benjaminp/six.git",
+        "pinned_sha": "c8e394065cd541a16c040515dc0afb85cf22a7c3"
+      },
+      "prompt": "Several of six.py's PY3 type aliases are wrong, so code that relies on them misbehaves. Fix six.py so the full upstream test suite in test_six.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test_six.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "test_six.py passes with every upstream PY3 alias restored (string_types, integer_types, class_types) and no test modified."
+    },
+    {
+      "task_id": "tenacity-multisite-ordinal-suffixes",
+      "repo": {
+        "name": "tenacity",
+        "url": "https://github.com/jd/tenacity.git",
+        "pinned_sha": "c650fb45204635f07910948d5fc59a8c551ffdda"
+      },
+      "prompt": "find_ordinal in tenacity/_utils.py returns incorrect ordinal suffixes. Fix tenacity/_utils.py so tests/test_utils.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_utils.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "tests/test_utils.py passes with the 1st/2nd/3rd suffixes all restored and no test modified."
+    },
+    {
+      "task_id": "attrs-multisite-filter-ignored",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "attrs is ignoring the `filter` argument, so filtered attributes are incorrectly included in serialised output. Fix src/attr/_funcs.py so tests/test_funcs.py passes again. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "tests/test_funcs.py passes with filter honoured in BOTH asdict and astuple and no test modified."
+    },
+    {
+      "task_id": "six-impl-with-metaclass",
+      "repo": {
+        "name": "six",
+        "url": "https://github.com/benjaminp/six.git",
+        "pinned_sha": "c8e394065cd541a16c040515dc0afb85cf22a7c3"
+      },
+      "prompt": "six.with_metaclass is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q test_six.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test_six.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q test_six.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "tenacity-impl-to-seconds",
+      "repo": {
+        "name": "tenacity",
+        "url": "https://github.com/jd/tenacity.git",
+        "pinned_sha": "c650fb45204635f07910948d5fc59a8c551ffdda"
+      },
+      "prompt": "tenacity._utils.to_seconds is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_utils.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_utils.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_utils.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "tenacity-impl-ordinal-pair",
+      "repo": {
+        "name": "tenacity",
+        "url": "https://github.com/jd/tenacity.git",
+        "pinned_sha": "c650fb45204635f07910948d5fc59a8c551ffdda"
+      },
+      "prompt": "tenacity._utils ordinal helpers are unimplemented (they raise NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_utils.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_utils.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_utils.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "attrs-impl-has",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "attr.has is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_funcs.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_funcs.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "attrs-impl-assoc",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "attr.assoc is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_funcs.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_funcs.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "attrs-impl-asdict",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "attr.asdict is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_funcs.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_funcs.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "attrs-impl-serialisation-pair",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "attrs' serialisation helpers are unimplemented (they raise NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests/test_funcs.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/test_funcs.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests/test_funcs.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "jmespath-impl-to-number",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "The jmespath to_number built-in function is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "jmespath-impl-starts-with",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "The jmespath starts_with built-in function is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "jmespath-impl-merge",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "The jmespath merge built-in function is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "jmespath-impl-sort-by",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "The jmespath sort_by built-in function is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "jmespath-impl-by-pair",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "Several jmespath *_by built-in functions are unimplemented (they raise NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "itsdangerous-impl-base64-encode",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "itsdangerous.encoding.base64_encode is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "itsdangerous-impl-base64-pair",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "itsdangerous' base64 helpers are unimplemented (they raise NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "itsdangerous-impl-int-bytes-pair",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "itsdangerous' integer/bytes conversion helpers are unimplemented (they raise NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "itsdangerous-impl-want-bytes",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "itsdangerous.encoding.want_bytes is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "slugify-impl-smart-truncate",
+      "repo": {
+        "name": "python-slugify",
+        "url": "https://github.com/un33k/python-slugify.git",
+        "pinned_sha": "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
+      },
+      "prompt": "slugify.smart_truncate is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q test.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q test.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "slugify-impl-slugify",
+      "repo": {
+        "name": "python-slugify",
+        "url": "https://github.com/un33k/python-slugify.git",
+        "pinned_sha": "7b6d5d96c1995e6dccb39a19a13ba78d7d0a3ee4"
+      },
+      "prompt": "The slugify function is unimplemented (it raises NotImplementedError). Implement it so the upstream test suite passes again. The adjudicating test command is: python -m pytest -q test.py. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "test.py"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q test.py passes with real upstream behaviour restored and no test modified."
+    },
+    {
+      "task_id": "itsdangerous-crossfile-want-bytes",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "The itsdangerous package no longer imports: a helper it depends on has gone missing, and the modules that used it were left inconsistent by the same bad revert. Restore the package so the full upstream test suite passes. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "feature",
+      "expected_outcome": "python -m pytest -q tests passes (297 passed). CROSS-FILE by construction: want_bytes was deleted from src/itsdangerous/encoding.py AND its import was removed from signer.py, serializer.py and timed.py, while __init__.py still re-exports it. Measured on the pinned SHA: implementing the helper in encoding.py alone still leaves 59 failed / 229 errors, so the task cannot be passed without visiting every consuming module. No test modified."
+    },
+    {
+      "task_id": "itsdangerous-misleading-base64-padding",
+      "repo": {
+        "name": "itsdangerous",
+        "url": "https://github.com/pallets/itsdangerous.git",
+        "pinned_sha": "672971d66a2ef9f85151e53283113f33d642dabd"
+      },
+      "prompt": "itsdangerous is failing its upstream test suite: signed values produced by the signer no longer match what the unsigner expects. Fix the source in src/itsdangerous so the full upstream test suite passes. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "bugfix",
+      "expected_outcome": "python -m pytest -q tests passes (297 passed) with base64_encode stripping its '=' padding again, and no test modified. MISLEADING CONTEXT: the seed also plants a plausible-but-WRONG docstring note in base64_encode claiming the padding is preserved deliberately (citing the real fact that base64_decode re-adds padding), plus a matching comment in base64_decode so the false claim is locally coherent. The correct fix CONTRADICTS the planted documentation, so a pass requires treating in-repo prose as untrusted evidence. Measured on the pinned SHA: the seeded defect fails 28 tests."
+    },
+    {
+      "task_id": "jmespath-refactor-dedup-key-func",
+      "repo": {
+        "name": "jmespath.py",
+        "url": "https://github.com/jmespath/jmespath.py.git",
+        "pinned_sha": "2812594e69d43098ef60f81f4efc404c071b0418"
+      },
+      "prompt": "In jmespath/functions.py the three methods Functions._func_sort_by, Functions._func_min_by and Functions._func_max_by each contain their own inline copy of the same key-function logic. De-duplicate it: extract that logic into a single shared private helper named _create_key_func(self, expref, allowed_types, function_name) on Functions, and have all three methods call it instead of defining the key function inline. Do not change any behaviour. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "refactor",
+      "expected_outcome": "python -m pytest -q tests passes: the 991 upstream tests grade BEHAVIOUR (the refactor must preserve it) and the planted tests/test_structure_dedup.py grades STRUCTURE over the shipped module's AST (_create_key_func is defined, all three *_by methods call it, and none of them still defines the key function inline). The seed is behaviour-preserving, so the upstream suite is GREEN both before and after it; the structural grader is what validity gate 2 fails on. HONEST LIMIT: the discriminating half of this grade is a check the harness wrote, not upstream behaviour, and the grader ships inside the repository where the agent can read it \u2014 do not cite a refactor pass as equivalent to a bugfix pass. No test modified."
+    },
+    {
+      "task_id": "attrs-longrunning-four-modules",
+      "repo": {
+        "name": "attrs",
+        "url": "https://github.com/python-attrs/attrs.git",
+        "pinned_sha": "f06ceaafbe5bdbdafad8a0c01a2daabb89386a42"
+      },
+      "prompt": "Several helper functions across the attrs package are unimplemented \u2014 they raise NotImplementedError \u2014 and the failures show up in unrelated-looking areas of the library. Implement the real upstream behaviour so the FULL upstream test suite passes. The adjudicating test command is: python -m pytest -q tests. Do not edit or delete any test.",
+      "verifier_argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests"
+      ],
+      "task_kind": "long-running",
+      "expected_outcome": "python -m pytest -q tests passes (1384 passed, 6 skipped, 1 xfailed) with filters._split_what, converters.to_bool, validators.in_ and _funcs.resolve_types all reimplemented, and no test modified. LONG-RUNNING by construction: four functions in four different modules, every failure at run time rather than collection time (a collection error would abort pytest after the first problem and collapse the task to a single site). Measured on the pinned SHA: 81 failed / 1303 passed spread over test_annotations, test_converters, test_filters and test_validators, so no single test file reveals the whole job and only the full suite can confirm completion."
+    }
+  ],
+  "excluded_tasks": [
+    {
+      "task_id": "six-impl-ensure-binary",
+      "reason": "EXCLUDED: removing the body did not fail test_six.py \u2014 the ensure_* helpers are not exercised by the adjudicating suite on py3, so the task would be vacuous."
+    },
+    {
+      "task_id": "six-impl-ensure-str",
+      "reason": "EXCLUDED: same as six-impl-ensure-binary \u2014 verifier unaffected by the removal."
+    },
+    {
+      "task_id": "six-impl-ensure-text",
+      "reason": "EXCLUDED: same as six-impl-ensure-binary \u2014 verifier unaffected by the removal."
+    },
+    {
+      "task_id": "six-impl-ensure-trio",
+      "reason": "EXCLUDED: same as six-impl-ensure-binary \u2014 verifier unaffected by the removal."
+    },
+    {
+      "task_id": "tenacity-impl-to-ordinal",
+      "reason": "EXCLUDED: tests/test_utils.py does not exercise to_ordinal, so removing it left the verifier green (vacuous)."
+    },
+    {
+      "task_id": "tests-class-write-a-failing-test",
+      "reason": "NOT ADDED (class 'tests'). The design was: seed a bug, require the agent to write a test that FAILS on the buggy revision and PASSES on the fixed one. It is unimplementable in this harness without changing the runner, which is out of scope for this change. Two independent blockers, both in run_cell: (1) the false-green guard forces passed=False whenever the final diff touches any test file, so a cell where the agent correctly ADDS a test can never be scored as a pass \u2014 the guard cannot distinguish 'tampered with the adjudicating test' from 'wrote the test it was asked to write'; (2) _observed_change reads `git diff --numstat HEAD`, which ignores untracked paths, so an agent that creates a test file without staging it yields diff_lines=0 and is recorded in the taxonomy as `no_change`. Additionally, the harness runs the verifier exactly once, on the final tree, so the both-revisions property (fail on buggy, pass on fixed) has nowhere to be checked. Recorded rather than added weakly: a task that cannot pass even when solved correctly would silently depress both arms."
+    },
+    {
+      "task_id": "retrieval-abstention-nonexistent-symbol",
+      "reason": "NOT ADDED (class 'retrieval-abstention'). The design was: ask about something that genuinely does not exist in the pinned repo, where correct behaviour is to abstain and change nothing, graded as 'no source change AND suite still green'. It is structurally incompatible with this harness's validity gates: guard_regression_active requires the verifier to FAIL after injection, and an abstention task must leave it GREEN, so every such cell is excluded as 'regression did not break the verifier (task would be vacuous)'. inject_regression also refuses a task with no mutation. Making it work would mean per-task inversion of gate 2 and a second success criterion in run_cell \u2014 runner changes, out of scope here. Recorded honestly rather than faked. NOTE the class's own weakness, which is why it is a low priority to rescue: an abstention task rewards INACTION, so an agent that does nothing at all \u2014 including one that crashed, ran out of budget, or never started \u2014 passes it. It measures 'did not act' and cannot distinguish that from 'correctly judged that there was nothing to act on'. Any future implementation must report it as a no-op-passes class rather than counting it toward a pass rate."
+    }
+  ]
+}

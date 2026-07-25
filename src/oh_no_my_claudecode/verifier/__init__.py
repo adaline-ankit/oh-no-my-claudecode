@@ -14,8 +14,51 @@ evidence as non-authoritative in
 
 Every entry point is pure over injected data; nothing here runs a test, shells a
 process, or trusts agent prose.
+
+Those detectors were previously all-or-nothing, so their individual contribution
+could not be measured. Two modules add that measurement without duplicating any
+detection logic:
+
+- :mod:`~oh_no_my_claudecode.verifier.composition` — the config surface for
+  running an explicit *subset* of components over one change.
+- :mod:`~oh_no_my_claudecode.verifier.ablation` — an offline, deterministic,
+  zero-cost ablation of every subset over the
+  :mod:`~oh_no_my_claudecode.verifier.challenges` false-green challenge set.
 """
 
+from oh_no_my_claudecode.verifier.ablation import (
+    AblationReport,
+    CaseOutcome,
+    CaseResult,
+    ComponentAttribution,
+    ComponentRole,
+    SubsetResult,
+    run_ablation,
+)
+from oh_no_my_claudecode.verifier.challenges import (
+    CHALLENGE_SET,
+    CaseProvenance,
+    ChallengeCase,
+    challenge_by_id,
+    challenge_cases,
+    source_tests,
+)
+from oh_no_my_claudecode.verifier.composition import (
+    COMPONENT_ORDER,
+    PACKAGE_COMPONENTS,
+    ComponentFinding,
+    ComponentStatus,
+    CompositeVerdict,
+    ContractInput,
+    MutationInput,
+    ProofGraphInput,
+    ReachabilityInput,
+    VerifierCase,
+    VerifierComponent,
+    VerifierConfig,
+    component_subsets,
+    run_components,
+)
 from oh_no_my_claudecode.verifier.contract_review import (
     BehaviorRequirement,
     ContractReview,
@@ -44,8 +87,22 @@ from oh_no_my_claudecode.verifier.reachability import (
 )
 
 __all__ = [
+    "CHALLENGE_SET",
+    "COMPONENT_ORDER",
+    "PACKAGE_COMPONENTS",
+    "AblationReport",
     "BehaviorRequirement",
+    "CaseOutcome",
+    "CaseProvenance",
+    "CaseResult",
+    "ChallengeCase",
     "ChangedRegion",
+    "ComponentAttribution",
+    "ComponentFinding",
+    "ComponentRole",
+    "ComponentStatus",
+    "CompositeVerdict",
+    "ContractInput",
     "ContractReview",
     "ContractVerdict",
     "ForbiddenRegression",
@@ -53,15 +110,28 @@ __all__ = [
     "Invariant",
     "Mutant",
     "MutantTestRunner",
+    "MutationInput",
     "MutationOperator",
     "MutationReport",
+    "ProofGraphInput",
+    "ReachabilityInput",
     "ReachabilityReport",
+    "SubsetResult",
     "TaskContract",
     "TestExecution",
     "UnreachedRegion",
+    "VerifierCase",
+    "VerifierComponent",
+    "VerifierConfig",
     "assess_reachability",
+    "challenge_by_id",
+    "challenge_cases",
+    "component_subsets",
     "generate_mutants",
     "is_false_green",
     "review_contract",
+    "run_ablation",
+    "run_components",
     "run_mutation_campaign",
+    "source_tests",
 ]

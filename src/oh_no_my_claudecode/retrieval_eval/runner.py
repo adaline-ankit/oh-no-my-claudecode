@@ -17,7 +17,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from oh_no_my_claudecode.retrieval_eval.dataset import EvalCase, RetrievalDataset, load_dataset
@@ -104,6 +104,28 @@ def _percentile(values: list[float], p: float) -> float:
     return sorted_vals[lo] * (1.0 - frac) + sorted_vals[hi] * frac
 
 
+@dataclass(frozen=True)
+class SurfaceSkip:
+    """A machine-readable reason a surface cannot be measured.
+
+    An honestly-skipped surface is a *correct* result: it says "this retrieval
+    mode is not implementable against the frozen split", which is different
+    from — and must never be reported as — a score of zero.
+
+    Fields
+    ------
+    code:
+        Stable, machine-readable identifier (snake_case) for CI / scripts to
+        branch on, e.g. ``"embeddings_disabled"``.  Never localised, never
+        reworded once published.
+    reason:
+        Human-readable explanation of *why* the surface cannot be measured.
+    """
+
+    code: str
+    reason: str
+
+
 @dataclass
 class SurfaceReport:
     """Aggregate metrics for one retrieval surface."""
@@ -112,6 +134,13 @@ class SurfaceReport:
     query_results: list[QueryResult] = field(default_factory=list)
     skipped: bool = False
     skip_reason: str = ""
+    # Machine-readable counterpart of ``skip_reason``.  Empty for the legacy
+    # "no cases for surface ..." skips so their JSON stays byte-identical.
+    skip_code: str = ""
+    # Free-form provenance for a measured surface (e.g. which embedder backed a
+    # dense run).  Emitted only when non-empty so existing surfaces' JSON and
+    # Markdown rows are unchanged.
+    notes: str = ""
 
     # Aggregate metrics (computed by finalize())
     mean_recall_at_5: float = 0.0
@@ -142,12 +171,15 @@ class SurfaceReport:
 
     def to_dict(self) -> dict[str, Any]:
         if self.skipped:
-            return {
+            skipped: dict[str, Any] = {
                 "surface": self.surface_name,
                 "skipped": True,
                 "skip_reason": self.skip_reason,
             }
-        return {
+            if self.skip_code:
+                skipped["skip_code"] = self.skip_code
+            return skipped
+        measured: dict[str, Any] = {
             "surface": self.surface_name,
             "n_cases": self.n_cases,
             "recall@5": round(self.mean_recall_at_5, 4),
@@ -159,12 +191,16 @@ class SurfaceReport:
             "latency_p95_ms": round(self.latency_p95_ms, 2),
             "context_tokens": round(self.mean_context_tokens, 1),
         }
+        if self.notes:
+            measured["notes"] = self.notes
+        return measured
 
     def to_markdown_row(self) -> str:
         if self.skipped:
             raw = self.skip_reason
             reason = (raw[:60] + "...") if len(raw) > 60 else raw
-            return f"| {self.surface_name} | SKIPPED: {reason} | — | — | — | — | — | — | — | — |"
+            label = f"SKIPPED[{self.skip_code}]" if self.skip_code else "SKIPPED"
+            return f"| {self.surface_name} | {label}: {reason} | — | — | — | — | — | — | — | — |"
         return (
             f"| {self.surface_name} "
             f"| {self.n_cases} "
@@ -204,6 +240,12 @@ class RetrievalReport:
         ]
         for sr in self.surface_reports:
             lines.append(sr.to_markdown_row())
+        noted = [sr for sr in self.surface_reports if sr.notes and not sr.skipped]
+        if noted:
+            lines.append("")
+            lines.append("Provenance:")
+            for sr in noted:
+                lines.append(f"- `{sr.surface_name}`: {sr.notes}")
         lines.append("")
         lines.append(
             "> Metrics are offline and deterministic.  "
@@ -294,9 +336,40 @@ class BaselineAdapter:
 
     Subclass and implement ``surface_name``, ``retrieve``, and optionally
     ``setup`` / ``teardown``.
+
+    Optional honesty hooks (all default to "no opinion", so existing adapters
+    are unaffected):
+
+    ``case_surface``
+        Name of another surface whose labeled cases this surface is scored on.
+        Only consulted when the dataset has *no* cases for ``surface_name``.
+        Use this when a new retrieval mode must be ablated against an existing
+        frozen label set — the labels (query text + relevant_ids) are properties
+        of the dataset, not of the retriever, so reusing them is sound as long
+        as the label sets are provably identical across surfaces.  The runner
+        rewrites each borrowed case's ``query_id``/``surface`` so per-query rows
+        are never mislabeled as belonging to the lender.
+    ``precheck``
+        Return a :class:`SurfaceSkip` when this surface cannot be measured at
+        all (missing primitive, disabled dependency).  The runner then reports
+        the surface as SKIPPED with a machine-readable code and never calls
+        ``retrieve`` — an absent capability must never be scored as 0.0.
+    ``provenance``
+        Short string describing *how* the surface was computed (e.g. which
+        embedder backed a dense run), surfaced as ``notes`` in the report so a
+        reader cannot mistake a fallback backend for a stronger one.
     """
 
     surface_name: str = "unknown"
+    case_surface: str = ""
+
+    def precheck(self) -> SurfaceSkip | None:
+        """Return a skip when the surface is unmeasurable; ``None`` to proceed."""
+        return None
+
+    def provenance(self) -> str:
+        """Return a short provenance note for the report (``""`` for none)."""
+        return ""
 
     def setup(self, dataset: RetrievalDataset) -> None:
         """Called once before evaluation begins.  Seed the corpus here."""
@@ -334,6 +407,11 @@ def _score_surface(
         report.skip_reason = f"setup failed: {exc}"
         return report
 
+    # Capture provenance while the adapter is still live (teardown may release
+    # the backing index, and an empty note must not be mistaken for "no info").
+    with contextlib.suppress(Exception):
+        report.notes = adapter.provenance()
+
     try:
         for case in cases:
             t0 = time.perf_counter()
@@ -367,6 +445,40 @@ def _score_surface(
     return report
 
 
+def _precheck_skip(adapter: BaselineAdapter) -> SurfaceReport | None:
+    """Return a skipped report when *adapter* declares itself unmeasurable.
+
+    A failing precheck is authoritative and is evaluated *before* case lookup:
+    when the retrieval primitive does not exist, "no primitive" is the true
+    reason, not "no cases".
+    """
+    try:
+        skip = adapter.precheck()
+    except Exception as exc:  # noqa: BLE001
+        skip = SurfaceSkip(code="precheck_failed", reason=f"precheck raised: {exc}")
+    if skip is None:
+        return None
+    return SurfaceReport(
+        surface_name=adapter.surface_name,
+        skipped=True,
+        skip_reason=skip.reason,
+        skip_code=skip.code,
+    )
+
+
+def _relabel_case(case: _CaseLike, *, from_surface: str, to_surface: str) -> _CaseLike:
+    """Re-stamp a borrowed case so it is attributed to *to_surface*.
+
+    The query text and ``relevant_ids`` (the actual labels) are untouched — only
+    the surface tag and the surface suffix of ``query_id`` change, so per-query
+    rows never claim to belong to the surface the labels were borrowed from.
+    """
+    src_suffix = from_surface.rsplit("-", 1)[-1]
+    dst_suffix = to_surface.rsplit("-", 1)[-1]
+    stem = case.query_id.removesuffix(f"-{src_suffix}")
+    return replace(case, query_id=f"{stem}-{dst_suffix}", surface=to_surface)
+
+
 def run_evaluation(
     adapters: list[BaselineAdapter],
     *,
@@ -385,6 +497,10 @@ def run_evaluation(
     surface_reports: list[SurfaceReport] = []
 
     for adapter in adapters:
+        pre = _precheck_skip(adapter)
+        if pre is not None:
+            surface_reports.append(pre)
+            continue
         cases = dataset.cases_for_surface(adapter.surface_name)
         if not cases:
             sr = SurfaceReport(
@@ -411,7 +527,12 @@ def run_code_evaluation(
     """Run the evaluation harness over the frozen CODE retrieval split.
 
     Loads ``datasets/retrieval_code_v1.json`` and scores each adapter against
-    its surface (``"code-bm25"`` or ``"code-hybrid"``).  Both
+    its surface.  A surface with no cases of its own may borrow another
+    surface's frozen label set by declaring ``case_surface`` (used by
+    ``"code-dense"``, which reuses the ``"code-bm25"`` labels); an adapter whose
+    :meth:`BaselineAdapter.precheck` returns a :class:`SurfaceSkip` is reported
+    as skipped and never retrieved from, so an unimplementable surface can never
+    be scored as zero.  Both
     :class:`~oh_no_my_claudecode.retrieval_eval.code_adapters.CodeLexicalAdapter`
     and
     :class:`~oh_no_my_claudecode.retrieval_eval.code_adapters.CodeHybridAdapter`
@@ -434,7 +555,23 @@ def run_code_evaluation(
     surface_reports: list[SurfaceReport] = []
 
     for adapter in adapters:
-        cases = code_dataset.cases_for_surface(adapter.surface_name)
+        pre = _precheck_skip(adapter)
+        if pre is not None:
+            surface_reports.append(pre)
+            continue
+
+        cases: list[_CaseLike] = code_dataset.cases_for_surface(adapter.surface_name)
+        borrowed_from = ""
+        if not cases and adapter.case_surface and adapter.case_surface != adapter.surface_name:
+            lender = adapter.case_surface
+            lent = code_dataset.cases_for_surface(lender)
+            if lent:
+                borrowed_from = lender
+                cases = [
+                    _relabel_case(c, from_surface=lender, to_surface=adapter.surface_name)
+                    for c in lent
+                ]
+
         if not cases:
             sr = SurfaceReport(
                 surface_name=adapter.surface_name,
@@ -443,8 +580,15 @@ def run_code_evaluation(
             )
             surface_reports.append(sr)
             continue
+
         # _score_surface works with any cases duck-typed like EvalCase.
         sr = _score_surface(adapter, cases, code_dataset, k)  # type: ignore[arg-type]
+        if borrowed_from:
+            note = (
+                f"scored on the frozen '{borrowed_from}' label set "
+                "(identical queries + relevant_ids)"
+            )
+            sr.notes = f"{sr.notes}; {note}" if sr.notes else note
         surface_reports.append(sr)
 
     return RetrievalReport(

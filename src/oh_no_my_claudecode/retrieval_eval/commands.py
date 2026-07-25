@@ -21,9 +21,13 @@ Splits
     (surface "guard") against the frozen memory dataset v1.
 
 ``code``:
-    Scores BM25-only (surface "code-bm25") and BM25+dense+RRF hybrid
-    (surface "code-hybrid") against the frozen code dataset v1.
-    Both adapters run the same 40 queries so the delta is directly comparable.
+    Runs the four-way retrieval ablation against the frozen code dataset v1 —
+    BM25-only ("code-bm25"), fused BM25+dense+RRF ("code-hybrid"), dense-only
+    ("code-dense"), and graph-only ("code-graph").  All measured surfaces run
+    the same 40 frozen queries so deltas are directly comparable.  A surface
+    with no implementable primitive is reported as SKIPPED with a
+    machine-readable ``skip_code`` — never as zeroed metrics.  Today
+    "code-graph" is such a surface (no query-to-chunk graph ranker exists).
 
 ``all``:
     Runs both splits in sequence and prints a combined report.
@@ -64,7 +68,8 @@ app = typer.Typer(
 _SPLIT_HELP = (
     "Which retrieval split to evaluate. "
     "'memory' (default): recall + guard surfaces from the memory dataset. "
-    "'code': code-bm25 and code-hybrid surfaces from the code dataset. "
+    "'code': the four-way ablation (code-bm25, code-hybrid, code-dense, code-graph) "
+    "from the code dataset. "
     "'all': run both splits."
 )
 
@@ -81,9 +86,11 @@ def retrieval_eval_command(
 ) -> None:
     """Run the offline retrieval-eval harness and print the scorecard.
 
-    Use ``--split code`` to measure BM25-only vs hybrid retrieval on the frozen
-    code split (40 queries, corpus of 149 code chunks from the three in-scope
-    modules: retrieval_eval, retrieval, codeindex).
+    Use ``--split code`` to run the four-way BM25 / dense / graph / fused
+    ablation on the frozen code split (40 queries, corpus of 149 code chunks
+    from the three in-scope modules: retrieval_eval, retrieval, codeindex).
+    Surfaces without an implementable primitive are reported as SKIPPED with a
+    machine-readable reason instead of fabricated metrics.
 
     Use ``--split all`` to run both memory and code splits in one pass.
 
@@ -94,7 +101,9 @@ def retrieval_eval_command(
         return
 
     from oh_no_my_claudecode.retrieval_eval.adapters import default_adapters  # noqa: PLC0415
-    from oh_no_my_claudecode.retrieval_eval.code_adapters import code_adapters  # noqa: PLC0415
+    from oh_no_my_claudecode.retrieval_eval.code_adapters import (  # noqa: PLC0415
+        code_ablation_adapters,
+    )
     from oh_no_my_claudecode.retrieval_eval.runner import (  # noqa: PLC0415
         run_code_evaluation,
         run_evaluation,
@@ -105,12 +114,12 @@ def retrieval_eval_command(
         _emit(report, json_output=json_output)
 
     elif split == Split.code:
-        report = run_code_evaluation(code_adapters())
+        report = run_code_evaluation(code_ablation_adapters())
         _emit(report, json_output=json_output)
 
     else:  # all
         mem_report = run_evaluation(default_adapters())
-        code_report = run_code_evaluation(code_adapters())
+        code_report = run_code_evaluation(code_ablation_adapters())
         if json_output:
             combined = {
                 "memory": mem_report.to_dict(),
