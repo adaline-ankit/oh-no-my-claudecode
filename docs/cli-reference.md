@@ -2863,7 +2863,12 @@ Usage: onmc explain [OPTIONS] [RECEIPT_REF]
 
  ``aborted``:  Manually interrupted (Ctrl-C or signal).
 
- ``agent-error``:  Adapter-level error (API failure, auth problem, etc.).
+ ``agent-error``:  Adapter-level error the agent could not recover from.
+ ``agent-unavailable``:  The provider was unreachable or throttled — no
+ agent work happened, so this is infrastructure, not an agent failure.
+ ``agent-credentials``:  Authentication was rejected; fix auth and re-run.
+ ``verifier-unavailable``:  The verify command could not RUN (as opposed to
+ tests failing).
 
  Examples:
 

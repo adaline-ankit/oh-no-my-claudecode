@@ -651,7 +651,18 @@ def run_onmc(
     # A denied capability or an unavailable verifier means ONMC never executed.
     # That is an instrument failure, not evidence about the agent — record it
     # loudly instead of banking a free loss for the treatment arm (rule 13).
-    for marker in ("capability was denied", "verifier=deny", "verifier-unavailable"):
+    # `agent-unavailable` / `agent-credentials` are the provider-side stops: a
+    # throttled or unauthenticated provider means NO agent work happened. Scoring
+    # those as an agent loss would bank a provider outage as evidence about the
+    # agent — the same measurement-integrity bug that already invalidated one run
+    # of this benchmark, one hop further along.
+    for marker in (
+        "capability was denied",
+        "verifier=deny",
+        "verifier-unavailable",
+        "agent-unavailable",
+        "agent-credentials",
+    ):
         if marker in out:
             return f"onmc did not execute ({marker})", cost
     return None, cost

@@ -6,6 +6,8 @@ Coverage (≥6 tests as required)
 2. Pure ``explain_receipt`` — no-changes receipt: vacuous-pass explanation text.
 3. Pure ``explain_receipt`` — max-iterations receipt: correct explanation.
 4. Pure ``explain_receipt`` — agent-error receipt: correct explanation.
+4b. ``agent-unavailable`` (transient provider outage) reads as infrastructure + retry.
+4c. ``agent-credentials`` (401) points at authentication; all three never verified.
 5. Pure ``explain_receipt`` — missing keys default sensibly (never crash).
 6. CLI ``--json`` envelope shape: verified field, kind, all expected keys.
 7. CLI "no receipts" path: friendly message, exit 0.
@@ -143,6 +145,75 @@ def test_explain_receipt_agent_error() -> None:
     expl_lower = result.explanation.lower()
     # Should mention adapter / API / authentication or error
     assert any(kw in expl_lower for kw in ("adapter", "api", "authentication", "error"))
+    # Regression guard: the plain agent-error wording must NOT claim the failure
+    # was infrastructure — that claim belongs only to agent-unavailable.
+    assert "infrastructure" not in expl_lower
+
+
+# ---------------------------------------------------------------------------
+# Test 4b/4c: agent-unavailable / agent-credentials — cause-split siblings of
+# agent-error.  A throttled provider is INFRASTRUCTURE (retry), a 401 is
+# MISCONFIGURATION (fix auth); neither is the agent failing the task, and
+# neither may ever be reported as verified.
+# ---------------------------------------------------------------------------
+
+
+def test_explain_receipt_agent_unavailable_is_infrastructure_and_says_retry() -> None:
+    """agent-unavailable must read as infrastructure + retry, and never as verified."""
+    receipt = _make_receipt(
+        # Deliberately hostile input: the receipt CLAIMS verified.
+        verified=True,
+        stop_reason="agent-unavailable",
+        iterations=1,
+    )
+    result: ExplainResult = explain_receipt(receipt)
+
+    assert result.verified is False, "a provider outage proved nothing — never verified"
+    assert result.verdict == "NOT VERIFIED"
+    expl_lower = result.explanation.lower()
+    assert "infrastructure" in expl_lower
+    assert "retry" in expl_lower
+    # Must NOT blame the agent for failing the task.
+    assert "not an agent failure" in expl_lower
+
+
+def test_explain_receipt_agent_credentials_says_fix_auth() -> None:
+    """agent-credentials must point at authentication, and never be verified."""
+    receipt = _make_receipt(verified=True, stop_reason="agent-credentials", iterations=1)
+    result: ExplainResult = explain_receipt(receipt)
+
+    assert result.verified is False
+    assert result.verdict == "NOT VERIFIED"
+    expl_lower = result.explanation.lower()
+    assert any(kw in expl_lower for kw in ("authenticat", "credential"))
+    assert "401" in result.explanation
+    # Actionable: tell the user to fix auth.
+    assert "fix authentication" in expl_lower
+
+
+def test_explain_receipt_agent_error_variants_are_never_verified() -> None:
+    """All three agent-failure stops report NOT VERIFIED, with distinct wording."""
+    blurbs = {}
+    for reason in ("agent-error", "agent-unavailable", "agent-credentials"):
+        result = explain_receipt(_make_receipt(verified=True, stop_reason=reason, iterations=1))
+        assert result.verified is False, reason
+        assert result.verdict == "NOT VERIFIED", reason
+        blurbs[reason] = result.explanation
+    # The whole point of the split: three different explanations.
+    assert len(set(blurbs.values())) == 3, blurbs
+
+
+def test_explain_receipt_verifier_unavailable_is_infrastructure() -> None:
+    """verifier-unavailable had no blurb at all and rendered as 'unrecognised reason'."""
+    result: ExplainResult = explain_receipt(
+        _make_receipt(verified=True, stop_reason="verifier-unavailable", iterations=1)
+    )
+
+    assert result.verified is False
+    assert result.verdict == "NOT VERIFIED"
+    expl_lower = result.explanation.lower()
+    assert "unrecognised reason" not in expl_lower
+    assert "infrastructure" in expl_lower
 
 
 # ---------------------------------------------------------------------------
@@ -271,3 +342,49 @@ def test_cli_latest_receipt_is_picked(tmp_path: Path, monkeypatch: pytest.Monkey
         "Likely the oldest receipt was picked instead of the newest."
     )
     assert payload["verified"] is True
+
+
+def test_explain_last_resolves_to_the_newest_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`onmc explain last` is the documented phrasing and must work.
+
+    It previously failed with `Receipt not found: 'last'` because the word was
+    matched as a filename substring. Receipts are all named `run-<id>.json`, so
+    treating `last` as "newest" cannot shadow a real reference.
+    """
+    import json
+
+    from typer.testing import CliRunner
+
+    from oh_no_my_claudecode.cli import app
+
+    receipts = tmp_path / ".agent-memory" / "receipts"
+    receipts.mkdir(parents=True)
+    for idx, (name, goal) in enumerate(
+        [("run-aaa.json", "older run"), ("run-bbb.json", "newest run")]
+    ):
+        (receipts / name).write_text(
+            json.dumps(
+                {
+                    "goal": goal,
+                    "verified": True,
+                    "stop_reason": "converged",
+                    "iterations": idx + 1,
+                    "agent": "claude",
+                    "receipt_hash": "f" * 64,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    bare = runner.invoke(app, ["explain"])
+    aliased = runner.invoke(app, ["explain", "last"])
+
+    assert aliased.exit_code == 0, aliased.output
+    assert "Receipt not found" not in aliased.output
+    # `last` must resolve to exactly what the bare invocation resolves to.
+    assert bare.exit_code == aliased.exit_code
+    assert ("run-bbb" in aliased.output) or ("newest run" in aliased.output)

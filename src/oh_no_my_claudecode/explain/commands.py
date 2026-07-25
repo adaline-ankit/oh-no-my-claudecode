@@ -242,7 +242,12 @@ def register(app: typer.Typer) -> None:
 
         ``aborted``:  Manually interrupted (Ctrl-C or signal).
 
-        ``agent-error``:  Adapter-level error (API failure, auth problem, etc.).
+        ``agent-error``:  Adapter-level error the agent could not recover from.
+        ``agent-unavailable``:  The provider was unreachable or throttled — no
+        agent work happened, so this is infrastructure, not an agent failure.
+        ``agent-credentials``:  Authentication was rejected; fix auth and re-run.
+        ``verifier-unavailable``:  The verify command could not RUN (as opposed to
+        tests failing).
 
         Examples:
 
@@ -263,11 +268,19 @@ def register(app: typer.Typer) -> None:
         receipts_dir = _receipts_dir(repo_root)
 
         # --- Resolve the receipt path ---
+        # `onmc explain last` is the documented phrasing for "the newest run", and
+        # it previously failed with `Receipt not found: 'last'` because the word was
+        # matched as a filename substring. No real receipt filename is `last`
+        # (they are all `run-<id>.json`), so treating it as the newest cannot
+        # shadow a genuine reference.
+        if receipt_ref is not None and receipt_ref.strip().lower() == "last":
+            receipt_ref = None
         if receipt_ref is None:
             receipt_path = _latest_receipt_path(receipts_dir)
             if receipt_path is None:
                 typer.echo(
-                    'No run receipts yet — run `onmc autopilot "<goal>"` first.',
+                    "No run receipts yet — run `onmc run \"<task>\" --execute` or "
+                    '`onmc autopilot "<goal>"` first.',
                 )
                 raise typer.Exit(code=0)
         else:

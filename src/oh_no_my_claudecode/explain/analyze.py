@@ -7,11 +7,18 @@ from a ``.agent-memory/receipts/run-*.json`` file) and returns a structured
 ``stop_reason`` values (from the engine docstring)::
 
     converged | max-iterations | budget | no-progress | cost | wall-time |
-    duplicate-action | repeated-error | no-changes | aborted | agent-error
+    duplicate-action | repeated-error | verifier-unavailable | no-changes |
+    aborted | agent-error | agent-unavailable | agent-credentials
 
 The special case ``no-changes`` receives an extended explanation because it is
 the most confusing: the verify command exits 0 but the agent changed nothing,
 which is a "vacuous pass" — nothing was actually accomplished.
+
+``agent-unavailable`` and ``agent-credentials`` are the *cause-split* siblings of
+``agent-error``: the agent never reached a model (provider outage / missing
+credentials), so the run is infrastructure noise rather than evidence that the
+agent failed the task.  They are still reported NOT VERIFIED — the distinction is
+about the cause, never about pretending a run passed.
 """
 
 from __future__ import annotations
@@ -62,6 +69,28 @@ _STOP_REASON_BLURB: dict[str, str] = {
         "The agent adapter encountered an unrecoverable error (e.g. an API failure"
         " or authentication problem). No further iterations were attempted."
     ),
+    "agent-unavailable": (
+        "INFRASTRUCTURE, not an agent failure: the model provider was unavailable"
+        " (HTTP 503 / throttled / overloaded / retries exhausted), so the agent"
+        " never got to attempt the task. This run is therefore not verified — it"
+        " proved nothing either way — but it is NOT evidence that the agent or the"
+        " approach failed, and it must not be scored as one. Retry the run once"
+        " the provider recovers."
+    ),
+    "agent-credentials": (
+        "The agent could not authenticate with its model provider (missing or"
+        " rejected credentials — HTTP 401 / missing bearer token), so no work was"
+        " attempted. This is a configuration problem on this machine, not an agent"
+        " or task failure. Fix authentication — log in to the agent CLI (e.g."
+        " 'codex login' / 'claude login') or set the provider API key in the"
+        " environment — then re-run. The run is not verified because nothing ran."
+    ),
+    "verifier-unavailable": (
+        "INFRASTRUCTURE, not an agent failure: the verify command could not RUN at"
+        " all (missing test runner, command not found, or it timed out) — this is"
+        " not the same as the tests failing. Nothing was proved either way. Fix the"
+        " verifier invocation or its dependencies and re-run."
+    ),
     "no-progress": (
         "The agent made no measurable progress for several consecutive iterations"
         " (no-progress window exceeded). The run was stopped early."
@@ -70,6 +99,23 @@ _STOP_REASON_BLURB: dict[str, str] = {
 
 _UNKNOWN_BLURB = (
     "The run stopped for an unrecognised reason. Check the receipt for details."
+)
+
+#: Stop reasons that can NEVER be reported as verified, whatever the receipt's own
+#: ``verified`` flag says.  ``no-changes`` is a vacuous pass (verifier exited 0
+#: against unchanged state).  The agent-failure stops mean the agent invocation
+#: itself failed, so a green verifier could only have been exercising pre-existing
+#: state.  ``verifier-unavailable`` means the verifier never ran, so there is no
+#: pass to believe.  Being generous here would be the worst kind of error:
+#: silently upgrading "nothing happened" to "it works".
+_NEVER_VERIFIED_STOPS = frozenset(
+    {
+        "no-changes",
+        "agent-error",
+        "agent-unavailable",
+        "agent-credentials",
+        "verifier-unavailable",
+    }
 )
 
 
@@ -213,10 +259,11 @@ def explain_receipt(receipt: dict[str, object]) -> ExplainResult:
     receipt_hash_short = receipt_hash[:8] if receipt_hash else ""
 
     # --- Determine actual verified status ---
-    # ``no-changes`` is special: the receipt may claim verified=True (verifier
-    # exited 0) but the agent made no changes — a vacuous pass.
-    is_no_changes = stop_reason == "no-changes"
-    verified = raw_verified and not is_no_changes
+    # Some stop reasons can never be verified even when the receipt claims
+    # verified=True (verifier exited 0): ``no-changes`` is a vacuous pass, and the
+    # agent-infrastructure stops never ran the agent at all.  See
+    # ``_NEVER_VERIFIED_STOPS``.
+    verified = raw_verified and stop_reason not in _NEVER_VERIFIED_STOPS
 
     # --- Build verdict and explanation ---
     if verified:

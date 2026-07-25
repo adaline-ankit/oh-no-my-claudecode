@@ -9,8 +9,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from oh_no_my_claudecode.explain.analyze import explain_receipt
+from oh_no_my_claudecode.loop.adapters import (
+    CREDENTIALS_ERROR_MARKER,
+    TRANSIENT_ERROR_MARKER,
+)
 from oh_no_my_claudecode.loop.engine import (
+    _agent_error_stop_reason,
     _build_brief,
+    _classify_failure_cause,
     _verifier_unavailable,
     run_loop,
 )
@@ -424,6 +431,137 @@ def test_agent_error_does_not_burn_remaining_iterations(tmp_path: Path) -> None:
 
     assert result.stop_reason == "agent-error"
     assert len(result.iterations) == 1  # stopped immediately
+
+
+# ---------------------------------------------------------------------------
+# Provider-failure cause split: a throttled/unauthenticated provider is NOT the
+# agent failing the task.  The adapters prefix AgentRunResult.error with a public
+# marker; the engine must turn that into a distinct terminal stop_reason so a
+# benchmark scorer can exclude those cells instead of banking them as agent
+# losses.  Mirrors the existing verifier-unavailable precedent.
+# ---------------------------------------------------------------------------
+
+
+def test_agent_error_stop_reason_maps_markers() -> None:
+    """The marker → stop_reason mapping is leading-marker based and defaults strict."""
+    assert (
+        _agent_error_stop_reason(f"{TRANSIENT_ERROR_MARKER} unexpected status 503 throttled")
+        == "agent-unavailable"
+    )
+    assert (
+        _agent_error_stop_reason(f"{CREDENTIALS_ERROR_MARKER} 401 Unauthorized: Missing bearer")
+        == "agent-credentials"
+    )
+    # Unmarked errors keep the original reason — infra is never the default.
+    assert _agent_error_stop_reason("API Error: 500 internal") == "agent-error"
+    # A marker merely MENTIONED mid-string cannot launder a real agent failure.
+    assert (
+        _agent_error_stop_reason(f"agent wrote about {TRANSIENT_ERROR_MARKER} in its notes")
+        == "agent-error"
+    )
+
+
+def test_transient_provider_error_stops_with_agent_unavailable(tmp_path: Path) -> None:
+    """A transient-marker agent error yields stop_reason='agent-unavailable'."""
+    storage = _storage(tmp_path)
+    result = run_loop(
+        storage,
+        tmp_path,
+        LoopSpec(goal="do the thing"),
+        LoopConfig(max_iterations=5),
+        agent_runner=_error_agent(
+            f"{TRANSIENT_ERROR_MARKER} ERROR: unexpected status 503: "
+            '{"code":"throttled"} (reconnect attempts exhausted)'
+        ),
+        # Even an always-passing verifier must not rescue a run where the agent
+        # never reached a model.
+        verify_runner=_fake_verify(passes=True, output="all good"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "agent-unavailable"
+    assert len(result.iterations) == 1
+    assert result.iterations[0].outcome == "loss"
+    # verify_output keeps the [agent-error] prefix, which is what keeps the loss
+    # classified "environment" and out of the FAILED_APPROACH dead-end guard.
+    assert result.iterations[0].verify_output.startswith("[agent-error] ")
+    assert TRANSIENT_ERROR_MARKER in result.iterations[0].verify_output
+    assert _classify_failure_cause(result.iterations[0].verify_output) == "environment"
+    assert result.recorded_memory_ids == []
+
+
+def test_credentials_error_stops_with_agent_credentials(tmp_path: Path) -> None:
+    """A credentials-marker agent error yields stop_reason='agent-credentials'."""
+    storage = _storage(tmp_path)
+    result = run_loop(
+        storage,
+        tmp_path,
+        LoopSpec(goal="do the thing"),
+        LoopConfig(max_iterations=5),
+        agent_runner=_error_agent(
+            f"{CREDENTIALS_ERROR_MARKER} ERROR: 401 Unauthorized: Missing bearer or basic auth"
+        ),
+        verify_runner=_fake_verify(passes=True, output="all good"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "agent-credentials"
+    assert len(result.iterations) == 1
+    assert result.iterations[0].outcome == "loss"
+    assert _classify_failure_cause(result.iterations[0].verify_output) == "environment"
+    assert result.recorded_memory_ids == []
+
+
+def test_unmarked_agent_error_still_stops_with_plain_agent_error(tmp_path: Path) -> None:
+    """Regression guard: an unmarked agent error keeps today's 'agent-error' stop."""
+    storage = _storage(tmp_path)
+    result = run_loop(
+        storage,
+        tmp_path,
+        LoopSpec(goal="do the thing"),
+        LoopConfig(max_iterations=5),
+        agent_runner=_error_agent("Unexpected adapter crash: OSError(2)"),
+        verify_runner=_fake_verify(passes=True, output="all good"),
+        now=_FIXED_NOW,
+    )
+
+    assert result.converged is False
+    assert result.stop_reason == "agent-error"
+    assert len(result.iterations) == 1
+
+
+def test_provider_failure_stops_are_never_reported_verified(tmp_path: Path) -> None:
+    """None of the three agent-failure stops may ever be explained as verified."""
+    storage = _storage(tmp_path)
+    errors = {
+        "agent-unavailable": f"{TRANSIENT_ERROR_MARKER} 503 service unavailable",
+        "agent-credentials": f"{CREDENTIALS_ERROR_MARKER} 401 unauthorized",
+        "agent-error": "some unrecognised adapter failure",
+    }
+    for expected_reason, message in errors.items():
+        result = run_loop(
+            storage,
+            tmp_path,
+            LoopSpec(goal=f"goal for {expected_reason}"),
+            LoopConfig(max_iterations=3),
+            agent_runner=_error_agent(message),
+            verify_runner=_fake_verify(passes=True, output="all good"),
+            now=_FIXED_NOW,
+        )
+        assert result.stop_reason == expected_reason
+        assert result.converged is False
+        # And the explain layer agrees, even if a receipt claimed otherwise.
+        explained = explain_receipt(
+            {
+                "verified": True,  # hostile receipt
+                "stop_reason": result.stop_reason,
+                "iterations": len(result.iterations),
+            }
+        )
+        assert explained.verified is False, expected_reason
+        assert explained.verdict == "NOT VERIFIED", expected_reason
 
 
 # ---------------------------------------------------------------------------

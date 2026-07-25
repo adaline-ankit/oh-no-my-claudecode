@@ -23,6 +23,10 @@ from pathlib import Path
 
 from oh_no_my_claudecode.guard.compiler import compile_guard
 from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
+from oh_no_my_claudecode.loop.adapters import (
+    CREDENTIALS_ERROR_MARKER,
+    TRANSIENT_ERROR_MARKER,
+)
 from oh_no_my_claudecode.loop.checkpoint import (
     CheckpointState,
     CheckpointStore,
@@ -474,6 +478,46 @@ def _verifier_unavailable(output: str) -> bool:
     return output.lstrip().startswith(_VERIFIER_UNAVAILABLE_PREFIXES)
 
 
+#: Marker → stop_reason for agent invocations that never reached a model at all.
+#: Mirrors :data:`_VERIFIER_UNAVAILABLE_PREFIXES` exactly one level up the stack:
+#: there the distinction is "the verifier could not RUN" vs "the tests failed";
+#: here it is "the agent could not RUN" vs "the agent ran and failed".  The
+#: markers are prefixed onto ``AgentRunResult.error`` by the adapters (see
+#: :mod:`oh_no_my_claudecode.loop.adapters`) and are imported rather than
+#: duplicated so the two sides can never drift apart.
+#:
+#: Why this matters beyond nicer wording: a benchmark that scores ``agent-error``
+#: as an agent loss would otherwise bank provider outages as evidence about the
+#: agent.  A distinct terminal reason lets scorers exclude those cells as
+#: instrument failures — exactly as they already do for ``verifier-unavailable``.
+#: Credentials are listed first to match the adapters' own precedence (a missing
+#: credential that then retried into a 503 is still a credentials problem).
+_AGENT_UNAVAILABLE_STOPS: tuple[tuple[str, str], ...] = (
+    (CREDENTIALS_ERROR_MARKER, "agent-credentials"),
+    (TRANSIENT_ERROR_MARKER, "agent-unavailable"),
+)
+
+
+def _agent_error_stop_reason(error: str) -> str:
+    """Map an agent invocation *error* to its terminal stop_reason.
+
+    Returns ``'agent-unavailable'`` for a transient provider failure,
+    ``'agent-credentials'`` for an authentication failure, and the unchanged
+    ``'agent-error'`` for everything else.
+
+    Uses a leading-marker check (not substring), same as
+    :func:`_verifier_unavailable`, so agent output that merely *mentions* a
+    marker can never launder a genuine agent failure into an excused
+    infrastructure stop.  Unrecognised errors keep ``'agent-error'``: the
+    permissive reading is never the default.
+    """
+    stripped = error.lstrip()
+    for marker, reason in _AGENT_UNAVAILABLE_STOPS:
+        if stripped.startswith(marker):
+            return reason
+    return "agent-error"
+
+
 def run_loop(
     storage: SQLiteStorage,
     repo_root: Path,
@@ -562,7 +606,14 @@ def run_loop(
         'converged' | 'max-iterations' | 'budget' | 'no-progress' | 'cost' |
         'wall-time' | 'duplicate-action' | 'repeated-error' | 'verifier-unavailable' |
         'no-changes' |
-        'aborted' | 'agent-error'.
+        'aborted' | 'agent-error' | 'agent-unavailable' | 'agent-credentials'.
+
+        ``agent-unavailable`` (transient provider failure: 503 / throttled /
+        reconnect exhausted) and ``agent-credentials`` (401 / missing bearer) are
+        split out of ``agent-error`` because in both cases the agent never ran:
+        they are infrastructure/configuration facts, not evidence that the agent
+        failed the task.  ``agent-error`` retains its original meaning — the
+        agent invocation failed for an unrecognised reason.
     """
     import logging as _logging
 
@@ -774,6 +825,15 @@ def run_loop(
         # would pass against pre-existing state) and stop loudly.  This closes
         # the hole where a 401/api-error could be parsed as ordinary output and
         # a passing verifier reported the run as ``verified``.
+        #
+        # The stop is still terminal and still a loss, but the *reason* is split
+        # by cause via _agent_error_stop_reason: a throttled provider
+        # (agent-unavailable) or missing credentials (agent-credentials) never
+        # reached a model, so callers and benchmark scorers can tell them apart
+        # from an agent that actually ran and failed (agent-error).  The
+        # verify_output keeps its ``[agent-error]`` prefix regardless, which is
+        # what keeps every variant classified "environment" and out of the
+        # FAILED_APPROACH dead-end guard.
         if agent_result.error is not None:
             error_contract = IterationContract(
                 iteration=i,
@@ -790,7 +850,7 @@ def run_loop(
             if mid is not None:
                 recorded_memory_ids.append(mid)
             _save_checkpoint()
-            return _make_result(False, "agent-error")
+            return _make_result(False, _agent_error_stop_reason(agent_result.error))
 
         # Verify.
         verify_outcome: VerifyOutcome = verify_runner(config.verify_command)
