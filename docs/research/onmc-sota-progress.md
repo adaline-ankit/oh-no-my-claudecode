@@ -300,6 +300,81 @@ non-editable snapshot.
   `.onmc/` to `.gitignore`. Benign bookkeeping, not a scope violation, but the
   arms' diffs are not byte-comparable.
 
+## SECOND external run: 24 tasks / 6 repos — THIRD ceiling effect, claim abandoned (2026-07-25)
+
+Snapshot under test `3b58232` (non-editable install, pinned at run start). **48 live
+cells: 24 audited tasks x 6 pinned upstream repositories x 2 conditions x 1 trial.**
+Total spend **$29.37**. **0 infra failures, 0 budget-stopped cells, 0 false greens,
+0 exclusions at run time** (5 candidate tasks had already been rejected by the
+vacuity gate before spending — recorded in the manifest's `excluded_tasks`).
+Raw artifact: `datasets/experiment/reports/external_v3_stage1_2026-07-25.json`.
+
+| Condition | pass@1 | 95% CI | pass^k | mean cost/run | mean latency |
+|---|---|---|---|---|---|
+| `bare-agent` | 24/24 = **1.000** | [1.00, 1.00] | 1.000 | **$0.6352** | 106.3 s |
+| `onmc-current` | 24/24 = **1.000** | [1.00, 1.00] | 1.000 | $0.8796 | **102.7 s** |
+
+**Paired per-task delta: 0.000, 95% CI [0.000, 0.000] — not significant.**
+Failure taxonomy: empty in both arms (nothing failed). ONMC was ~3% faster here but
+cost **+38%**.
+
+### Verdict: the SOTA claim is abandoned, not deferred
+
+Three independent corpora have now saturated both arms:
+
+| Corpus | Tasks | Repos | bare | ONMC | paired delta |
+|---|---|---|---|---|---|
+| external v1 (single-hunk reverts) | 3 | 3 | 9/9 | 9/9 | 0.000 [0.000, 0.000] |
+| external v2 (multi-site reverts) | +3 | 3 | — | — | folded into v3 |
+| external v3 (AST body removal, multi-site) | 24 | 6 | 24/24 | 24/24 | 0.000 [0.000, 0.000] |
+
+The corpus was made progressively harder on purpose — single-site revert, then
+multi-site revert, then whole-function removal requiring reimplementation, several
+requiring two or three related functions to be found. **Bare Claude Code solved
+every single one.** This is not evidence that ONMC and bare Claude Code are equal;
+it is evidence that mechanically-seeded defects in small pure-Python libraries
+cannot discriminate between them at all.
+
+**Stages 2 and 3 (adding trials 2-3 and the ablation arms, ~$200 of an approved
+~$320 budget) were NOT run.** Buying a third trial on a corpus measured at
+100%/100% purchases a more precise zero. Recorded as a deliberate decision, not an
+omission (rule 19: keep the stronger baseline; rule 20: remove scaffolding that no
+longer adds measured value).
+
+### Why a public-repo corpus structurally cannot prove ONMC's claim
+
+ONMC's claim is not "better at coding" — it is *"better on a specific
+repository"*, via retrieved repo context and promoted repo memory. That advantage
+can only show up where the required knowledge is **not discoverable from the
+repository itself**. But any convention discoverable inside a public repo is
+equally discoverable by the bare agent reading the same repo. So on public
+upstream corpora the treatment has nothing to add, and the only way to manufacture
+a win is to *inject* private knowledge — which is precisely the
+"favorable-by-construction" caveat already attached to the internal 90-run result.
+
+The honest consequence: **an `external` memory-transfer claim requires genuinely
+private repositories**, where the conventions are real institutional knowledge
+rather than planted. That is the one remaining design that could reach a
+defensible claim, and it needs repositories this agent does not have.
+
+### Retrieval ablation (offline, free, frozen split `dataset_sha 8e8f6d52…`, 40 cases)
+
+| Surface | R@5 | R@10 | MRR@10 | nDCG@10 | p50 latency | ctx tokens |
+|---|---|---|---|---|---|---|
+| **code-bm25** (default) | **0.950** | **1.000** | **0.8101** | **0.8574** | **0.18 ms** | 3299 |
+| code-hybrid (BM25+dense+RRF) | 0.875 | 0.950 | 0.7637 | 0.8082 | 4.60 ms | **2887** |
+
+BM25 wins every quality metric and is **~25x faster**; hybrid wins only on context
+tokens. The shipped default is the measured winner, and hybrid's negative result is
+retained rather than re-litigated. Memory split: `recall` MRR@10 0.8889, `guard`
+R@5 0.7833; `search_memory` and `context_engine` surfaces **skipped — no cases in
+the dataset**, so those two ablation cells are unmeasured, not passed.
+
+**Ablations still NOT run:** dense-only and graph-only retrieval (no such
+evaluation surface exists — only `code-bm25` and `code-hybrid` are implemented),
+retrieval-vs-abstention, memory disabled/candidate/promoted, one-agent vs adaptive
+harness, advisory vs enforced, and per-component verifier isolation.
+
 ## Reproduce
 
 ```bash
