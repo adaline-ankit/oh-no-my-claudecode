@@ -53,26 +53,86 @@ from oh_no_my_claudecode.experiment.stats import (  # noqa: E402
     bootstrap_ci,
     derive_seed,
     mean,
+    median,
     paired_deltas,
+    variance,
 )
 
-#: Seeded regressions: (task_id) -> (relative file, exact old text, broken text).
-#: Each is a single-function revert whose repair is adjudicated by upstream tests.
-REGRESSIONS: dict[str, tuple[str, str, str]] = {
+#: Seeded regressions: task_id -> tuple of (relative file, exact old text, broken
+#: text) hunks. Every hunk is applied; the repair is adjudicated by the
+#: repository's own upstream tests.
+#:
+#: Single-hunk tasks are kept for continuity but are known NOT to discriminate:
+#: both arms scored 9/9 on them (2026-07-25). Multi-hunk/multi-file entries exist
+#: to break that ceiling.
+REGRESSIONS: dict[str, tuple[tuple[str, str, str], ...]] = {
     "six-bugfix-integer-types": (
-        "six.py",
-        "    integer_types = int,",
-        "    integer_types = (str,)  # REGRESSION",
+        (
+            "six.py",
+            "    integer_types = int,",
+            "    integer_types = (str,)  # REGRESSION",
+        ),
     ),
     "tenacity-bugfix-find-ordinal": (
-        "tenacity/_utils.py",
-        '    if pos_num == 1:\n        return "st"',
-        '    if pos_num == 1:\n        return "th"  # REGRESSION',
+        (
+            "tenacity/_utils.py",
+            '    if pos_num == 1:\n        return "st"',
+            '    if pos_num == 1:\n        return "th"  # REGRESSION',
+        ),
     ),
     "attrs-bugfix-asdict-recurse": (
-        "src/attr/_funcs.py",
-        "        if filter is not None and not filter(a, v):\n            continue",
-        "        if False:  # REGRESSION\n            continue",
+        (
+            "src/attr/_funcs.py",
+            "        if filter is not None and not filter(a, v):\n            continue",
+            "        if False:  # REGRESSION\n            continue",
+        ),
+    ),
+    # --- multi-site tasks (added 2026-07-25 to break the ceiling effect) ---
+    # The prompt names the SYMPTOM, never the number of broken sites. A one-shot
+    # agent that fixes the first failing assertion and stops will not pass; the
+    # adjudicating suite only goes green when every site is repaired.
+    "six-multisite-type-aliases": (
+        (
+            "six.py",
+            "    string_types = str,\n    integer_types = int,\n    class_types = type,",
+            "    string_types = (bytes,)  # REGRESSION\n"
+            "    integer_types = (str,)  # REGRESSION\n"
+            "    class_types = (object,)  # REGRESSION",
+        ),
+    ),
+    "tenacity-multisite-ordinal-suffixes": (
+        (
+            "tenacity/_utils.py",
+            '    if pos_num == 1:\n        return "st"\n'
+            '    if pos_num == 2:\n        return "nd"\n'
+            '    if pos_num == 3:\n        return "rd"',
+            '    if pos_num == 1:\n        return "th"  # REGRESSION\n'
+            '    if pos_num == 2:\n        return "th"  # REGRESSION\n'
+            '    if pos_num == 3:\n        return "th"  # REGRESSION',
+        ),
+    ),
+    # Two structurally identical sites in different functions (asdict, astuple).
+    # Anchored on distinct trailing context so each hunk is unambiguous rather
+    # than relying on replacement order.
+    "attrs-multisite-filter-ignored": (
+        (
+            "src/attr/_funcs.py",
+            "        if filter is not None and not filter(a, v):\n"
+            "            continue\n\n"
+            "        if value_serializer is not None:",
+            "        if False:  # REGRESSION\n"
+            "            continue\n\n"
+            "        if value_serializer is not None:",
+        ),
+        (
+            "src/attr/_funcs.py",
+            "        if filter is not None and not filter(a, v):\n"
+            "            continue\n"
+            "        value_type = type(v)",
+            "        if False:  # REGRESSION\n"
+            "            continue\n"
+            "        value_type = type(v)",
+        ),
     ),
 }
 
@@ -248,13 +308,23 @@ def prepare_clone(task: TaskSpec, dest: Path, cache: Path) -> str | None:
 
 
 def inject_regression(task: TaskSpec, dest: Path) -> str | None:
-    """Seed the single-function regression and COMMIT it."""
-    rel, old, new = REGRESSIONS[task.task_id]
-    target = dest / rel
-    text = target.read_text(encoding="utf-8")
-    if old not in text:
-        return f"regression anchor not found in {rel}"
-    target.write_text(text.replace(old, new, 1), encoding="utf-8")
+    """Seed the regression (one or many hunks, across one or many files) and COMMIT it.
+
+    Multi-hunk support exists because single-hunk reverts turned out to be
+    *unable to discriminate*: in the 2026-07-25 run bare Claude Code and ONMC both
+    scored 9/9, so the corpus had a ceiling effect and the measured delta was zero
+    by construction. A task that requires finding every affected site is the kind
+    of task where a retrieval-and-loop harness could plausibly differ from a
+    one-shot agent — so the corpus has to be able to express it.
+    """
+    for rel, old, new in REGRESSIONS[task.task_id]:
+        target = dest / rel
+        if not target.exists():
+            return f"regression target missing: {rel}"
+        text = target.read_text(encoding="utf-8")
+        if old not in text:
+            return f"regression anchor not found in {rel}"
+        target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
     # COMMIT the seeded regression. Leaving it uncommitted made the broken state
     # itself the working diff, so an agent that correctly restored upstream
@@ -538,11 +608,41 @@ def summarize(
             "mean_latency_ms": (
                 round(mean([r.latency_ms for r in usable]), 1) if usable else None
             ),
+            "median_latency_ms": round(median([r.latency_ms for r in usable]), 1)
+            if usable
+            else None,
+            "latency_variance": round(variance([r.latency_ms for r in usable]), 1)
+            if len(usable) > 1
+            else None,
             "mean_cost_usd": round(mean(costs), 4) if costs else None,
             "cost_reported_cells": len(costs),
             "false_greens_blocked": sum(1 for r in rows if r.tests_touched),
+            "failure_taxonomy": _taxonomy(rows),
         }
     return summary
+
+
+def _taxonomy(rows: list[TrialRecord]) -> dict[str, int]:
+    """Count failures by cause so a null result can be explained, not just stated.
+
+    ``no_change`` separates "the agent did nothing" from "the agent tried and was
+    wrong" — the two demand completely different fixes, and collapsing them into a
+    single failure count is how a broken instrument hides.
+    """
+    counts: dict[str, int] = {}
+    for row in rows:
+        if row.infra_error is not None:
+            key = "infra"
+        elif row.passed:
+            continue
+        elif row.tests_touched:
+            key = "false_green_test_edit"
+        elif row.diff_lines == 0:
+            key = "no_change"
+        else:
+            key = "wrong_change"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
 
 
 def _pass_hat_k(rows: list[TrialRecord]) -> float | None:
