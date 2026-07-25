@@ -194,11 +194,123 @@ and the prediction was "no accuracy win". That was **underpowered and wrong** �
 at 3 trials with paired analysis the direction reverses and becomes significant.
 Recorded as a correction rather than quietly replaced.
 
+## FIRST EXTERNAL EVALUATION — vertical path proven, accuracy benefit NOT measurable (2026-07-25)
+
+Main `b7bf16f`. **18 live cells: 3 real external repositories x 2 conditions x 3
+trials**, seeded single-function regressions adjudicated by each repository's OWN
+upstream test suite, real bare-agent control, fresh clone per cell, randomized
+order, pinned non-editable ONMC snapshot (`code_sha_under_test`
+`b7bf16f147becc22faf127b599921f4827570863`). Total spend **$9.657** of a $10
+ceiling. **0 infra failures, 0 budget-stopped cells, 0 exclusions.**
+Raw artifact: `datasets/experiment/reports/external_v1_2026-07-25.json`.
+
+| Condition | pass@1 | 95% CI | pass^k | mean cost/run | mean latency |
+|---|---|---|---|---|---|
+| `bare-agent` (bare Claude Code) | **9/9 = 1.000** | [1.00, 1.00] | 1.000 | **$0.498** | **53.3 s** |
+| `onmc-current` (full `onmc run`) | **9/9 = 1.000** | [1.00, 1.00] | 1.000 | $0.630 | 70.1 s |
+
+**Paired per-task delta: 0.000, 95% CI [0.000, 0.000] — not significant.**
+
+### Honest verdict
+
+**This is a null result on accuracy and a negative result on cost.** Both arms
+solved every task on every trial, so the corpus has a **ceiling effect** and
+cannot discriminate between the conditions at all — the delta is exactly zero by
+construction, not because the two are known to be equal. On these tasks ONMC cost
+**+26.6%** ($0.630 vs $0.498) and took **+31.6%** longer (70.1 s vs 53.3 s) for
+identical repository outcomes. Per truth rule 19 the negative result is recorded
+and the **stronger baseline is retained**: nothing here justifies defaulting a
+user into ONMC for single-function bugfixes.
+
+**No SOTA claim. No "improves Claude Code" claim.** The earlier internal 90-run
+memory-transfer win (+0.267, CI [+0.022, +0.489]) is *not* replicated here and
+must not be reported as if it were — that corpus tests private-convention recall,
+which these tasks do not require at all.
+
+### What this DOES establish (evidence level: `external`)
+
+The P0 vertical path executes end-to-end on repositories ONMC has never seen: 9/9
+ONMC cells ran the complete DAG
+(understand -> retrieve -> plan -> claim -> execute -> verify -> repair -> prove -> learn -> completed),
+each converging in **1 iteration** with `verified=True` read back from the
+persisted receipt, adjudicated by upstream tests rather than agent prose.
+**0 false greens** (a pass that edited a test file is scored a failure; none
+occurred). This is the first `external`-level evidence that the runtime works
+outside our own fixtures.
+
+### Four instrument bugs found and fixed BEFORE any number was banked
+
+Every one would have produced a confidently wrong benchmark. Each was found by
+reading why a cell lost, not by a unit test:
+
+1. **The verifier could not run.** `verifier_argv` starts with a bare `python`,
+   which resolved to ONMC's own uv venv — an interpreter that cannot import the
+   target repo's test deps. On `tenacity` the agent produced the exactly-correct
+   one-line fix and the cell was still recorded a loss
+   (`stop_reason=verifier-unavailable`). Fixed with a per-cell venv bound through
+   PATH (`6d74b8d`).
+2. **A broken verifier was indistinguishable from a broken build.** The only gate
+   asserted the verifier FAILS after the regression — which a never-runnable
+   verifier also satisfies. Added a pristine-passes gate; that is what surfaced
+   (1) (`6622879`).
+3. **`attrs` was adjudicated by the wrong suite** (`test_make.py` while its
+   regression was in `_funcs.py`), so the seeded break never touched the
+   adjudicating tests (`6622879`).
+4. **The monitor was silently zeroing the treatment arm.** With the verifier
+   outside the checkout, `onmc run` printed
+   `Policy: agent:claude=allow, verifier=deny` and aborted before executing while
+   the bare arm ran unimpeded. The monitor was RIGHT — it allowlists verifier
+   commands by argv prefix. Fixed in the harness, **not** by weakening policy;
+   loosening it would have benchmarked a product ONMC does not ship (`6d74b8d`).
+
+A fifth validity problem was caught mid-flight: the portfolio's ONMC venv was an
+*editable* install, so source edits made during a run changed the code under later
+cells. The first pass was **discarded ($0.55)** and re-run against a pinned
+non-editable snapshot.
+
+### Product gaps this evaluation exposed and fixed
+
+* **`onmc explain` could not see a real `onmc run`.** The `HarnessRunReceipt` was
+  built, returned in memory and dropped, while `explain` reads
+  `.agent-memory/receipts/run-*.json`. After a completed external run it still
+  said "No run receipts yet". Now persisted (`deea22b`).
+* **Run cost was invisible.** `onmc run` reported no spend, tokens or turns in
+  `--json` or rendered output. Now reported, as `int | None` / `float | None` so
+  "unknown" is never rendered as `$0.00` (`b7bf16f`).
+* **A committed fix was scored a vacuous pass.** The change probe used
+  `git status --porcelain` only, so an agent that edited AND committed left an
+  identical signature; it now folds in the HEAD sha (`3975830`).
+
+### Known limits of this run
+
+* **3 tasks, one task class.** All three are single-function bugfix reverts. The
+  blueprint's other classes (cross-file feature, refactor, ambiguity,
+  retrieval-abstention, misleading context, long-running) are **not** covered.
+  20-50 audited tasks remain the target; this is 3.
+* **Ceiling effect** means this design cannot detect a benefit even if one exists.
+  The next corpus must be hard enough that bare Claude Code fails a meaningful
+  fraction of cells.
+* **Not turn-matched by design:** ONMC is a loop (`--max-iterations 4`) versus one
+  bare shot. All 9 ONMC cells converged in 1 iteration so the allowance was never
+  used, but the arms are not turn-equalised.
+* **`bare-agent` cost is missing for 1 of 9 cells** (8/9 reported); ONMC cost for
+  all 9 was recovered from the persisted receipts after the live stdout capture
+  truncated the field.
+* ONMC's observed diff is 4 lines vs the bare arm's 2, because `onmc init` appends
+  `.onmc/` to `.gitignore`. Benign bookkeeping, not a scope violation, but the
+  arms' diffs are not byte-comparable.
+
 ## Reproduce
 
 ```bash
 uv sync
 uv run onmc retrieval-eval --split code --json   # re-measure the baseline
+# re-run the external portfolio (paid; ~$10, hard-capped, records all fallbacks)
+uv run python scripts/run_external_eval.py \
+  --manifest datasets/experiment/portfolio_external_v1.json \
+  --workdir /tmp/onmc-external --out /tmp/onmc-external/report.json \
+  --trials 3 --max-total-usd 10.0 --max-cost-usd 1.0
+
 uv run pytest tests/test_experiment_contracts.py tests/test_experiment_kernel.py \
   tests/test_experiment_portfolio.py tests/test_learning_gate.py \
   tests/test_learning_ingest.py tests/test_enforcement_monitor.py \
