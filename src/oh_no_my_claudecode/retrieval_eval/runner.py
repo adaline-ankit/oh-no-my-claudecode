@@ -53,6 +53,7 @@ class QueryResult:
     relevant_ids: set[str]
     graded: dict[str, float]
     latency_ms: float
+    context_tokens: int = 0
 
     recall_at_5: float = 0.0
     recall_at_10: float = 0.0
@@ -82,6 +83,7 @@ class QueryResult:
             "mrr@10": round(self.mrr_at_10, 4),
             "ndcg@10": round(self.ndcg_at_10, 4),
             "latency_ms": round(self.latency_ms, 2),
+            "context_tokens": self.context_tokens,
             "ranked_ids": self.ranked_ids[:10],
             "relevant_ids": sorted(self.relevant_ids),
         }
@@ -119,6 +121,7 @@ class SurfaceReport:
     mean_ndcg_at_10: float = 0.0
     latency_p50_ms: float = 0.0
     latency_p95_ms: float = 0.0
+    mean_context_tokens: float = 0.0
     n_cases: int = 0
 
     def finalize(self) -> None:
@@ -132,6 +135,7 @@ class SurfaceReport:
         self.mean_precision_at_5 = sum(q.precision_at_5 for q in qr) / len(qr)
         self.mean_mrr_at_10 = sum(q.mrr_at_10 for q in qr) / len(qr)
         self.mean_ndcg_at_10 = sum(q.ndcg_at_10 for q in qr) / len(qr)
+        self.mean_context_tokens = sum(q.context_tokens for q in qr) / len(qr)
         latencies = [q.latency_ms for q in qr]
         self.latency_p50_ms = _percentile(latencies, 50)
         self.latency_p95_ms = _percentile(latencies, 95)
@@ -153,13 +157,14 @@ class SurfaceReport:
             "ndcg@10": round(self.mean_ndcg_at_10, 4),
             "latency_p50_ms": round(self.latency_p50_ms, 2),
             "latency_p95_ms": round(self.latency_p95_ms, 2),
+            "context_tokens": round(self.mean_context_tokens, 1),
         }
 
     def to_markdown_row(self) -> str:
         if self.skipped:
             raw = self.skip_reason
             reason = (raw[:60] + "...") if len(raw) > 60 else raw
-            return f"| {self.surface_name} | SKIPPED: {reason} | — | — | — | — | — | — | — |"
+            return f"| {self.surface_name} | SKIPPED: {reason} | — | — | — | — | — | — | — | — |"
         return (
             f"| {self.surface_name} "
             f"| {self.n_cases} "
@@ -169,7 +174,8 @@ class SurfaceReport:
             f"| {self.mean_mrr_at_10:.3f} "
             f"| {self.mean_ndcg_at_10:.3f} "
             f"| {self.latency_p50_ms:.1f}ms "
-            f"| {self.latency_p95_ms:.1f}ms |"
+            f"| {self.latency_p95_ms:.1f}ms "
+            f"| {self.mean_context_tokens:.0f} |"
         )
 
 
@@ -192,8 +198,9 @@ class RetrievalReport:
             "",
             f"Dataset SHA: `{self.dataset_sha}`",
             "",
-            "| Surface | Cases | R@5 | R@10 | P@5 | MRR@10 | nDCG@10 | Lat p50 | Lat p95 |",
-            "|---------|-------|-----|------|-----|--------|---------|---------|---------|",
+            "| Surface | Cases | R@5 | R@10 | P@5 | MRR@10 | nDCG@10 "
+            "| Lat p50 | Lat p95 | Ctx tok |",
+            "|---------|-------|-----|------|-----|--------|---------|---------|---------|---------|",
         ]
         for sr in self.surface_reports:
             lines.append(sr.to_markdown_row())
@@ -204,6 +211,82 @@ class RetrievalReport:
             "Do not edit the dataset to improve scores."
         )
         return "\n".join(lines)
+
+
+@dataclass
+class WinLoss:
+    """Per-query win/loss comparison of a candidate surface vs a lexical baseline."""
+
+    baseline_surface: str
+    candidate_surface: str
+    metric: str
+    wins: int = 0
+    losses: int = 0
+    ties: int = 0
+    mean_delta: float = 0.0
+
+    @property
+    def n(self) -> int:
+        return self.wins + self.losses + self.ties
+
+    @property
+    def verdict(self) -> str:
+        if self.wins > self.losses:
+            return f"CANDIDATE BEATS {self.baseline_surface.upper()}"
+        if self.losses > self.wins:
+            return f"{self.baseline_surface.upper()} >= CANDIDATE"
+        return "TIE"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "baseline": self.baseline_surface,
+            "candidate": self.candidate_surface,
+            "metric": self.metric,
+            "wins": self.wins,
+            "losses": self.losses,
+            "ties": self.ties,
+            "mean_delta": round(self.mean_delta, 4),
+            "verdict": self.verdict,
+        }
+
+
+def compare_surfaces(
+    baseline: SurfaceReport,
+    candidate: SurfaceReport,
+    *,
+    metric: str = "ndcg_at_10",
+    epsilon: float = 1e-9,
+) -> WinLoss:
+    """Count per-query wins/losses of *candidate* vs *baseline* on *metric*.
+
+    Queries are matched by their query **text** (surfaces use independent
+    query-id namespaces, but the same query text across surfaces is the natural
+    join key); a query is a win when the candidate's metric exceeds the
+    baseline's by more than *epsilon*, a loss when lower, a tie otherwise.
+    ``mean_delta`` is the mean (candidate - baseline) over the matched queries.
+    Deterministic.
+    """
+    baseline_by_key = {q.query: q for q in baseline.query_results}
+    result = WinLoss(
+        baseline_surface=baseline.surface_name,
+        candidate_surface=candidate.surface_name,
+        metric=metric,
+    )
+    deltas: list[float] = []
+    for cand in candidate.query_results:
+        base = baseline_by_key.get(cand.query)
+        if base is None:
+            continue
+        delta = getattr(cand, metric) - getattr(base, metric)
+        deltas.append(delta)
+        if delta > epsilon:
+            result.wins += 1
+        elif delta < -epsilon:
+            result.losses += 1
+        else:
+            result.ties += 1
+    result.mean_delta = sum(deltas) / len(deltas) if deltas else 0.0
+    return result
 
 
 class BaselineAdapter:
@@ -221,6 +304,15 @@ class BaselineAdapter:
     def retrieve(self, query: str, k: int) -> list[str]:
         """Return up to k ranked document IDs for the given query."""
         raise NotImplementedError
+
+    def context_tokens(self, ranked_ids: list[str]) -> int:
+        """Estimated context-token cost of packing *ranked_ids*.
+
+        Default: the number of retrieved items (a granularity proxy).  Adapters
+        that know their corpus should override with a real token estimate so the
+        report's context-token column reflects true budget cost.
+        """
+        return len(ranked_ids)
 
     def teardown(self) -> None:
         """Called once after evaluation completes.  Clean up resources."""
@@ -252,6 +344,10 @@ def _score_surface(
                 _ = exc  # retrieval failure yields empty result, not a crash
 
             elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            try:
+                ctx_tokens = adapter.context_tokens(ranked)
+            except Exception:  # noqa: BLE001
+                ctx_tokens = len(ranked)
             qr = QueryResult(
                 query_id=case.query_id,
                 query=case.query,
@@ -260,6 +356,7 @@ def _score_surface(
                 relevant_ids=set(case.relevant_ids),
                 graded=case.graded,
                 latency_ms=elapsed_ms,
+                context_tokens=ctx_tokens,
             )
             report.query_results.append(qr)
     finally:

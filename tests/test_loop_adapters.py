@@ -925,6 +925,22 @@ def test_detect_claude_error_api_status_only() -> None:
     assert _detect_claude_error(raw) == "Overloaded"
 
 
+def test_detect_claude_error_soft_subtypes_are_not_fatal() -> None:
+    """is_error=true with a *soft* subtype (max-turns / execution) is NOT a fatal
+    agent error — the edit may have landed, so ONMC's own verifier must decide."""
+    for subtype in ("error_max_turns", "error_during_execution"):
+        raw = json.dumps(
+            {"type": "result", "subtype": subtype, "is_error": True, "result": "ran out"}
+        )
+        assert _detect_claude_error(raw) is None, subtype
+
+
+def test_detect_claude_error_hard_is_error_without_api_status_still_fatal() -> None:
+    """A non-soft is_error=true (no api_status) remains fatal."""
+    raw = json.dumps({"type": "result", "subtype": "error_other", "is_error": True})
+    assert _detect_claude_error(raw) == "Claude reported is_error=true with no message"
+
+
 def test_detect_claude_error_healthy_output_is_none() -> None:
     """Normal successful output must NOT be flagged as an error."""
     raw = json.dumps({"result": "Done.", "usage": {"input_tokens": 5, "output_tokens": 3}})

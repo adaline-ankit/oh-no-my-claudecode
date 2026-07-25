@@ -8,6 +8,7 @@ from oh_no_my_claudecode.context_engine.models import (
     Exclusion,
     RetrievalMode,
     ScoreSignals,
+    TrustLevel,
 )
 from oh_no_my_claudecode.context_engine.planner import ContextEngine, PlannerConfig
 from oh_no_my_claudecode.context_engine.providers import (
@@ -31,4 +32,5 @@ __all__ = [
     "ScoreSignals",
     "StaticCandidateProvider",
     "StaticGraphProvider",
+    "TrustLevel",
 ]

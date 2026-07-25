@@ -11,6 +11,7 @@ from pathlib import Path
 
 from oh_no_my_claudecode.loop.engine import (
     _build_brief,
+    _verifier_unavailable,
     run_loop,
 )
 from oh_no_my_claudecode.loop.models import (
@@ -563,3 +564,40 @@ def test_no_change_breaker_stops_after_limit(tmp_path: Path) -> None:
     assert result.stop_reason == "no-changes"
     assert len(result.iterations) == 2  # stopped at the limit, no cost beyond it
     assert all(it.outcome == "loss" for it in result.iterations)
+
+
+# ---------------------------------------------------------------------------
+# Verifier-infrastructure failure → distinct stop (not repeated-error)
+# ---------------------------------------------------------------------------
+
+
+def test_verifier_unavailable_detects_infra_markers() -> None:
+    assert _verifier_unavailable("[verify error: command not found]")
+    assert _verifier_unavailable("[verify timed out]")
+    assert _verifier_unavailable("   [verify error: x]")
+    # A real test failure — or a test that merely prints the phrase — is NOT infra.
+    assert not _verifier_unavailable("1 failed\nassert 2 == 3")
+    assert not _verifier_unavailable("captured stdout: '[verify error:' appeared")
+
+
+def test_loop_stops_verifier_unavailable_not_repeated_error(tmp_path: Path) -> None:
+    """A verifier that cannot RUN stops loudly on iteration 1 with a distinct
+    reason, instead of looping into the repeated-error breaker."""
+    storage = _storage(tmp_path)
+    spec = LoopSpec(goal="fix it")
+    config = LoopConfig(max_iterations=5, repeated_error_limit=3)
+    result = run_loop(
+        storage,
+        tmp_path,
+        spec,
+        config,
+        agent_runner=_fake_agent("edited", files=["calc.py"]),
+        verify_runner=_fake_verify(
+            passes=False,
+            output="[verify error: verify command could not run — No module named pytest]",
+        ),
+        now=_FIXED_NOW,
+    )
+    assert result.converged is False
+    assert result.stop_reason == "verifier-unavailable"
+    assert len(result.iterations) == 1

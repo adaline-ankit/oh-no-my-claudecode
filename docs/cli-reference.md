@@ -6624,8 +6624,11 @@ Usage: onmc run [OPTIONS] TASK
 │ --risk                  TEXT                  Execution risk: low, medium,   │
 │                                               high, or critical.             │
 │                                               [default: medium]              │
-│ --context-budget        INTEGER RANGE [x>=1]  Maximum context packet tokens. │
-│                                               [default: 4000]                │
+│ --budget-mode           TEXT                  Context budget preset: tiny,   │
+│                                               standard, or deep.             │
+│                                               [default: standard]            │
+│ --context-budget        INTEGER RANGE [x>=1]  Override the budget mode's     │
+│                                               context-token ceiling.         │
 │ --resume                TEXT                  Resume or inspect the durable  │
 │                                               state for a run ID.            │
 │ --json                                        Emit the plan and result as    │

@@ -151,10 +151,13 @@ def _emit_code_delta(report: RetrievalReport) -> None:
     if bm25_sr is None or hybrid_sr is None:
         return
 
+    from oh_no_my_claudecode.retrieval_eval.runner import compare_surfaces  # noqa: PLC0415
+
     dr10 = hybrid_sr.mean_recall_at_10 - bm25_sr.mean_recall_at_10
     dp5 = hybrid_sr.mean_precision_at_5 - bm25_sr.mean_precision_at_5
     dmrr = hybrid_sr.mean_mrr_at_10 - bm25_sr.mean_mrr_at_10
     dndcg = hybrid_sr.mean_ndcg_at_10 - bm25_sr.mean_ndcg_at_10
+    dctx = hybrid_sr.mean_context_tokens - bm25_sr.mean_context_tokens
 
     def _fmt(v: float) -> str:
         sign = "+" if v >= 0 else ""
@@ -165,17 +168,33 @@ def _emit_code_delta(report: RetrievalReport) -> None:
     typer.echo("#### Code split delta (hybrid minus bm25-only)")
     typer.echo("")
     typer.echo(
-        f"| Metric  | BM25  | Hybrid | Delta |\n"
-        f"|---------|-------|--------|-------|\n"
-        f"| R@10    | {bm25_sr.mean_recall_at_10:.3f} | {hybrid_sr.mean_recall_at_10:.3f} "
+        f"| Metric   | BM25  | Hybrid | Delta |\n"
+        f"|----------|-------|--------|-------|\n"
+        f"| R@10     | {bm25_sr.mean_recall_at_10:.3f} | {hybrid_sr.mean_recall_at_10:.3f} "
         f"| {_fmt(dr10)} |\n"
-        f"| P@5     | {bm25_sr.mean_precision_at_5:.3f} | {hybrid_sr.mean_precision_at_5:.3f} "
+        f"| P@5      | {bm25_sr.mean_precision_at_5:.3f} | {hybrid_sr.mean_precision_at_5:.3f} "
         f"| {_fmt(dp5)} |\n"
-        f"| MRR@10  | {bm25_sr.mean_mrr_at_10:.3f} | {hybrid_sr.mean_mrr_at_10:.3f} "
+        f"| MRR@10   | {bm25_sr.mean_mrr_at_10:.3f} | {hybrid_sr.mean_mrr_at_10:.3f} "
         f"| {_fmt(dmrr)} |\n"
-        f"| nDCG@10 | {bm25_sr.mean_ndcg_at_10:.3f} | {hybrid_sr.mean_ndcg_at_10:.3f} "
+        f"| nDCG@10  | {bm25_sr.mean_ndcg_at_10:.3f} | {hybrid_sr.mean_ndcg_at_10:.3f} "
         f"| {_fmt(dndcg)} |\n"
+        f"| Ctx tok  | {bm25_sr.mean_context_tokens:.0f} | {hybrid_sr.mean_context_tokens:.0f} "
+        f"| {_fmt(dctx)} |\n"
         f"\n**Verdict: {verdict}**"
+    )
+
+    # Per-query wins/losses of hybrid vs the lexical (BM25) baseline on nDCG@10.
+    win_loss = compare_surfaces(bm25_sr, hybrid_sr, metric="ndcg_at_10")
+    typer.echo("")
+    typer.echo("#### Per-query wins/losses vs lexical baseline (nDCG@10)")
+    typer.echo("")
+    typer.echo(
+        f"| Candidate | Baseline | Wins | Losses | Ties | Mean Δ |\n"
+        f"|-----------|----------|------|--------|------|--------|\n"
+        f"| {win_loss.candidate_surface} | {win_loss.baseline_surface} "
+        f"| {win_loss.wins} | {win_loss.losses} | {win_loss.ties} "
+        f"| {_fmt(win_loss.mean_delta)} |\n"
+        f"\n**Verdict: {win_loss.verdict}**"
     )
 
 
