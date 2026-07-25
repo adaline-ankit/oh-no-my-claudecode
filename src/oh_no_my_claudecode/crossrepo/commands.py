@@ -23,9 +23,11 @@ from oh_no_my_claudecode.crossrepo.crossrepo import (
     scan_repos,
 )
 
-#: Inline marker appended to a hit the origin repo had quarantined.  Cross-repo
+#: Inline marker prefixed to a hit the origin repo had quarantined.  Cross-repo
 #: recall never drops such a hit — it just refuses to show it as reviewed.
-_UNPROMOTED_MARKER = "[unpromoted in origin repo]"
+#: Deliberately bracket-free: Rich parses ``[...]`` as markup and would swallow
+#: the label instead of printing it.
+_UNPROMOTED_MARKER = "⚠ unpromoted in origin repo —"
 
 crossrepo_app = typer.Typer(
     name="crossrepo",

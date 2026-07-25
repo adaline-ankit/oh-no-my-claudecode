@@ -22,12 +22,17 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
+from oh_no_my_claudecode.crossrepo import commands as crossrepo_commands
+from oh_no_my_claudecode.crossrepo.commands import _render_recall_plain
 from oh_no_my_claudecode.crossrepo.crossrepo import (
+    CROSSREPO_PROVENANCE_NOTE,
     PROVENANCE_CROSS_REPO,
     PROVENANCE_UNPROMOTED,
+    RecallHit,
     federated_recall,
     scan_repos,
 )
@@ -260,6 +265,108 @@ def test_recall_no_match(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Provenance labelling (cross-repo trust boundary)
+# ---------------------------------------------------------------------------
+
+
+def test_recall_labels_ordinary_hit_as_unreviewed_cross_repo(tmp_path: Path) -> None:
+    """A hit the origin repo never quarantined is still unreviewed *here*."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(alpha, [_make_memory("m-1", "auth flow", "auth login flow", ["auth"])])
+
+    hits = federated_recall([alpha], "auth")
+
+    assert len(hits) == 1
+    assert hits[0].unpromoted is False
+    assert hits[0].provenance == PROVENANCE_CROSS_REPO
+    assert hits[0].to_dict()["provenance"] == PROVENANCE_CROSS_REPO
+
+
+def test_recall_flags_origin_quarantine_from_source_ref_prefix(tmp_path: Path) -> None:
+    """The reserved ``unpromoted:`` source_ref prefix marks the hit."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(
+        alpha,
+        [
+            _make_memory(
+                "m-quarantined",
+                "auth flow",
+                "auth login flow",
+                ["auth"],
+                source_ref=unpromoted_source_ref("autopilot:plan"),
+            )
+        ],
+    )
+
+    hits = federated_recall([alpha], "auth")
+
+    assert [h.memory_id for h in hits] == ["m-quarantined"]
+    assert hits[0].unpromoted is True
+    assert hits[0].provenance == PROVENANCE_UNPROMOTED
+
+
+def test_recall_flags_origin_quarantine_from_record_flag(tmp_path: Path) -> None:
+    """The explicit ``unpromoted`` record flag marks the hit on its own."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(
+        alpha,
+        [_make_memory("m-flagged", "auth flow", "auth login flow", ["auth"])],
+        unpromoted_ids={"m-flagged"},
+    )
+
+    hits = federated_recall([alpha], "auth")
+
+    assert hits[0].unpromoted is True
+    assert hits[0].provenance == PROVENANCE_UNPROMOTED
+
+
+def test_recall_false_flag_cannot_launder_prefixed_source_ref(tmp_path: Path) -> None:
+    """``"unpromoted": false`` must not clear an already-prefixed source_ref."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    # unpromoted_ids omitted → the record is written with "unpromoted": false
+    # while the source_ref still carries the reserved prefix.  Union wins.
+    _write_export(
+        alpha,
+        [
+            _make_memory(
+                "m-launder",
+                "auth flow",
+                "auth login flow",
+                ["auth"],
+                source_ref=unpromoted_source_ref("docs/x.md"),
+            )
+        ],
+    )
+
+    hits = federated_recall([alpha], "auth")
+
+    assert hits[0].unpromoted is True
+
+
+def test_recall_labels_rather_than_filters_quarantined_hits(tmp_path: Path) -> None:
+    """Cross-repo recall stays a feature: a quarantined hit is shown, not dropped."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(
+        alpha,
+        [
+            _make_memory("m-clean", "auth rotation", "rotate auth tokens", ["auth"]),
+            _make_memory(
+                "m-dirty",
+                "auth rotation",
+                "rotate auth tokens",
+                ["auth"],
+                source_ref=unpromoted_source_ref("autopilot:learn"),
+            ),
+        ],
+    )
+
+    hits = federated_recall([alpha], "auth rotation")
+
+    assert {h.memory_id for h in hits} == {"m-clean", "m-dirty"}
+    assert {h.memory_id: h.unpromoted for h in hits} == {"m-clean": False, "m-dirty": True}
+
+
+# ---------------------------------------------------------------------------
 # CLI smoke
 # ---------------------------------------------------------------------------
 
@@ -295,6 +402,108 @@ def test_cli_recall_json(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload[0]["repo"] == "alpha"
     assert payload[0]["memory_id"] == "m-a1"
+
+
+def test_cli_recall_json_carries_provenance(tmp_path: Path) -> None:
+    """A ``--json`` consumer never sees the banner, so provenance rides per-hit."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(
+        alpha,
+        [
+            _make_memory(
+                "m-a1",
+                "Auth token rotation",
+                "rotate auth tokens",
+                ["auth"],
+                source_ref=unpromoted_source_ref("autopilot:learn"),
+            )
+        ],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["crossrepo", "recall", "auth token", "--repo", str(alpha), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload[0]["unpromoted"] is True
+    assert payload[0]["provenance"] == PROVENANCE_UNPROMOTED
+
+
+def test_cli_recall_renders_unreviewed_banner_and_marker(tmp_path: Path) -> None:
+    """Rendered output states the trust boundary and marks quarantined hits."""
+    alpha = _make_repo(tmp_path / "alpha", modules=["auth"])
+    _write_export(
+        alpha,
+        [
+            _make_memory("m-clean", "Auth token rotation", "rotate auth tokens", ["auth"]),
+            _make_memory(
+                "m-dirty",
+                "Auth token cache",
+                "cache auth tokens",
+                ["auth"],
+                source_ref=unpromoted_source_ref("autopilot:learn"),
+            ),
+        ],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["crossrepo", "recall", "auth token", "--repo", str(alpha)])
+
+    assert result.exit_code == 0, result.output
+    # Both hits are still presented — labelling, not filtering.
+    assert "rotation" in result.output
+    assert "cache" in result.output
+    # Standing trust-boundary note for the whole result set.  Asserted on single
+    # words because Rich hard-wraps the caption at the terminal width.
+    assert "unreviewed" in result.output
+    assert "cross-repo" in result.output
+    # Per-hit marker, on exactly the one hit quarantined in its origin repo.
+    # "unpromoted" appears nowhere else in the rendered output.
+    assert result.output.count("unpromoted") == 1
+
+
+def test_plain_renderer_carries_banner_and_marker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The no-Rich fallback renderer must not lose the provenance labels.
+
+    ``typer.echo`` is captured directly rather than via ``capsys`` because this
+    project runs pytest with ``-p no:capture``.
+    """
+    hits = [
+        RecallHit(
+            repo="alpha",
+            memory_id="m-clean",
+            title="Auth token rotation",
+            summary="rotate auth tokens",
+            tags=["auth"],
+            score=10,
+        ),
+        RecallHit(
+            repo="beta",
+            memory_id="m-dirty",
+            title="Auth token cache",
+            summary="cache auth tokens",
+            tags=["auth"],
+            score=5,
+            unpromoted=True,
+        ),
+    ]
+
+    captured: list[str] = []
+    monkeypatch.setattr(
+        crossrepo_commands.typer, "echo", lambda message, **_: captured.append(str(message))
+    )
+    _render_recall_plain(hits, "auth token")
+    out = "\n".join(captured)
+
+    assert CROSSREPO_PROVENANCE_NOTE in out
+    assert "Auth token rotation" in out
+    assert "⚠ unpromoted in origin repo — Auth token cache" in out
+    # The clean hit is not mislabelled as quarantined.
+    assert "⚠ unpromoted in origin repo — Auth token rotation" not in out
 
 
 def test_cli_recall_no_repos_errors() -> None:
