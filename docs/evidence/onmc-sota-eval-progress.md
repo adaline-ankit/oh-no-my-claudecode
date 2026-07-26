@@ -114,6 +114,10 @@ This is evidence for a stronger harness foundation:
   per-condition measured-token coverage. The report does not fabricate usage when providers omit it,
   and manifest-gated calibration blocks external claims when the telemetry artifact is missing or
   malformed.
+- Saved external reports now carry verifier artifacts for usable benchmark cells: verifier command,
+  pass/fail adjudication, output size, and output SHA-256 hash. Manifest-gated calibration blocks
+  external claims when verifier artifacts are missing or incomplete, so reports cannot cite only
+  agent prose or aggregate pass counts as proof.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -176,7 +180,7 @@ python -m pytest -q tests/test_experiment_calibration.py tests/test_experiment_c
 Result:
 
 ```text
-73 passed
+74 passed
 ```
 
 ```text

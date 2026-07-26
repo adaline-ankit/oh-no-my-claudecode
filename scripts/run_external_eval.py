@@ -28,6 +28,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import random
@@ -564,6 +565,7 @@ class TrialRecord:
     context_tokens: int | None = None
     diff_lines: int = 0
     tests_touched: bool = False
+    verifier_artifact: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -580,6 +582,7 @@ class TrialRecord:
             "context_tokens": self.context_tokens,
             "diff_lines": self.diff_lines,
             "tests_touched": self.tests_touched,
+            "verifier_artifact": self.verifier_artifact,
         }
 
 
@@ -919,6 +922,18 @@ def verify(task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path) -> tuple[b
     return code == 0, out
 
 
+def verifier_artifact(task: TaskSpec, python: Path, out: str, passed: bool) -> dict[str, object]:
+    """Compact, replayable evidence pointer for the independent verifier result."""
+    encoded = out.encode("utf-8", errors="replace")
+    return {
+        "kind": "verifier-output",
+        "command": shlex.join(verifier_argv(task, python)),
+        "passed": passed,
+        "output_sha256": hashlib.sha256(encoded).hexdigest(),
+        "output_size_bytes": len(encoded),
+    }
+
+
 def guard_pristine_verifier(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
 ) -> str | None:
@@ -1070,6 +1085,7 @@ def run_cell(
     infra, cost, usage = RUNNERS[condition](task, dest, cfg, python)
     diff_lines, tests_touched = _observed_change(dest)
     passed, out = verify(task, dest, cfg, python)
+    artifact = verifier_artifact(task, python, out, passed)
     latency = (time.monotonic() - started) * 1000.0
     note = "" if passed else out.strip().splitlines()[-1][:160] if out.strip() else ""
     if passed and tests_touched:
@@ -1091,6 +1107,7 @@ def run_cell(
         context_tokens=usage["context_tokens"],
         diff_lines=diff_lines,
         tests_touched=tests_touched,
+        verifier_artifact=artifact,
     )
 
 
@@ -1156,6 +1173,44 @@ def token_telemetry_report(
             cond.value: _token_summary([row for row in records if row.condition == cond.value])
             for cond in conditions
         },
+    }
+
+
+def verifier_artifacts_report(
+    records: list[TrialRecord],
+    conditions: list[Condition],
+) -> dict[str, object]:
+    """Return verifier-artifact coverage without embedding raw verifier output."""
+    return {
+        "overall": _verifier_artifact_summary(records),
+        "by_condition": {
+            cond.value: _verifier_artifact_summary(
+                [row for row in records if row.condition == cond.value]
+            )
+            for cond in conditions
+        },
+    }
+
+
+def _verifier_artifact_summary(rows: list[TrialRecord]) -> dict[str, object]:
+    hash_values: set[str] = set()
+    for row in rows:
+        artifact = row.verifier_artifact
+        if not isinstance(artifact, dict):
+            continue
+        output_sha = artifact.get("output_sha256")
+        if isinstance(output_sha, str):
+            hash_values.add(output_sha)
+    hashes = sorted(hash_values)
+    usable_cells = sum(1 for row in rows if row.infra_error is None)
+    artifact_cells = sum(1 for row in rows if row.verifier_artifact is not None)
+    return {
+        "cells": len(rows),
+        "usable_cells": usable_cells,
+        "artifact_cells": artifact_cells,
+        "missing_artifacts": max(usable_cells - artifact_cells, 0),
+        "unique_output_hashes": len(hashes),
+        "output_hashes": hashes,
     }
 
 
@@ -1335,6 +1390,7 @@ def main() -> int:
         "summary": summarize(records, conditions, seed=seed),
         "failure_taxonomy": failure_taxonomy_report(records, conditions),
         "token_telemetry": token_telemetry_report(records, conditions),
+        "verifier_artifacts": verifier_artifacts_report(records, conditions),
         "paired": (
             paired_analysis(records, conditions[0], conditions[1], seed=seed)
             if len(conditions) >= 2

@@ -153,6 +153,8 @@ class ReportMetadataAudit:
     failure_taxonomy_complete: bool
     token_telemetry_present: bool
     token_telemetry_complete: bool
+    verifier_artifacts_present: bool
+    verifier_artifacts_complete: bool
     leakage_notes_present: bool
     report_leakage_notes_present: bool
     missing_fields: tuple[str, ...]
@@ -173,6 +175,8 @@ class ReportMetadataAudit:
             "failure_taxonomy_complete": self.failure_taxonomy_complete,
             "token_telemetry_present": self.token_telemetry_present,
             "token_telemetry_complete": self.token_telemetry_complete,
+            "verifier_artifacts_present": self.verifier_artifacts_present,
+            "verifier_artifacts_complete": self.verifier_artifacts_complete,
             "leakage_notes_present": self.leakage_notes_present,
             "report_leakage_notes_present": self.report_leakage_notes_present,
             "missing_fields": list(self.missing_fields),
@@ -339,6 +343,10 @@ def _audit_report_metadata(
         report,
         expected_conditions,
     )
+    verifier_artifacts_present, verifier_artifacts_complete = _audit_verifier_artifacts(
+        report,
+        expected_conditions,
+    )
 
     missing: list[str] = []
     mismatched: list[str] = []
@@ -377,6 +385,10 @@ def _audit_report_metadata(
         missing.append("report.token_telemetry")
     elif not token_telemetry_complete:
         mismatched.append("report.token_telemetry")
+    if not verifier_artifacts_present:
+        missing.append("report.verifier_artifacts")
+    elif not verifier_artifacts_complete:
+        mismatched.append("report.verifier_artifacts")
 
     if missing:
         reasons.append("report missing leakage/reproducibility fields: " + ", ".join(missing))
@@ -395,6 +407,8 @@ def _audit_report_metadata(
         failure_taxonomy_complete=failure_taxonomy_complete,
         token_telemetry_present=token_telemetry_present,
         token_telemetry_complete=token_telemetry_complete,
+        verifier_artifacts_present=verifier_artifacts_present,
+        verifier_artifacts_complete=verifier_artifacts_complete,
         leakage_notes_present=leakage_notes is not None,
         report_leakage_notes_present=report_leakage_notes is not None,
         missing_fields=tuple(missing),
@@ -446,6 +460,57 @@ def _audit_token_telemetry(
         if not isinstance(item, Mapping) or not _token_counts(item):
             return True, False
     return True, True
+
+
+def _audit_verifier_artifacts(
+    report: Mapping[str, object],
+    expected_conditions: Sequence[str],
+) -> tuple[bool, bool]:
+    raw = report.get("verifier_artifacts")
+    if not isinstance(raw, Mapping):
+        return False, False
+    by_condition = raw.get("by_condition")
+    overall = raw.get("overall")
+    if not isinstance(by_condition, Mapping) or not isinstance(overall, Mapping):
+        return True, False
+    if not _verifier_artifact_counts(overall):
+        return True, False
+    for condition in expected_conditions:
+        item = by_condition.get(condition)
+        if not isinstance(item, Mapping) or not _verifier_artifact_counts(item):
+            return True, False
+    return True, True
+
+
+def _verifier_artifact_counts(value: Mapping[object, object]) -> bool:
+    required = (
+        "cells",
+        "usable_cells",
+        "artifact_cells",
+        "missing_artifacts",
+        "unique_output_hashes",
+    )
+    if not all(_non_negative_int(value.get(key)) for key in required):
+        return False
+    usable_cells = value["usable_cells"]
+    artifact_cells = value["artifact_cells"]
+    missing_artifacts = value["missing_artifacts"]
+    if not (
+        isinstance(usable_cells, int)
+        and isinstance(artifact_cells, int)
+        and isinstance(missing_artifacts, int)
+    ):
+        return False
+    if artifact_cells > usable_cells:
+        return False
+    if missing_artifacts != usable_cells - artifact_cells:
+        return False
+    if missing_artifacts != 0:
+        return False
+    hashes = value.get("output_hashes", [])
+    if not isinstance(hashes, list):
+        return False
+    return all(isinstance(item, str) and item for item in hashes)
 
 
 def _token_counts(value: Mapping[object, object]) -> bool:

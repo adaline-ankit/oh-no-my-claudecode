@@ -80,6 +80,37 @@ def _token_telemetry() -> dict[str, object]:
     }
 
 
+def _verifier_artifacts() -> dict[str, object]:
+    return {
+        "overall": {
+            "cells": 40,
+            "usable_cells": 40,
+            "artifact_cells": 40,
+            "missing_artifacts": 0,
+            "unique_output_hashes": 2,
+            "output_hashes": ["hash-a", "hash-b"],
+        },
+        "by_condition": {
+            Condition.BARE_AGENT.value: {
+                "cells": 20,
+                "usable_cells": 20,
+                "artifact_cells": 20,
+                "missing_artifacts": 0,
+                "unique_output_hashes": 1,
+                "output_hashes": ["hash-a"],
+            },
+            Condition.ONMC_CURRENT.value: {
+                "cells": 20,
+                "usable_cells": 20,
+                "artifact_cells": 20,
+                "missing_artifacts": 0,
+                "unique_output_hashes": 1,
+                "output_hashes": ["hash-b"],
+            },
+        },
+    }
+
+
 def test_saturated_report_is_not_claim_ready() -> None:
     raw = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
 
@@ -234,6 +265,7 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
         },
         "failure_taxonomy": _failure_taxonomy(),
         "token_telemetry": _token_telemetry(),
+        "verifier_artifacts": _verifier_artifacts(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -252,6 +284,8 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
     assert gated.metadata_audit.failure_taxonomy_complete is True
     assert gated.metadata_audit.token_telemetry_present is True
     assert gated.metadata_audit.token_telemetry_complete is True
+    assert gated.metadata_audit.verifier_artifacts_present is True
+    assert gated.metadata_audit.verifier_artifacts_complete is True
     assert gated.missing_tasks == ()
     assert gated.unexpected_tasks == ()
     assert gated.reasons == ()
@@ -312,6 +346,7 @@ def test_manifest_gate_blocks_missing_report_metadata() -> None:
         "report.environment",
         "report.failure_taxonomy",
         "report.token_telemetry",
+        "report.verifier_artifacts",
     )
     assert any("leakage/reproducibility" in reason for reason in gated.reasons)
 
@@ -363,6 +398,7 @@ def test_manifest_gate_blocks_environment_manifest_mismatch() -> None:
         },
         "failure_taxonomy": _failure_taxonomy(),
         "token_telemetry": _token_telemetry(),
+        "verifier_artifacts": _verifier_artifacts(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -432,6 +468,7 @@ def test_manifest_gate_blocks_incomplete_failure_taxonomy() -> None:
             },
         },
         "token_telemetry": _token_telemetry(),
+        "verifier_artifacts": _verifier_artifacts(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -512,6 +549,7 @@ def test_manifest_gate_blocks_incomplete_token_telemetry() -> None:
                 },
             },
         },
+        "verifier_artifacts": _verifier_artifacts(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -525,6 +563,81 @@ def test_manifest_gate_blocks_incomplete_token_telemetry() -> None:
     assert gated.metadata_audit.token_telemetry_present is True
     assert gated.metadata_audit.token_telemetry_complete is False
     assert gated.metadata_audit.mismatched_fields == ("report.token_telemetry",)
+    assert gated.quality_claim_ready is False
+
+
+def test_manifest_gate_blocks_incomplete_verifier_artifacts() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 2,
+            "environment": {
+                "code_sha": "abc123",
+                "config_hash": "cfg1",
+                "model": "claude-test",
+                "provider": "anthropic",
+                "image": "local",
+            },
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records: list[dict[str, object]] = []
+    for task_id in task_ids:
+        for trial in range(2):
+            records.append(
+                {
+                    **_record(task_id, Condition.BARE_AGENT.value, False),
+                    "trial": trial + 1,
+                }
+            )
+            records.append(
+                {
+                    **_record(task_id, Condition.ONMC_CURRENT.value, True),
+                    "trial": trial + 1,
+                }
+            )
+    incomplete_artifacts = _verifier_artifacts()
+    by_condition = incomplete_artifacts["by_condition"]
+    assert isinstance(by_condition, dict)
+    by_condition[Condition.ONMC_CURRENT.value] = {
+        "cells": 20,
+        "usable_cells": 20,
+        "artifact_cells": 19,
+        "missing_artifacts": 1,
+        "unique_output_hashes": 1,
+        "output_hashes": ["hash-b"],
+    }
+    report = {
+        "task_set_revision": "rev-good",
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "environment": {
+            "code_sha": "abc123",
+            "config_hash": "cfg1",
+            "model": "claude-test",
+            "provider": "anthropic",
+            "image": "local",
+        },
+        "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": _token_telemetry(),
+        "verifier_artifacts": incomplete_artifacts,
+        "code_sha": "abc123",
+        "code_sha_under_test": "def456",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 2,
+        "records": records,
+    }
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.calibration.quality_claim_ready is True
+    assert gated.metadata_audit.verifier_artifacts_present is True
+    assert gated.metadata_audit.verifier_artifacts_complete is False
+    assert gated.metadata_audit.mismatched_fields == ("report.verifier_artifacts",)
     assert gated.quality_claim_ready is False
 
 

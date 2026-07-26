@@ -326,6 +326,10 @@ def _metadata_audit_markdown(audit: dict[str, Any]) -> list[str]:
         f"`{str(audit['token_telemetry_present']).lower()}`",
         f"- token_telemetry_complete: "
         f"`{str(audit['token_telemetry_complete']).lower()}`",
+        f"- verifier_artifacts_present: "
+        f"`{str(audit['verifier_artifacts_present']).lower()}`",
+        f"- verifier_artifacts_complete: "
+        f"`{str(audit['verifier_artifacts_complete']).lower()}`",
         f"- leakage_notes_present: `{str(audit['leakage_notes_present']).lower()}`",
         f"- report_leakage_notes_present: "
         f"`{str(audit['report_leakage_notes_present']).lower()}`",
