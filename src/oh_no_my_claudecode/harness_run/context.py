@@ -25,7 +25,11 @@ from oh_no_my_claudecode.harness_run.repo_signals import (
     detect_conventions,
 )
 from oh_no_my_claudecode.ingest.repo_tree import scan_repository_files
-from oh_no_my_claudecode.retrieval import HybridRetriever
+from oh_no_my_claudecode.retrieval import (
+    HybridRetriever,
+    Reranker,
+    RetrievalDecision,
+)
 
 # Bounded relevance boost applied to files with uncommitted changes so
 # retrieval is git-diff-aware (what the developer is editing is likely relevant).
@@ -307,7 +311,11 @@ class HybridRepositoryCandidateProvider:
     min_score: float = 0.0
     token_budget: int | None = None
     retrieval_mode: str = "bm25"  # BM25-first for code; "hybrid"/"dense" opt-in
+    candidate_promoted: bool = False
+    min_candidate_confidence: float = 0.65
+    reranker: Reranker | None = None
     on_fallback: Callable[[str], None] | None = None
+    on_decision: Callable[[RetrievalDecision], None] | None = None
 
     def candidates(self, query: str, mode: RetrievalMode) -> tuple[Candidate, ...]:
         try:
@@ -367,7 +375,21 @@ class HybridRepositoryCandidateProvider:
             min_score=self.min_score,
             token_budget=self.token_budget,
         )
-        hits = retriever.retrieve(query, k=self.top_k, mode=self.retrieval_mode)
+        measured_budget = self.token_budget
+        if measured_budget is None:
+            measured_budget = sum(max(1, len(text.split())) for text in full_texts)
+        decision = retriever.retrieve_measured(
+            query,
+            k=self.top_k,
+            requested_mode=self.retrieval_mode,
+            candidate_promoted=self.candidate_promoted,
+            min_candidate_confidence=self.min_candidate_confidence,
+            token_budget=measured_budget,
+            reranker=self.reranker,
+        )
+        if self.on_decision is not None:
+            self.on_decision(decision)
+        hits = decision.hits
         if not hits:
             return ()
 
@@ -385,7 +407,11 @@ class HybridRepositoryCandidateProvider:
             content, start_line, end_line = _excerpt_with_span(hit.evidence, query_tokens)
             content, redactions = redact_secrets(content)
             token_count = max(1, (len(content) + 3) // 4)
-            semantic = min(1.0, hit.score / norm)
+            semantic = (
+                min(1.0, hit.score / norm)
+                if decision.selected_stage != "bm25"
+                else None
+            )
             trust = _trust_after_redaction(_trust_for_path(path), redactions)
             items.append(
                 Candidate(
@@ -393,7 +419,11 @@ class HybridRepositoryCandidateProvider:
                     content=content,
                     source=path,
                     token_count=token_count,
-                    provenance=(hit.doc_id,),
+                    provenance=(
+                        hit.doc_id,
+                        f"retrieval:{decision.selected_stage}",
+                        f"query-plan:{decision.query_plan.schema_version}",
+                    ),
                     structural_score=structural,
                     semantic_score=semantic,
                     dedupe_key=path,
@@ -405,6 +435,13 @@ class HybridRepositoryCandidateProvider:
                         ("path", path),
                         ("kind", "repository-file"),
                         ("retrieval_rank", str(hit.rank)),
+                        ("query_intent", decision.query_plan.intent.value),
+                        ("retrieval_stage", decision.selected_stage),
+                        ("retrieval_confidence", f"{decision.confidence:.6f}"),
+                        ("retrieval_fallback", decision.fallback_reason),
+                        ("lexical_floor", str(decision.query_plan.lexical_floor).lower()),
+                        ("candidate_promoted", str(decision.candidate_promoted).lower()),
+                        ("retrieval_token_budget", str(decision.token_budget)),
                         ("trust", trust.value),
                         *_redaction_metadata(redactions),
                         *signals.metadata_for(path),

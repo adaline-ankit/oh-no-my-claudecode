@@ -22,6 +22,7 @@ from oh_no_my_claudecode.context_engine import EvidencePacket
 from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
 from oh_no_my_claudecode.loop.models import LoopResult
 from oh_no_my_claudecode.proof_graph import ProofAssessment
+from oh_no_my_claudecode.retrieval import RetrievalDecision
 
 from .context_selection import context_selection_manifest
 from .run_policy import VerifierSignal, injection_findings
@@ -95,7 +96,9 @@ def prepare_stage(dag: TaskDAG, run_id: str, risk: RiskLevel) -> StageRecord:
 
 
 def context_stage(
-    packet: EvidencePacket, retrieval_fallbacks: tuple[str, ...] = ()
+    packet: EvidencePacket,
+    retrieval_fallbacks: tuple[str, ...] = (),
+    retrieval_decision: RetrievalDecision | None = None,
 ) -> StageRecord:
     """Record retrieved context and quarantine any injected instructions.
 
@@ -110,7 +113,11 @@ def context_stage(
     """
     joined = "\n".join(item.content for item in packet.evidence)
     findings = injection_findings(joined)
-    selection = context_selection_manifest(packet, retrieval_fallbacks=retrieval_fallbacks)
+    selection = context_selection_manifest(
+        packet,
+        retrieval_fallbacks=retrieval_fallbacks,
+        retrieval_decision=retrieval_decision,
+    )
     reasons = tuple(f"quarantined: {finding.rule_id} {finding.title}" for finding in findings)
     reasons += tuple(f"retrieval-fallback: {reason}" for reason in retrieval_fallbacks)
     summary = (
@@ -135,6 +142,10 @@ def context_stage(
             ("low_confidence", str(selection.low_confidence).lower()),
             ("abstained", str(selection.abstained).lower()),
             ("fallback_decision", selection.fallback_decision),
+            ("query_intent", selection.query_intent),
+            ("retrieval_stage", selection.retrieval_stage),
+            ("lexical_floor", str(selection.lexical_floor).lower()),
+            ("candidate_promoted", str(selection.candidate_promoted).lower()),
             ("injection_findings", str(len(findings))),
         ),
         reasons=reasons,
