@@ -30,6 +30,7 @@ python scripts/validate_benchmark_manifest.py \
 python scripts/generate_benchmark_report.py \
   datasets/experiment/reports/external_v3_stage1_2026-07-25.json \
   --manifest datasets/experiment/portfolio_external_v4.json \
+  --verifier-calibration docs/evidence/verifier_external_v2_report.json \
   --json-out docs/evidence/sota-report.json \
   --markdown-out docs/evidence/sota-report.md \
   --artifact-index-out docs/evidence/raw-artifacts.json

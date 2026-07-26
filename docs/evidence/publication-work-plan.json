@@ -59,7 +59,9 @@
     "runtime_delegation_blockers": [],
     "runtime_delegation_ready": true,
     "seeds_to_register": 3,
-    "tasks_to_add": 22
+    "tasks_to_add": 22,
+    "verifier_evidence_blockers": [],
+    "verifier_evidence_ready": true
   },
   "next_actions": [
     "Keep the live product surface collapsed around `onmc run`, setup, Mission Control, and operator views; advanced diagnostics must stay behind `onmc commands --all`.",

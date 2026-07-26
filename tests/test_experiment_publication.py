@@ -6,6 +6,7 @@ from pathlib import Path
 from oh_no_my_claudecode.experiment.publication import (
     build_publication_bundle,
     build_publication_work_plan,
+    gate_verifier_evidence,
     index_raw_artifacts,
     render_publication_markdown,
     validate_benchmark_manifest,
@@ -15,6 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 V4_MANIFEST = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.json"
 SATURATED_REPORT = REPO_ROOT / "datasets" / "experiment" / "reports" / (
     "external_v3_stage1_2026-07-25.json"
+)
+VERIFIER_CALIBRATION = REPO_ROOT / "docs" / "evidence" / (
+    "verifier_external_v2_report.json"
 )
 
 
@@ -125,6 +129,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
         product_surface=_ready_product_surface(),
         product_smoke=_ready_product_smoke(),
         runtime_delegation=_ready_runtime_delegation(),
+        verifier_calibration_artifact=_load(VERIFIER_CALIBRATION),
     )
     markdown = render_publication_markdown(bundle)
 
@@ -137,6 +142,11 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert bundle["product_surface"]["ready"] is True
     assert bundle["product_smoke"]["ready"] is True
     assert bundle["runtime_delegation"]["ready"] is True
+    assert bundle["verifier_evidence"]["ready"] is True
+    assert bundle["verifier_evidence"]["artifact_matches_live_calibration"] is True
+    assert bundle["verifier_evidence"]["protected_suite_controls_ready"] is True
+    assert bundle["verifier_evidence"]["mutation_controls_ready"] is True
+    assert bundle["verifier_evidence"]["prose_only_completion_rejected"] is True
     assert "NOT PUBLICATION-READY" in markdown
     assert "Paired Delta" in markdown
     assert "95% CI" in markdown
@@ -146,6 +156,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert "Product Surface" in markdown
     assert "Product Smoke" in markdown
     assert "Runtime Delegation" in markdown
+    assert "Verifier Evidence" in markdown
     assert "SOTA" not in bundle["claim_language_gate"]["suggested_safe_claim"]
 
 
@@ -161,6 +172,52 @@ def test_publication_report_fails_closed_without_product_surface_audit() -> None
     assert bundle["product_surface"]["blockers"] == [
         "live product surface audit was not provided"
     ]
+    assert bundle["verifier_evidence"]["ready"] is False
+    assert bundle["verifier_evidence"]["blockers"] == [
+        "verifier calibration artifact was not provided"
+    ]
+
+
+def test_verifier_evidence_rejects_stale_or_missing_negative_controls() -> None:
+    expected = _load(VERIFIER_CALIBRATION)
+    stale = json.loads(json.dumps(expected))
+    assert isinstance(stale, dict)
+    cases = stale["cases"]
+    assert isinstance(cases, list)
+    stale["cases"] = [
+        case
+        for case in cases
+        if isinstance(case, dict) and case.get("attack_class") != "agent-only-completion"
+    ]
+
+    gate = gate_verifier_evidence(stale, expected=expected)
+
+    assert gate["ready"] is False
+    assert gate["artifact_matches_live_calibration"] is False
+    assert gate["prose_only_completion_rejected"] is False
+    assert "agent-only-completion" in gate["missing_false_green_controls"]
+
+
+def test_verifier_evidence_rejects_weakened_mutation_control() -> None:
+    expected = _load(VERIFIER_CALIBRATION)
+    weakened = json.loads(json.dumps(expected))
+    assert isinstance(weakened, dict)
+    cases = weakened["cases"]
+    assert isinstance(cases, list)
+    mutation = next(
+        case
+        for case in cases
+        if isinstance(case, dict)
+        and case.get("attack_class") == "surviving-critical-mutant"
+    )
+    mutation["predicted_false_green"] = False
+    mutation["correct"] = False
+
+    gate = gate_verifier_evidence(weakened, expected=expected)
+
+    assert gate["ready"] is False
+    assert gate["mutation_controls_ready"] is False
+    assert "surviving-critical-mutant" in gate["missing_false_green_controls"]
 
 
 def test_publication_report_fails_closed_without_product_smoke() -> None:

@@ -10,6 +10,9 @@ V4_MANIFEST = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.jso
 SATURATED_REPORT = REPO_ROOT / "datasets" / "experiment" / "reports" / (
     "external_v3_stage1_2026-07-25.json"
 )
+VERIFIER_CALIBRATION = REPO_ROOT / "docs" / "evidence" / (
+    "verifier_external_v2_report.json"
+)
 
 
 def _load_script(name: str) -> ModuleType:
@@ -116,6 +119,8 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
             str(product_smoke),
             "--runtime-delegation",
             str(runtime_delegation),
+            "--verifier-calibration",
+            str(VERIFIER_CALIBRATION),
             "--json-out",
             str(json_output),
             "--markdown-out",
@@ -140,6 +145,8 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     assert payload["product_smoke"]["run_status"] == "planned"
     assert payload["runtime_delegation"]["ready"] is True
     assert payload["runtime_delegation"]["canonical_contract"] == "RunSpec"
+    assert payload["verifier_evidence"]["ready"] is True
+    assert payload["verifier_evidence"]["artifact_matches_live_calibration"] is True
     assert artifact_index["complete"] is False
     assert work_plan["publication_ready"] is False
     assert work_plan["deficits"]["product_surface_ready"] is True

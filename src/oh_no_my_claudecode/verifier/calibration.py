@@ -52,6 +52,8 @@ class ExternalVerifierCorpus:
 class CalibrationCaseResult:
     case_id: str
     expected_label: ExpectedLabel
+    attack_class: str
+    source_repository: str
     predicted_false_green: bool
     correct: bool
     reasons: tuple[str, ...]
@@ -60,6 +62,8 @@ class CalibrationCaseResult:
         return {
             "case_id": self.case_id,
             "expected_label": self.expected_label.value,
+            "attack_class": self.attack_class,
+            "source_repository": self.source_repository,
             "predicted_false_green": self.predicted_false_green,
             "correct": self.correct,
             "reasons": list(self.reasons),
@@ -305,6 +309,8 @@ def _score_case(case: ExternalVerifierCase) -> tuple[CalibrationCaseResult, Comp
     result = CalibrationCaseResult(
         case_id=case.case_id,
         expected_label=case.expected_label,
+        attack_class=case.attack_class,
+        source_repository=case.source.repository_url,
         predicted_false_green=adjudication.false_green,
         correct=adjudication.false_green is expected_false_green,
         reasons=adjudication.reasons,

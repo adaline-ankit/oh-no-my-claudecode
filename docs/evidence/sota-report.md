@@ -50,6 +50,16 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - indexed cells: `0/48`
 - missing entries: `96`
 
+## Verifier Evidence
+
+- status: `READY`
+- artifact matches live calibration: `true`
+- independent source repositories: `6`
+- protected-suite controls: `true`
+- mutation controls: `true`
+- prose-only completion rejected: `true`
+- true-fix controls: `true`
+
 ## Product Surface
 
 - status: `READY`

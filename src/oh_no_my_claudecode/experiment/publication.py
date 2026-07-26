@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..verifier.calibration import calibrate_external_corpus
 from .calibration import calibrate_portfolio_report
 from .claim import build_claim_readiness, gate_claim_language
 from .coverage import gate_portfolio_coverage
@@ -28,12 +29,13 @@ __all__ = [
     "BenchmarkManifestValidation",
     "build_publication_bundle",
     "build_publication_work_plan",
+    "gate_verifier_evidence",
     "index_raw_artifacts",
     "render_publication_markdown",
     "validate_benchmark_manifest",
 ]
 
-_SCHEMA_VERSION = "onmc-publication-report/v1"
+_SCHEMA_VERSION = "onmc-publication-report/v2"
 _ARTIFACT_INDEX_SCHEMA_VERSION = "onmc-raw-artifact-index/v1"
 _REQUIRED_ARMS = frozenset(
     {
@@ -42,6 +44,22 @@ _REQUIRED_ARMS = frozenset(
         "onmc-single-agent",
         "trajectory-routed",
         "selective-swarm",
+    }
+)
+_REQUIRED_FALSE_GREEN_CONTROLS = frozenset(
+    {
+        "agent-only-completion",
+        "assertion-weakening",
+        "baseline-not-reproduced",
+        "dual-verifier-disagreement",
+        "fixture-tampering",
+        "skip-injection",
+        "surviving-critical-mutant",
+        "test-deletion",
+        "ungraded-mutation",
+        "unreached-changed-code",
+        "vacuous-test",
+        "verifier-narrowing",
     }
 )
 
@@ -201,6 +219,7 @@ def build_publication_bundle(
     product_surface: Mapping[str, object] | None = None,
     product_smoke: Mapping[str, object] | None = None,
     runtime_delegation: Mapping[str, object] | None = None,
+    verifier_calibration_artifact: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a deterministic report bundle without weakening any evidence gate."""
 
@@ -221,12 +240,37 @@ def build_publication_bundle(
     calibration = calibrate_portfolio_report(manifest, report)
     report_coverage = external_report_coverage_manifest(report)
     verifier_calibration = calibrate_default_verifier()
+    verifier_calibration_payload = verifier_calibration.to_dict()
+    verifier_evidence_expected = calibrate_external_corpus().to_dict()
+    verifier_evidence = gate_verifier_evidence(
+        verifier_calibration_artifact,
+        expected=verifier_evidence_expected,
+    )
+    verifier_claim_gate = dict(verifier_calibration_payload)
+    if verifier_evidence["ready"] is not True:
+        verifier_claim_gate["claim_ready"] = False
+        verifier_claim_gate["reasons"] = list(
+            dict.fromkeys(
+                [
+                    *(
+                        str(item)
+                        for item in _optional_list(
+                            verifier_calibration_payload.get("reasons")
+                        )
+                    ),
+                    *(
+                        str(item)
+                        for item in _optional_list(verifier_evidence.get("blockers"))
+                    ),
+                ]
+            )
+        )
     claim_readiness = build_claim_readiness(
         benchmark_plan=benchmark_plan.to_dict(),
         coverage_gate=portfolio_coverage.to_dict(),
         calibration_gate=calibration.to_dict(),
         report_coverage_gate=report_coverage.to_dict(),
-        verifier_calibration_gate=verifier_calibration.to_dict(),
+        verifier_calibration_gate=verifier_claim_gate,
     )
     claim_language = gate_claim_language(
         proposed_claim,
@@ -247,6 +291,7 @@ def build_publication_bundle(
         and report_coverage.claim_ready
         and leakage_audit["complete"] is True
         and artifacts["complete"] is True
+        and verifier_evidence["ready"] is True
         and product_surface_gate["ready"] is True
         and product_smoke_gate["ready"] is True
         and runtime_delegation_gate["ready"] is True
@@ -263,7 +308,8 @@ def build_publication_bundle(
         "portfolio_coverage": portfolio_coverage.to_dict(),
         "calibration": calibration.to_dict(),
         "report_coverage": report_coverage.to_dict(),
-        "verifier_calibration": verifier_calibration.to_dict(),
+        "verifier_calibration": verifier_calibration_payload,
+        "verifier_evidence": verifier_evidence,
         "claim_readiness": claim_readiness.to_dict(),
         "claim_language_gate": claim_language.to_dict(),
         "conditions": _json_value(report.get("conditions", [])),
@@ -298,6 +344,7 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
     runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
+    verifier_evidence = _optional_mapping(bundle.get("verifier_evidence"))
 
     task_count = _int_or_zero(validation.get("task_count"))
     min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
@@ -341,6 +388,10 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "runtime_delegation_ready": runtime_delegation.get("ready") is True,
         "runtime_delegation_blockers": list(
             _string_list(runtime_delegation.get("blockers"))
+        ),
+        "verifier_evidence_ready": verifier_evidence.get("ready") is True,
+        "verifier_evidence_blockers": list(
+            _string_list(verifier_evidence.get("blockers"))
         ),
         "coverage_fields_to_fill": [
             str(field.get("name"))
@@ -485,6 +536,108 @@ def index_raw_artifacts(
     }
 
 
+def gate_verifier_evidence(
+    artifact: Mapping[str, object] | None,
+    *,
+    expected: Mapping[str, object],
+) -> dict[str, object]:
+    """Bind publication to a frozen calibration artifact and required controls."""
+
+    if artifact is None:
+        return {
+            "schema_version": "onmc-verifier-evidence-gate/v1",
+            "ready": False,
+            "evaluated": False,
+            "artifact_sha256": None,
+            "expected_sha256": _canonical_digest(expected),
+            "artifact_matches_live_calibration": False,
+            "independent_source_repositories": 0,
+            "false_green_controls": [],
+            "missing_false_green_controls": sorted(_REQUIRED_FALSE_GREEN_CONTROLS),
+            "protected_suite_controls_ready": False,
+            "mutation_controls_ready": False,
+            "prose_only_completion_rejected": False,
+            "true_fix_controls_ready": False,
+            "blockers": ["verifier calibration artifact was not provided"],
+        }
+
+    blockers: list[str] = []
+    artifact_digest = _canonical_digest(artifact)
+    expected_digest = _canonical_digest(expected)
+    matches = artifact_digest == expected_digest
+    if not matches:
+        blockers.append(
+            "verifier calibration artifact does not match current corpus and adjudicator"
+        )
+    if artifact.get("corpus_kind") != "external-frozen":
+        blockers.append("verifier calibration artifact must use the frozen external corpus")
+    corpus_sha = artifact.get("corpus_sha256")
+    if not isinstance(corpus_sha, str) or len(corpus_sha) != 64:
+        blockers.append("verifier calibration artifact lacks a valid corpus digest")
+
+    cases = _optional_mapping_list(artifact.get("cases"))
+    false_green = [
+        case for case in cases if case.get("expected_label") == "false-green"
+    ]
+    true_fix = [case for case in cases if case.get("expected_label") == "true-fix"]
+    caught_controls = {
+        str(case.get("attack_class"))
+        for case in false_green
+        if case.get("predicted_false_green") is True and case.get("correct") is True
+    }
+    missing_controls = sorted(_REQUIRED_FALSE_GREEN_CONTROLS - caught_controls)
+    if missing_controls:
+        blockers.append(
+            "verifier calibration missing caught false-green control(s): "
+            + ", ".join(missing_controls)
+        )
+
+    repositories = {
+        str(case.get("source_repository"))
+        for case in cases
+        if _non_empty_string(case.get("source_repository"))
+    }
+    if len(repositories) < 2:
+        blockers.append("verifier calibration requires multiple independent repositories")
+
+    protected_controls = {
+        "assertion-weakening",
+        "fixture-tampering",
+        "skip-injection",
+        "test-deletion",
+        "vacuous-test",
+        "verifier-narrowing",
+    }
+    mutation_controls = {"surviving-critical-mutant", "ungraded-mutation"}
+    protected_ready = protected_controls <= caught_controls
+    mutation_ready = mutation_controls <= caught_controls
+    prose_rejected = "agent-only-completion" in caught_controls
+    true_fix_ready = bool(true_fix) and all(
+        case.get("predicted_false_green") is False and case.get("correct") is True
+        for case in true_fix
+    )
+    if not true_fix_ready:
+        blockers.append("verifier calibration lacks passing true-fix controls")
+
+    blockers = list(dict.fromkeys(blockers))
+    return {
+        "schema_version": "onmc-verifier-evidence-gate/v1",
+        "ready": not blockers,
+        "evaluated": True,
+        "artifact_sha256": artifact_digest,
+        "expected_sha256": expected_digest,
+        "artifact_matches_live_calibration": matches,
+        "independent_source_repositories": len(repositories),
+        "false_green_controls": sorted(caught_controls),
+        "missing_false_green_controls": missing_controls,
+        "protected_suite_controls_ready": protected_ready,
+        "mutation_controls_ready": mutation_ready,
+        "prose_only_completion_rejected": prose_rejected,
+        "true_fix_controls_ready": true_fix_ready,
+        "blockers": blockers,
+    }
+
+
 def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     """Render the publication bundle as a compact, deterministic evidence report."""
 
@@ -500,6 +653,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
     runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
+    verifier_evidence = _optional_mapping(bundle.get("verifier_evidence"))
 
     lines = [
         "# ONMC External Benchmark Evidence Report",
@@ -575,6 +729,22 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
             f"{artifacts.get('usable_cells', 0)}`",
             f"- missing entries: `{len(_optional_list(artifacts.get('missing')))}`",
             "",
+            "## Verifier Evidence",
+            "",
+            f"- status: `{'READY' if verifier_evidence.get('ready') is True else 'INCOMPLETE'}`",
+            f"- artifact matches live calibration: "
+            f"`{str(verifier_evidence.get('artifact_matches_live_calibration', False)).lower()}`",
+            f"- independent source repositories: "
+            f"`{verifier_evidence.get('independent_source_repositories', 0)}`",
+            f"- protected-suite controls: "
+            f"`{str(verifier_evidence.get('protected_suite_controls_ready', False)).lower()}`",
+            f"- mutation controls: "
+            f"`{str(verifier_evidence.get('mutation_controls_ready', False)).lower()}`",
+            f"- prose-only completion rejected: "
+            f"`{str(verifier_evidence.get('prose_only_completion_rejected', False)).lower()}`",
+            f"- true-fix controls: "
+            f"`{str(verifier_evidence.get('true_fix_controls_ready', False)).lower()}`",
+            "",
             "## Product Surface",
             "",
             f"- status: `{'READY' if product_surface.get('ready') is True else 'INCOMPLETE'}`",
@@ -624,6 +794,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     blockers.extend(str(item) for item in _optional_list(product_surface.get("blockers")))
     blockers.extend(str(item) for item in _optional_list(product_smoke.get("blockers")))
     blockers.extend(str(item) for item in _optional_list(runtime_delegation.get("blockers")))
+    blockers.extend(str(item) for item in _optional_list(verifier_evidence.get("blockers")))
     fields = _optional_list(report_coverage.get("fields"))
     blockers.extend(
         f"report coverage missing {item.get('name')}: {item.get('reason')}"

@@ -37,6 +37,7 @@ is valid but the U14 publication requirements are not met.
 .venv/bin/python scripts/generate_benchmark_report.py \
   datasets/experiment/reports/external_v3_stage1_2026-07-25.json \
   --manifest datasets/experiment/portfolio_external_v4.json \
+  --verifier-calibration docs/evidence/verifier_external_v2_report.json \
   --json-out /tmp/onmc-sota-report.json \
   --markdown-out /tmp/onmc-sota-report.md \
   --artifact-index-out /tmp/onmc-raw-artifacts.json
@@ -54,6 +55,10 @@ diff -u docs/evidence/raw-artifacts.json /tmp/onmc-raw-artifacts.json
 The raw-artifact index is intentionally incomplete until every usable cell
 provides both `trajectory_path` and `verifier_path` under the declared artifact
 root. Paths that escape that root are rejected.
+
+The verifier calibration artifact is content-bound to the current frozen corpus
+and adjudicator. Missing, stale, tampered, prose-only, protected-suite weakening,
+or mutation-control evidence keeps the publication bundle fail-closed.
 
 ## 3. Exercise the external claim gate
 

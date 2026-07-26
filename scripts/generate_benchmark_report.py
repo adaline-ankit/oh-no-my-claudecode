@@ -30,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claim", default=_DEFAULT_CLAIM)
     parser.add_argument("--product-smoke", type=Path, default=None)
     parser.add_argument("--runtime-delegation", type=Path, default=None)
+    parser.add_argument("--verifier-calibration", type=Path, default=None)
     parser.add_argument("--json-out", type=Path, default=None)
     parser.add_argument("--markdown-out", type=Path, default=None)
     parser.add_argument("--artifact-index-out", type=Path, default=None)
@@ -53,6 +54,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.runtime_delegation is not None
         else None
     )
+    verifier_calibration = (
+        _load_object(args.verifier_calibration, "verifier calibration")
+        if args.verifier_calibration is not None
+        else None
+    )
     bundle = build_publication_bundle(
         report,
         manifest,
@@ -61,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         product_surface=_live_product_surface(),
         product_smoke=product_smoke,
         runtime_delegation=runtime_delegation,
+        verifier_calibration_artifact=verifier_calibration,
     )
     rendered_json = json.dumps(bundle, indent=2, sort_keys=True) + "\n"
     rendered_markdown = render_publication_markdown(bundle)
