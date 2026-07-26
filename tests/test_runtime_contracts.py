@@ -817,6 +817,34 @@ def test_runtime_contract_exposes_pre_execution_capability_manifest(
     )
 
 
+def test_runtime_contract_exposes_environment_snapshot(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=HarnessController(tmp_path).dependencies.context_engine,
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+    )
+    plan = HarnessController(tmp_path, dependencies=dependencies).run(
+        RunRequest(task="Fix reproducibly", plan_only=True)
+    ).plan
+
+    spec = plan.to_run_spec()
+    snapshot = spec.metadata["environment_snapshot"]
+
+    assert snapshot == plan.environment_snapshot.to_dict()
+    assert snapshot["repo_root"] == str(tmp_path.resolve())
+    assert snapshot["git_available"] is False
+    assert snapshot["git_head"] is None
+    assert snapshot["git_dirty"] is None
+    assert isinstance(snapshot["python_version"], str)
+    assert isinstance(snapshot["onmc_version"], str)
+    assert all(
+        node.metadata["environment_snapshot"] == snapshot
+        for node in spec.nodes
+    )
+
+
 def _completion_evidence(node: NodeSpec) -> tuple[EvidenceRef, ...]:
     return (
         EvidenceRef(

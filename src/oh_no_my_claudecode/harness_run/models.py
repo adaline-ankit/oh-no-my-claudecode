@@ -24,6 +24,7 @@ from oh_no_my_claudecode.runtime.contracts import (
 
 from .capabilities import ExecutionCapabilityManifest
 from .context_selection import ContextSelectionManifest
+from .environment import EnvironmentSnapshot
 from .isolation import IsolationProfile
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
@@ -133,6 +134,7 @@ class ExecutionPlan:
     policy_decisions: tuple[PolicyDecisionRecord, ...]
     isolation_profile: IsolationProfile
     capability_manifest: ExecutionCapabilityManifest
+    environment_snapshot: EnvironmentSnapshot
     state_path: str
     schema_version: str = "1"
 
@@ -144,6 +146,7 @@ class ExecutionPlan:
         isolation = self.isolation_profile.to_dict()
         context_selection = self.context_selection.to_dict()
         capability_manifest = self.capability_manifest.to_dict()
+        environment = self.environment_snapshot.to_dict()
         nodes = tuple(
             NodeSpec(
                 node_id=node.node_id,
@@ -176,6 +179,7 @@ class ExecutionPlan:
                     "isolation_profile": isolation,
                     "context_selection": context_selection,
                     "capability_manifest": capability_manifest,
+                    "environment_snapshot": environment,
                     "risk": self.dag.risk.value,
                     "verifier": node.policy.verifier,
                 },
@@ -194,6 +198,7 @@ class ExecutionPlan:
                 "isolation_profile": isolation,
                 "context_selection": context_selection,
                 "capability_manifest": capability_manifest,
+                "environment_snapshot": environment,
             },
         )
 
@@ -208,6 +213,7 @@ class ExecutionPlan:
             "policy_decisions": [item.to_dict() for item in self.policy_decisions],
             "isolation_profile": self.isolation_profile.to_dict(),
             "capability_manifest": self.capability_manifest.to_dict(),
+            "environment_snapshot": self.environment_snapshot.to_dict(),
             "state_path": self.state_path,
             "resume": {
                 "supported": True,
@@ -351,6 +357,13 @@ class HarnessResult:
                 f"secrets_scoped="
                 f"{str(self.plan.capability_manifest.secrets_scoped).lower()}, "
                 f"max_cost={self.plan.capability_manifest.max_cost_usd}"
+            ),
+            (
+                "Environment: "
+                f"git_head={self.plan.environment_snapshot.git_head or 'n/a'}, "
+                f"branch={self.plan.environment_snapshot.git_branch or 'n/a'}, "
+                f"dirty={self.plan.environment_snapshot.git_dirty}, "
+                f"onmc={self.plan.environment_snapshot.onmc_version}"
             ),
         ]
         if self.status is not HarnessStatus.PLANNED:

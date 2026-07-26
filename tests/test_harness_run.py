@@ -120,9 +120,13 @@ def test_plan_only_never_executes_agent_and_is_deterministic(tmp_path: Path) -> 
         "policy_decisions",
         "isolation_profile",
         "capability_manifest",
+        "environment_snapshot",
         "state_path",
         "resume",
     }
+    assert first.plan.environment_snapshot.repo_root == str(tmp_path.resolve())
+    assert first.plan.environment_snapshot.git_available is False
+    assert first.plan.environment_snapshot.git_head is None
     assert not Path(first.plan.state_path).exists()
 
 
@@ -433,9 +437,9 @@ def test_isolated_execution_binds_agent_and_verifier_to_worktree(
     assert seen["loop_root"] == isolated
     assert seen["loop_isolate"] is False
     assert seen["teardown"] == (isolated, True)
-    assert subprocess_calls[0][0] == ["pytest", "-q"]
-    assert subprocess_calls[0][1]["cwd"] == isolated
-    assert "shell" not in subprocess_calls[0][1]
+    verifier_call = next(call for call in subprocess_calls if call[0] == ["pytest", "-q"])
+    assert verifier_call[1]["cwd"] == isolated
+    assert "shell" not in verifier_call[1]
     assert result.worktree_path == str(isolated)
 
 

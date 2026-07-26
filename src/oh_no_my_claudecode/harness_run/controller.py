@@ -77,6 +77,7 @@ from .capabilities import execution_capability_manifest
 from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
 from .context_selection import context_selection_manifest
+from .environment import environment_snapshot
 from .isolation import isolation_profile
 from .models import (
     ExecutionPlan,
@@ -568,6 +569,7 @@ class HarnessController:
             max_cost_usd=request.max_cost_usd,
             isolation=isolation,
         )
+        environment = environment_snapshot(self.repo_root)
         return ExecutionPlan(
             run_id=run_id,
             dag=dag,
@@ -577,6 +579,7 @@ class HarnessController:
             policy_decisions=decisions,
             isolation_profile=isolation,
             capability_manifest=capability_manifest,
+            environment_snapshot=environment,
             state_path=state_path_for(self.dependencies.runtime_store.root, run_id),
         )
 

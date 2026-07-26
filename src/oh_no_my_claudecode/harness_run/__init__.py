@@ -13,6 +13,7 @@ from .controller import (
     PolicyDecider,
     default_dependencies,
 )
+from .environment import EnvironmentSnapshot, environment_snapshot
 from .isolation import IsolationProfile, isolation_profile
 from .models import (
     AgentName,
@@ -63,6 +64,7 @@ __all__ = [
     "ContextSelectionManifest",
     "ExecutionCapabilityManifest",
     "ExecutionPlan",
+    "EnvironmentSnapshot",
     "HarnessController",
     "HarnessResult",
     "HarnessRunReceipt",
@@ -89,6 +91,7 @@ __all__ = [
     "evaluate_run_policy",
     "execute_stage",
     "execution_capability_manifest",
+    "environment_snapshot",
     "evaluate_completion_gate",
     "harness_receipt_path",
     "injection_findings",
