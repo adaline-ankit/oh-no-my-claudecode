@@ -27,7 +27,12 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 from oh_no_my_claudecode.trace.models import TraceEvent, TraceSession
 
@@ -37,6 +42,10 @@ from oh_no_my_claudecode.trace.models import TraceEvent, TraceSession
 
 _TRACES_DIR_NAME = "traces"
 _CURRENT_FILE_NAME = "current"
+_CURRENT_SPAN_ID: ContextVar[str | None] = ContextVar(
+    "onmc_current_trace_span_id",
+    default=None,
+)
 
 
 def _traces_dir(repo_root: Path) -> Path:
@@ -54,6 +63,98 @@ def _session_file(repo_root: Path, session_id: str) -> Path:
 def _new_session_id() -> str:
     """Generate a short random session identifier."""
     return "tr_" + secrets.token_hex(8)
+
+
+def _new_span_id() -> str:
+    """Generate a process-local logical span identifier."""
+    return "sp_" + secrets.token_hex(8)
+
+
+@dataclass(slots=True)
+class TraceSpan:
+    """Mutable handle for adding measured metadata before a span closes."""
+
+    span_id: str
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def set_attribute(self, key: str, value: object) -> None:
+        """Attach one observed attribute to the eventual trace event."""
+        self.payload[key] = value
+
+    def set_usage(
+        self,
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        cache_read_input_tokens: int | None = None,
+        cache_creation_input_tokens: int | None = None,
+        cost_usd: float | None = None,
+    ) -> None:
+        """Attach provider-reported usage without deriving missing values."""
+        observed = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_input_tokens": cache_read_input_tokens,
+            "cache_creation_input_tokens": cache_creation_input_tokens,
+            "cost_usd": cost_usd,
+        }
+        self.payload.update({key: value for key, value in observed.items() if value is not None})
+
+
+def current_span_id() -> str | None:
+    """Return the logical parent span active in this execution context."""
+    return _CURRENT_SPAN_ID.get()
+
+
+@contextmanager
+def trace_parent(span_id: str) -> Iterator[None]:
+    """Make *span_id* the parent for trace events recorded in this context."""
+    token = _CURRENT_SPAN_ID.set(span_id)
+    try:
+        yield
+    finally:
+        _CURRENT_SPAN_ID.reset(token)
+
+
+@contextmanager
+def trace_span(
+    repo_root: Path,
+    kind: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    span_id: str | None = None,
+    parent_span_id: str | None = None,
+) -> Iterator[TraceSpan]:
+    """Record a real-duration nested span around a synchronous operation.
+
+    The helper never estimates timing or usage.  Callers attach only values
+    observed from the provider or operation through the yielded handle.
+    """
+    started_at = time.time()
+    logical_span_id = span_id or _new_span_id()
+    resolved_parent = parent_span_id or current_span_id()
+    handle = TraceSpan(span_id=logical_span_id, payload=dict(payload or {}))
+    try:
+        with trace_parent(logical_span_id):
+            yield handle
+    except Exception as exc:
+        handle.payload.setdefault("error_type", type(exc).__name__)
+        handle.payload.setdefault("status", "error")
+        raise
+    finally:
+        ended_at = time.time()
+        handle.payload["end_ts"] = ended_at
+        handle.payload["duration_seconds"] = max(0.0, ended_at - started_at)
+        record_trace_event(
+            repo_root,
+            TraceEvent(
+                kind=kind,
+                ts=started_at,
+                payload=handle.payload,
+                span_id=logical_span_id,
+                parent_span_id=resolved_parent,
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +257,8 @@ def record_trace_event(repo_root: Path, event: TraceEvent) -> None:
         The ``TraceEvent`` to append.
     """
     try:
+        if event.parent_span_id is None and current_span_id() is not None:
+            event = replace(event, parent_span_id=current_span_id())
         curr_file = _current_file(repo_root)
         if not curr_file.exists():
             return

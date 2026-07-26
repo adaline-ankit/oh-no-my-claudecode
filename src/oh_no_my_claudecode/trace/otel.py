@@ -10,14 +10,16 @@ any OTLP-compatible backend or inspect manually.
 
 Key attributes used
 -------------------
-- ``gen_ai.system``          — "onmc"
+- ``gen_ai.system``          — legacy compatibility marker "onmc"
+- ``gen_ai.provider.name``   — measured provider identity when available
 - ``gen_ai.operation.name``  — mapped from ``TraceEventKind``
 - ``gen_ai.usage.input_tokens`` / ``gen_ai.usage.output_tokens``
+- ``gen_ai.usage.cache_*``   — measured cache-token fields when available
 - ``onmc.tool``              — tool name for tool_call events
-- ``onmc.target``            — file path / query for read/search events
+- ``onmc.content.*``         — opt-in redacted content only
 - ``onmc.session_id``        — parent session identifier
-- ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
-- ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
+- ``onmc.usage.complete`` / ``onmc.cost.complete`` — explicit coverage markers
+- ``onmc.duration.complete`` — false when no measured end time was recorded
 - ``onmc.runtime.*``         — runtime graph/run/node attributes for runtime events
 - ``traceId`` / ``spanId``   — deterministic OTLP correlation identifiers
 - ``parentSpanId``           — runtime_node parent run span when runtime_run is present
@@ -28,7 +30,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
+import re
+from dataclasses import dataclass
 from typing import Any
 
 from oh_no_my_claudecode.trace.models import (
@@ -43,14 +46,20 @@ _GEN_AI_SYSTEM = "onmc"
 _OPERATION_MAP: dict[str, str] = {
     TraceEventKind.TOOL_CALL: "execute_tool",
     TraceEventKind.TOOL_FAILURE: "execute_tool",
+    TraceEventKind.MODEL_CALL: "chat",
+    TraceEventKind.RETRIEVAL: "retrieval",
+    TraceEventKind.VERIFIER: "verify",
+    TraceEventKind.POLICY_DECISION: "policy",
+    TraceEventKind.ROUTE_DECISION: "route",
+    TraceEventKind.PROMOTION_DECISION: "promote",
     TraceEventKind.RUNTIME_RUN: "invoke_agent",
     TraceEventKind.RUNTIME_NODE: "execute_agent",
-    TraceEventKind.FILE_READ: "retrieve",
-    TraceEventKind.SEARCH_QUERY: "retrieve",
+    TraceEventKind.FILE_READ: "retrieval",
+    TraceEventKind.SEARCH_QUERY: "retrieval",
     TraceEventKind.TOKENS: "chat",
-    TraceEventKind.MEMORY_HIT: "retrieve",
-    TraceEventKind.MEMORY_MISS: "retrieve",
-    TraceEventKind.RECALL_SURFACED: "retrieve",
+    TraceEventKind.MEMORY_HIT: "retrieval",
+    TraceEventKind.MEMORY_MISS: "retrieval",
+    TraceEventKind.RECALL_SURFACED: "retrieval",
     TraceEventKind.DANGER_BLOCKED: "execute_tool",
     TraceEventKind.MEMORY_CAPTURED: "create",
     TraceEventKind.SKILL_PROMOTED: "create",
@@ -62,6 +71,46 @@ _STATUS_ERROR = {"code": 2}  # OTEL StatusCode.ERROR
 _STATUS_OK = {"code": 1}  # OTEL StatusCode.OK
 _ERROR_RUNTIME_NODE_STATUSES = frozenset({"cancelled", "failed", "skipped"})
 _ERROR_RUNTIME_RUN_STATUSES = frozenset({"cancelled", "failed"})
+_USAGE_EVENT_KINDS = frozenset({TraceEventKind.MODEL_CALL, TraceEventKind.TOKENS})
+_CONTENT_KEYS = frozenset(
+    {
+        "arguments",
+        "content",
+        "detail",
+        "error",
+        "objective",
+        "output",
+        "prompt",
+        "query",
+        "result",
+        "target",
+        "title",
+        "tool_input",
+        "tool_output",
+    }
+)
+_DEFAULT_REDACTION_PATTERNS = (
+    r"(?i)\b(?:authorization\s*:\s*)?bearer\s+[A-Za-z0-9._~+/=-]+",
+    r"(?i)\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+",
+    r"\b(?:sk|xox[baprs])-[A-Za-z0-9_-]{8,}\b",
+    r"/Users/[^/\s]+",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class TelemetryPrivacy:
+    """Privacy policy applied before trace content leaves the process."""
+
+    capture_content: bool = False
+    redaction_text: str = "[REDACTED]"
+    redaction_patterns: tuple[str, ...] = _DEFAULT_REDACTION_PATTERNS
+
+    def redact(self, value: object) -> str:
+        """Render *value* and replace common credential and local-path forms."""
+        rendered = str(value)
+        for pattern in self.redaction_patterns:
+            rendered = re.sub(pattern, self.redaction_text, rendered)
+        return rendered
 
 
 def _ns(ts_seconds: float) -> int:
@@ -74,17 +123,22 @@ def _span_from_event(
     *,
     session_id: str,
     index: int = 0,
+    privacy: TelemetryPrivacy,
 ) -> dict[str, Any]:
     """Build an OTLP JSON span dict from a single ``TraceEvent``."""
     kind = event.kind
     operation = _OPERATION_MAP.get(kind, "chat")
-    span_status = _span_status(event)
+    span_status = _span_status(event, privacy=privacy)
 
     attributes: list[dict[str, Any]] = [
         {"key": "gen_ai.system", "value": {"stringValue": _GEN_AI_SYSTEM}},
         {"key": "gen_ai.operation.name", "value": {"stringValue": operation}},
         {"key": "onmc.session_id", "value": {"stringValue": session_id}},
         {"key": "onmc.event_kind", "value": {"stringValue": kind}},
+        {
+            "key": "onmc.content.capture_enabled",
+            "value": {"boolValue": privacy.capture_content},
+        },
     ]
 
     payload = event.payload
@@ -94,17 +148,13 @@ def _span_from_event(
         attributes.append(
             {"key": "onmc.tool", "value": {"stringValue": str(payload["tool"])}}
         )
-    if "target" in payload:
-        attributes.append(
-            {"key": "onmc.target", "value": {"stringValue": str(payload["target"])}}
-        )
-    attributes.extend(_token_usage_attributes(payload))
-    if payload.get("title"):
-        attributes.append(
-            {"key": "onmc.title", "value": {"stringValue": str(payload["title"])}}
-        )
-    attributes.extend(_runtime_run_attributes(event))
-    attributes.extend(_runtime_node_attributes(event))
+    _append_string_attribute(attributes, "gen_ai.provider.name", payload.get("provider"))
+    _append_string_attribute(attributes, "gen_ai.request.model", payload.get("model"))
+    attributes.extend(_token_usage_attributes(event))
+    attributes.extend(_cost_attributes(event))
+    attributes.extend(_content_attributes(payload, privacy=privacy))
+    attributes.extend(_runtime_run_attributes(event, privacy=privacy))
+    attributes.extend(_runtime_node_attributes(event, privacy=privacy))
 
     return {
         "traceId": _trace_id(session_id),
@@ -124,6 +174,8 @@ def _trace_id(session_id: str) -> str:
 
 
 def _span_id(session_id: str, index: int, event: TraceEvent) -> str:
+    if event.span_id is not None:
+        return _logical_span_id(session_id, event.span_id)
     material = {
         "kind": event.kind,
         "payload": event.payload,
@@ -141,8 +193,15 @@ def _span_id(session_id: str, index: int, event: TraceEvent) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
+def _logical_span_id(session_id: str, logical_span_id: str) -> str:
+    material = f"onmc-span:{session_id}:{logical_span_id}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
+
+
 def _event_is_error(event: TraceEvent) -> bool:
     if event.kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED):
+        return True
+    if str(event.payload.get("status", "")).lower() in {"error", "failed"}:
         return True
     if event.kind == TraceEventKind.RUNTIME_RUN:
         return str(event.payload.get("status", "")).lower() in _ERROR_RUNTIME_RUN_STATUSES
@@ -151,17 +210,21 @@ def _event_is_error(event: TraceEvent) -> bool:
     return False
 
 
-def _span_status(event: TraceEvent) -> dict[str, Any]:
+def _span_status(event: TraceEvent, *, privacy: TelemetryPrivacy) -> dict[str, Any]:
     if not _event_is_error(event):
         return _STATUS_OK
     status: dict[str, Any] = dict(_STATUS_ERROR)
     message = event.payload.get("error") or event.payload.get("title")
-    if message:
-        status["message"] = str(message)
+    if message and privacy.capture_content:
+        status["message"] = privacy.redact(message)
     return status
 
 
-def _runtime_run_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+def _runtime_run_attributes(
+    event: TraceEvent,
+    *,
+    privacy: TelemetryPrivacy,
+) -> list[dict[str, Any]]:
     if event.kind != TraceEventKind.RUNTIME_RUN:
         return []
     payload = event.payload
@@ -169,7 +232,12 @@ def _runtime_run_attributes(event: TraceEvent) -> list[dict[str, Any]]:
     _append_string_attribute(attributes, "onmc.runtime.backend", payload.get("backend"))
     _append_string_attribute(attributes, "onmc.runtime.run_id", payload.get("run_id"))
     _append_string_attribute(attributes, "onmc.runtime.run.status", payload.get("status"))
-    _append_string_attribute(attributes, "onmc.runtime.run.error", payload.get("error"))
+    if privacy.capture_content and payload.get("error") is not None:
+        _append_string_attribute(
+            attributes,
+            "onmc.runtime.run.error",
+            privacy.redact(payload["error"]),
+        )
     _append_string_attribute(
         attributes,
         "onmc.runtime.run.spec_digest",
@@ -263,7 +331,11 @@ def _append_node_status_count_attributes(
         )
 
 
-def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+def _runtime_node_attributes(
+    event: TraceEvent,
+    *,
+    privacy: TelemetryPrivacy,
+) -> list[dict[str, Any]]:
     if event.kind != TraceEventKind.RUNTIME_NODE:
         return []
     payload = event.payload
@@ -273,7 +345,12 @@ def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
     _append_string_attribute(attributes, "onmc.runtime.node_id", payload.get("node_id"))
     _append_string_attribute(attributes, "onmc.runtime.node.kind", payload.get("node_kind"))
     _append_string_attribute(attributes, "onmc.runtime.node.status", payload.get("status"))
-    _append_string_attribute(attributes, "onmc.runtime.node.error", payload.get("error"))
+    if privacy.capture_content and payload.get("error") is not None:
+        _append_string_attribute(
+            attributes,
+            "onmc.runtime.node.error",
+            privacy.redact(payload["error"]),
+        )
     _append_bool_attribute(
         attributes,
         "onmc.runtime.node.side_effecting",
@@ -321,11 +398,15 @@ def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
             "onmc.runtime.capabilities.tools",
             capabilities.get("tools"),
         )
-        _append_string_array_attribute(
-            attributes,
-            "onmc.runtime.capabilities.commands",
-            _command_strings(capabilities.get("commands")),
-        )
+        if privacy.capture_content:
+            _append_string_array_attribute(
+                attributes,
+                "onmc.runtime.capabilities.commands",
+                [
+                    privacy.redact(command)
+                    for command in _command_strings(capabilities.get("commands"))
+                ],
+            )
         _append_bool_attribute(
             attributes,
             "onmc.runtime.capabilities.filesystem_write",
@@ -366,7 +447,7 @@ def _span_times(event: TraceEvent) -> tuple[int, int, list[dict[str, Any]]]:
         return (
             start_ns,
             _ns(end_ts),
-            [{"key": "onmc.duration.estimated", "value": {"boolValue": False}}],
+            [{"key": "onmc.duration.complete", "value": {"boolValue": True}}],
         )
 
     duration_seconds = _optional_float(payload, "duration_seconds")
@@ -378,57 +459,108 @@ def _span_times(event: TraceEvent) -> tuple[int, int, list[dict[str, Any]]]:
         return (
             start_ns,
             start_ns + _ns(duration_seconds),
-            [{"key": "onmc.duration.estimated", "value": {"boolValue": False}}],
+            [{"key": "onmc.duration.complete", "value": {"boolValue": True}}],
         )
 
     return (
         start_ns,
-        start_ns + 1_000_000,
+        start_ns,
         [
-            {"key": "onmc.duration.estimated", "value": {"boolValue": True}},
+            {"key": "onmc.duration.complete", "value": {"boolValue": False}},
             {
-                "key": "onmc.duration.estimate_reason",
-                "value": {"stringValue": "instant_event_default_1ms"},
+                "key": "onmc.duration.incomplete_reason",
+                "value": {"stringValue": "end_time_not_recorded"},
             },
         ],
     )
 
 
-def _token_usage_attributes(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def _token_usage_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+    if event.kind not in _USAGE_EVENT_KINDS:
+        return []
+    payload = event.payload
     measured_input = _optional_int(payload, "input_tokens")
     measured_output = _optional_int(payload, "output_tokens")
-    if measured_input is not None or measured_output is not None:
-        attributes: list[dict[str, Any]] = [
-            {"key": "onmc.usage.estimated", "value": {"boolValue": False}}
-        ]
-        if measured_input is not None:
-            attributes.append(
-                {"key": "gen_ai.usage.input_tokens", "value": {"intValue": measured_input}}
-            )
-        if measured_output is not None:
-            attributes.append(
-                {"key": "gen_ai.usage.output_tokens", "value": {"intValue": measured_output}}
-            )
-        total = _optional_int(payload, "total")
-        if total is not None:
-            attributes.append({"key": "onmc.usage.total_tokens", "value": {"intValue": total}})
-        return attributes
-
+    cache_read = _optional_int(payload, "cache_read_input_tokens")
+    cache_creation = _optional_int(payload, "cache_creation_input_tokens")
+    reasoning_output = _optional_int(payload, "reasoning_output_tokens")
     total = _optional_int(payload, "total")
-    if total is None:
+    attributes: list[dict[str, Any]] = []
+    if measured_input is not None:
+        _append_int_attribute(attributes, "gen_ai.usage.input_tokens", measured_input)
+    if measured_output is not None:
+        _append_int_attribute(attributes, "gen_ai.usage.output_tokens", measured_output)
+    if cache_read is not None:
+        _append_int_attribute(
+            attributes,
+            "gen_ai.usage.cache_read.input_tokens",
+            cache_read,
+        )
+    if cache_creation is not None:
+        _append_int_attribute(
+            attributes,
+            "gen_ai.usage.cache_creation.input_tokens",
+            cache_creation,
+        )
+    if reasoning_output is not None:
+        _append_int_attribute(
+            attributes,
+            "gen_ai.usage.reasoning.output_tokens",
+            reasoning_output,
+        )
+    if total is not None:
+        _append_int_attribute(attributes, "onmc.usage.total_tokens", total)
+
+    complete = measured_input is not None and measured_output is not None
+    _append_bool_attribute(attributes, "onmc.usage.complete", complete)
+    if complete:
+        return attributes
+    if total is not None and measured_input is None and measured_output is None:
+        reason = "provider_reported_total_only"
+    elif measured_input is None and measured_output is None:
+        reason = "provider_did_not_report"
+    elif measured_input is None:
+        reason = "input_tokens_not_reported"
+    else:
+        reason = "output_tokens_not_reported"
+    _append_string_attribute(attributes, "onmc.usage.incomplete_reason", reason)
+    return attributes
+
+
+def _cost_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+    if event.kind not in _USAGE_EVENT_KINDS:
         return []
-    input_tokens = int(total * 0.6)
-    output_tokens = total - input_tokens
-    return [
-        {"key": "gen_ai.usage.input_tokens", "value": {"intValue": input_tokens}},
-        {"key": "gen_ai.usage.output_tokens", "value": {"intValue": output_tokens}},
-        {"key": "onmc.usage.total_tokens", "value": {"intValue": total}},
-        {"key": "onmc.usage.estimated", "value": {"boolValue": True}},
-        {
-            "key": "onmc.usage.estimate_reason",
-            "value": {"stringValue": "legacy_total_tokens_only"},
-        },
-    ]
+    cost = _optional_float(event.payload, "cost_usd")
+    attributes: list[dict[str, Any]] = []
+    _append_bool_attribute(attributes, "onmc.cost.complete", cost is not None)
+    if cost is None:
+        _append_string_attribute(
+            attributes,
+            "onmc.cost.incomplete_reason",
+            "provider_did_not_report",
+        )
+    else:
+        _append_float_attribute(attributes, "onmc.usage.cost_usd", cost)
+    return attributes
+
+
+def _content_attributes(
+    payload: dict[str, Any],
+    *,
+    privacy: TelemetryPrivacy,
+) -> list[dict[str, Any]]:
+    present = sorted(key for key in _CONTENT_KEYS if payload.get(key) is not None)
+    attributes: list[dict[str, Any]] = []
+    if not present:
+        return attributes
+    _append_bool_attribute(attributes, "onmc.content.redacted", True)
+    if not privacy.capture_content:
+        return attributes
+    for key in present:
+        value = privacy.redact(payload[key])
+        attribute_key = "onmc.target" if key == "target" else f"onmc.content.{key}"
+        _append_string_attribute(attributes, attribute_key, value)
+    return attributes
 
 
 def _optional_int(payload: dict[str, Any], key: str) -> int | None:
@@ -497,6 +629,20 @@ def _append_int_attribute(
     attributes.append({"key": key, "value": {"intValue": parsed}})
 
 
+def _append_float_attribute(
+    attributes: list[dict[str, Any]],
+    key: str,
+    value: object,
+) -> None:
+    if isinstance(value, bool):
+        return
+    try:
+        parsed = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return
+    attributes.append({"key": key, "value": {"doubleValue": parsed}})
+
+
 def _append_string_array_attribute(
     attributes: list[dict[str, Any]],
     key: str,
@@ -520,6 +666,7 @@ def to_otel_spans(
     source: TraceReport | list[TraceEvent],
     *,
     session_id: str = "",
+    privacy: TelemetryPrivacy | None = None,
 ) -> list[dict[str, Any]]:
     """Convert a report or event list to OTLP JSON span dicts.
 
@@ -531,81 +678,48 @@ def to_otel_spans(
     session_id:
         Used when *source* is a list of events.  Overrides the report's
         session_id when both are provided.
+    privacy:
+        Export privacy controls.  Content capture is disabled by default and
+        common credential/path forms remain redacted when explicitly enabled.
 
     Returns
     -------
     list[dict[str, Any]]
         One span dict per event.  Serialise with ``json.dumps`` for OTLP JSON.
     """
+    privacy_policy = privacy or TelemetryPrivacy()
     if isinstance(source, TraceReport):
         sid = session_id or source.session_id
+        # Aggregated reports contain no real event timestamps or hierarchy.
+        # Returning no spans is safer than fabricating telemetry.  Callers that
+        # need export fidelity must pass the raw recorded events.
         events: list[TraceEvent] = []
-        # Re-synthesise minimal events from the report's aggregated counters.
-        # Real events are not stored on TraceReport — callers who need full
-        # fidelity should pass the raw event list instead.
-        # We emit one summary span per metric category.
-        now = time.time()
-        if source.tool_calls > 0:
-            events.append(
-                TraceEvent(
-                    kind=TraceEventKind.TOOL_CALL,
-                    ts=now,
-                    payload={"total_calls": source.tool_calls, "tool": "summary"},
-                )
-            )
-        if source.tool_failures > 0:
-            events.append(
-                TraceEvent(
-                    kind=TraceEventKind.TOOL_FAILURE,
-                    ts=now,
-                    payload={"total_failures": source.tool_failures, "tool": "summary"},
-                )
-            )
-        if source.total_tokens > 0:
-            events.append(
-                TraceEvent(
-                    kind=TraceEventKind.TOKENS,
-                    ts=now,
-                    payload={
-                        "total": source.total_tokens,
-                        "est_without": source.est_tokens_without_onmc,
-                    },
-                )
-            )
-        if source.memory_hits > 0:
-            events.append(
-                TraceEvent(
-                    kind=TraceEventKind.MEMORY_HIT,
-                    ts=now,
-                    payload={"count": source.memory_hits},
-                )
-            )
-        if source.memory_misses > 0:
-            events.append(
-                TraceEvent(
-                    kind=TraceEventKind.MEMORY_MISS,
-                    ts=now,
-                    payload={"count": source.memory_misses},
-                )
-            )
     else:
         events = source
         sid = session_id
 
     spans = [
-        _span_from_event(ev, session_id=sid, index=index)
+        _span_from_event(
+            ev,
+            session_id=sid,
+            index=index,
+            privacy=privacy_policy,
+        )
         for index, ev in enumerate(events)
     ]
-    return _attach_runtime_dependency_links(events, spans)
+    return _attach_parentage_and_runtime_links(events, spans)
 
 
-def _attach_runtime_dependency_links(
+def _attach_parentage_and_runtime_links(
     events: list[TraceEvent],
     spans: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     runtime_run_spans: dict[str, dict[str, Any]] = {}
     runtime_node_spans: dict[tuple[str, str], dict[str, Any]] = {}
+    logical_spans: dict[str, dict[str, Any]] = {}
     for event, span in zip(events, spans, strict=True):
+        if event.span_id is not None:
+            logical_spans[event.span_id] = span
         if event.kind == TraceEventKind.RUNTIME_RUN:
             run_id = event.payload.get("run_id")
             if run_id is not None:
@@ -617,11 +731,15 @@ def _attach_runtime_dependency_links(
                 runtime_node_spans[(str(run_id), str(node_id))] = span
 
     for event, span in zip(events, spans, strict=True):
+        if event.parent_span_id is not None:
+            explicit_parent = logical_spans.get(event.parent_span_id)
+            if explicit_parent is not None:
+                span["parentSpanId"] = explicit_parent["spanId"]
         if event.kind != TraceEventKind.RUNTIME_NODE:
             continue
         run_id = event.payload.get("run_id")
         run_span = runtime_run_spans.get(str(run_id)) if run_id is not None else None
-        if run_span is not None:
+        if run_span is not None and "parentSpanId" not in span:
             span["parentSpanId"] = run_span["spanId"]
         dependencies = event.payload.get("dependencies")
         if run_id is None or not isinstance(dependencies, list | tuple):

@@ -42,6 +42,12 @@ class TraceEventKind(StrEnum):
     # --- trace-native ---
     TOOL_CALL = "tool_call"
     TOOL_FAILURE = "tool_failure"
+    MODEL_CALL = "model_call"
+    RETRIEVAL = "retrieval"
+    VERIFIER = "verifier"
+    POLICY_DECISION = "policy_decision"
+    ROUTE_DECISION = "route_decision"
+    PROMOTION_DECISION = "promotion_decision"
     RUNTIME_RUN = "runtime_run"
     RUNTIME_NODE = "runtime_node"
     FILE_READ = "file_read"
@@ -71,15 +77,30 @@ class TraceEvent:
         - ``query``     — for ``memory_hit`` / ``memory_miss``: lookup text.
         - ``title``     — for notify-sourced events: event title.
         - ``detail``    — for notify-sourced events: detail body.
+    span_id / parent_span_id:
+        Optional logical identifiers used to preserve explicit parent-child
+        relationships.  The OTLP exporter deterministically maps them to
+        protocol-sized hexadecimal span IDs.
     """
 
     kind: str
     ts: float = field(default_factory=time.time)
     payload: dict[str, Any] = field(default_factory=dict)
+    span_id: str | None = None
+    parent_span_id: str | None = None
 
     def to_record(self) -> dict[str, Any]:
         """Serialise to a JSONL-friendly dict."""
-        return {"kind": self.kind, "ts": self.ts, "payload": self.payload}
+        record: dict[str, Any] = {
+            "kind": self.kind,
+            "ts": self.ts,
+            "payload": self.payload,
+        }
+        if self.span_id is not None:
+            record["span_id"] = self.span_id
+        if self.parent_span_id is not None:
+            record["parent_span_id"] = self.parent_span_id
+        return record
 
     @classmethod
     def from_record(cls, record: dict[str, Any]) -> TraceEvent:
@@ -88,6 +109,8 @@ class TraceEvent:
             kind=str(record.get("kind", TraceEventKind.GENERIC)),
             ts=float(record.get("ts", time.time())),
             payload=dict(record.get("payload", {})),
+            span_id=_optional_string(record.get("span_id")),
+            parent_span_id=_optional_string(record.get("parent_span_id")),
         )
 
     @classmethod
@@ -106,7 +129,16 @@ class TraceEvent:
                 "detail": record.get("detail", ""),
                 "severity": record.get("severity", "routine"),
             },
+            span_id=_optional_string(record.get("span_id")),
+            parent_span_id=_optional_string(record.get("parent_span_id")),
         )
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+    rendered = str(value).strip()
+    return rendered or None
 
 
 @dataclass
