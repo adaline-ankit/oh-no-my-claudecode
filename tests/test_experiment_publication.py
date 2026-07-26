@@ -10,6 +10,11 @@ from oh_no_my_claudecode.experiment.publication import (
     render_publication_markdown,
     validate_benchmark_manifest,
 )
+from oh_no_my_claudecode.experiment.routing import (
+    RoutingArm,
+    RoutingTrial,
+    evaluate_routing,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 V4_MANIFEST = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.json"
@@ -198,6 +203,32 @@ def test_publication_report_fails_closed_without_runtime_delegation() -> None:
     assert bundle["runtime_delegation"]["blockers"] == [
         "runtime delegation audit was not provided"
     ]
+
+
+def test_publication_report_ingests_shadow_routing_evidence_without_claim() -> None:
+    routing = evaluate_routing(
+        [
+            RoutingTrial("task-a", RoutingArm.ALWAYS_STRONG, True, 0.50),
+            RoutingTrial("task-a", RoutingArm.TRAJECTORY, True, 0.30),
+        ]
+    )
+
+    bundle = build_publication_bundle(
+        _load(SATURATED_REPORT),
+        _load(V4_MANIFEST),
+        product_surface=_ready_product_surface(),
+        product_smoke=_ready_product_smoke(),
+        runtime_delegation=_ready_runtime_delegation(),
+        routing_evidence=routing.to_dict(),
+    )
+
+    gate = bundle["routing_evidence"]
+    assert isinstance(gate, dict)
+    assert gate["evaluated"] is True
+    assert gate["ready"] is False
+    assert gate["enforcement_enabled"] is False
+    assert "routing evidence is not claim-ready" in gate["blockers"]
+    assert bundle["publication_ready"] is False
 
 
 def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:

@@ -27,6 +27,7 @@ class ShadowRoutingDecision:
     observed_risk_score: int
     cost_learning_eligible: bool
     telemetry_status: tuple[str, ...]
+    observation: TrajectoryObservation
     advisory_only: bool = True
     enforced: bool = False
     preserve_worktree: bool = True
@@ -41,6 +42,7 @@ class ShadowRoutingDecision:
             "observed_risk_score": self.observed_risk_score,
             "cost_learning_eligible": self.cost_learning_eligible,
             "telemetry_status": list(self.telemetry_status),
+            "observed_trajectory": self.observation.to_dict(),
             "advisory_only": self.advisory_only,
             "enforced": self.enforced,
             "preserve_worktree": self.preserve_worktree,
@@ -203,6 +205,7 @@ class ShadowRoutingPolicy:
             observed_risk_score=risk_score,
             cost_learning_eligible=observation.cost_learning_eligible,
             telemetry_status=ShadowRoutingPolicy._telemetry_status(observation),
+            observation=observation,
         )
 
     @staticmethod
