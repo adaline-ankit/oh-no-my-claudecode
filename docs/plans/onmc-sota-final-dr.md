@@ -54,6 +54,17 @@ Current fan-out PRs:
    - status: merge conflict
    - action: update from main, resolve conflict, rerun focused tests, then
      merge before router if green
+4. [#416](https://github.com/adaline-ankit/oh-no-my-claudecode/pull/416)
+   `feat(cli): unify setup and task onboarding`
+   - lane: one-command UX
+   - status: CI running
+   - action: review after checks complete; merge late because it changes user
+     surface
+5. [#417](https://github.com/adaline-ankit/oh-no-my-claudecode/pull/417)
+   `feat(experiment): pin Harbor reproduction contract`
+   - lane: Harbor/repro benchmark
+   - status: CI queued/running
+   - action: review after checks complete; merge after verifier/router evidence
 
 Current main checks for `docs(evidence): add sota readiness audit`:
 
