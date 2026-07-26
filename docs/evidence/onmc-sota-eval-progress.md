@@ -135,6 +135,9 @@ This is evidence for a stronger harness foundation:
   shape (`instruction.md`, `task.toml`, `environment/Dockerfile`, `tests/test.sh`) while imported
   Harbor results must carry ATIF trajectory artifacts, verifier artifacts, reward/pass state, and
   measured metrics before becoming ONMC `TrialResult` rows.
+- ONMC can now export a bounded Harbor smoke bundle from a portfolio manifest and emit the exact
+  local Docker `harbor run` cells before execution. The smoke plan refuses cell counts over its hard
+  ceiling, so unscheduled or surprise benchmark cells cannot be launched silently.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -461,6 +464,63 @@ introduced by this Harbor-adapter slice.
 This is not yet the U7 Harbor smoke. It proves ONMC can export task bundles and reject incomplete
 Harbor trial imports locally. U7 still needs a real two-task Docker Harbor run and import of the
 result artifacts from Harbor's runtime output.
+
+## Harbor Smoke Plan Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harbor_adapter.py tests/test_experiment_contracts.py tests/test_experiment_kernel.py
+```
+
+Result:
+
+```text
+37 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/atif.py src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/import_harbor_results.py scripts/export_harbor_tasks.py tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment/atif.py src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/import_harbor_results.py scripts/export_harbor_tasks.py
+```
+
+Result:
+
+```text
+Success: no issues found in 4 source files
+```
+
+Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+`crewai`, `fastembed`, `langchain_community`, and `langchain_text_splitters`; these were not
+introduced by this Harbor-smoke-plan slice.
+
+Live export-plan command run against the v4 manifest:
+
+```text
+python scripts/export_harbor_tasks.py datasets/experiment/portfolio_external_v4.json --out /private/tmp/onmc-harbor-smoke --limit-tasks 2 --smoke-plan --max-cells 4
+```
+
+Observed result:
+
+```text
+task_count: 2
+task_names: onmc/six-bugfix-integer-types, onmc/tenacity-bugfix-find-ordinal
+conditions: bare-agent, onmc-current
+total_cells: 4
+budget_ready: true
+```
+
+This is still not the real Harbor runtime smoke. `harbor` was not installed in the local environment,
+so no Harbor job was launched and no Harbor runtime output was imported.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:

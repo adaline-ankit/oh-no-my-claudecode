@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import shlex
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,11 +24,13 @@ from oh_no_my_claudecode.experiment.portfolio import PortfolioManifest, TaskSpec
 
 __all__ = [
     "HarborExportSummary",
+    "HarborSmokePlan",
     "HarborTrialImport",
     "export_portfolio_to_harbor",
     "harbor_task_payload",
     "import_harbor_results",
     "import_harbor_trial",
+    "plan_harbor_smoke",
 ]
 
 
@@ -45,6 +47,33 @@ class HarborExportSummary:
             "root": str(self.root),
             "task_count": self.task_count,
             "task_names": list(self.task_names),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class HarborSmokePlan:
+    """A bounded local Harbor smoke plan before any paid/cloud benchmark."""
+
+    task_names: tuple[str, ...]
+    conditions: tuple[str, ...]
+    trials: int
+    total_cells: int
+    max_cells: int
+    commands: tuple[tuple[str, ...], ...]
+
+    @property
+    def budget_ready(self) -> bool:
+        return self.total_cells <= self.max_cells
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "task_names": list(self.task_names),
+            "conditions": list(self.conditions),
+            "trials": self.trials,
+            "total_cells": self.total_cells,
+            "max_cells": self.max_cells,
+            "budget_ready": self.budget_ready,
+            "commands": [list(command) for command in self.commands],
         }
 
 
@@ -118,6 +147,64 @@ def export_portfolio_to_harbor(
         root=output_root,
         task_count=len(task_names),
         task_names=tuple(task_names),
+    )
+
+
+def plan_harbor_smoke(
+    task_names: Sequence[str],
+    *,
+    output_root: Path,
+    conditions: Sequence[Condition] = (Condition.BARE_AGENT, Condition.ONMC_CURRENT),
+    trials: int = 1,
+    max_cells: int = 4,
+    agent: str = "oracle",
+    model: str = "local",
+) -> HarborSmokePlan:
+    """Build a no-cloud Harbor Docker smoke plan and enforce a hard cell budget."""
+
+    if not task_names:
+        raise ValueError("smoke plan needs at least one task")
+    if trials < 1:
+        raise ValueError("trials must be positive")
+    if max_cells < 1:
+        raise ValueError("max_cells must be positive")
+    if not agent.strip():
+        raise ValueError("agent must not be empty")
+    if not model.strip():
+        raise ValueError("model must not be empty")
+    condition_values = tuple(condition.value for condition in conditions)
+    total_cells = len(task_names) * len(condition_values) * trials
+    if total_cells > max_cells:
+        raise ValueError(
+            f"harbor smoke has {total_cells} cell(s), exceeding max_cells={max_cells}"
+        )
+    commands: list[tuple[str, ...]] = []
+    for task_name in task_names:
+        task_path = output_root / task_name
+        for condition in condition_values:
+            commands.append(
+                (
+                    "harbor",
+                    "run",
+                    "-p",
+                    str(task_path),
+                    "-a",
+                    agent,
+                    "-m",
+                    model,
+                    "--env",
+                    "docker",
+                    "--metadata",
+                    f"onmc_condition={condition}",
+                )
+            )
+    return HarborSmokePlan(
+        task_names=tuple(task_names),
+        conditions=condition_values,
+        trials=trials,
+        total_cells=total_cells,
+        max_cells=max_cells,
+        commands=tuple(commands),
     )
 
 
