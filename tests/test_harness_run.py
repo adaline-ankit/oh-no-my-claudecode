@@ -14,6 +14,7 @@ from oh_no_my_claudecode.config import default_config, write_config
 from oh_no_my_claudecode.context_engine import ContextEngine
 from oh_no_my_claudecode.durable_runtime import NodeState, RunState, RuntimeStore
 from oh_no_my_claudecode.harness_run import (
+    ChangeSet,
     ControllerDependencies,
     HarnessController,
     HarnessStatus,
@@ -59,6 +60,11 @@ class FakeLoop:
         return self.result
 
 
+def _observed_change(root: Path) -> ChangeSet:
+    del root
+    return ChangeSet(("src/example.py",), 4, "+ return 1\n")
+
+
 def _loop_result(*, converged: bool) -> LoopResult:
     return LoopResult(
         iterations=[
@@ -88,6 +94,7 @@ def _controller(
         runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
         policy_decider=policy or AllowPolicy(),
         loop_executor=loop,
+        changes_reader=_observed_change,
     )
     return HarnessController(tmp_path, dependencies=dependencies)
 
@@ -156,6 +163,25 @@ def test_successful_and_failing_fake_execution_are_reported_honestly(tmp_path: P
     assert failure.loop_converged is False
     assert failure.proof_complete is False
     assert failure.stop_reason == "max-iterations"
+
+
+def test_converged_loop_without_observed_change_is_not_complete(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=ContextEngine(),
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+        changes_reader=lambda root: ChangeSet.empty(),
+    )
+    controller = HarnessController(tmp_path, dependencies=dependencies)
+
+    result = controller.run(RunRequest(task="Claim success without changing code", execute=True))
+
+    assert result.status is HarnessStatus.FAILED
+    assert result.verified is False
+    assert result.proof_complete is False
+    assert "no observed working-tree change" in result.proof_reasons
 
 
 def test_resume_surface_returns_terminal_run_without_reexecution(tmp_path: Path) -> None:

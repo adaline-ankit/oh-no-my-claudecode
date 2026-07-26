@@ -57,6 +57,13 @@ the 44 existing harness tests are unchanged; 5 new wiring tests prove advisory
 recording, enforced-mode blocking (opt-in → `BLOCKED`, never verified), and a
 false-green downgrade. Enforced enforcement + real coverage/mutant adapters
 remain opt-in/next. Still `implemented`/`internal`.
+
+**Completion gate tightened (2026-07-26).** `onmc run` now applies one central
+runtime completion gate after execution. A run cannot complete from loop
+convergence, process exit, verifier output, or proof-graph status unless the
+controller also observes a non-vacuous repository change and no policy,
+approval, monitor, or independent false-green block. This directly targets the
+R5/R6 failure mode where an agent says "done" while the repository is unchanged.
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |

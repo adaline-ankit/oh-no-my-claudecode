@@ -73,6 +73,7 @@ from oh_no_my_claudecode.tool_broker import (
 from oh_no_my_claudecode.utils.time import utc_now
 
 from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
+from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
 from .models import (
     ExecutionPlan,
@@ -665,11 +666,6 @@ class HarnessController:
             signals = _verifier_signals(request, loop_result)
             verify_rec = verify_stage(signals)
 
-            proof_graph = _proof_graph(plan.dag.task, plan.proof_requirements[0].argv)
-            assessment, results, evidence = _assess_loop_proof(proof_graph, loop_result)
-            proof_receipt = ProofReceipt.build(proof_graph, assessment, results, evidence)
-            proof_rec = proof_stage(assessment, receipt_hash=proof_receipt.receipt_hash)
-
             policy_decision = evaluate_run_policy(
                 self.dependencies.run_policy,
                 changed_files=change_set.changed_files,
@@ -685,19 +681,19 @@ class HarnessController:
             enforcement_trace, monitor_block = self._run_reference_monitor(request, change_set)
             verifier_false_green = self._verifier_false_green(request, signals, change_set)
 
-            # Proof is complete only when it is complete AND not false-green — as
-            # judged by the proof graph OR the independent verifier.
-            proof_complete = (
-                loop_result.converged
-                and assessment.complete
-                and not assessment.false_green
-                and not verifier_false_green
+            proof_graph = _proof_graph(plan.dag.task, plan.proof_requirements[0].argv)
+            base_assessment, results, evidence = _assess_loop_proof(proof_graph, loop_result)
+            proof_receipt = ProofReceipt.build(proof_graph, base_assessment, results, evidence)
+            gate = evaluate_completion_gate(
+                loop_converged=loop_result.converged,
+                changed_files=change_set.changed_files,
+                verifier_signals=signals,
+                proof=base_assessment,
+                policy=policy_decision,
+                monitor_blocked=monitor_block,
+                verifier_false_green=verifier_false_green,
             )
-            policy_ok = (
-                policy_decision.allowed
-                and not policy_decision.approvals_required
-                and not monitor_block
-            )
+            proof_rec = proof_stage(gate.assessment, receipt_hash=proof_receipt.receipt_hash)
 
             if not loop_result.converged:
                 store.fail_node(
@@ -724,11 +720,11 @@ class HarnessController:
                         learn_rec,
                     ),
                     policy=policy_decision,
-                    assessment=assessment,
+                    assessment=gate.assessment,
                     loop_converged=False,
                     proof_complete=False,
                     stop_reason=loop_result.stop_reason,
-                    proof_reasons=assessment.reasons,
+                    proof_reasons=gate.proof_reasons,
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
@@ -740,7 +736,7 @@ class HarnessController:
                 NodeKind.EXECUTE.value,
                 idempotency_key="node:execute:complete",
             )
-            if not proof_complete:
+            if not gate.proof_complete:
                 store.start_node(
                     plan.run_id,
                     NodeKind.VERIFY.value,
@@ -770,18 +766,18 @@ class HarnessController:
                         learn_rec,
                     ),
                     policy=policy_decision,
-                    assessment=assessment,
+                    assessment=gate.assessment,
                     loop_converged=True,
                     proof_complete=False,
                     stop_reason="proof-incomplete",
-                    proof_reasons=assessment.reasons,
+                    proof_reasons=gate.proof_reasons,
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
                     loop_result=loop_result,
                 )
 
-            if not policy_ok:
+            if not gate.policy_ok:
                 # Proof is complete, but the change violates policy or awaits approval.
                 store.start_node(
                     plan.run_id,
@@ -817,11 +813,11 @@ class HarnessController:
                         learn_rec,
                     ),
                     policy=policy_decision,
-                    assessment=assessment,
+                    assessment=gate.assessment,
                     loop_converged=True,
                     proof_complete=True,
                     stop_reason=stop_reason,
-                    proof_reasons=tuple(v.message for v in policy_decision.violations),
+                    proof_reasons=gate.policy_reasons,
                     resumed=resumed,
                     worktree_path=loop_result.worktree_path,
                     enforcement_trace=enforcement_trace,
@@ -844,7 +840,7 @@ class HarnessController:
                     learn_rec,
                 ),
                 policy=policy_decision,
-                assessment=assessment,
+                assessment=gate.assessment,
                 loop_converged=True,
                 proof_complete=True,
                 stop_reason=loop_result.stop_reason,

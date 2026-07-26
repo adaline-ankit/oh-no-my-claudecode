@@ -1,5 +1,6 @@
 """Public typed execution harness used by ``onmc run``."""
 
+from .completion import CompletionGateDecision, evaluate_completion_gate
 from .controller import (
     ChangeSet,
     ChangesReader,
@@ -47,6 +48,7 @@ __all__ = [
     "AgentName",
     "ChangeSet",
     "ChangesReader",
+    "CompletionGateDecision",
     "ControllerDependencies",
     "ExecutionPlan",
     "HarnessController",
@@ -72,6 +74,7 @@ __all__ = [
     "default_dependencies",
     "evaluate_run_policy",
     "execute_stage",
+    "evaluate_completion_gate",
     "injection_findings",
     "learn_candidate_stage",
     "load_run_policy",
