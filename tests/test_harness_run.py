@@ -26,12 +26,18 @@ from oh_no_my_claudecode.harness_run.context import (
 )
 from oh_no_my_claudecode.harness_run.controller import (
     _default_loop_executor,
+    _sandbox_verify_runner_for,
     default_dependencies,
 )
 from oh_no_my_claudecode.loop.adapters import CodexCliAdapter
 from oh_no_my_claudecode.loop.engine import _default_verify_runner
-from oh_no_my_claudecode.loop.models import IterationContract, LoopResult
+from oh_no_my_claudecode.loop.models import IterationContract, LoopResult, VerifyOutcome
 from oh_no_my_claudecode.retrieval import HybridRetriever
+from oh_no_my_claudecode.sandbox import (
+    DockerSandboxPlan,
+    SandboxExecutionResult,
+    SandboxExecutionStatus,
+)
 from oh_no_my_claudecode.tool_broker import Decision, DecisionEffect
 
 
@@ -297,6 +303,62 @@ def test_render_text_exposes_planned_sandbox_boundary(tmp_path: Path) -> None:
     assert result.plan.sandbox_manifest.verifier_plan["secret_env"] == []
 
 
+def test_sandbox_verifier_runner_executes_command_without_agent_secret(tmp_path: Path) -> None:
+    seen: list[DockerSandboxPlan] = []
+
+    def executor(plan: DockerSandboxPlan) -> SandboxExecutionResult:
+        seen.append(plan)
+        return SandboxExecutionResult(
+            status=SandboxExecutionStatus.SUCCEEDED,
+            returncode=0,
+            stdout="1 passed",
+            stderr="",
+            argv_sha256="abc",
+            timeout_seconds=120,
+            reason="sandbox command succeeded",
+        )
+
+    request = RunRequest(
+        task="verify in sandbox",
+        execute=True,
+        sandbox=True,
+        sandbox_provider="docker",
+    )
+    runner = _sandbox_verify_runner_for(tmp_path, request, executor=executor)
+
+    outcome = runner("python -m pytest")
+
+    assert outcome.passed is True
+    assert outcome.output == "1 passed"
+    plan = seen[0]
+    assert plan.role == "verifier"
+    assert plan.secret_env == ()
+    assert "--network" in plan.argv
+    assert "none" in plan.argv
+
+
+def test_sandbox_verifier_runner_classifies_missing_runner(tmp_path: Path) -> None:
+    def executor(plan: DockerSandboxPlan) -> SandboxExecutionResult:
+        del plan
+        return SandboxExecutionResult(
+            status=SandboxExecutionStatus.FAILED,
+            returncode=1,
+            stdout="",
+            stderr="No module named pytest",
+            argv_sha256="abc",
+            timeout_seconds=120,
+            reason="sandbox command failed",
+        )
+
+    request = RunRequest(task="verify in sandbox", execute=True, sandbox=True)
+    runner = _sandbox_verify_runner_for(tmp_path, request, executor=executor)
+
+    outcome = runner("python -m pytest")
+
+    assert outcome.passed is False
+    assert "[sandbox verify error: verify command could not run" in outcome.output
+
+
 def test_cli_json_and_help_expose_safe_execution_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -464,6 +526,65 @@ def test_isolated_execution_binds_agent_and_verifier_to_worktree(
     assert verifier_call[1]["cwd"] == isolated
     assert "shell" not in verifier_call[1]
     assert result.worktree_path == str(isolated)
+
+
+def test_sandbox_execution_binds_verifier_to_docker_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_config(default_config(tmp_path), tmp_path)
+    seen: dict[str, object] = {}
+
+    def fake_agent_runner(agent: str, repo_root: Path, *, model: str | None = None) -> object:
+        seen["agent"] = (agent, repo_root, model)
+        return lambda prompt, escalation_level: None
+
+    def fake_sandbox_verify_runner(repo_root: Path, request: RunRequest) -> object:
+        seen["sandbox_verify"] = (repo_root, request.sandbox, request.sandbox_provider)
+        return lambda command: VerifyOutcome(True, f"sandbox:{command}")
+
+    def fake_run_loop(
+        storage: object,
+        repo_root: Path,
+        spec: object,
+        config: object,
+        **kwargs: object,
+    ) -> LoopResult:
+        del storage, repo_root, spec, config
+        verifier = kwargs["verify_runner"]
+        assert callable(verifier)
+        seen["verify_outcome"] = verifier("pytest -q")
+        return _loop_result(converged=True)
+
+    monkeypatch.setattr(harness_controller_module, "make_agent_runner", fake_agent_runner)
+    monkeypatch.setattr(
+        harness_controller_module,
+        "_sandbox_verify_runner_for",
+        fake_sandbox_verify_runner,
+    )
+    monkeypatch.setattr(harness_controller_module, "run_loop", fake_run_loop)
+    packet = HarnessController(tmp_path).plan(RunRequest(task="Fix sandbox")).context_packet
+
+    result = _default_loop_executor(
+        LoopInvocation(
+            tmp_path,
+            RunRequest(
+                task="Fix sandbox",
+                execute=True,
+                sandbox=True,
+                sandbox_provider="docker",
+            ),
+            context_packet=packet,
+            resume=False,
+        )
+    )
+
+    outcome = seen["verify_outcome"]
+    assert isinstance(outcome, VerifyOutcome)
+    assert seen["agent"] == ("claude", tmp_path, None)
+    assert seen["sandbox_verify"] == (tmp_path, True, "docker")
+    assert outcome.output == "sandbox:pytest -q"
+    assert result.converged is True
 
 
 # ---------------------------------------------------------------------------

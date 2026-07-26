@@ -56,6 +56,13 @@ from oh_no_my_claudecode.proof_graph import (
     evaluate_proof,
 )
 from oh_no_my_claudecode.proof_graph.receipt import ProofReceipt
+from oh_no_my_claudecode.sandbox import (
+    DockerSandboxPlan,
+    SandboxExecutionResult,
+    default_repo_sandbox,
+    docker_run_plan,
+    execute_docker_plan,
+)
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.tool_broker import (
     Action,
@@ -343,6 +350,13 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
             execution_root,
             model=None if request.model == "default" else request.model,
         )
+        verify_runner = _verify_runner_for(execution_root)
+        if request.sandbox:
+            if request.sandbox_provider != "docker":
+                raise RuntimeError(
+                    f"sandbox provider {request.sandbox_provider} cannot execute locally yet"
+                )
+            verify_runner = _sandbox_verify_runner_for(execution_root, request)
         result = run_loop(
             storage,
             execution_root,
@@ -363,7 +377,7 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
                 repeated_error_limit=3,
             ),
             agent_runner=agent_runner,
-            verify_runner=_verify_runner_for(execution_root),
+            verify_runner=verify_runner,
             checkpoint_store=FileCheckpointStore(repo_root),
             resume=invocation.resume,
         )
@@ -423,6 +437,41 @@ def _verify_runner_for(repo_root: Path) -> VerifyRunner:
             return VerifyOutcome(False, "[verify timed out]")
         except (OSError, ValueError) as exc:
             return VerifyOutcome(False, f"[verify error: {exc}]")
+
+    return _run
+
+
+def _sandbox_verify_runner_for(
+    repo_root: Path,
+    request: RunRequest,
+    *,
+    executor: Callable[[DockerSandboxPlan], SandboxExecutionResult] = execute_docker_plan,
+) -> VerifyRunner:
+    """Return a verifier runner executed through the Docker sandbox boundary."""
+
+    def _run(command: str) -> VerifyOutcome:
+        try:
+            argv = shlex.split(command)
+            if not argv:
+                return VerifyOutcome(False, "[sandbox verify error: empty command]")
+            spec = default_repo_sandbox(repo_root, image=request.sandbox_image, writeable=False)
+            plan = docker_run_plan(spec, tuple(argv), role="verifier")
+            result = executor(plan)
+        except (OSError, ValueError) as exc:
+            return VerifyOutcome(False, f"[sandbox verify error: {exc}]")
+
+        combined = (result.stdout + result.stderr)[:2000]
+        if result.succeeded:
+            return VerifyOutcome(True, combined)
+        if result.reason == "sandbox command failed" and _runner_module_missing(argv, combined):
+            return VerifyOutcome(
+                False,
+                f"[sandbox verify error: verify command could not run — {combined.strip()[:300]}]",
+            )
+        return VerifyOutcome(
+            False,
+            f"[sandbox verify {result.status.value}: {result.reason}; {combined}".strip(),
+        )
 
     return _run
 
