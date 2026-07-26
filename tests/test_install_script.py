@@ -106,34 +106,20 @@ def test_install_sh_fallback_order() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Post-install integration: onmc setup (+ quickstart fallback)
+# 4. Post-install integration: one canonical setup path
 # ---------------------------------------------------------------------------
 
 
 def test_install_sh_calls_onmc_setup() -> None:
-    """Script must call 'onmc setup' as the fallback integration step."""
+    """Script must call the canonical setup command."""
     text = script_text()
     assert "onmc setup" in text, "install.sh must call 'onmc setup'"
 
 
-def test_install_sh_calls_onmc_quickstart() -> None:
-    """Script must attempt 'onmc quickstart --yes' first (newer versions)."""
+def test_install_sh_does_not_call_onmc_quickstart() -> None:
+    """Installer must not introduce a second setup path."""
     text = script_text()
-    assert "onmc quickstart --yes" in text, (
-        "install.sh must try 'onmc quickstart --yes' before falling back to setup"
-    )
-
-
-def test_install_sh_quickstart_before_setup() -> None:
-    """quickstart must be tried before setup in the integration block."""
-    text = script_text()
-    qs_pos = text.find("onmc quickstart --yes")
-    setup_pos = text.find("onmc setup")
-    assert qs_pos != -1, "onmc quickstart --yes not found"
-    assert setup_pos != -1, "onmc setup not found"
-    assert qs_pos < setup_pos, (
-        f"quickstart ({qs_pos}) must appear before setup ({setup_pos})"
-    )
+    assert "onmc quickstart" not in text
 
 
 # ---------------------------------------------------------------------------
@@ -219,11 +205,11 @@ def test_install_sh_integration_stdin_devnull() -> None:
     )
 
 
-def test_install_sh_setup_fallback_uses_yes_flag() -> None:
-    """Fallback 'onmc setup' must include --yes to avoid interactive prompts."""
+def test_install_sh_setup_uses_yes_flag() -> None:
+    """Installer setup must include --yes to avoid interactive prompts."""
     text = script_text()
     assert "onmc setup --yes" in text, (
-        "install.sh fallback must use 'onmc setup --yes', not bare 'onmc setup'"
+        "install.sh must use 'onmc setup --yes', not bare 'onmc setup'"
     )
     # Verify bare 'onmc setup' (without --yes) is not used as the actual command
     # (it can appear in warning messages, but the SETUP_CMD assignment must be --yes)
@@ -238,16 +224,16 @@ def test_install_sh_setup_fallback_uses_yes_flag() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6b. Day-1 banner mirrors the `onmc quickstart` ready card
+# 6b. Day-1 banner follows the canonical task path
 # ---------------------------------------------------------------------------
 
 
-def test_install_sh_banner_leads_with_onmc_slash_command() -> None:
-    """The closing day-1 banner must lead with /onmc, matching the quickstart card."""
+def test_install_sh_banner_leads_with_canonical_run() -> None:
+    """The closing banner must lead with run and expose observed status."""
     text = script_text()
     banner = text[text.find("Day-1 commands") :]
-    assert "/onmc" in banner, "install.sh day-1 banner must mention /onmc"
-    for cmd in ("onmc autopilot", "onmc brief", "onmc ui"):
+    assert banner.find("onmc run") != -1
+    for cmd in ("onmc status", "onmc missioncontrol", "onmc ui"):
         assert cmd in banner, f"install.sh day-1 banner must mention {cmd}"
 
 

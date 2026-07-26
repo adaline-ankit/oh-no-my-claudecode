@@ -20,7 +20,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
 │ setup           Run the interactive ONMC onboarding wizard.                  │
-│ init            Initialize ONMC state in the current git repository.         │
 │ brief           Compile a task-specific context brief.                       │
 │ guard           Surface recorded dead-ends so you never repeat a known       │
 │                 failure.                                                     │
@@ -35,10 +34,6 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ mission         View the canonical runtime as a mission plan.                │
 │ missioncontrol  Read-only progress and proof view over the canonical         │
 │                 runtime.                                                     │
-│ quickstart      Zero-config onboarding: init memory, integrate Claude Code,  │
-│                 activate control plane.                                      │
-│ wrap            Make onmc the default layer for Claude Code; manage the      │
-│                 session switch.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
  Default workflow:  onmc setup  →  onmc run "your task"  →  onmc missioncontrol
@@ -5898,8 +5893,7 @@ Usage: onmc quest stats [OPTIONS]
 ```text
 Usage: onmc quickstart [OPTIONS]
 
- Zero-config onboarding: init memory, integrate Claude Code, activate control
- plane.
+ Compatibility bootstrap; prefer ``onmc setup`` for new repositories.
 
  Composes three steps in one idempotent command:
 
@@ -5912,6 +5906,7 @@ Usage: onmc quickstart [OPTIONS]
                 (same as ``onmc wrap --default-active``).
 
  Safe to re-run: each step reports ``already configured`` when already done.
+ Afterward, use ``onmc run "your task"`` as the canonical task path.
 
  Examples:
 

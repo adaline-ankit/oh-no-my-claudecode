@@ -26,11 +26,11 @@ __all__ = [
     "run_quickstart",
 ]
 
-# Day-1 commands shown on the ready card (order matters — shown top-to-bottom).
+# Compatibility ready card follows the canonical public workflow.
 DAY1_COMMANDS: list[str] = [
-    "/onmc",
-    'onmc autopilot "your goal"',
-    "onmc brief",
+    'onmc run "your task"',
+    "onmc status",
+    "onmc missioncontrol",
     "onmc ui",
 ]
 

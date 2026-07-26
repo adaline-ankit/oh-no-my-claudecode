@@ -5,10 +5,9 @@ that :func:`oh_no_my_claudecode.command_registry.register_feature_commands`
 invokes at CLI build time, so ``onmc quickstart`` ships with **zero edits** to
 ``cli.py`` or any other shared hub.
 
-``onmc quickstart`` is the zero-config onboarding command.  One invocation
-composes ``onmc init``, ``onmc plug claude-code``, and ``onmc wrap
---default-active`` into a single idempotent flow and prints a high-signal
-"you're ready" card with day-1 commands.
+``onmc quickstart`` is a compatibility bootstrap. New users should run
+``onmc setup``. This command remains callable for existing automation and
+prints the same canonical ``setup -> run -> missioncontrol`` handoff.
 
 Examples::
 
@@ -62,9 +61,9 @@ def _render_card(result: QuickstartResult) -> None:
     typer.echo("")
     typer.echo("Day-1 commands to try:")
     _descriptions: dict[str, str] = {
-        "/onmc": "toggle deep-wrap on/off from Claude Code",
-        'onmc autopilot "your goal"': "autonomous coding loop with memory",
-        "onmc brief": "memory context brief for your next task",
+        'onmc run "your task"': "preview the canonical runtime contract",
+        "onmc status": "check repository and ONMC readiness",
+        "onmc missioncontrol": "inspect durable run and proof state",
         "onmc ui": "visual memory dashboard",
     }
     for cmd in result.day1_commands:
@@ -112,7 +111,7 @@ def register(app: typer.Typer) -> None:
             ),
         ] = False,
     ) -> None:
-        """Zero-config onboarding: init memory, integrate Claude Code, activate control plane.
+        """Compatibility bootstrap; prefer ``onmc setup`` for new repositories.
 
         Composes three steps in one idempotent command:
 
@@ -123,6 +122,7 @@ def register(app: typer.Typer) -> None:
                        (same as ``onmc wrap --default-active``).
 
         Safe to re-run: each step reports ``already configured`` when already done.
+        Afterward, use ``onmc run "your task"`` as the canonical task path.
 
         Examples:
 
