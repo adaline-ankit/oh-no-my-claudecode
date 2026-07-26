@@ -430,6 +430,8 @@ def test_native_backend_retries_transient_exception_before_terminal_result(
 def test_native_backend_persists_approval_interrupt_before_side_effect(
     tmp_path: Path,
 ) -> None:
+    session_id = start_session(tmp_path, label="approval trace")
+    assert session_id is not None
     spec = RunSpec(
         run_id="run-approval",
         task="Deploy feature",
@@ -454,6 +456,20 @@ def test_native_backend_persists_approval_interrupt_before_side_effect(
     snapshot = backend.store.load(spec.run_id)
     assert snapshot.state.value == "awaiting_approval"
     assert snapshot.nodes["deploy"].state.value == "awaiting_approval"
+    _, events = load_session_events(
+        tmp_path,
+        session_id,
+        include_notify_window=False,
+    )
+    runtime_events = [event for event in events if event.kind == TraceEventKind.RUNTIME_NODE]
+    assert len(runtime_events) == 1
+    payload = runtime_events[0].payload
+    assert payload["run_id"] == "run-approval"
+    assert payload["node_id"] == "deploy"
+    assert payload["status"] == "interrupted"
+    assert payload["error"] == "approval required before deploy"
+    assert payload["approval_required"] is True
+    assert payload["side_effecting"] is True
 
 
 def test_native_backend_resumes_approval_interrupt_without_duplicate_side_effect(

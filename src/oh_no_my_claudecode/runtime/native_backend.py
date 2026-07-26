@@ -127,16 +127,27 @@ class NativeExecutionBackend:
                         and state is NodeState.RUNNING
                         and not self._node_has_approval(spec.run_id, node.node_id)
                     ):
+                        reason = f"approval required before {node.node_id}"
                         self.store.request_node_approval(
                             spec.run_id,
                             node.node_id,
-                            reason=f"approval required before {node.node_id}",
+                            reason=reason,
                             idempotency_key=f"runtime:{node.node_id}:approval-request",
                         )
                         self.store.request_approval(
                             spec.run_id,
-                            reason=f"approval required before {node.node_id}",
+                            reason=reason,
                             idempotency_key=f"runtime:{node.node_id}:run-approval-request",
+                        )
+                        now = time.time()
+                        self._record_runtime_node_event(
+                            spec.run_id,
+                            node,
+                            started_at=now,
+                            ended_at=now,
+                            result=None,
+                            error=reason,
+                            status="interrupted",
                         )
                         return self._interrupted_result(spec, results, node=node)
                     ready_nodes.append(node)
@@ -464,6 +475,7 @@ class NativeExecutionBackend:
         ended_at: float,
         result: NodeResult | None,
         error: str | None,
+        status: str | None = None,
     ) -> None:
         if self.repo_root is None:
             return
@@ -472,11 +484,12 @@ class NativeExecutionBackend:
             retry_attempts = self.store.load(run_id).nodes[node.node_id].attempts
         except Exception:  # noqa: BLE001
             retry_attempts = 0
-        status = (
-            result.status.value
-            if result is not None
-            else NodeResultStatus.FAILED.value
-        )
+        if status is not None:
+            status_value = status
+        elif result is not None:
+            status_value = result.status.value
+        else:
+            status_value = NodeResultStatus.FAILED.value
         record_trace_event(
             self.repo_root,
             TraceEvent(
@@ -487,7 +500,7 @@ class NativeExecutionBackend:
                     "run_id": run_id,
                     "node_id": node.node_id,
                     "node_kind": node.kind,
-                    "status": status,
+                    "status": status_value,
                     "error": error or (result.error if result is not None else None),
                     "side_effecting": node.side_effecting,
                     "approval_required": node.approval_required,
@@ -496,7 +509,7 @@ class NativeExecutionBackend:
                     "retry_attempts": retry_attempts,
                     "end_ts": ended_at,
                     "duration_seconds": max(0.0, ended_at - started_at),
-                    "title": f"runtime node {node.node_id} {status}",
+                    "title": f"runtime node {node.node_id} {status_value}",
                 },
             ),
         )
