@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
 __all__ = [
+    "ClaimLanguageDecision",
+    "ClaimLanguageGate",
     "ClaimReadinessDecision",
     "ClaimReadinessReport",
     "build_claim_readiness",
+    "gate_claim_language",
 ]
 
 
@@ -18,6 +22,13 @@ class ClaimReadinessDecision(StrEnum):
 
     READY = "ready"
     NOT_READY = "not-ready"
+
+
+class ClaimLanguageDecision(StrEnum):
+    """Whether a user-facing claim can be published from the available evidence."""
+
+    ALLOW = "allow"
+    REFUSE = "refuse"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +58,26 @@ class ClaimReadinessReport:
             "blocked_gates": list(self.blocked_gates),
             "reasons": list(self.reasons),
             "next_actions": list(self.next_actions),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimLanguageGate:
+    """Verdict for one proposed external-facing claim string."""
+
+    decision: ClaimLanguageDecision
+    claim_text: str
+    detected_claims: tuple[str, ...]
+    reasons: tuple[str, ...]
+    suggested_safe_claim: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "decision": self.decision.value,
+            "claim_text": self.claim_text,
+            "detected_claims": list(self.detected_claims),
+            "reasons": list(self.reasons),
+            "suggested_safe_claim": self.suggested_safe_claim,
         }
 
 
@@ -123,6 +154,45 @@ def build_claim_readiness(
     )
 
 
+def gate_claim_language(
+    claim_text: str,
+    readiness: ClaimReadinessReport | Mapping[str, object],
+    *,
+    report_coverage: Mapping[str, object] | None = None,
+) -> ClaimLanguageGate:
+    """Refuse strong marketing claims when the evidence contract is incomplete."""
+    text = claim_text.strip()
+    if not text:
+        raise ValueError("claim_text must not be empty")
+
+    data = readiness.to_dict() if isinstance(readiness, ClaimReadinessReport) else readiness
+    detected = _detect_claim_kinds(text)
+    reasons: list[str] = []
+
+    quality_ready = _bool(data.get("quality_claim_ready"), "readiness.quality_claim_ready")
+    cost_ready = _bool(data.get("cost_claim_ready"), "readiness.cost_claim_ready")
+    decision_ready = data.get("decision") == ClaimReadinessDecision.READY.value
+    report_ready = _report_coverage_ready(report_coverage)
+
+    if "quality" in detected and not quality_ready:
+        reasons.append("quality improvement claim lacks a ready matched benchmark gate")
+    if "cost" in detected and not cost_ready:
+        reasons.append("cost claim lacks complete cost telemetry and cost gate readiness")
+    if "sota" in detected and not decision_ready:
+        reasons.append("SOTA claim requires every external benchmark readiness gate to pass")
+    if detected and report_coverage is not None and not report_ready:
+        reasons.append("receipt/report coverage is incomplete for external claims")
+
+    decision = ClaimLanguageDecision.REFUSE if reasons else ClaimLanguageDecision.ALLOW
+    return ClaimLanguageGate(
+        decision=decision,
+        claim_text=text,
+        detected_claims=detected,
+        reasons=tuple(dict.fromkeys(reasons)),
+        suggested_safe_claim=_safe_claim(data, report_coverage=report_coverage),
+    )
+
+
 def _append_benchmark_next_action(
     next_actions: list[str],
     benchmark_plan: Mapping[str, object],
@@ -159,3 +229,55 @@ def _optional_int(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+_QUALITY_RE = re.compile(
+    r"\b(better|improves?|improved|improvement|boosts?|higher pass|more reliable)\b",
+    re.IGNORECASE,
+)
+_COST_RE = re.compile(
+    r"\b(cheaper|saves?|saved|saving|cost reduction|lowers? cost|token reduction)\b",
+    re.IGNORECASE,
+)
+_SOTA_RE = re.compile(r"\b(sota|state[- ]of[- ]the[- ]art|best[- ]in[- ]class)\b", re.IGNORECASE)
+
+
+def _detect_claim_kinds(text: str) -> tuple[str, ...]:
+    kinds: list[str] = []
+    if _QUALITY_RE.search(text):
+        kinds.append("quality")
+    if _COST_RE.search(text):
+        kinds.append("cost")
+    if _SOTA_RE.search(text):
+        kinds.append("sota")
+    return tuple(kinds)
+
+
+def _report_coverage_ready(report_coverage: Mapping[str, object] | None) -> bool:
+    if report_coverage is None:
+        return True
+    return _bool(report_coverage.get("claim_ready"), "report_coverage.claim_ready")
+
+
+def _safe_claim(
+    readiness: Mapping[str, object],
+    *,
+    report_coverage: Mapping[str, object] | None,
+) -> str:
+    if readiness.get("decision") == ClaimReadinessDecision.READY.value and _report_coverage_ready(
+        report_coverage
+    ):
+        return (
+            "ONMC is ready for externally-citable quality and cost claims under "
+            "the attached benchmark evidence."
+        )
+    blocked = readiness.get("blocked_gates")
+    if isinstance(blocked, list) and blocked:
+        return (
+            "ONMC records harness evidence, but external improvement claims are blocked "
+            f"until these gates pass: {', '.join(str(item) for item in blocked)}."
+        )
+    return (
+        "ONMC records harness evidence for this run; broader improvement claims require "
+        "matched external benchmarks with complete report coverage."
+    )

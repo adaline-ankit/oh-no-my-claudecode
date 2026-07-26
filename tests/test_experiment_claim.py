@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from oh_no_my_claudecode.experiment.claim import (
+    ClaimLanguageDecision,
     ClaimReadinessDecision,
     build_claim_readiness,
+    gate_claim_language,
 )
 
 
@@ -75,3 +77,69 @@ def test_report_without_manifest_cannot_support_external_claim() -> None:
     assert report.quality_claim_ready is False
     assert report.blocked_gates == ("portfolio_coverage",)
     assert any("manifest missing" in reason for reason in report.reasons)
+
+
+def test_claim_language_refuses_better_sota_when_gates_are_missing() -> None:
+    readiness = build_claim_readiness(
+        benchmark_plan={"claim_ready": False, "reasons": ["only 18 cells"]},
+        coverage_gate={"claim_ready": False, "reasons": ["only 3 repo(s)"]},
+        calibration_gate={
+            "quality_claim_ready": False,
+            "cost_claim_ready": False,
+            "reasons": ["saturated benchmark"],
+        },
+    )
+
+    gate = gate_claim_language(
+        "ONMC is SOTA and makes Claude Code better and cheaper.",
+        readiness,
+        report_coverage={"claim_ready": False},
+    )
+
+    assert gate.decision is ClaimLanguageDecision.REFUSE
+    assert gate.detected_claims == ("quality", "cost", "sota")
+    assert any("quality improvement" in reason for reason in gate.reasons)
+    assert any("cost claim" in reason for reason in gate.reasons)
+    assert any("SOTA claim" in reason for reason in gate.reasons)
+    assert any("coverage is incomplete" in reason for reason in gate.reasons)
+    assert "external improvement claims are blocked" in gate.suggested_safe_claim
+
+
+def test_claim_language_allows_strong_claim_only_after_readiness_and_coverage() -> None:
+    readiness = build_claim_readiness(
+        benchmark_plan={"claim_ready": True, "reasons": []},
+        coverage_gate={"claim_ready": True, "reasons": []},
+        calibration_gate={
+            "quality_claim_ready": True,
+            "cost_claim_ready": True,
+            "reasons": [],
+        },
+    )
+
+    gate = gate_claim_language(
+        "ONMC improves pass rate and lowers cost under the attached benchmark.",
+        readiness,
+        report_coverage={"claim_ready": True},
+    )
+
+    assert gate.decision is ClaimLanguageDecision.ALLOW
+    assert gate.detected_claims == ("quality", "cost")
+    assert gate.reasons == ()
+
+
+def test_claim_language_allows_plain_evidence_description_without_ready_benchmark() -> None:
+    readiness = build_claim_readiness(
+        benchmark_plan={"claim_ready": False, "reasons": ["too few tasks"]},
+        coverage_gate={"claim_ready": False, "reasons": ["too few repos"]},
+        calibration_gate={
+            "quality_claim_ready": False,
+            "cost_claim_ready": False,
+            "reasons": [],
+        },
+    )
+
+    gate = gate_claim_language("ONMC records a tamper-evident local receipt.", readiness)
+
+    assert gate.decision is ClaimLanguageDecision.ALLOW
+    assert gate.detected_claims == ()
+    assert gate.reasons == ()
