@@ -16,6 +16,7 @@ Key attributes used
 - ``onmc.tool``              — tool name for tool_call events
 - ``onmc.target``            — file path / query for read/search events
 - ``onmc.session_id``        — parent session identifier
+- ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
 """
 
 from __future__ import annotations
@@ -83,17 +84,7 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         attributes.append(
             {"key": "onmc.target", "value": {"stringValue": str(payload["target"])}}
         )
-    if "total" in payload:
-        total = int(payload.get("total", 0))
-        # Approximate: split 60/40 input/output for token events.
-        input_tokens = int(total * 0.6)
-        output_tokens = total - input_tokens
-        attributes.append(
-            {"key": "gen_ai.usage.input_tokens", "value": {"intValue": input_tokens}}
-        )
-        attributes.append(
-            {"key": "gen_ai.usage.output_tokens", "value": {"intValue": output_tokens}}
-        )
+    attributes.extend(_token_usage_attributes(payload))
     if payload.get("title"):
         attributes.append(
             {"key": "onmc.title", "value": {"stringValue": str(payload["title"])}}
@@ -107,6 +98,58 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         "status": _STATUS_ERROR if is_error else _STATUS_OK,
         "attributes": attributes,
     }
+
+
+def _token_usage_attributes(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    measured_input = _optional_int(payload, "input_tokens")
+    measured_output = _optional_int(payload, "output_tokens")
+    if measured_input is not None or measured_output is not None:
+        attributes: list[dict[str, Any]] = [
+            {"key": "onmc.usage.estimated", "value": {"boolValue": False}}
+        ]
+        if measured_input is not None:
+            attributes.append(
+                {"key": "gen_ai.usage.input_tokens", "value": {"intValue": measured_input}}
+            )
+        if measured_output is not None:
+            attributes.append(
+                {"key": "gen_ai.usage.output_tokens", "value": {"intValue": measured_output}}
+            )
+        total = _optional_int(payload, "total")
+        if total is not None:
+            attributes.append({"key": "onmc.usage.total_tokens", "value": {"intValue": total}})
+        return attributes
+
+    total = _optional_int(payload, "total")
+    if total is None:
+        return []
+    input_tokens = int(total * 0.6)
+    output_tokens = total - input_tokens
+    return [
+        {"key": "gen_ai.usage.input_tokens", "value": {"intValue": input_tokens}},
+        {"key": "gen_ai.usage.output_tokens", "value": {"intValue": output_tokens}},
+        {"key": "onmc.usage.total_tokens", "value": {"intValue": total}},
+        {"key": "onmc.usage.estimated", "value": {"boolValue": True}},
+        {
+            "key": "onmc.usage.estimate_reason",
+            "value": {"stringValue": "legacy_total_tokens_only"},
+        },
+    ]
+
+
+def _optional_int(payload: dict[str, Any], key: str) -> int | None:
+    if key not in payload or payload[key] is None:
+        return None
+    value = payload[key]
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed
 
 
 def to_otel_spans(

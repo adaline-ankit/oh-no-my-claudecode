@@ -570,6 +570,40 @@ class TestOtelSpans:
         assert attr_map["gen_ai.system"]["stringValue"] == "onmc"
         assert "gen_ai.usage.input_tokens" in attr_map or "gen_ai.usage.output_tokens" in attr_map
 
+    def test_otel_span_preserves_measured_token_usage(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            _ev(
+                TraceEventKind.TOKENS,
+                input_tokens=321,
+                output_tokens=123,
+                total=444,
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_measured")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["gen_ai.usage.input_tokens"]["intValue"] == 321
+        assert attr_map["gen_ai.usage.output_tokens"]["intValue"] == 123
+        assert attr_map["onmc.usage.total_tokens"]["intValue"] == 444
+        assert attr_map["onmc.usage.estimated"]["boolValue"] is False
+
+    def test_otel_span_marks_legacy_total_token_split_as_estimated(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [_ev(TraceEventKind.TOKENS, total=500)]
+        spans = to_otel_spans(events, session_id="tr_estimated")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["gen_ai.usage.input_tokens"]["intValue"] == 300
+        assert attr_map["gen_ai.usage.output_tokens"]["intValue"] == 200
+        assert attr_map["onmc.usage.estimated"]["boolValue"] is True
+        assert (
+            attr_map["onmc.usage.estimate_reason"]["stringValue"]
+            == "legacy_total_tokens_only"
+        )
+
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 

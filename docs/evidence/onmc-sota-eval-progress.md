@@ -47,6 +47,9 @@ This is evidence for a stronger harness foundation:
 - Side-effecting native runtime nodes now acquire durable node leases while handlers run, release
   leases after execution, recover persisted results that still have active leases, and reacquire a
   fresh deterministic lease if a process crashes after lease release but before result persistence.
+- OTel GenAI span export now preserves measured `input_tokens` and `output_tokens` when trace events
+  provide them, and explicitly marks legacy total-token-only fallback splits as estimated instead of
+  presenting them as measured usage.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -240,6 +243,59 @@ Success: no issues found in 6 source files
 
 Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
 and `crewai`; these were not introduced by the lease slice.
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+```text
+python -m pytest -q tests/test_trace.py
+```
+
+Result:
+
+```text
+46 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/trace tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 6 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by the OTel slice.
+
+```text
+python -m pytest -q tests/test_trace.py tests/test_runtime_contracts.py
+```
+
+Result:
+
+```text
+60 passed
+```
 
 ```text
 git diff --check
