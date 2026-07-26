@@ -30,6 +30,8 @@ This is evidence for a stronger harness foundation:
   gates into exact task-addition requirements.
 - The native runtime now recovers a node result that was written immediately before a crash and
   does not re-run the node handler, closing a duplicate-side-effect recovery gap.
+- Native runtime runs now persist a `RunSpec` manifest and reject replay/resume when the requested
+  spec digest differs from the stored one, preventing stale-result reuse across task changes.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -128,7 +130,7 @@ python -m pytest -q tests/test_runtime_contracts.py tests/test_durable_runtime.p
 Result:
 
 ```text
-34 passed
+35 passed
 ```
 
 ```text
@@ -170,6 +172,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 | Runtime contract validation | Pass | Unsafe graph specs are rejected before execution. |
 | Durable replay | Pass | Re-running a completed graph returns persisted results without new node execution. |
 | Crash-window recovery | Pass | A persisted node result is reconciled without re-running the handler after a crash. |
+| RunSpec digest lock | Pass | Resuming with a changed task/graph contract is rejected before handlers run. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |

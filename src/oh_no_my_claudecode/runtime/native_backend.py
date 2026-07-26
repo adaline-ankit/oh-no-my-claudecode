@@ -187,16 +187,19 @@ class NativeExecutionBackend:
         except RunNotFoundError:
             if resume:
                 raise
-            return self.store.create_run(
+            snapshot = self.store.create_run(
                 spec.run_id,
                 node_ids=tuple(node.node_id for node in spec.nodes),
                 repo=self.repo_root,
                 idempotency_key="runtime:create",
             )
+            self._write_spec_manifest(spec)
+            return snapshot
         existing_nodes = tuple(snapshot.nodes)
         requested_nodes = tuple(node.node_id for node in spec.nodes)
         if existing_nodes != requested_nodes:
             raise RuntimeContractError("stored run nodes do not match the RunSpec")
+        self._validate_stored_spec_manifest(spec)
         return snapshot
 
     def _fail_running_node(self, run_id: str, reason: str) -> None:
@@ -269,6 +272,37 @@ class NativeExecutionBackend:
 
     def _result_path(self, run_id: str, node_id: str) -> Path:
         return self.store.root / "runs" / run_id / "node-results" / f"{node_id}.json"
+
+    def _spec_path(self, run_id: str) -> Path:
+        return self.store.root / "runs" / run_id / "runtime-spec.json"
+
+    def _write_spec_manifest(self, spec: RunSpec) -> None:
+        path = self._spec_path(spec.run_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": spec.schema_version,
+            "run_id": spec.run_id,
+            "spec_digest": spec.digest,
+            "spec": spec.to_dict(),
+        }
+        path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    def _validate_stored_spec_manifest(self, spec: RunSpec) -> None:
+        path = self._spec_path(spec.run_id)
+        if not path.exists():
+            raise RuntimeContractError("stored run is missing its RunSpec manifest")
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise RuntimeContractError("stored RunSpec manifest must be an object")
+        if raw.get("run_id") != spec.run_id:
+            raise RuntimeContractError("stored RunSpec manifest run_id mismatch")
+        if raw.get("schema_version") != spec.schema_version:
+            raise RuntimeContractError("stored RunSpec schema mismatch")
+        if raw.get("spec_digest") != spec.digest:
+            raise RuntimeContractError("stored RunSpec digest does not match requested spec")
 
     def _has_result(self, run_id: str, node_id: str) -> bool:
         return self._result_path(run_id, node_id).exists()

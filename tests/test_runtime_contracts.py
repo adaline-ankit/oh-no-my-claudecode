@@ -173,6 +173,7 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
         "execute",
         idempotency_key="runtime:execute:start",
     )
+    backend._write_spec_manifest(spec)
     result = NodeResult(
         node_id="execute",
         status=NodeResultStatus.SUCCEEDED,
@@ -191,6 +192,34 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
     snapshot = backend.store.load(spec.run_id)
     assert snapshot.state.value == "completed"
     assert snapshot.nodes["execute"].state.value == "succeeded"
+
+
+def test_native_backend_rejects_resume_with_mismatched_run_spec(tmp_path: Path) -> None:
+    original = RunSpec(
+        run_id="run-locked",
+        task="Original task",
+        nodes=(_node("plan"),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    result = backend.execute(
+        original,
+        {
+            "plan": lambda node: NodeResult(
+                node_id=node.node_id,
+                status=NodeResultStatus.SUCCEEDED,
+                idempotency_key=f"runtime:{node.node_id}",
+            )
+        },
+    )
+    assert result.status is RunResultStatus.COMPLETED
+    changed = RunSpec(
+        run_id="run-locked",
+        task="Changed task",
+        nodes=(_node("plan"),),
+    )
+
+    with pytest.raises(RuntimeContractError, match="digest"):
+        backend.execute(changed, {"plan": lambda node: pytest.fail("must not run")})
 
 
 def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
