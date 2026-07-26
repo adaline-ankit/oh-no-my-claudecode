@@ -11,6 +11,7 @@ from .controller import (
     PolicyDecider,
     default_dependencies,
 )
+from .isolation import IsolationProfile, isolation_profile
 from .models import (
     AgentName,
     ExecutionPlan,
@@ -62,6 +63,7 @@ __all__ = [
     "HarnessResult",
     "HarnessRunReceipt",
     "HarnessStatus",
+    "IsolationProfile",
     "LoopExecutor",
     "LoopInvocation",
     "PolicyDecider",
@@ -84,6 +86,7 @@ __all__ = [
     "evaluate_completion_gate",
     "harness_receipt_path",
     "injection_findings",
+    "isolation_profile",
     "learn_candidate_stage",
     "load_harness_receipt",
     "load_run_policy",

@@ -75,6 +75,7 @@ from oh_no_my_claudecode.utils.time import utc_now
 from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
 from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
+from .isolation import isolation_profile
 from .models import (
     ExecutionPlan,
     HarnessResult,
@@ -557,6 +558,7 @@ class HarnessController:
             context_packet=packet,
             proof_requirements=proof_requirements,
             policy_decisions=decisions,
+            isolation_profile=isolation_profile(requested=request.isolation),
             state_path=state_path_for(self.dependencies.runtime_store.root, run_id),
         )
 

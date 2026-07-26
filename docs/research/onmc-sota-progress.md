@@ -124,6 +124,14 @@ next episode prompt, stored on the `IterationContract`, and counted in the
 execute stage. This moves R14 forward from hidden threshold counters toward
 trajectory-grounded routing while preserving existing escalation behavior.
 
+**Isolation boundaries are now declared in runtime contracts (2026-07-26).**
+`ExecutionPlan`, `RunSpec`, every node, receipts, and text output now carry an
+`isolation_profile`. The profile states whether worktree isolation was
+requested, what filesystem boundary it provides, what cleanup will happen, and
+what ONMC still does not isolate: host processes, network, and ambient secrets.
+This moves R7 forward by making capability boundaries explicit before execution
+without pretending worktrees are containers or microVMs.
+
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |

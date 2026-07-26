@@ -22,6 +22,7 @@ from oh_no_my_claudecode.runtime.contracts import (
     RetryPolicy as RuntimeRetryPolicy,
 )
 
+from .isolation import IsolationProfile
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
 from .stages import StageRecord
@@ -127,6 +128,7 @@ class ExecutionPlan:
     context_packet: EvidencePacket
     proof_requirements: tuple[ProofRequirement, ...]
     policy_decisions: tuple[PolicyDecisionRecord, ...]
+    isolation_profile: IsolationProfile
     state_path: str
     schema_version: str = "1"
 
@@ -135,6 +137,7 @@ class ExecutionPlan:
         evidence = tuple(_evidence_refs(self.context_packet))
         agent = self.dag.nodes[0].policy.agent if self.dag.nodes else "claude"
         adapter_capability = adapter_capability_payload(agent)
+        isolation = self.isolation_profile.to_dict()
         nodes = tuple(
             NodeSpec(
                 node_id=node.node_id,
@@ -164,6 +167,7 @@ class ExecutionPlan:
                     "agent": node.policy.agent,
                     "model": node.policy.model,
                     "adapter_capability": adapter_capability_payload(node.policy.agent),
+                    "isolation_profile": isolation,
                     "risk": self.dag.risk.value,
                     "verifier": node.policy.verifier,
                 },
@@ -179,6 +183,7 @@ class ExecutionPlan:
                 "source": "harness_run.ExecutionPlan",
                 "state_path": self.state_path,
                 "adapter_capability": adapter_capability,
+                "isolation_profile": isolation,
             },
         )
 
@@ -190,6 +195,7 @@ class ExecutionPlan:
             "context_packet": self.context_packet.to_dict(),
             "proof_requirements": [item.to_dict() for item in self.proof_requirements],
             "policy_decisions": [item.to_dict() for item in self.policy_decisions],
+            "isolation_profile": self.isolation_profile.to_dict(),
             "state_path": self.state_path,
             "resume": {
                 "supported": True,
@@ -287,6 +293,7 @@ class HarnessResult:
     def render_text(self) -> str:
         agent = self.plan.dag.nodes[0].policy.agent if self.plan.dag.nodes else "claude"
         adapter_capability = adapter_capability_payload(agent)
+        isolation = self.plan.isolation_profile
         lines = [
             f"ONMC run {self.plan.run_id}: {self.status.value}",
             f"Task: {self.plan.dag.task}",
@@ -308,6 +315,11 @@ class HarnessResult:
                 f"tokens={adapter_capability['tokens']}; "
                 f"cost={adapter_capability['cost']}; "
                 f"isolation={adapter_capability['isolation']})"
+            ),
+            (
+                f"Isolation: {isolation.mode} "
+                f"(filesystem={isolation.filesystem}; network={isolation.network}; "
+                f"secrets={isolation.secrets})"
             ),
         ]
         if self.status is not HarnessStatus.PLANNED:

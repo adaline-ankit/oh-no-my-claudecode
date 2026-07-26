@@ -739,6 +739,33 @@ def test_runtime_contract_exposes_honest_adapter_capabilities(tmp_path: Path) ->
     assert all(node.metadata["adapter_capability"] == capability for node in spec.nodes)
 
 
+def test_runtime_contract_exposes_declared_isolation_profile(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=HarnessController(tmp_path).dependencies.context_engine,
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+    )
+    plan = HarnessController(tmp_path, dependencies=dependencies).run(
+        RunRequest(
+            task="Refactor safely",
+            plan_only=True,
+            isolation=True,
+        )
+    ).plan
+
+    spec = plan.to_run_spec()
+    isolation = spec.metadata["isolation_profile"]
+
+    assert isolation == plan.isolation_profile.to_dict()
+    assert isolation["requested"] is True
+    assert isolation["mode"] == "git_worktree_required"
+    assert isolation["network"] == "not constrained by ONMC"
+    assert "not a container or microVM" in " ".join(isolation["limitations"])
+    assert all(node.metadata["isolation_profile"] == isolation for node in spec.nodes)
+
+
 def _completion_evidence(node: NodeSpec) -> tuple[EvidenceRef, ...]:
     return (
         EvidenceRef(

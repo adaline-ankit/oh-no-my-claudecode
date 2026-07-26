@@ -117,6 +117,7 @@ def test_plan_only_never_executes_agent_and_is_deterministic(tmp_path: Path) -> 
         "context_packet",
         "proof_requirements",
         "policy_decisions",
+        "isolation_profile",
         "state_path",
         "resume",
     }
@@ -253,6 +254,20 @@ def test_render_text_exposes_adapter_telemetry_limits(tmp_path: Path) -> None:
     assert "Adapter: codex" in text
     assert "tokens=best_effort_human_stdout_parse" in text
     assert "cost=not_reported" in text
+
+
+def test_render_text_exposes_isolation_boundary(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+
+    result = controller.run(
+        RunRequest(task="Use isolated worktree", plan_only=True, isolation=True)
+    )
+    text = result.render_text()
+
+    assert "Isolation: git_worktree_required" in text
+    assert "network=not constrained by ONMC" in text
+    assert "secrets=ambient environment" in text
 
 
 def test_cli_json_and_help_expose_safe_execution_contract(
