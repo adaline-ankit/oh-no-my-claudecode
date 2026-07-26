@@ -2538,10 +2538,73 @@ def hooks_prompt_router_command() -> None:
             _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
         except Exception:  # noqa: BLE001
             storage = None
-        output = compile_prompt_policy(prompt, storage, strict=strict)
+        raw_session_id = payload.get("session_id")
+        session_id = raw_session_id if isinstance(raw_session_id, str) else ""
+        output = compile_prompt_policy(
+            prompt,
+            storage,
+            strict=strict,
+            repo_root=repo_root,
+            session_id=session_id,
+        )
         if output:
             sys.stdout.write(output + "\n")
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@hooks_app.command("decision-intercept")
+def hooks_decision_intercept_command() -> None:
+    """Resolve low-risk Claude Code questions through the strict runtime."""
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import compile_decision_intercept, read_wrap_strict
+
+        payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        output = compile_decision_intercept(payload, strict=read_wrap_strict(repo_root))
+        if output:
+            sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
+        pass
+
+
+@hooks_app.command("runtime-stop")
+def hooks_runtime_stop_command() -> None:
+    """Block a strict wrapped session from stopping before verification."""
+    try:
+        from oh_no_my_claudecode.core.repo import discover_repo_root
+        from oh_no_my_claudecode.wrap import read_wrap_strict
+        from oh_no_my_claudecode.wrap.runtime import evaluate_completion
+
+        payload = _read_hook_payload()
+        if not _wrap_active_for(payload):
+            return
+        raw_cwd = payload.get("cwd")
+        cwd = Path(raw_cwd) if isinstance(raw_cwd, str) and raw_cwd else Path.cwd()
+        try:
+            repo_root = discover_repo_root(cwd)
+        except Exception:  # noqa: BLE001
+            repo_root = cwd
+        raw_session_id = payload.get("session_id")
+        session_id = raw_session_id if isinstance(raw_session_id, str) else ""
+        decision = evaluate_completion(
+            repo_root,
+            session_id,
+            strict=read_wrap_strict(repo_root),
+        )
+        if decision is not None:
+            output = decision.hook_output()
+            if output:
+                sys.stdout.write(output + "\n")
+    except Exception:  # noqa: BLE001, S110 - hook commands must never brick Claude Code.
         pass
 
 

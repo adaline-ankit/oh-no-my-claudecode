@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from oh_no_my_claudecode.storage import SQLiteStorage
 
 __all__ = [
+    "compile_decision_intercept",
     "compile_prompt_policy",
     "compile_task_intercept",
     "swarm_active",
@@ -42,6 +43,7 @@ __all__ = [
 # The native Claude Code tool that spawns subagents. This is the only tool the
 # intercept acts on; every other tool is allowed through untouched.
 _TASK_TOOL_NAME = "Task"
+_QUESTION_TOOL_NAME = "AskUserQuestion"
 
 # Env var the user (or onmc's own fan-out) can set to bypass the intercept.
 _ALLOW_TASK_ENV = "ONMC_ALLOW_TASK"
@@ -49,6 +51,25 @@ _ALLOW_TASK_ENV = "ONMC_ALLOW_TASK"
 # A swarm marker older than this is considered stale and no longer exempts
 # native Task spawns (the swarm has almost certainly finished or died).
 _SWARM_MARKER_TTL_SECONDS = 30 * 60  # 30 minutes
+
+_HIGH_RISK_QUESTION_TERMS = frozenset(
+    {
+        "authentication",
+        "authorization",
+        "billing",
+        "compliance",
+        "credential",
+        "delete",
+        "destructive",
+        "legal",
+        "migration",
+        "payment",
+        "personally identifiable",
+        "production",
+        "secret",
+        "security",
+    }
+)
 
 
 def _truthy(value: str | None) -> bool:
@@ -140,6 +161,8 @@ def compile_prompt_policy(
     storage: SQLiteStorage | None,
     *,
     strict: bool,
+    repo_root: Path | None = None,
+    session_id: str = "",
     now: datetime | None = None,
 ) -> str:
     """Build the ``UserPromptSubmit`` additional-context nudge for *prompt*.
@@ -168,6 +191,17 @@ def compile_prompt_policy(
         }.get(decision.strategy, "onmc recall")
 
         dead_ends = _top_dead_ends(prompt, storage, now=now)
+        mission = None
+        if repo_root is not None:
+            from oh_no_my_claudecode.wrap.runtime import arm_mission
+
+            mission = arm_mission(
+                repo_root,
+                session_id,
+                prompt,
+                strict=strict,
+                now=now,
+            )
 
         mode = "strict" if strict else "soft"
         parts = [
@@ -176,6 +210,12 @@ def compile_prompt_policy(
         ]
         if dead_ends:
             parts.append("Dead-ends: " + "; ".join(dead_ends) + ".")
+        if mission is not None:
+            parts.append(
+                "ONMC completion contract armed: do not stop until a non-vacuous "
+                f"change passes `{mission.verifier}`. Low-risk choices should use "
+                "the best reversible default; escalate only material-risk decisions."
+            )
         parts.append("Default to onmc paths; preflight before done.")
         context = " ".join(parts)
 
@@ -188,6 +228,70 @@ def compile_prompt_policy(
             }
         )
     except Exception:  # noqa: BLE001 - never brick Claude Code; fail open.
+        return ""
+
+
+def compile_decision_intercept(payload: dict[str, Any], *, strict: bool) -> str:
+    """Resolve low-risk ``AskUserQuestion`` calls without interrupting the user.
+
+    Strict mode denies only questions whose options represent reversible
+    implementation choices. Material-risk questions are allowed unchanged.
+    Denial feedback tells Claude which concrete default to adopt and records
+    that it must document the assumption.
+    """
+    try:
+        if not strict or payload.get("tool_name") != _QUESTION_TOOL_NAME:
+            return ""
+        tool_input = payload.get("tool_input")
+        if not isinstance(tool_input, dict):
+            return ""
+        questions = tool_input.get("questions")
+        if not isinstance(questions, list) or not questions:
+            return ""
+        serialized = json.dumps(questions, ensure_ascii=True).lower()
+        if any(term in serialized for term in _HIGH_RISK_QUESTION_TERMS):
+            return ""
+
+        selected: list[str] = []
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            options = question.get("options")
+            if not isinstance(options, list) or not options:
+                continue
+            choice = next(
+                (
+                    option
+                    for option in options
+                    if isinstance(option, dict)
+                    and "recommended"
+                    in f"{option.get('label', '')} {option.get('description', '')}".lower()
+                ),
+                options[0],
+            )
+            if isinstance(choice, dict):
+                label = choice.get("label")
+                if isinstance(label, str) and label.strip():
+                    selected.append(label.strip())
+
+        if not selected:
+            return ""
+        reason = (
+            "ONMC autonomous runtime selected the best reversible defaults: "
+            + "; ".join(selected)
+            + ". Continue with these choices, record them as explicit assumptions, "
+            "and keep working until the completion contract verifies."
+        )
+        return json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": reason,
+                }
+            }
+        )
+    except Exception:  # noqa: BLE001 - a decision helper must never brick Claude Code.
         return ""
 
 

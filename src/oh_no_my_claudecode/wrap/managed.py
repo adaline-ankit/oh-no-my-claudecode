@@ -25,7 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from oh_no_my_claudecode.hooks.installer import (
+    DECISION_INTERCEPT_COMMAND,
     PROMPT_ROUTER_COMMAND,
+    RUNTIME_STOP_COMMAND,
     TASK_INTERCEPT_COMMAND,
 )
 
@@ -39,8 +41,15 @@ __all__ = [
 
 # Matcher used by the Task intercept hook.
 _TASK_MATCHER = "Task"
-# The two wrap commands that belong in managed-settings.
-_WRAP_COMMANDS = frozenset({TASK_INTERCEPT_COMMAND, PROMPT_ROUTER_COMMAND})
+_QUESTION_MATCHER = "AskUserQuestion"
+_WRAP_COMMANDS = frozenset(
+    {
+        TASK_INTERCEPT_COMMAND,
+        PROMPT_ROUTER_COMMAND,
+        DECISION_INTERCEPT_COMMAND,
+        RUNTIME_STOP_COMMAND,
+    }
+)
 
 
 def default_managed_path() -> Path:
@@ -74,7 +83,14 @@ def merge_managed_hooks(existing: dict[str, Any]) -> dict[str, Any]:
     _merge_hook(
         hooks, event_name="PreToolUse", matcher=_TASK_MATCHER, command=TASK_INTERCEPT_COMMAND
     )
+    _merge_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_QUESTION_MATCHER,
+        command=DECISION_INTERCEPT_COMMAND,
+    )
     _merge_hook(hooks, event_name="UserPromptSubmit", matcher="", command=PROMPT_ROUTER_COMMAND)
+    _merge_hook(hooks, event_name="Stop", matcher="", command=RUNTIME_STOP_COMMAND)
     return settings
 
 
@@ -97,7 +113,14 @@ def managed_hooks_present(settings: dict[str, Any]) -> bool:
         return False
     return _has_hook(
         hooks, event_name="PreToolUse", matcher=_TASK_MATCHER, command=TASK_INTERCEPT_COMMAND
-    ) and _has_hook(hooks, event_name="UserPromptSubmit", matcher="", command=PROMPT_ROUTER_COMMAND)
+    ) and _has_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_QUESTION_MATCHER,
+        command=DECISION_INTERCEPT_COMMAND,
+    ) and _has_hook(
+        hooks, event_name="UserPromptSubmit", matcher="", command=PROMPT_ROUTER_COMMAND
+    ) and _has_hook(hooks, event_name="Stop", matcher="", command=RUNTIME_STOP_COMMAND)
 
 
 def manual_install_json() -> str:

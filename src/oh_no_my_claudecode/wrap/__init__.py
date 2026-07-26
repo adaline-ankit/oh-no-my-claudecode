@@ -1,13 +1,15 @@
 """``onmc wrap`` — make onmc the default layer for a Claude Code session.
 
-Wrapping installs two hooks into ``.claude/settings.json``:
+Wrapping installs four hooks into ``.claude/settings.json``:
 
 - a ``PreToolUse`` hook (matcher ``"Task"``) that intercepts native
   agent-spawning and redirects it to ``onmc swarm`` (strict = deny + redirect,
   soft = nudge), and
 - a ``UserPromptSubmit`` hook that routes each prompt through onmc's
-  deterministic router + dead-end guard and injects a terse "prefer onmc
-  paths" nudge.
+  deterministic router + dead-end guard and arms a completion contract,
+- a low-risk decision intercept that chooses reversible defaults, and
+- a ``Stop`` guard that requires a non-vacuous change plus a passing repository
+  verifier before Claude can claim completion.
 
 The session switch (``onmc wrap on/off/toggle``) controls whether the
 deep-wrap lifecycle hooks engage.  When off, all hooks exit 0 silently.
@@ -30,6 +32,7 @@ to never raise — a wrapper that bricks Claude Code is unacceptable.
 from __future__ import annotations
 
 from oh_no_my_claudecode.wrap.logic import (
+    compile_decision_intercept,
     compile_prompt_policy,
     compile_task_intercept,
     swarm_active,
@@ -50,6 +53,7 @@ from oh_no_my_claudecode.wrap.state import (
 
 __all__ = [
     "compile_prompt_policy",
+    "compile_decision_intercept",
     "compile_task_intercept",
     "is_active",
     "read_default_active",

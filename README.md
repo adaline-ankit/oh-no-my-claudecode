@@ -324,6 +324,21 @@ Claude Code marketplace install:
 /reload-plugins
 ```
 
+Turn ONMC into the active, verifier-gated Claude Code runtime for this
+repository:
+
+```bash
+onmc wrap --strict --default-active
+```
+
+For actionable coding prompts, strict wrapping automatically arms a bounded
+completion contract. Claude cannot finish until ONMC observes a real workspace
+change and the detected repository verifier passes. Low-risk implementation
+questions use a recommended reversible default; material security, production,
+payment, deletion, migration, compliance, and credential decisions still
+reach the user. The guard returns control after six blocked completion attempts
+or 45 minutes, so a broken verifier cannot create an infinite agent loop.
+
 Codex MCP registration:
 
 ```bash

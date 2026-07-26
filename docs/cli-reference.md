@@ -3321,29 +3321,46 @@ Usage: onmc hooks [OPTIONS] COMMAND [ARGS]...
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ install         Install project-scoped Claude Code hooks into                │
-│                 .claude/settings.json.                                       │
-│ uninstall       Remove ONMC entries from project Claude Code settings and    │
-│                 .mcp.json.                                                   │
-│ status          Show current Claude hook installation and snapshot status.   │
-│ pre-compact     Capture a compaction snapshot before Claude Code compacts    │
-│                 context.                                                     │
-│ session-start   Inject context at session start: boot digest on startup,     │
-│                 continuation brief after compaction.                         │
-│ prompt-recall   Inject the most relevant repo memories for the current user  │
-│                 prompt.                                                      │
-│ session-end     Run memory consolidation and heuristic auto-capture on       │
-│                 SessionEnd.                                                  │
-│ pre-tool-use    Inject file-level danger warnings before the agent edits a   │
-│                 file.                                                        │
-│ post-tool-use   Emit a live telemetry ``tool_call`` event for each           │
-│                 PostToolUse hook fire.                                       │
-│ subagent-stop   Emit a live telemetry ``subagent_stop`` event on             │
-│                 SubagentStop or Stop.                                        │
-│ task-intercept  Intercept native ``Task`` agent-spawning and redirect it to  │
-│                 ``onmc swarm``.                                              │
-│ prompt-router   Route the user prompt through onmc and inject a "prefer onmc │
-│                 paths" nudge.                                                │
+│ install             Install project-scoped Claude Code hooks into            │
+│                     .claude/settings.json.                                   │
+│ uninstall           Remove ONMC entries from project Claude Code settings    │
+│                     and .mcp.json.                                           │
+│ status              Show current Claude hook installation and snapshot       │
+│                     status.                                                  │
+│ pre-compact         Capture a compaction snapshot before Claude Code         │
+│                     compacts context.                                        │
+│ session-start       Inject context at session start: boot digest on startup, │
+│                     continuation brief after compaction.                     │
+│ prompt-recall       Inject the most relevant repo memories for the current   │
+│                     user prompt.                                             │
+│ session-end         Run memory consolidation and heuristic auto-capture on   │
+│                     SessionEnd.                                              │
+│ pre-tool-use        Inject file-level danger warnings before the agent edits │
+│                     a file.                                                  │
+│ post-tool-use       Emit a live telemetry ``tool_call`` event for each       │
+│                     PostToolUse hook fire.                                   │
+│ subagent-stop       Emit a live telemetry ``subagent_stop`` event on         │
+│                     SubagentStop or Stop.                                    │
+│ task-intercept      Intercept native ``Task`` agent-spawning and redirect it │
+│                     to ``onmc swarm``.                                       │
+│ prompt-router       Route the user prompt through onmc and inject a "prefer  │
+│                     onmc paths" nudge.                                       │
+│ decision-intercept  Resolve low-risk Claude Code questions through the       │
+│                     strict runtime.                                          │
+│ runtime-stop        Block a strict wrapped session from stopping before      │
+│                     verification.                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks decision-intercept`
+
+```text
+Usage: onmc hooks decision-intercept [OPTIONS]
+
+ Resolve low-risk Claude Code questions through the strict runtime.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3459,6 +3476,18 @@ Usage: onmc hooks prompt-router [OPTIONS]
  prompt from the stdin payload, routes it via the deterministic router +
  dead-end guard, and writes a terse ``additionalContext`` JSON payload.
  Stdout is always pure JSON or empty. Always exits 0; never raises.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc hooks runtime-stop`
+
+```text
+Usage: onmc hooks runtime-stop [OPTIONS]
+
+ Block a strict wrapped session from stopping before verification.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --help          Show this message and exit.                                  │

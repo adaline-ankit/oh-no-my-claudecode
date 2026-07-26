@@ -102,14 +102,17 @@ integration, or diagnosis, hide it from primary help and deprecate it.
 
 1. Add a typed node contract and register existing core functions as nodes.
 2. Make `mission --execute` delegate to the shared harness.
-3. Replace static task nodes with executable transitions.
-4. Add dependency-aware fan-out and deterministic fan-in.
-5. Add persisted approval interrupts and resume.
-6. Add held-out eval gating before learning promotion.
-7. Stream graph events to UI from the same durable state.
-8. Benchmark plain Claude, context-only, single-agent harness, and selective
+3. Arm strict interactive sessions from `UserPromptSubmit`; block `Stop` until
+   a non-vacuous change passes a detected repository verifier, with bounded
+   retries and a wall-clock circuit breaker.
+4. Replace static task nodes with executable transitions.
+5. Add dependency-aware fan-out and deterministic fan-in.
+6. Add persisted approval interrupts and resume.
+7. Add held-out eval gating before learning promotion.
+8. Stream graph events to UI from the same durable state.
+9. Benchmark plain Claude, context-only, single-agent harness, and selective
    swarm under matched models, budgets, repositories, and seeds.
-9. Replace the runtime only after graph parity tests and a public-repository
+10. Replace the runtime only after graph parity tests and a public-repository
    execution pass.
 
 ## Non-Goals
