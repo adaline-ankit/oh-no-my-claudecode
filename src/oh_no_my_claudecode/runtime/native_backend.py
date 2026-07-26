@@ -68,19 +68,19 @@ class NativeExecutionBackend:
         if missing_handlers:
             raise RuntimeContractError(f"missing node handlers: {missing_handlers}")
 
+        execute_started_at = time.time()
         snapshot = self._load_or_create(spec, resume=resume)
         if snapshot.state is RunState.COMPLETED:
-            return RunResult(
-                run_id=spec.run_id,
+            return self._result_with_run_event(
+                spec,
                 status=RunResultStatus.COMPLETED,
                 results=self._load_results(spec),
-                backend=self.backend_name,
-                spec_digest=spec.digest,
+                started_at=execute_started_at,
             )
         if snapshot.state is RunState.AWAITING_APPROVAL:
-            return self._interrupted_result(spec, results=[])
+            return self._interrupted_result(spec, results=[], started_at=execute_started_at)
         if snapshot.state is RunState.CANCELLED:
-            return self._cancelled_result(spec, results=[])
+            return self._cancelled_result(spec, results=[], started_at=execute_started_at)
         if snapshot.state is not RunState.RUNNING:
             snapshot = self.store.start(spec.run_id, idempotency_key="runtime:start")
 
@@ -97,9 +97,18 @@ class NativeExecutionBackend:
                         results.append(result)
                         continue
                     if state is NodeState.CANCELLED:
-                        return self._cancelled_result(spec, results)
+                        return self._cancelled_result(
+                            spec,
+                            results,
+                            started_at=execute_started_at,
+                        )
                     if state is NodeState.AWAITING_APPROVAL:
-                        return self._interrupted_result(spec, results, node=node)
+                        return self._interrupted_result(
+                            spec,
+                            results,
+                            node=node,
+                            started_at=execute_started_at,
+                        )
                     if self._has_result(spec.run_id, node.node_id):
                         result = self._load_result(spec.run_id, node.node_id)
                         self._validate_node_result(node, result)
@@ -117,7 +126,12 @@ class NativeExecutionBackend:
                                 reason=result.error or f"{node.node_id} skipped",
                                 idempotency_key="runtime:cancel",
                             )
-                        return self._terminal_result_from_node_result(spec, results, result)
+                        return self._terminal_result_from_node_result(
+                            spec,
+                            results,
+                            result,
+                            started_at=execute_started_at,
+                        )
                     if any(
                         current.nodes[dependency].state is not NodeState.SUCCEEDED
                         for dependency in node.dependencies
@@ -159,7 +173,12 @@ class NativeExecutionBackend:
                             error=reason,
                             status="interrupted",
                         )
-                        return self._interrupted_result(spec, results, node=node)
+                        return self._interrupted_result(
+                            spec,
+                            results,
+                            node=node,
+                            started_at=execute_started_at,
+                        )
                     ready_nodes.append(node)
                 for node, result in self._run_ready_nodes(spec.run_id, ready_nodes, handlers):
                     self._write_result(spec.run_id, result)
@@ -186,7 +205,12 @@ class NativeExecutionBackend:
                             reason=result.error or f"{node.node_id} skipped",
                             idempotency_key="runtime:cancel",
                         )
-                        return self._terminal_result_from_node_result(spec, results, result)
+                        return self._terminal_result_from_node_result(
+                            spec,
+                            results,
+                            result,
+                            started_at=execute_started_at,
+                        )
                     else:
                         self.store.fail_node(
                             spec.run_id,
@@ -199,23 +223,26 @@ class NativeExecutionBackend:
                             reason=result.error or f"{node.node_id} failed",
                             idempotency_key="runtime:fail",
                         )
-                        return self._terminal_result_from_node_result(spec, results, result)
+                        return self._terminal_result_from_node_result(
+                            spec,
+                            results,
+                            result,
+                            started_at=execute_started_at,
+                        )
             self.store.complete(spec.run_id, idempotency_key="runtime:complete")
-            return RunResult(
-                run_id=spec.run_id,
+            return self._result_with_run_event(
+                spec,
                 status=RunResultStatus.COMPLETED,
                 results=tuple(results),
-                backend=self.backend_name,
-                spec_digest=spec.digest,
+                started_at=execute_started_at,
             )
         except Exception as exc:
             self._fail_running_node(spec.run_id, str(exc))
-            return RunResult(
-                run_id=spec.run_id,
+            return self._result_with_run_event(
+                spec,
                 status=RunResultStatus.FAILED,
                 results=tuple(results),
-                backend=self.backend_name,
-                spec_digest=spec.digest,
+                started_at=execute_started_at,
                 error=str(exc),
             )
 
@@ -338,33 +365,65 @@ class NativeExecutionBackend:
             ]
             return [(node, future.result()) for node, future in zip(nodes, futures, strict=True)]
 
+    def _result_with_run_event(
+        self,
+        spec: RunSpec,
+        *,
+        status: RunResultStatus,
+        results: tuple[NodeResult, ...],
+        started_at: float,
+        error: str | None = None,
+    ) -> RunResult:
+        self._record_runtime_run_event(
+            spec,
+            started_at=started_at,
+            ended_at=time.time(),
+            status=status,
+            result_count=len(results),
+            error=error,
+        )
+        return RunResult(
+            run_id=spec.run_id,
+            status=status,
+            results=results,
+            backend=self.backend_name,
+            spec_digest=spec.digest,
+            error=error,
+        )
+
     def _terminal_result_from_node_result(
         self,
         spec: RunSpec,
         results: list[NodeResult],
         result: NodeResult,
+        *,
+        started_at: float,
     ) -> RunResult:
         status = (
             RunResultStatus.CANCELLED
             if result.status is NodeResultStatus.SKIPPED
             else RunResultStatus.FAILED
         )
-        return RunResult(
-            run_id=spec.run_id,
+        return self._result_with_run_event(
+            spec,
             status=status,
             results=tuple(results),
-            backend=self.backend_name,
-            spec_digest=spec.digest,
+            started_at=started_at,
             error=result.error,
         )
 
-    def _cancelled_result(self, spec: RunSpec, results: list[NodeResult]) -> RunResult:
-        return RunResult(
-            run_id=spec.run_id,
+    def _cancelled_result(
+        self,
+        spec: RunSpec,
+        results: list[NodeResult],
+        *,
+        started_at: float,
+    ) -> RunResult:
+        return self._result_with_run_event(
+            spec,
             status=RunResultStatus.CANCELLED,
             results=tuple(results),
-            backend=self.backend_name,
-            spec_digest=spec.digest,
+            started_at=started_at,
             error="run cancelled",
         )
 
@@ -373,15 +432,15 @@ class NativeExecutionBackend:
         spec: RunSpec,
         results: list[NodeResult],
         *,
+        started_at: float,
         node: NodeSpec | None = None,
     ) -> RunResult:
         target = "run" if node is None else f"node {node.node_id}"
-        return RunResult(
-            run_id=spec.run_id,
+        return self._result_with_run_event(
+            spec,
             status=RunResultStatus.INTERRUPTED,
             results=tuple(results),
-            backend=self.backend_name,
-            spec_digest=spec.digest,
+            started_at=started_at,
             error=f"approval required for {target}",
         )
 
@@ -484,6 +543,39 @@ class NativeExecutionBackend:
                     result=final_result,
                     error=release_failure or failure,
                 )
+
+    def _record_runtime_run_event(
+        self,
+        spec: RunSpec,
+        *,
+        started_at: float,
+        ended_at: float,
+        status: RunResultStatus,
+        result_count: int,
+        error: str | None,
+    ) -> None:
+        if self.repo_root is None:
+            return
+        record_trace_event(
+            self.repo_root,
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_RUN,
+                ts=started_at,
+                payload={
+                    "backend": self.backend_name,
+                    "run_id": spec.run_id,
+                    "status": status.value,
+                    "error": error,
+                    "spec_digest": spec.digest,
+                    "node_count": len(spec.nodes),
+                    "result_count": result_count,
+                    "max_workers": self.max_workers,
+                    "end_ts": ended_at,
+                    "duration_seconds": max(0.0, ended_at - started_at),
+                    "title": f"runtime run {spec.run_id} {status.value}",
+                },
+            ),
+        )
 
     def _record_runtime_node_event(
         self,

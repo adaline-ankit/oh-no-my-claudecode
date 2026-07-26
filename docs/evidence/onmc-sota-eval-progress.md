@@ -75,6 +75,11 @@ This is evidence for a stronger harness foundation:
 - OTel runtime-node export now marks `failed`, `skipped`, and `cancelled` node spans as error
   status with the runtime reason as the OTLP status message, while keeping approval interrupts
   non-error but explicitly attributed.
+- The native runtime now emits a privacy-preserving `runtime_run` trace event for each observed
+  run result, binding backend, run id, spec digest, status, node count, result count, worker count,
+  duration, and terminal error without exporting task text.
+- OTel export now maps `runtime_run` events to `invoke_agent` spans with stable
+  `onmc.runtime.run.*` attributes and terminal failed/cancelled run status surfaced as OTLP errors.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -397,6 +402,61 @@ Result:
 
 ```text
 130 collected tests passed
+```
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+For the runtime-run lineage slice:
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+74 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 11 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by this trace slice.
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py tests/test_trace.py
+```
+
+Result:
+
+```text
+133 collected tests passed
 ```
 
 ```text

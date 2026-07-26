@@ -767,6 +767,61 @@ class TestOtelSpans:
             {"stringValue": "pytest tests/unit"}
         ]
 
+    def test_otel_span_maps_runtime_run_to_agent_invocation(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_RUN,
+                ts=100.0,
+                payload={
+                    "backend": "native",
+                    "run_id": "run-1",
+                    "status": "completed",
+                    "spec_digest": "abc123",
+                    "node_count": 3,
+                    "result_count": 3,
+                    "max_workers": 2,
+                    "duration_ms": 50,
+                },
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_runtime_run")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["gen_ai.operation.name"]["stringValue"] == "invoke_agent"
+        assert attr_map["onmc.event_kind"]["stringValue"] == "runtime_run"
+        assert attr_map["onmc.runtime.backend"]["stringValue"] == "native"
+        assert attr_map["onmc.runtime.run_id"]["stringValue"] == "run-1"
+        assert attr_map["onmc.runtime.run.status"]["stringValue"] == "completed"
+        assert attr_map["onmc.runtime.run.spec_digest"]["stringValue"] == "abc123"
+        assert attr_map["onmc.runtime.run.node_count"]["intValue"] == 3
+        assert attr_map["onmc.runtime.run.result_count"]["intValue"] == 3
+        assert attr_map["onmc.runtime.run.max_workers"]["intValue"] == 2
+        assert spans[0]["status"]["code"] == 1
+
+    @pytest.mark.parametrize("status", ["cancelled", "failed"])
+    def test_otel_span_marks_terminal_runtime_run_as_error(self, status: str) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_RUN,
+                ts=100.0,
+                payload={
+                    "run_id": "run-1",
+                    "status": status,
+                    "error": "operator stopped run",
+                },
+            )
+        ]
+        spans = to_otel_spans(events, session_id=f"tr_runtime_run_{status}")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert spans[0]["status"]["code"] == 2
+        assert spans[0]["status"]["message"] == "operator stopped run"
+        assert attr_map["onmc.runtime.run.status"]["stringValue"] == status
+
     def test_otel_span_marks_failed_runtime_node_as_error(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 

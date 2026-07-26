@@ -42,6 +42,7 @@ class TraceEventKind(StrEnum):
     # --- trace-native ---
     TOOL_CALL = "tool_call"
     TOOL_FAILURE = "tool_failure"
+    RUNTIME_RUN = "runtime_run"
     RUNTIME_NODE = "runtime_node"
     FILE_READ = "file_read"
     SEARCH_QUERY = "search_query"

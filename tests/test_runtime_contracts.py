@@ -257,6 +257,17 @@ def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None
     assert payload["duration_seconds"] >= 0
     assert payload["end_ts"] >= runtime_events[0].ts
     assert payload["capabilities"]["filesystem_write"] is True
+    run_events = [event for event in events if event.kind == TraceEventKind.RUNTIME_RUN]
+    assert len(run_events) == 1
+    run_payload = run_events[0].payload
+    assert run_payload["backend"] == "native"
+    assert run_payload["run_id"] == "run-trace"
+    assert run_payload["status"] == "completed"
+    assert run_payload["spec_digest"] == spec.digest
+    assert run_payload["node_count"] == 1
+    assert run_payload["result_count"] == 1
+    assert run_payload["max_workers"] == 1
+    assert run_payload["duration_seconds"] >= payload["duration_seconds"]
 
 
 def test_native_backend_recovers_result_written_before_crash_without_side_effect(

@@ -18,7 +18,7 @@ Key attributes used
 - ``onmc.session_id``        — parent session identifier
 - ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
 - ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
-- ``onmc.runtime.*``         — runtime graph/node attributes for runtime_node events
+- ``onmc.runtime.*``         — runtime graph/run/node attributes for runtime events
 - ``traceId`` / ``spanId``   — deterministic OTLP correlation identifiers
 - ``links``                  — runtime_node dependency edges when dependency spans are present
 """
@@ -42,6 +42,7 @@ _GEN_AI_SYSTEM = "onmc"
 _OPERATION_MAP: dict[str, str] = {
     TraceEventKind.TOOL_CALL: "execute_tool",
     TraceEventKind.TOOL_FAILURE: "execute_tool",
+    TraceEventKind.RUNTIME_RUN: "invoke_agent",
     TraceEventKind.RUNTIME_NODE: "execute_agent",
     TraceEventKind.FILE_READ: "retrieve",
     TraceEventKind.SEARCH_QUERY: "retrieve",
@@ -58,7 +59,8 @@ _OPERATION_MAP: dict[str, str] = {
 
 _STATUS_ERROR = {"code": 2}  # OTEL StatusCode.ERROR
 _STATUS_OK = {"code": 1}  # OTEL StatusCode.OK
-_ERROR_RUNTIME_STATUSES = frozenset({"cancelled", "failed", "skipped"})
+_ERROR_RUNTIME_NODE_STATUSES = frozenset({"cancelled", "failed", "skipped"})
+_ERROR_RUNTIME_RUN_STATUSES = frozenset({"cancelled", "failed"})
 
 
 def _ns(ts_seconds: float) -> int:
@@ -100,6 +102,7 @@ def _span_from_event(
         attributes.append(
             {"key": "onmc.title", "value": {"stringValue": str(payload["title"])}}
         )
+    attributes.extend(_runtime_run_attributes(event))
     attributes.extend(_runtime_node_attributes(event))
 
     return {
@@ -140,8 +143,10 @@ def _span_id(session_id: str, index: int, event: TraceEvent) -> str:
 def _event_is_error(event: TraceEvent) -> bool:
     if event.kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED):
         return True
+    if event.kind == TraceEventKind.RUNTIME_RUN:
+        return str(event.payload.get("status", "")).lower() in _ERROR_RUNTIME_RUN_STATUSES
     if event.kind == TraceEventKind.RUNTIME_NODE:
-        return str(event.payload.get("status", "")).lower() in _ERROR_RUNTIME_STATUSES
+        return str(event.payload.get("status", "")).lower() in _ERROR_RUNTIME_NODE_STATUSES
     return False
 
 
@@ -153,6 +158,38 @@ def _span_status(event: TraceEvent) -> dict[str, Any]:
     if message:
         status["message"] = str(message)
     return status
+
+
+def _runtime_run_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+    if event.kind != TraceEventKind.RUNTIME_RUN:
+        return []
+    payload = event.payload
+    attributes: list[dict[str, Any]] = []
+    _append_string_attribute(attributes, "onmc.runtime.backend", payload.get("backend"))
+    _append_string_attribute(attributes, "onmc.runtime.run_id", payload.get("run_id"))
+    _append_string_attribute(attributes, "onmc.runtime.run.status", payload.get("status"))
+    _append_string_attribute(attributes, "onmc.runtime.run.error", payload.get("error"))
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.spec_digest",
+        payload.get("spec_digest"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.node_count",
+        payload.get("node_count"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.result_count",
+        payload.get("result_count"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.max_workers",
+        payload.get("max_workers"),
+    )
+    return attributes
 
 
 def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
