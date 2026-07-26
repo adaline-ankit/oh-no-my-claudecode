@@ -54,8 +54,16 @@ mypy src
 pytest --cov=oh_no_my_claudecode --cov-report=term-missing --cov-fail-under=80
 python -m build
 python -m twine check dist/*
+python scripts/release_artifact_smoke.py --dist-dir dist --offline
 python scripts/generate-cli-reference.py --check
 ```
+
+The offline artifact smoke creates a disposable environment, force-installs the
+built wheel, checks the console entrypoint, and runs one pre-recorded fixture
+comparison with zero model calls. Run it only after the current environment has
+the package's runtime dependencies installed. It proves packaging and the
+fixture execution path; it is not external benchmark evidence and cannot
+support performance claims.
 
 ### 3. Update release-facing files
 
