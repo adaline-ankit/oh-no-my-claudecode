@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 
+
+## [0.110.0] — 2026-07-26
+
+### Added
+
+- Publication work-plan generation for external benchmark evidence. The report
+  generator can now emit the exact missing tasks, arms, seeds, languages, cost
+  cells, raw artifacts, and coverage fields needed before ONMC can make an
+  external quality, cost, or SOTA claim.
+
 ## [0.109.0] — 2026-07-26
 
 ### Added
