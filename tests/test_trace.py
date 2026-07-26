@@ -822,6 +822,13 @@ class TestOtelSpans:
                     "run_id": "run-1",
                     "status": "completed",
                     "spec_digest": "abc123",
+                    "environment_digest": "e" * 64,
+                    "environment_python_version": "3.12.4",
+                    "environment_platform": "macOS-15.0-arm64-arm-64bit",
+                    "git_digest": "g" * 64,
+                    "git_head": "abcde12345",
+                    "git_branch": "main",
+                    "git_dirty": False,
                     "node_count": 3,
                     "result_count": 3,
                     "node_status_counts": {
@@ -847,6 +854,15 @@ class TestOtelSpans:
         assert attr_map["onmc.runtime.run_id"]["stringValue"] == "run-1"
         assert attr_map["onmc.runtime.run.status"]["stringValue"] == "completed"
         assert attr_map["onmc.runtime.run.spec_digest"]["stringValue"] == "abc123"
+        assert attr_map["onmc.runtime.run.environment_digest"]["stringValue"] == "e" * 64
+        assert attr_map["onmc.runtime.run.environment.python_version"]["stringValue"] == "3.12.4"
+        assert attr_map["onmc.runtime.run.environment.platform"]["stringValue"] == (
+            "macOS-15.0-arm64-arm-64bit"
+        )
+        assert attr_map["onmc.runtime.run.git_digest"]["stringValue"] == "g" * 64
+        assert attr_map["onmc.runtime.run.git_head"]["stringValue"] == "abcde12345"
+        assert attr_map["onmc.runtime.run.git_branch"]["stringValue"] == "main"
+        assert attr_map["onmc.runtime.run.git_dirty"]["boolValue"] is False
         assert attr_map["onmc.runtime.run.node_count"]["intValue"] == 3
         assert attr_map["onmc.runtime.run.result_count"]["intValue"] == 3
         assert attr_map["onmc.runtime.run.node_status_count.succeeded"]["intValue"] == 3

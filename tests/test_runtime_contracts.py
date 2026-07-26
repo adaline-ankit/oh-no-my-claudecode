@@ -268,6 +268,13 @@ def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None
     assert run_payload["run_id"] == "run-trace"
     assert run_payload["status"] == "completed"
     assert run_payload["spec_digest"] == spec.digest
+    assert len(run_payload["environment_digest"]) == 64
+    assert len(run_payload["git_digest"]) == 64
+    assert run_payload["environment_python_version"]
+    assert run_payload["environment_platform"]
+    assert "cwd" not in run_payload
+    assert "executable" not in run_payload
+    assert "git_root" not in run_payload
     assert run_payload["node_count"] == 1
     assert run_payload["result_count"] == 1
     assert run_payload["node_status_counts"] == {

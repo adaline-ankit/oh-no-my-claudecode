@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from collections.abc import Mapping
@@ -33,6 +34,45 @@ from oh_no_my_claudecode.runtime.contracts import (
 from oh_no_my_claudecode.runtime.fanout import dependency_layers
 from oh_no_my_claudecode.trace.models import TraceEvent, TraceEventKind
 from oh_no_my_claudecode.trace.recorder import record_trace_event
+
+
+def _snapshot_trace_payload(snapshot: RunSnapshot | None) -> dict[str, object]:
+    """Return privacy-preserving runtime envelope fields for run trace events."""
+    if snapshot is None:
+        return {}
+    environment = {
+        "platform": snapshot.environment.platform,
+        "python_version": snapshot.environment.python_version,
+    }
+    git = {
+        "branch": snapshot.git.branch,
+        "dirty": snapshot.git.dirty,
+        "head": snapshot.git.head,
+    }
+    payload: dict[str, object] = {
+        "environment_digest": _stable_digest(environment),
+        "environment_platform": snapshot.environment.platform,
+        "environment_python_version": snapshot.environment.python_version,
+        "git_digest": _stable_digest(git),
+    }
+    if snapshot.git.head is not None:
+        payload["git_head"] = snapshot.git.head
+    if snapshot.git.branch is not None:
+        payload["git_branch"] = snapshot.git.branch
+    if snapshot.git.dirty is not None:
+        payload["git_dirty"] = snapshot.git.dirty
+    return payload
+
+
+def _stable_digest(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 class NativeExecutionBackend:
@@ -556,6 +596,11 @@ class NativeExecutionBackend:
     ) -> None:
         if self.repo_root is None:
             return
+        snapshot: RunSnapshot | None = None
+        try:
+            snapshot = self.store.load(spec.run_id)
+        except Exception:  # noqa: BLE001
+            snapshot = None
         evidence = tuple(item for result in results for item in result.evidence)
         evidence_kinds = sorted({item.kind for item in evidence})
         status_counts = {
@@ -582,6 +627,7 @@ class NativeExecutionBackend:
                     "completion_evidence_count": sum(
                         1 for item in evidence if item.kind == "completion"
                     ),
+                    **_snapshot_trace_payload(snapshot),
                     "max_workers": self.max_workers,
                     "end_ts": ended_at,
                     "duration_seconds": max(0.0, ended_at - started_at),
@@ -589,7 +635,6 @@ class NativeExecutionBackend:
                 },
             ),
         )
-
     def _record_runtime_node_event(
         self,
         run_id: str,

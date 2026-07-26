@@ -93,6 +93,12 @@ This is evidence for a stronger harness foundation:
 - OTel runtime-run export now surfaces those aggregate proof and status counts as stable
   `onmc.runtime.run.*` attributes, giving Mission Control and trace backends a run-level proof
   summary without leaking evidence contents.
+- Runtime-run trace events now include a privacy-preserving reproducibility envelope: deterministic
+  environment and Git digests plus non-path Python/platform and Git head/branch/dirty fields when
+  available. Local working-directory, executable, and repository-root paths are not exported.
+- OTel runtime-run export now surfaces that same reproducibility envelope as stable
+  `onmc.runtime.run.*` attributes, allowing benchmark reports, receipts, and trace sinks to
+  correlate results with the code/runtime state that produced them without leaking local paths.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -120,6 +126,29 @@ Result:
 ```text
 All checks passed
 ```
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py tests/test_trace.py
+```
+
+Result:
+
+```text
+134 passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 11 source files
+```
+
+Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`, and
+`crewai`; these were not introduced by this slice.
 
 ```text
 python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py
@@ -1210,4 +1239,28 @@ Concrete corpus expansion target:
 - Include at least 2 more long-running tasks.
 - Draft slot mix: 4 bugfix, 9 refactor, and 9 long-running tasks.
 - At the 50-task target, add no more than 11 additional feature tasks.
+```
+
+## Runtime Reproducibility Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+75 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/runtime/native_backend.py src/oh_no_my_claudecode/trace/otel.py tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
 ```

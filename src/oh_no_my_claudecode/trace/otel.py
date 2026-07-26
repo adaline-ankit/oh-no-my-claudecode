@@ -175,6 +175,41 @@ def _runtime_run_attributes(event: TraceEvent) -> list[dict[str, Any]]:
         "onmc.runtime.run.spec_digest",
         payload.get("spec_digest"),
     )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.environment_digest",
+        payload.get("environment_digest"),
+    )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.environment.python_version",
+        payload.get("environment_python_version"),
+    )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.environment.platform",
+        payload.get("environment_platform"),
+    )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.git_digest",
+        payload.get("git_digest"),
+    )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.git_head",
+        payload.get("git_head"),
+    )
+    _append_string_attribute(
+        attributes,
+        "onmc.runtime.run.git_branch",
+        payload.get("git_branch"),
+    )
+    _append_bool_attribute(
+        attributes,
+        "onmc.runtime.run.git_dirty",
+        payload.get("git_dirty"),
+    )
     _append_int_attribute(
         attributes,
         "onmc.runtime.run.node_count",
