@@ -195,6 +195,26 @@ def test_resume_surface_returns_terminal_run_without_reexecution(tmp_path: Path)
 
     assert resumed.status is HarnessStatus.COMPLETED
     assert resumed.resumed is True
+    assert resumed.receipt is not None
+    assert resumed.verified is True
+    assert loop.calls == 1
+
+
+def test_completed_resume_requires_valid_receipt(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+    first = controller.run(RunRequest(task="Receipt-backed resume", execute=True))
+    receipt_path = tmp_path / ".agent-memory" / "receipts" / f"run-{first.plan.run_id}.json"
+    receipt_path.unlink()
+
+    resumed = controller.run(
+        RunRequest(task="Receipt-backed resume", execute=True, resume_run_id=first.plan.run_id)
+    )
+
+    assert resumed.status is HarnessStatus.FAILED
+    assert resumed.resumed is True
+    assert resumed.stop_reason == "resumed-completed-receipt-invalid"
+    assert resumed.verified is False
     assert loop.calls == 1
 
 

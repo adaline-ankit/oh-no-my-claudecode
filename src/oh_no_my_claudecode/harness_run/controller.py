@@ -84,7 +84,7 @@ from .models import (
     RunRequest,
     state_path_for,
 )
-from .receipt import HarnessRunReceipt
+from .receipt import HarnessRunReceipt, load_harness_receipt
 from .run_policy import (
     RunPolicy,
     RunPolicyDecision,
@@ -589,17 +589,7 @@ class HarnessController:
         if resumed:
             snapshot = store.load(plan.run_id)
             if snapshot.state in {RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED}:
-                completed = snapshot.state is RunState.COMPLETED
-                return HarnessResult(
-                    HarnessStatus.COMPLETED if completed else HarnessStatus.FAILED,
-                    plan,
-                    loop_converged=completed,
-                    proof_complete=completed,
-                    stop_reason=f"resumed-{snapshot.state.value}",
-                    resumed=True,
-                    resume_run_id=plan.run_id,
-                    worktree_path=None,
-                )
+                return self._resume_terminal_result(plan, snapshot)
             if snapshot.state is RunState.CREATED:
                 snapshot = store.start(plan.run_id, idempotency_key="harness:start")
             elif snapshot.state in {RunState.PAUSED, RunState.WAITING}:
@@ -896,6 +886,54 @@ class HarnessController:
             run_id,
             node_id,
             idempotency_key=f"node:{node_id}:complete",
+        )
+
+    def _resume_terminal_result(
+        self, plan: ExecutionPlan, snapshot: RunSnapshot
+    ) -> HarnessResult:
+        """Return terminal resume state without trusting durable state alone."""
+        if snapshot.state is not RunState.COMPLETED:
+            return HarnessResult(
+                HarnessStatus.FAILED,
+                plan,
+                stop_reason=f"resumed-{snapshot.state.value}",
+                resumed=True,
+                resume_run_id=plan.run_id,
+                worktree_path=None,
+            )
+        receipt = load_harness_receipt(self.repo_root, plan.run_id)
+        if receipt is None:
+            return HarnessResult(
+                HarnessStatus.FAILED,
+                plan,
+                loop_converged=True,
+                proof_complete=False,
+                verified=False,
+                stop_reason="resumed-completed-receipt-invalid",
+                proof_reasons=(
+                    "completed durable state has no valid verified harness receipt",
+                ),
+                resumed=True,
+                resume_run_id=plan.run_id,
+                worktree_path=None,
+            )
+        proof = receipt.proof
+        proof_complete = proof.get("complete") is True and proof.get("false_green") is False
+        proof_reasons = proof.get("reasons", ())
+        return HarnessResult(
+            HarnessStatus.COMPLETED,
+            plan,
+            loop_converged=True,
+            proof_complete=proof_complete,
+            verified=receipt.verified,
+            stop_reason="resumed-completed",
+            proof_reasons=tuple(str(item) for item in proof_reasons)
+            if isinstance(proof_reasons, list)
+            else (),
+            resumed=True,
+            resume_run_id=plan.run_id,
+            worktree_path=None,
+            receipt=receipt,
         )
 
     def _finish(

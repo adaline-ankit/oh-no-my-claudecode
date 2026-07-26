@@ -20,7 +20,13 @@ from .models import (
     ProofRequirement,
     RunRequest,
 )
-from .receipt import HarnessRunReceipt, compute_verified, verify_harness_receipt
+from .receipt import (
+    HarnessRunReceipt,
+    compute_verified,
+    harness_receipt_path,
+    load_harness_receipt,
+    verify_harness_receipt,
+)
 from .run_policy import (
     PolicyViolation,
     RunPolicy,
@@ -75,8 +81,10 @@ __all__ = [
     "evaluate_run_policy",
     "execute_stage",
     "evaluate_completion_gate",
+    "harness_receipt_path",
     "injection_findings",
     "learn_candidate_stage",
+    "load_harness_receipt",
     "load_run_policy",
     "prepare_stage",
     "proof_stage",

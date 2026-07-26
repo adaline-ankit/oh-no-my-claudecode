@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from oh_no_my_claudecode.proof_graph import ProofAssessment
 
@@ -153,8 +154,85 @@ def verify_harness_receipt(serialized: str) -> bool:
     return _digest(raw) == claimed
 
 
+def harness_receipt_path(repo_root: Path, run_id: str) -> Path:
+    """Return the canonical persisted harness receipt path for *run_id*."""
+    return repo_root / ".agent-memory" / "receipts" / f"run-{run_id}.json"
+
+
+def load_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | None:
+    """Load and validate the persisted harness receipt for *run_id*.
+
+    The on-disk file is a user-facing wrapper with the canonical harness receipt
+    nested under ``harness``. A resumed completed run may trust that state only
+    when the nested receipt is present, matches its hash, is for the requested
+    run, and is marked verified.
+    """
+    path = harness_receipt_path(repo_root, run_id)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    nested = raw.get("harness")
+    if not isinstance(nested, dict):
+        return None
+    serialized = _canonical_json(nested)
+    if not verify_harness_receipt(serialized):
+        return None
+    receipt = _coerce_harness_receipt(nested)
+    if receipt is None or receipt.run_id != run_id or not receipt.verified:
+        return None
+    return receipt
+
+
+def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
+    try:
+        schema_version = raw["schema_version"]
+        run_id = raw["run_id"]
+        task = raw["task"]
+        status = raw["status"]
+        verified = raw["verified"]
+        stages = raw["stages"]
+        policy = raw["policy"]
+        proof = raw["proof"]
+        receipt_hash = raw["receipt_hash"]
+    except KeyError:
+        return None
+    if not (
+        isinstance(schema_version, str)
+        and isinstance(run_id, str)
+        and isinstance(task, str)
+        and isinstance(status, str)
+        and isinstance(verified, bool)
+        and isinstance(stages, list)
+        and isinstance(policy, dict)
+        and isinstance(proof, dict)
+        and isinstance(receipt_hash, str)
+    ):
+        return None
+    stage_payload: list[dict[str, object]] = []
+    for stage in stages:
+        if not isinstance(stage, dict):
+            return None
+        stage_payload.append(stage)
+    return HarnessRunReceipt(
+        schema_version=schema_version,
+        run_id=run_id,
+        task=task,
+        status=status,
+        verified=verified,
+        stages=tuple(stage_payload),
+        policy=policy,
+        proof=proof,
+        receipt_hash=receipt_hash,
+    )
+
+
 __all__ = [
     "HarnessRunReceipt",
     "compute_verified",
+    "harness_receipt_path",
+    "load_harness_receipt",
     "verify_harness_receipt",
 ]
