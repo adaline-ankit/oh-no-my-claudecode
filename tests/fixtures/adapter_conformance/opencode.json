@@ -1,7 +1,8 @@
 {
   "schema_version": "1",
   "provider": "opencode",
-  "cli_version": "recorded-opencode-1.0",
+  "cli_version": "unspecified",
+  "fixture_source": "offline-contract-recording",
   "prompt": "Apply the recorded fixture change.",
   "model": "anthropic/claude-sonnet-4-5",
   "stdout": "{\"type\":\"result\",\"text\":\"fixture complete\",\"usage\":{\"input\":80,\"output\":20}}\n",

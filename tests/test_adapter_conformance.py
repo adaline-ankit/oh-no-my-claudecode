@@ -166,4 +166,8 @@ def test_fixture_suite_covers_every_provider_without_live_calls(
     monkeypatch.setattr("subprocess.run", forbidden)
     fixtures = _fixtures()
     assert {fixture["provider"] for fixture in fixtures} == set(PROVIDERS)
-    assert all(str(fixture["cli_version"]).startswith("recorded-") for fixture in fixtures)
+    assert all(fixture["cli_version"] == "unspecified" for fixture in fixtures)
+    assert all(
+        fixture["fixture_source"] == "offline-contract-recording"
+        for fixture in fixtures
+    )
