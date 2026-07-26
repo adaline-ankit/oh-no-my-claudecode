@@ -285,6 +285,8 @@ class HarnessResult:
         }
 
     def render_text(self) -> str:
+        agent = self.plan.dag.nodes[0].policy.agent if self.plan.dag.nodes else "claude"
+        adapter_capability = adapter_capability_payload(agent)
         lines = [
             f"ONMC run {self.plan.run_id}: {self.status.value}",
             f"Task: {self.plan.dag.task}",
@@ -299,6 +301,13 @@ class HarnessResult:
             "Policy: "
             + ", ".join(
                 f"{item.capability}={item.effect}" for item in self.plan.policy_decisions
+            ),
+            (
+                f"Adapter: {adapter_capability['agent']} "
+                f"({adapter_capability['invocation_mode']}; "
+                f"tokens={adapter_capability['tokens']}; "
+                f"cost={adapter_capability['cost']}; "
+                f"isolation={adapter_capability['isolation']})"
             ),
         ]
         if self.status is not HarnessStatus.PLANNED:

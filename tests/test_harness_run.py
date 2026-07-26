@@ -241,6 +241,20 @@ def test_model_is_compiled_and_codex_adapter_receives_override(tmp_path: Path) -
     assert seen[1][4:6] == ["--model", "gpt-test"]
 
 
+def test_render_text_exposes_adapter_telemetry_limits(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+
+    result = controller.run(
+        RunRequest(task="Use selected model", plan_only=True, agent="codex", model="gpt-test")
+    )
+    text = result.render_text()
+
+    assert "Adapter: codex" in text
+    assert "tokens=best_effort_human_stdout_parse" in text
+    assert "cost=not_reported" in text
+
+
 def test_cli_json_and_help_expose_safe_execution_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
