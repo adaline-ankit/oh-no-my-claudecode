@@ -69,6 +69,29 @@ class NativeExecutionBackend:
                 if state is NodeState.SUCCEEDED:
                     results.append(self._load_result(spec.run_id, node.node_id))
                     continue
+                if self._has_result(spec.run_id, node.node_id):
+                    result = self._load_result(spec.run_id, node.node_id)
+                    self._apply_persisted_result(spec.run_id, result)
+                    results.append(result)
+                    if result.status is NodeResultStatus.SUCCEEDED:
+                        continue
+                    if result.status is NodeResultStatus.SKIPPED:
+                        return RunResult(
+                            run_id=spec.run_id,
+                            status=RunResultStatus.CANCELLED,
+                            results=tuple(results),
+                            backend=self.backend_name,
+                            spec_digest=spec.digest,
+                            error=result.error,
+                        )
+                    return RunResult(
+                        run_id=spec.run_id,
+                        status=RunResultStatus.FAILED,
+                        results=tuple(results),
+                        backend=self.backend_name,
+                        spec_digest=spec.digest,
+                        error=result.error,
+                    )
                 if any(
                     current.nodes[dependency].state is not NodeState.SUCCEEDED
                     for dependency in node.dependencies
@@ -196,6 +219,51 @@ class NativeExecutionBackend:
                     idempotency_key=f"runtime:{running.node_id}:exception",
                 )
             self.store.fail(run_id, reason=reason, idempotency_key="runtime:exception")
+        except InvalidTransitionError:
+            return
+
+    def _apply_persisted_result(self, run_id: str, result: NodeResult) -> None:
+        try:
+            snapshot = self.store.load(run_id)
+            node_state = snapshot.nodes[result.node_id].state
+            if snapshot.state is not RunState.RUNNING:
+                snapshot = self.store.resume(run_id, idempotency_key="runtime:resume")
+            if node_state is NodeState.PENDING:
+                self.store.start_node(
+                    run_id,
+                    result.node_id,
+                    idempotency_key=f"runtime:{result.node_id}:start",
+                )
+            elif node_state is not NodeState.RUNNING:
+                self.store.resume_node(
+                    run_id,
+                    result.node_id,
+                    idempotency_key=f"runtime:{result.node_id}:resume",
+                )
+            if result.status is NodeResultStatus.SUCCEEDED:
+                self.store.complete_node(
+                    run_id,
+                    result.node_id,
+                    idempotency_key=f"runtime:{result.node_id}:complete",
+                )
+            elif result.status is NodeResultStatus.SKIPPED:
+                reason = result.error or "skipped"
+                self.store.cancel_node(
+                    run_id,
+                    result.node_id,
+                    reason=reason,
+                    idempotency_key=f"runtime:{result.node_id}:skip",
+                )
+                self.store.cancel(run_id, reason=reason, idempotency_key="runtime:cancel")
+            else:
+                reason = result.error or "failed"
+                self.store.fail_node(
+                    run_id,
+                    result.node_id,
+                    reason=reason,
+                    idempotency_key=f"runtime:{result.node_id}:fail",
+                )
+                self.store.fail(run_id, reason=reason, idempotency_key="runtime:fail")
         except InvalidTransitionError:
             return
 

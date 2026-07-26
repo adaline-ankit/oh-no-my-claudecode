@@ -28,6 +28,8 @@ This is evidence for a stronger harness foundation:
   benchmark power, portfolio coverage, calibration quality, and cost telemetry.
 - Manifest-gated artifacts now include a `portfolio_gap_plan` that converts failed power/coverage
   gates into exact task-addition requirements.
+- The native runtime now recovers a node result that was written immediately before a crash and
+  does not re-run the node handler, closing a duplicate-side-effect recovery gap.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -120,6 +122,16 @@ Result:
 ```
 
 ```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py
+```
+
+Result:
+
+```text
+34 passed
+```
+
+```text
 ruff check src/oh_no_my_claudecode/experiment src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py scripts/run_external_eval.py scripts/calibrate_external_report.py tests/test_experiment_calibration.py tests/test_experiment_power.py tests/test_runtime_contracts.py
 ```
 
@@ -157,6 +169,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 |---|---:|---|
 | Runtime contract validation | Pass | Unsafe graph specs are rejected before execution. |
 | Durable replay | Pass | Re-running a completed graph returns persisted results without new node execution. |
+| Crash-window recovery | Pass | A persisted node result is reconciled without re-running the handler after a crash. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |

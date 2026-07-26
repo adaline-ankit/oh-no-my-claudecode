@@ -152,6 +152,47 @@ def test_native_backend_replays_completed_idempotency_without_side_effect(tmp_pa
     assert len(backend.store.events("run-1")) == event_count_after_first_run
 
 
+def test_native_backend_recovers_result_written_before_crash_without_side_effect(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-crash",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    backend.store.create_run(
+        spec.run_id,
+        node_ids=("execute",),
+        repo=tmp_path,
+        idempotency_key="runtime:create",
+    )
+    backend.store.start(spec.run_id, idempotency_key="runtime:start")
+    backend.store.start_node(
+        spec.run_id,
+        "execute",
+        idempotency_key="runtime:execute:start",
+    )
+    result = NodeResult(
+        node_id="execute",
+        status=NodeResultStatus.SUCCEEDED,
+        idempotency_key="idem:execute",
+        output={"written_before_crash": True},
+    )
+    backend._write_result(spec.run_id, result)
+
+    def must_not_run(node: NodeSpec) -> NodeResult:
+        raise AssertionError(f"handler repeated side effect for {node.node_id}")
+
+    recovered = backend.execute(spec, {"execute": must_not_run}, resume=True)
+
+    assert recovered.status is RunResultStatus.COMPLETED
+    assert [item.to_dict() for item in recovered.results] == [result.to_dict()]
+    snapshot = backend.store.load(spec.run_id)
+    assert snapshot.state.value == "completed"
+    assert snapshot.nodes["execute"].state.value == "succeeded"
+
+
 def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     loop = FakeLoop(_loop_result(converged=True))
     dependencies = ControllerDependencies(
