@@ -211,10 +211,16 @@ def compile_prompt_policy(
         if dead_ends:
             parts.append("Dead-ends: " + "; ".join(dead_ends) + ".")
         if mission is not None:
+            contract = (
+                f" Runtime contract `{mission.runtime_contract_digest[:12]}` is armed."
+                if mission.runtime_contract_digest
+                else ""
+            )
             parts.append(
                 "ONMC completion contract armed: do not stop until a non-vacuous "
                 f"change passes `{mission.verifier}`. Low-risk choices should use "
                 "the best reversible default; escalate only material-risk decisions."
+                f"{contract}"
             )
         parts.append("Default to onmc paths; preflight before done.")
         context = " ".join(parts)

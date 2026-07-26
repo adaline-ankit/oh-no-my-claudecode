@@ -27,6 +27,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 _SCHEMA_VERSION = 1
 _DEFAULT_MAX_BLOCKS = 6
@@ -89,9 +90,12 @@ class InteractiveMission:
     started_at: str
     deadline_at_epoch: float
     last_reason: str = ""
+    runtime_contract: dict[str, Any] | None = None
+    runtime_contract_digest: str = ""
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> InteractiveMission:
+        raw_runtime_contract = payload.get("runtime_contract")
         return cls(
             schema_version=_parse_int(payload["schema_version"]),
             session_id=str(payload["session_id"]),
@@ -104,6 +108,12 @@ class InteractiveMission:
             started_at=str(payload["started_at"]),
             deadline_at_epoch=_parse_float(payload["deadline_at_epoch"]),
             last_reason=str(payload.get("last_reason", "")),
+            runtime_contract=(
+                raw_runtime_contract.copy()
+                if isinstance(raw_runtime_contract, dict)
+                else None
+            ),
+            runtime_contract_digest=str(payload.get("runtime_contract_digest", "")),
         )
 
 
@@ -234,6 +244,27 @@ def run_verifier(command: str, repo_root: Path) -> tuple[bool, str]:
     return completed.returncode == 0, output[-1500:]
 
 
+def _compile_runtime_contract(
+    repo_root: Path,
+    *,
+    goal: str,
+    verifier: str,
+) -> tuple[dict[str, object], str]:
+    """Compile the interactive mission through the canonical harness planner."""
+    from oh_no_my_claudecode.harness_run.controller import HarnessController
+    from oh_no_my_claudecode.harness_run.models import RunRequest
+
+    plan = HarnessController(repo_root).run(
+        RunRequest(
+            task=goal,
+            plan_only=True,
+            verifier=verifier,
+        )
+    ).plan
+    spec = plan.to_run_spec()
+    return spec.to_dict(), spec.digest
+
+
 def _write_mission(path: Path, mission: InteractiveMission) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = asdict(mission)
@@ -283,6 +314,14 @@ def arm_mission(
     if verify_command is None:
         return None
     moment = _now(now)
+    try:
+        runtime_contract, runtime_contract_digest = _compile_runtime_contract(
+            repo_root,
+            goal=prompt.strip(),
+            verifier=verify_command,
+        )
+    except Exception:  # noqa: BLE001 - hooks must stay usable even if planning degrades.
+        runtime_contract, runtime_contract_digest = None, ""
     mission = InteractiveMission(
         schema_version=_SCHEMA_VERSION,
         session_id=session_id,
@@ -294,6 +333,8 @@ def arm_mission(
         max_blocks=_DEFAULT_MAX_BLOCKS,
         started_at=moment.isoformat(),
         deadline_at_epoch=moment.timestamp() + _DEFAULT_MAX_RUNTIME_SECONDS,
+        runtime_contract=runtime_contract,
+        runtime_contract_digest=runtime_contract_digest,
     )
     _write_mission(mission_path(repo_root, session_id), mission)
     return mission

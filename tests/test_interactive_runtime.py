@@ -13,6 +13,7 @@ from oh_no_my_claudecode.hooks.installer import (
     install_wrap_hooks,
     wrap_hooks_installed,
 )
+from oh_no_my_claudecode.runtime import RunSpec
 from oh_no_my_claudecode.wrap.logic import compile_decision_intercept
 from oh_no_my_claudecode.wrap.runtime import (
     MissionStatus,
@@ -41,6 +42,11 @@ def test_actionable_prompt_arms_strict_mission(tmp_path: Path) -> None:
     assert mission is not None
     assert mission.verifier == "pytest"
     assert mission.status is MissionStatus.ACTIVE
+    assert mission.runtime_contract is not None
+    spec = RunSpec.from_dict(mission.runtime_contract)
+    assert mission.runtime_contract_digest == spec.digest
+    assert spec.task == "Fix the failing authentication test"
+    assert spec.metadata["source"] == "harness_run.ExecutionPlan"
     assert load_mission(tmp_path, "session-1") == mission
 
 
