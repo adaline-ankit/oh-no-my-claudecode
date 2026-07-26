@@ -19,10 +19,13 @@ Key attributes used
 - ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
 - ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
 - ``onmc.runtime.*``         — runtime graph/node attributes for runtime_node events
+- ``traceId`` / ``spanId``   — deterministic OTLP correlation identifiers
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import time
 from typing import Any
 
@@ -61,7 +64,12 @@ def _ns(ts_seconds: float) -> int:
     return int(ts_seconds * 1_000_000_000)
 
 
-def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
+def _span_from_event(
+    event: TraceEvent,
+    *,
+    session_id: str,
+    index: int = 0,
+) -> dict[str, Any]:
     """Build an OTLP JSON span dict from a single ``TraceEvent``."""
     kind = event.kind
     operation = _OPERATION_MAP.get(kind, "chat")
@@ -93,6 +101,8 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
     attributes.extend(_runtime_node_attributes(event))
 
     return {
+        "traceId": _trace_id(session_id),
+        "spanId": _span_id(session_id, index, event),
         "name": f"onmc.{kind}",
         "kind": 1,  # INTERNAL
         "startTimeUnixNano": start_ns,
@@ -100,6 +110,29 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         "status": _STATUS_ERROR if is_error else _STATUS_OK,
         "attributes": attributes,
     }
+
+
+def _trace_id(session_id: str) -> str:
+    material = f"onmc-trace:{session_id or 'default'}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+def _span_id(session_id: str, index: int, event: TraceEvent) -> str:
+    material = {
+        "kind": event.kind,
+        "payload": event.payload,
+        "session_id": session_id,
+        "span_index": index,
+        "ts": event.ts,
+    }
+    encoded = json.dumps(
+        material,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _event_is_error(event: TraceEvent) -> bool:
@@ -419,4 +452,7 @@ def to_otel_spans(
         events = source
         sid = session_id
 
-    return [_span_from_event(ev, session_id=sid) for ev in events]
+    return [
+        _span_from_event(ev, session_id=sid, index=index)
+        for index, ev in enumerate(events)
+    ]

@@ -536,6 +536,8 @@ class TestOtelSpans:
         spans = to_otel_spans(events, session_id="tr_test")
         assert len(spans) == 2
         for span in spans:
+            assert len(span["traceId"]) == 32
+            assert len(span["spanId"]) == 16
             assert "name" in span
             assert "startTimeUnixNano" in span
             assert "attributes" in span
@@ -543,6 +545,32 @@ class TestOtelSpans:
             attr_keys = {a["key"] for a in span["attributes"]}
             assert "gen_ai.system" in attr_keys
             assert "gen_ai.operation.name" in attr_keys
+        assert spans[0]["traceId"] == spans[1]["traceId"]
+        assert spans[0]["spanId"] != spans[1]["spanId"]
+
+    def test_otel_span_ids_are_stable_for_same_events(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={"run_id": "run-1", "node_id": "execute", "status": "succeeded"},
+            ),
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=101.0,
+                payload={"run_id": "run-1", "node_id": "verify", "status": "failed"},
+            ),
+        ]
+
+        first = to_otel_spans(events, session_id="tr_stable")
+        second = to_otel_spans(events, session_id="tr_stable")
+
+        assert [span["traceId"] for span in first] == [span["traceId"] for span in second]
+        assert [span["spanId"] for span in first] == [span["spanId"] for span in second]
+        assert first[0]["traceId"] == first[1]["traceId"]
+        assert first[0]["spanId"] != first[1]["spanId"]
 
     def test_to_otel_spans_from_report(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
