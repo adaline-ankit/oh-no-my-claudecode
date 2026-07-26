@@ -785,6 +785,15 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     ]
     assert payload["calibration"]["decision"] == "needs-discrimination"
     assert payload["calibration"]["saturated_tasks"] == 24
+    assert payload["claim_language_gate"]["decision"] == "refuse"
+    assert payload["claim_language_gate"]["detected_claims"] == ["quality", "cost"]
+    assert any(
+        "quality improvement claim" in reason
+        for reason in payload["claim_language_gate"]["reasons"]
+    )
+    assert "external improvement claims are blocked" in payload["claim_language_gate"][
+        "suggested_safe_claim"
+    ]
     printed = json.loads(stdout.getvalue())
     assert printed == payload
 
@@ -798,6 +807,9 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     assert "saturated_tasks: `24`" in markdown
     assert "claim_ready: `false`" in markdown
     assert "external_claim_decision: `not-ready`" in markdown
+    assert "claim_language_decision: `refuse`" in markdown
+    assert "## Claim Language Gate" in markdown
+    assert "suggested_safe_claim: ONMC records harness evidence" in markdown
 
 
 def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
@@ -836,6 +848,8 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
         "refactor": 9,
     }
     assert payload["claim_readiness"]["decision"] == "not-ready"
+    assert payload["claim_language_gate"]["decision"] == "refuse"
+    assert payload["claim_language_gate"]["detected_claims"] == ["quality", "cost"]
     assert payload["claim_readiness"]["blocked_gates"] == [
         "benchmark_plan",
         "portfolio_coverage",

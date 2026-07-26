@@ -16,7 +16,10 @@ from oh_no_my_claudecode.experiment.calibration import (  # noqa: E402
     calibrate_external_report,
     calibrate_portfolio_report,
 )
-from oh_no_my_claudecode.experiment.claim import build_claim_readiness  # noqa: E402
+from oh_no_my_claudecode.experiment.claim import (  # noqa: E402
+    build_claim_readiness,
+    gate_claim_language,
+)
 from oh_no_my_claudecode.experiment.coverage import (  # noqa: E402
     gate_portfolio_coverage,
     plan_portfolio_expansion,
@@ -27,6 +30,11 @@ from oh_no_my_claudecode.experiment.expansion import (  # noqa: E402
 from oh_no_my_claudecode.experiment.power import (  # noqa: E402
     plan_external_report,
     plan_portfolio_manifest,
+)
+
+_DEFAULT_EXTERNAL_CLAIM = (
+    "ONMC improves coding-agent quality and lowers cost versus plain Claude Code, "
+    "Codex, and OpenCode."
 )
 
 
@@ -114,6 +122,10 @@ def calibrate_report_file(
             benchmark_plan=_mapping(payload["benchmark_plan"]),
             calibration_gate=_mapping(payload["calibration"]),
         ).to_dict()
+    payload["claim_language_gate"] = gate_claim_language(
+        _DEFAULT_EXTERNAL_CLAIM,
+        _mapping(payload["claim_readiness"]),
+    ).to_dict()
     return payload
 
 
@@ -130,6 +142,8 @@ def _render_markdown(payload: dict[str, object]) -> str:
     plan_reasons = plan.get("reasons", [])
     claim_reasons = claim.get("reasons", [])
     next_actions = claim.get("next_actions", [])
+    language_gate = _mapping(payload["claim_language_gate"])
+    language_reasons = language_gate.get("reasons", [])
     lines = [
         "# ONMC External Report Calibration",
         "",
@@ -141,6 +155,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
         f"- external_quality_claim_ready: `{str(claim['quality_claim_ready']).lower()}`",
         f"- external_cost_claim_ready: `{str(claim['cost_claim_ready']).lower()}`",
         f"- blocked_gates: `{claim['blocked_gates']}`",
+        f"- claim_language_decision: `{language_gate['decision']}`",
         f"- decision: `{_decision(calibration)}`",
         f"- quality_claim_ready: `{str(calibration['quality_claim_ready']).lower()}`",
         f"- cost_claim_ready: `{str(calibration['cost_claim_ready']).lower()}`",
@@ -200,6 +215,21 @@ def _render_markdown(payload: dict[str, object]) -> str:
         *(
             [f"- {action}" for action in next_actions]
             if isinstance(next_actions, list) and next_actions
+            else ["- none"]
+        ),
+        "",
+        "## Claim Language Gate",
+        "",
+        f"- decision: `{language_gate['decision']}`",
+        f"- proposed_claim: {language_gate['claim_text']}",
+        f"- detected_claims: `{language_gate['detected_claims']}`",
+        f"- suggested_safe_claim: {language_gate['suggested_safe_claim']}",
+        "",
+        "### Claim Language Reasons",
+        "",
+        *(
+            [f"- {reason}" for reason in language_reasons]
+            if isinstance(language_reasons, list) and language_reasons
             else ["- none"]
         ),
         "",
