@@ -372,7 +372,7 @@ class LangGraphExecutionBackend(NativeExecutionBackend):
         if result.status is not NodeResultStatus.SKIPPED:
             return
         reason = result.error or result.status.value
-        self._cancel_pending_nodes(spec, reason=reason)
+        self._cancel_unfinished_nodes(spec, reason=reason)
         self.store.cancel(spec.run_id, reason=reason, idempotency_key="runtime:cancel")
 
     def _stored_results(self, spec: RunSpec) -> tuple[NodeResult, ...]:

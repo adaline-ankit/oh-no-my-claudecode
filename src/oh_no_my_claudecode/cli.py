@@ -4,7 +4,7 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -7367,7 +7367,8 @@ def _collapse_primary_help() -> None:
     """Keep advanced commands callable while removing them from root help."""
     from typer.main import get_command_name
 
-    for info in (*app.registered_commands, *app.registered_groups):
+    for raw_info in (*app.registered_commands, *app.registered_groups):
+        info = cast(Any, raw_info)
         callback = info.callback
         raw_name = info.name or getattr(callback, "__name__", "")
         name = get_command_name(raw_name)
