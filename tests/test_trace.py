@@ -660,7 +660,25 @@ class TestOtelSpans:
             TraceEvent(
                 kind=TraceEventKind.RUNTIME_NODE,
                 ts=100.0,
-                payload={"node_id": "execute", "duration_ms": 25},
+                payload={
+                    "backend": "native",
+                    "run_id": "run-1",
+                    "node_id": "execute",
+                    "node_kind": "agent",
+                    "status": "succeeded",
+                    "side_effecting": True,
+                    "approval_required": False,
+                    "retry_attempts": 2,
+                    "dependencies": ["plan"],
+                    "capabilities": {
+                        "tools": ["edit"],
+                        "commands": [["pytest", "tests/unit"]],
+                        "filesystem_write": True,
+                        "network": False,
+                        "secrets": ["ANTHROPIC_API_KEY"],
+                    },
+                    "duration_ms": 25,
+                },
             )
         ]
         spans = to_otel_spans(events, session_id="tr_runtime_node")
@@ -669,6 +687,38 @@ class TestOtelSpans:
         assert attr_map["gen_ai.operation.name"]["stringValue"] == "execute_agent"
         assert attr_map["onmc.event_kind"]["stringValue"] == "runtime_node"
         assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+        assert attr_map["onmc.runtime.backend"]["stringValue"] == "native"
+        assert attr_map["onmc.runtime.run_id"]["stringValue"] == "run-1"
+        assert attr_map["onmc.runtime.node_id"]["stringValue"] == "execute"
+        assert attr_map["onmc.runtime.node.kind"]["stringValue"] == "agent"
+        assert attr_map["onmc.runtime.node.status"]["stringValue"] == "succeeded"
+        assert attr_map["onmc.runtime.node.side_effecting"]["boolValue"] is True
+        assert attr_map["onmc.runtime.node.retry_attempts"]["intValue"] == 2
+        assert attr_map["onmc.runtime.capabilities.filesystem_write"]["boolValue"] is True
+        assert attr_map["onmc.runtime.capabilities.secret_count"]["intValue"] == 1
+        assert attr_map["onmc.runtime.node.dependencies"]["arrayValue"]["values"] == [
+            {"stringValue": "plan"}
+        ]
+        assert attr_map["onmc.runtime.capabilities.commands"]["arrayValue"]["values"] == [
+            {"stringValue": "pytest tests/unit"}
+        ]
+
+    def test_otel_span_marks_failed_runtime_node_as_error(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={"node_id": "verify", "status": "failed", "error": "tests failed"},
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_runtime_failed")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert spans[0]["status"]["code"] == 2
+        assert attr_map["onmc.runtime.node.status"]["stringValue"] == "failed"
+        assert attr_map["onmc.runtime.node.error"]["stringValue"] == "tests failed"
 
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans

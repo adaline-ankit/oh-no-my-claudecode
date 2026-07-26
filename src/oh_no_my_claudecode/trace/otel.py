@@ -18,6 +18,7 @@ Key attributes used
 - ``onmc.session_id``        — parent session identifier
 - ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
 - ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
+- ``onmc.runtime.*``         — runtime graph/node attributes for runtime_node events
 """
 
 from __future__ import annotations
@@ -64,7 +65,7 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
     """Build an OTLP JSON span dict from a single ``TraceEvent``."""
     kind = event.kind
     operation = _OPERATION_MAP.get(kind, "chat")
-    is_error = kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED)
+    is_error = _event_is_error(event)
 
     attributes: list[dict[str, Any]] = [
         {"key": "gen_ai.system", "value": {"stringValue": _GEN_AI_SYSTEM}},
@@ -89,6 +90,7 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         attributes.append(
             {"key": "onmc.title", "value": {"stringValue": str(payload["title"])}}
         )
+    attributes.extend(_runtime_node_attributes(event))
 
     return {
         "name": f"onmc.{kind}",
@@ -98,6 +100,89 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         "status": _STATUS_ERROR if is_error else _STATUS_OK,
         "attributes": attributes,
     }
+
+
+def _event_is_error(event: TraceEvent) -> bool:
+    if event.kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED):
+        return True
+    if event.kind == TraceEventKind.RUNTIME_NODE:
+        return str(event.payload.get("status", "")).lower() == "failed"
+    return False
+
+
+def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
+    if event.kind != TraceEventKind.RUNTIME_NODE:
+        return []
+    payload = event.payload
+    attributes: list[dict[str, Any]] = []
+    _append_string_attribute(attributes, "onmc.runtime.backend", payload.get("backend"))
+    _append_string_attribute(attributes, "onmc.runtime.run_id", payload.get("run_id"))
+    _append_string_attribute(attributes, "onmc.runtime.node_id", payload.get("node_id"))
+    _append_string_attribute(attributes, "onmc.runtime.node.kind", payload.get("node_kind"))
+    _append_string_attribute(attributes, "onmc.runtime.node.status", payload.get("status"))
+    _append_string_attribute(attributes, "onmc.runtime.node.error", payload.get("error"))
+    _append_bool_attribute(
+        attributes,
+        "onmc.runtime.node.side_effecting",
+        payload.get("side_effecting"),
+    )
+    _append_bool_attribute(
+        attributes,
+        "onmc.runtime.node.approval_required",
+        payload.get("approval_required"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.node.retry_attempts",
+        payload.get("retry_attempts"),
+    )
+    _append_string_array_attribute(
+        attributes,
+        "onmc.runtime.node.dependencies",
+        payload.get("dependencies"),
+    )
+    capabilities = payload.get("capabilities")
+    if isinstance(capabilities, dict):
+        _append_string_array_attribute(
+            attributes,
+            "onmc.runtime.capabilities.tools",
+            capabilities.get("tools"),
+        )
+        _append_string_array_attribute(
+            attributes,
+            "onmc.runtime.capabilities.commands",
+            _command_strings(capabilities.get("commands")),
+        )
+        _append_bool_attribute(
+            attributes,
+            "onmc.runtime.capabilities.filesystem_write",
+            capabilities.get("filesystem_write"),
+        )
+        _append_bool_attribute(
+            attributes,
+            "onmc.runtime.capabilities.network",
+            capabilities.get("network"),
+        )
+        secrets = capabilities.get("secrets")
+        if isinstance(secrets, list | tuple):
+            _append_int_attribute(
+                attributes,
+                "onmc.runtime.capabilities.secret_count",
+                len(secrets),
+            )
+    return attributes
+
+
+def _command_strings(commands: object) -> list[str]:
+    if not isinstance(commands, list | tuple):
+        return []
+    rendered: list[str] = []
+    for command in commands:
+        if isinstance(command, list | tuple):
+            rendered.append(" ".join(str(part) for part in command))
+        else:
+            rendered.append(str(command))
+    return rendered
 
 
 def _span_times(event: TraceEvent) -> tuple[int, int, list[dict[str, Any]]]:
@@ -201,6 +286,61 @@ def _optional_float(payload: dict[str, Any], key: str) -> float | None:
     if parsed < 0:
         return None
     return parsed
+
+
+def _append_string_attribute(
+    attributes: list[dict[str, Any]],
+    key: str,
+    value: object,
+) -> None:
+    if value is None:
+        return
+    attributes.append({"key": key, "value": {"stringValue": str(value)}})
+
+
+def _append_bool_attribute(
+    attributes: list[dict[str, Any]],
+    key: str,
+    value: object,
+) -> None:
+    if not isinstance(value, bool):
+        return
+    attributes.append({"key": key, "value": {"boolValue": value}})
+
+
+def _append_int_attribute(
+    attributes: list[dict[str, Any]],
+    key: str,
+    value: object,
+) -> None:
+    if isinstance(value, bool):
+        return
+    if not isinstance(value, int | float | str | bytes | bytearray):
+        return
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return
+    attributes.append({"key": key, "value": {"intValue": parsed}})
+
+
+def _append_string_array_attribute(
+    attributes: list[dict[str, Any]],
+    key: str,
+    value: object,
+) -> None:
+    if not isinstance(value, list | tuple):
+        return
+    attributes.append(
+        {
+            "key": key,
+            "value": {
+                "arrayValue": {
+                    "values": [{"stringValue": str(item)} for item in value],
+                }
+            },
+        }
+    )
 
 
 def to_otel_spans(
