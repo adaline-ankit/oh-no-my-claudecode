@@ -28,6 +28,7 @@ def _node(
     *,
     dependencies: tuple[str, ...] = (),
     side_effecting: bool = False,
+    approval_required: bool = False,
 ) -> NodeSpec:
     return NodeSpec(
         node_id=node_id,
@@ -36,6 +37,7 @@ def _node(
         completion_condition=f"{node_id} produced verifier evidence" if side_effecting else None,
         dependencies=dependencies,
         side_effecting=side_effecting,
+        approval_required=approval_required,
         idempotency_key=f"idem:{node_id}" if side_effecting else None,
         timeout_seconds=30.0 if side_effecting else None,
         budget=Budget(timeout_seconds=30.0, max_tokens=100) if side_effecting else None,
@@ -55,6 +57,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key=None,
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
@@ -70,6 +73,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key="idem:execute",
             timeout_seconds=None,
             budget=Budget(timeout_seconds=30.0),
@@ -85,6 +89,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=None,
@@ -100,6 +105,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
@@ -115,6 +121,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
@@ -130,6 +137,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             completion_condition=None,
             dependencies=(),
             side_effecting=True,
+            approval_required=False,
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
@@ -297,6 +305,78 @@ def test_native_backend_retries_transient_exception_before_terminal_result(
     assert retry_history[0].attempt == 1
     assert retry_history[0].retryable is True
     assert retry_history[0].reason == "temporarily unavailable"
+
+
+def test_native_backend_persists_approval_interrupt_before_side_effect(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-approval",
+        task="Deploy feature",
+        nodes=(_node("deploy", side_effecting=True, approval_required=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    calls: list[str] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(node.node_id)
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SUCCEEDED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node),
+        )
+
+    interrupted = backend.execute(spec, {"deploy": handler})
+
+    assert interrupted.status is RunResultStatus.INTERRUPTED
+    assert calls == []
+    snapshot = backend.store.load(spec.run_id)
+    assert snapshot.state.value == "awaiting_approval"
+    assert snapshot.nodes["deploy"].state.value == "awaiting_approval"
+
+
+def test_native_backend_resumes_approval_interrupt_without_duplicate_side_effect(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-approved",
+        task="Deploy feature",
+        nodes=(_node("deploy", side_effecting=True, approval_required=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    calls: list[str] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(node.node_id)
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SUCCEEDED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node),
+        )
+
+    interrupted = backend.execute(spec, {"deploy": handler})
+    assert interrupted.status is RunResultStatus.INTERRUPTED
+    backend.store.approve_node(
+        spec.run_id,
+        "deploy",
+        approved_by="maintainer",
+        idempotency_key="approve-node",
+    )
+    backend.store.approve(
+        spec.run_id,
+        approved_by="maintainer",
+        idempotency_key="approve-run",
+    )
+
+    completed = backend.execute(spec, {"deploy": handler}, resume=True)
+    replayed = backend.execute(spec, {"deploy": handler}, resume=True)
+
+    assert completed.status is RunResultStatus.COMPLETED
+    assert replayed.status is RunResultStatus.COMPLETED
+    assert calls == ["deploy"]
+    assert [item.node_id for item in completed.results] == ["deploy"]
 
 
 def test_native_backend_exhausts_retry_policy_before_failed_result(

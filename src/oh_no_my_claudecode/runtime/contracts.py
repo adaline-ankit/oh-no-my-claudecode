@@ -27,6 +27,7 @@ class RunResultStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +217,7 @@ class NodeSpec:
     completion_condition: str | None
     dependencies: tuple[str, ...]
     side_effecting: bool
+    approval_required: bool
     idempotency_key: str | None
     timeout_seconds: float | None
     budget: Budget | None
@@ -231,6 +233,7 @@ class NodeSpec:
             "completion_condition",
             "dependencies",
             "side_effecting",
+            "approval_required",
             "idempotency_key",
             "timeout_seconds",
             "budget",
@@ -251,6 +254,12 @@ class NodeSpec:
             raise RuntimeContractError(f"node {self.node_id!r} dependencies must be unique")
         if not isinstance(self.side_effecting, bool):
             raise RuntimeContractError("side_effecting must be a bool")
+        if not isinstance(self.approval_required, bool):
+            raise RuntimeContractError("approval_required must be a bool")
+        if self.approval_required and not self.side_effecting:
+            raise RuntimeContractError(
+                f"approval-required node {self.node_id!r} must be side-effecting"
+            )
         if self.idempotency_key is not None:
             _nonempty(self.idempotency_key, "idempotency_key")
         if self.timeout_seconds is not None:
@@ -298,6 +307,7 @@ class NodeSpec:
             "kind": self.kind,
             "metadata": _json_object(self.metadata, "metadata"),
             "objective": self.objective,
+            "approval_required": self.approval_required,
             "retry_policy": (
                 self.retry_policy.to_dict() if self.retry_policy is not None else None
             ),
@@ -324,6 +334,7 @@ class NodeSpec:
             else _string(raw_completion, f"{path}.completion_condition"),
             dependencies=_string_tuple(data["dependencies"], f"{path}.dependencies"),
             side_effecting=_bool(data["side_effecting"], f"{path}.side_effecting"),
+            approval_required=_bool(data["approval_required"], f"{path}.approval_required"),
             idempotency_key=None
             if raw_key is None
             else _string(raw_key, f"{path}.idempotency_key"),

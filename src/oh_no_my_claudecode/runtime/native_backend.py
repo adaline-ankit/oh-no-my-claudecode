@@ -72,6 +72,8 @@ class NativeExecutionBackend:
                 backend=self.backend_name,
                 spec_digest=spec.digest,
             )
+        if snapshot.state is RunState.AWAITING_APPROVAL:
+            return self._interrupted_result(spec, results=[])
         if snapshot.state is not RunState.RUNNING:
             snapshot = self.store.start(spec.run_id, idempotency_key="runtime:start")
 
@@ -87,6 +89,8 @@ class NativeExecutionBackend:
                         self._validate_node_result(node, result)
                         results.append(result)
                         continue
+                    if state is NodeState.AWAITING_APPROVAL:
+                        return self._interrupted_result(spec, results, node=node)
                     if self._has_result(spec.run_id, node.node_id):
                         result = self._load_result(spec.run_id, node.node_id)
                         self._validate_node_result(node, result)
@@ -108,6 +112,24 @@ class NativeExecutionBackend:
                             node.node_id,
                             idempotency_key=f"runtime:{node.node_id}:start",
                         )
+                        state = NodeState.RUNNING
+                    if (
+                        node.approval_required
+                        and state is NodeState.RUNNING
+                        and not self._node_has_approval(spec.run_id, node.node_id)
+                    ):
+                        self.store.request_node_approval(
+                            spec.run_id,
+                            node.node_id,
+                            reason=f"approval required before {node.node_id}",
+                            idempotency_key=f"runtime:{node.node_id}:approval-request",
+                        )
+                        self.store.request_approval(
+                            spec.run_id,
+                            reason=f"approval required before {node.node_id}",
+                            idempotency_key=f"runtime:{node.node_id}:run-approval-request",
+                        )
+                        return self._interrupted_result(spec, results, node=node)
                     ready_nodes.append(node)
                 for node, result in self._run_ready_nodes(spec.run_id, ready_nodes, handlers):
                     self._write_result(spec.run_id, result)
@@ -301,6 +323,35 @@ class NativeExecutionBackend:
             spec_digest=spec.digest,
             error=result.error,
         )
+
+    def _interrupted_result(
+        self,
+        spec: RunSpec,
+        results: list[NodeResult],
+        *,
+        node: NodeSpec | None = None,
+    ) -> RunResult:
+        target = "run" if node is None else f"node {node.node_id}"
+        return RunResult(
+            run_id=spec.run_id,
+            status=RunResultStatus.INTERRUPTED,
+            results=tuple(results),
+            backend=self.backend_name,
+            spec_digest=spec.digest,
+            error=f"approval required for {target}",
+        )
+
+    def _node_has_approval(self, run_id: str, node_id: str) -> bool:
+        for event in self.store.events(run_id):
+            if event.event_type != "node_transition":
+                continue
+            if event.payload.get("node_id") != node_id:
+                continue
+            if event.payload.get("to") == NodeState.RUNNING.value and event.payload.get(
+                "approved_by"
+            ):
+                return True
+        return False
 
     def _run_node_with_retries(
         self,

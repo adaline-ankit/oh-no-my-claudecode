@@ -144,6 +144,7 @@ class ExecutionPlan:
                 ),
                 dependencies=node.dependencies,
                 side_effecting=_node_has_side_effects(node.kind),
+                approval_required=False,
                 idempotency_key=f"{self.run_id}:node:{node.node_id}",
                 timeout_seconds=120.0,
                 budget=Budget(timeout_seconds=120.0, max_tokens=node.policy.context_budget),

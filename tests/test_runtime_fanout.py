@@ -28,6 +28,7 @@ def _node(node_id: str, *, dependencies: tuple[str, ...] = ()) -> NodeSpec:
         completion_condition=f"{node_id} completed with evidence",
         dependencies=dependencies,
         side_effecting=True,
+        approval_required=False,
         idempotency_key=f"idem:{node_id}",
         timeout_seconds=30.0,
         budget=Budget(timeout_seconds=30.0, max_tokens=100),
