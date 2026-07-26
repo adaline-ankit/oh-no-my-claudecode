@@ -1085,6 +1085,20 @@ def summarize(
     return summary
 
 
+def failure_taxonomy_report(
+    records: list[TrialRecord],
+    conditions: list[Condition],
+) -> dict[str, object]:
+    """Return an explicit report-level failure taxonomy for claim reports."""
+    return {
+        "overall": _taxonomy(records),
+        "by_condition": {
+            cond.value: _taxonomy([row for row in records if row.condition == cond.value])
+            for cond in conditions
+        },
+    }
+
+
 def _taxonomy(rows: list[TrialRecord]) -> dict[str, int]:
     """Count failures by cause so a null result can be explained, not just stated.
 
@@ -1243,6 +1257,7 @@ def main() -> int:
         "budget_ceiling_usd": cfg.max_total_usd,
         "budget_stopped_cells": budget_stopped,
         "summary": summarize(records, conditions, seed=seed),
+        "failure_taxonomy": failure_taxonomy_report(records, conditions),
         "paired": (
             paired_analysis(records, conditions[0], conditions[1], seed=seed)
             if len(conditions) >= 2

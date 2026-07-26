@@ -42,6 +42,16 @@ def _record(
     }
 
 
+def _failure_taxonomy() -> dict[str, object]:
+    return {
+        "overall": {"wrong_change": 20},
+        "by_condition": {
+            Condition.BARE_AGENT.value: {"wrong_change": 20},
+            Condition.ONMC_CURRENT.value: {},
+        },
+    }
+
+
 def test_saturated_report_is_not_claim_ready() -> None:
     raw = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
 
@@ -194,6 +204,7 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
             "provider": "anthropic",
             "image": "local",
         },
+        "failure_taxonomy": _failure_taxonomy(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -208,6 +219,8 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
     assert gated.metadata_audit.ready is True
     assert gated.metadata_audit.environment_manifest_present is True
     assert gated.metadata_audit.environment_manifest_matches is True
+    assert gated.metadata_audit.failure_taxonomy_present is True
+    assert gated.metadata_audit.failure_taxonomy_complete is True
     assert gated.missing_tasks == ()
     assert gated.unexpected_tasks == ()
     assert gated.reasons == ()
@@ -266,6 +279,7 @@ def test_manifest_gate_blocks_missing_report_metadata() -> None:
         "report.code_sha_under_test",
         "report.leakage_notes",
         "report.environment",
+        "report.failure_taxonomy",
     )
     assert any("leakage/reproducibility" in reason for reason in gated.reasons)
 
@@ -315,6 +329,7 @@ def test_manifest_gate_blocks_environment_manifest_mismatch() -> None:
             "provider": "anthropic",
             "image": "local",
         },
+        "failure_taxonomy": _failure_taxonomy(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -329,6 +344,73 @@ def test_manifest_gate_blocks_environment_manifest_mismatch() -> None:
     assert gated.metadata_audit.environment_manifest_present is True
     assert gated.metadata_audit.environment_manifest_matches is False
     assert gated.metadata_audit.mismatched_fields == ("report.environment",)
+    assert gated.quality_claim_ready is False
+
+
+def test_manifest_gate_blocks_incomplete_failure_taxonomy() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 2,
+            "environment": {
+                "code_sha": "abc123",
+                "config_hash": "cfg1",
+                "model": "claude-test",
+                "provider": "anthropic",
+                "image": "local",
+            },
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records: list[dict[str, object]] = []
+    for task_id in task_ids:
+        for trial in range(2):
+            records.append(
+                {
+                    **_record(task_id, Condition.BARE_AGENT.value, False),
+                    "trial": trial + 1,
+                }
+            )
+            records.append(
+                {
+                    **_record(task_id, Condition.ONMC_CURRENT.value, True),
+                    "trial": trial + 1,
+                }
+            )
+    report = {
+        "task_set_revision": "rev-good",
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "environment": {
+            "code_sha": "abc123",
+            "config_hash": "cfg1",
+            "model": "claude-test",
+            "provider": "anthropic",
+            "image": "local",
+        },
+        "failure_taxonomy": {
+            "overall": {"wrong_change": 20},
+            "by_condition": {
+                Condition.BARE_AGENT.value: {"wrong_change": 20},
+            },
+        },
+        "code_sha": "abc123",
+        "code_sha_under_test": "def456",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 2,
+        "records": records,
+    }
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.calibration.quality_claim_ready is True
+    assert gated.metadata_audit.failure_taxonomy_present is True
+    assert gated.metadata_audit.failure_taxonomy_complete is False
+    assert gated.metadata_audit.mismatched_fields == ("report.failure_taxonomy",)
     assert gated.quality_claim_ready is False
 
 
@@ -427,9 +509,11 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
     assert gate["metadata_audit"]["report_leakage_notes_present"] is False
     assert gate["metadata_audit"]["environment_manifest_present"] is False
     assert gate["metadata_audit"]["environment_manifest_matches"] is False
+    assert gate["metadata_audit"]["failure_taxonomy_present"] is False
+    assert gate["metadata_audit"]["failure_taxonomy_complete"] is False
     assert any(
         item in gate["metadata_audit"]["missing_fields"]
-        for item in ("report.leakage_notes", "report.environment")
+        for item in ("report.leakage_notes", "report.environment", "report.failure_taxonomy")
     )
     assert gate["manifest_tasks"] == 28
     assert gate["reported_tasks"] == 24

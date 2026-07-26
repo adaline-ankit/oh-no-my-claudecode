@@ -318,6 +318,10 @@ def _metadata_audit_markdown(audit: dict[str, Any]) -> list[str]:
         f"`{str(audit['environment_manifest_present']).lower()}`",
         f"- environment_manifest_matches: "
         f"`{str(audit['environment_manifest_matches']).lower()}`",
+        f"- failure_taxonomy_present: "
+        f"`{str(audit['failure_taxonomy_present']).lower()}`",
+        f"- failure_taxonomy_complete: "
+        f"`{str(audit['failure_taxonomy_complete']).lower()}`",
         f"- leakage_notes_present: `{str(audit['leakage_notes_present']).lower()}`",
         f"- report_leakage_notes_present: "
         f"`{str(audit['report_leakage_notes_present']).lower()}`",

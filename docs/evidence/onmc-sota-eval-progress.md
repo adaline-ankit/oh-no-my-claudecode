@@ -107,6 +107,9 @@ This is evidence for a stronger harness foundation:
 - Saved external reports now carry the complete experiment environment manifest (`code_sha`,
   `config_hash`, `model`, `provider`, and `image`), and manifest-gated calibration blocks external
   claims when that report environment is missing or differs from the frozen manifest.
+- Saved external reports now carry a top-level failure taxonomy with overall and per-condition
+  failure counts, and manifest-gated calibration blocks external claims when that taxonomy is
+  missing or incomplete.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -169,7 +172,7 @@ python -m pytest -q tests/test_experiment_calibration.py tests/test_experiment_c
 Result:
 
 ```text
-71 passed
+72 passed
 ```
 
 ```text
@@ -199,7 +202,7 @@ The current saved v3 report against the v4 manifest remains external-claim block
 audit now adds these explicit blockers:
 
 ```text
-report missing leakage/reproducibility fields: report.leakage_notes, report.environment
+report missing leakage/reproducibility fields: report.leakage_notes, report.environment, report.failure_taxonomy
 report metadata mismatch: report.code_sha
 ```
 

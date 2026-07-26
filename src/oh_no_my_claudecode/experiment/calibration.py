@@ -149,6 +149,8 @@ class ReportMetadataAudit:
     code_sha_under_test: str | None
     environment_manifest_present: bool
     environment_manifest_matches: bool
+    failure_taxonomy_present: bool
+    failure_taxonomy_complete: bool
     leakage_notes_present: bool
     report_leakage_notes_present: bool
     missing_fields: tuple[str, ...]
@@ -165,6 +167,8 @@ class ReportMetadataAudit:
             "code_sha_under_test": self.code_sha_under_test,
             "environment_manifest_present": self.environment_manifest_present,
             "environment_manifest_matches": self.environment_manifest_matches,
+            "failure_taxonomy_present": self.failure_taxonomy_present,
+            "failure_taxonomy_complete": self.failure_taxonomy_complete,
             "leakage_notes_present": self.leakage_notes_present,
             "report_leakage_notes_present": self.report_leakage_notes_present,
             "missing_fields": list(self.missing_fields),
@@ -319,6 +323,14 @@ def _audit_report_metadata(
     leakage_notes = _optional_string(manifest.get("leakage_notes"), "manifest.leakage_notes")
     report_leakage_notes = _optional_string(report.get("leakage_notes"), "report.leakage_notes")
     report_environment = report.get("environment")
+    expected_conditions = tuple(
+        _condition_value(item)
+        for item in _list(experiment.get("conditions"), "manifest.experiment.conditions")
+    )
+    failure_taxonomy_present, failure_taxonomy_complete = _audit_failure_taxonomy(
+        report,
+        expected_conditions,
+    )
 
     missing: list[str] = []
     mismatched: list[str] = []
@@ -349,6 +361,10 @@ def _audit_report_metadata(
         environment_manifest_matches = actual_environment == expected_environment
         if not environment_manifest_matches:
             mismatched.append("report.environment")
+    if not failure_taxonomy_present:
+        missing.append("report.failure_taxonomy")
+    elif not failure_taxonomy_complete:
+        mismatched.append("report.failure_taxonomy")
 
     if missing:
         reasons.append("report missing leakage/reproducibility fields: " + ", ".join(missing))
@@ -363,6 +379,8 @@ def _audit_report_metadata(
         code_sha_under_test=code_sha_under_test,
         environment_manifest_present=environment_manifest_present,
         environment_manifest_matches=environment_manifest_matches,
+        failure_taxonomy_present=failure_taxonomy_present,
+        failure_taxonomy_complete=failure_taxonomy_complete,
         leakage_notes_present=leakage_notes is not None,
         report_leakage_notes_present=report_leakage_notes is not None,
         missing_fields=tuple(missing),
@@ -374,6 +392,34 @@ def _audit_report_metadata(
 def _environment_dict(value: Mapping[str, object]) -> dict[str, str]:
     required = ("code_sha", "config_hash", "model", "provider", "image")
     return {key: _string(value.get(key), f"environment.{key}") for key in required}
+
+
+def _audit_failure_taxonomy(
+    report: Mapping[str, object],
+    expected_conditions: Sequence[str],
+) -> tuple[bool, bool]:
+    raw = report.get("failure_taxonomy")
+    if not isinstance(raw, Mapping):
+        return False, False
+    by_condition = raw.get("by_condition")
+    overall = raw.get("overall")
+    if not isinstance(by_condition, Mapping) or not isinstance(overall, Mapping):
+        return True, False
+    if not _taxonomy_counts(overall):
+        return True, False
+    for condition in expected_conditions:
+        item = by_condition.get(condition)
+        if not isinstance(item, Mapping) or not _taxonomy_counts(item):
+            return True, False
+    return True, True
+
+
+def _taxonomy_counts(value: Mapping[object, object]) -> bool:
+    return all(isinstance(key, str) and _non_negative_int(count) for key, count in value.items())
+
+
+def _non_negative_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def calibrate_records(
