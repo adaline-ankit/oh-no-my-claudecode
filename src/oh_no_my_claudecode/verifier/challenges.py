@@ -241,6 +241,53 @@ def _satisfied_contract(*, contract_id: str, claim_id: str, digest: str) -> Cont
     )
 
 
+def _legitimate_control(
+    *,
+    case_id: str,
+    description: str,
+    task_id: str,
+    claim_id: str,
+    statement: str,
+    file: str,
+    changed: Sequence[int],
+    executed: Sequence[int],
+    digest: str,
+) -> ChallengeCase:
+    """Build a legitimate control where every enabled detector should clear."""
+
+    return ChallengeCase(
+        provenance=CaseProvenance.COMPOSED,
+        rationale=(
+            "A legitimate control: changed executable lines are reached by passing tests, "
+            "mutants are killed, proof evidence is verifier-sourced, and the task contract "
+            "is satisfied. Any flag here is a verifier false positive."
+        ),
+        case=VerifierCase(
+            case_id=case_id,
+            description=description,
+            expected_false_green=False,
+            proof_graph=_clean_proof_graph(
+                task_id=task_id,
+                claim_id=claim_id,
+                statement=statement,
+                digest=digest,
+                changed_file=file,
+            ),
+            reachability=_reachability_from_coverage(
+                executed=executed,
+                changed=changed,
+                file=file,
+            ),
+            mutation=MutationInput(function=FUNCTION_UNDER_TEST, runner=_killing_runner),
+            contract=_satisfied_contract(
+                contract_id=task_id,
+                claim_id=claim_id,
+                digest=digest,
+            ),
+        ),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Tier 1 — 1:1 encodings of tests/test_verifier_false_green.py
 # --------------------------------------------------------------------------- #
@@ -824,10 +871,9 @@ _COMPOSED: tuple[ChallengeCase, ...] = (
         provenance=CaseProvenance.COMPOSED,
         rationale=(
             "A docs-only diff with a complete proof and a satisfied contract. It touches "
-            "no executable line, which reachability treats as a vacuous 'verified' claim "
-            "and flags. Labelled legitimate on purpose: the diff is real and correctly "
-            "evidenced, so the flag is a measured false positive of that detector, not a "
-            "catch."
+            "no executable line, but it is in documentation, not source. Labelled legitimate "
+            "on purpose: the diff is real and correctly evidenced, so reachability should "
+            "not require line coverage for it."
         ),
         case=VerifierCase(
             case_id="composed-legit-docs-only-change",
@@ -854,6 +900,83 @@ _COMPOSED: tuple[ChallengeCase, ...] = (
                 contract_id="legit-docs", claim_id="c_docs", digest="0bad1dea"
             ),
         ),
+    ),
+    _legitimate_control(
+        case_id="composed-legit-cache-bugfix",
+        description="a reached cache invalidation bugfix with verifier evidence",
+        task_id="legit-cache-bugfix",
+        claim_id="c_cache",
+        statement="cache invalidation refreshes stale entries",
+        file="src/cache.py",
+        changed=(12, 13),
+        executed=(10, 11, 12, 13, 14),
+        digest="c0ffee0000000001",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-auth-guard",
+        description="a reached auth guard fix with satisfied contract evidence",
+        task_id="legit-auth-guard",
+        claim_id="c_auth_guard",
+        statement="unauthorized users are rejected",
+        file="src/auth.py",
+        changed=(20, 21, 22),
+        executed=(18, 19, 20, 21, 22, 23),
+        digest="c0ffee0000000002",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-config-validation",
+        description="a reached config validation feature with passing targeted tests",
+        task_id="legit-config-validation",
+        claim_id="c_config",
+        statement="invalid config values are rejected",
+        file="src/config.py",
+        changed=(5, 6),
+        executed=(4, 5, 6, 7),
+        digest="c0ffee0000000003",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-error-path",
+        description="a reached error-path fix with contract coverage",
+        task_id="legit-error-path",
+        claim_id="c_error_path",
+        statement="timeout errors return a stable message",
+        file="src/http.py",
+        changed=(31, 32),
+        executed=(30, 31, 32, 33),
+        digest="c0ffee0000000004",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-parser-edge",
+        description="a reached parser edge-case fix with passing verifier evidence",
+        task_id="legit-parser-edge",
+        claim_id="c_parser",
+        statement="quoted delimiters parse correctly",
+        file="src/parser.py",
+        changed=(44, 45, 46),
+        executed=(42, 43, 44, 45, 46),
+        digest="c0ffee0000000005",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-billing-rounding",
+        description="a reached billing rounding fix with independent evidence",
+        task_id="legit-billing-rounding",
+        claim_id="c_billing",
+        statement="billing totals round at the final aggregation step",
+        file="src/billing.py",
+        changed=(70, 71),
+        executed=(69, 70, 71, 72),
+        digest="c0ffee0000000006",
+    ),
+    _legitimate_control(
+        case_id="composed-legit-cli-option",
+        description="a reached CLI option feature with satisfied proof and contract",
+        task_id="legit-cli-option",
+        claim_id="c_cli",
+        statement="the new CLI flag selects compact output",
+        file="src/cli.py",
+        changed=(90, 91, 92),
+        executed=(88, 89, 90, 91, 92),
+        digest="c0ffee0000000007",
     ),
 )
 

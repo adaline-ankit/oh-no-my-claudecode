@@ -168,7 +168,12 @@ def assess_reachability(
                     f"(not verified): {fail_sample}"
                 )
 
-    if total_changed == 0:
+    if total_changed == 0 and regions and all(
+        _non_executable_documentation_file(region.file) for region in regions
+    ):
+        reasons.insert(0, "change touches no executable lines in documentation-only files")
+        reached = True
+    elif total_changed == 0:
         reasons.insert(
             0,
             "no changed executable lines to verify — a 'verified' claim here is vacuous",
@@ -183,6 +188,18 @@ def assess_reachability(
         reached_lines=total_reached,
         unreached=tuple(unreached),
         reasons=tuple(dict.fromkeys(reasons)),
+    )
+
+
+def _non_executable_documentation_file(path: str) -> bool:
+    lowered = path.lower()
+    return lowered.startswith(("docs/", "doc/")) or lowered.endswith(
+        (
+            ".md",
+            ".markdown",
+            ".rst",
+            ".txt",
+        )
     )
 
 

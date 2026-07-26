@@ -72,6 +72,18 @@ def test_no_changed_executable_lines_is_vacuous_false_green() -> None:
     assert any("vacuous" in reason for reason in report.reasons)
 
 
+def test_docs_only_change_without_executable_lines_is_not_false_green() -> None:
+    regions = [ChangedRegion(file="docs/guide.md", lines=frozenset())]
+    executions = [_exec("t", Outcome.PASSED, **{"src/api.py": frozenset({1})})]
+
+    report = assess_reachability(regions, executions)
+
+    assert report.reached is True
+    assert report.false_green is False
+    assert report.total_changed_lines == 0
+    assert any("documentation-only" in reason for reason in report.reasons)
+
+
 def test_multi_file_change_all_reached() -> None:
     regions = [
         ChangedRegion(file="src/a.py", lines=frozenset({1, 2})),

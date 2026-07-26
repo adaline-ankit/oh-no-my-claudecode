@@ -53,22 +53,22 @@ _FUNCTION_UNDER_TEST = FunctionUnderTest(
 )
 
 EXPECTED_COUNTS: dict[str, tuple[int, int, int, int, int]] = {
-    "none": (0, 13, 0, 3, 0),
-    "proof-graph": (2, 4, 0, 2, 8),
-    "reachability": (4, 3, 1, 2, 6),
-    "mutation": (4, 2, 0, 2, 8),
-    "contract": (5, 3, 0, 3, 5),
-    "proof-graph+reachability": (6, 2, 1, 2, 5),
-    "proof-graph+mutation": (6, 2, 0, 3, 5),
-    "proof-graph+contract": (6, 3, 0, 3, 4),
-    "reachability+mutation": (7, 2, 1, 2, 4),
-    "reachability+contract": (9, 1, 1, 2, 3),
-    "mutation+contract": (9, 1, 0, 3, 3),
-    "proof-graph+reachability+mutation": (9, 1, 1, 2, 3),
-    "proof-graph+reachability+contract": (10, 1, 1, 2, 2),
-    "proof-graph+mutation+contract": (10, 1, 0, 3, 2),
-    "reachability+mutation+contract": (12, 0, 1, 2, 1),
-    "proof-graph+reachability+mutation+contract": (13, 0, 1, 2, 0),
+    "none": (0, 13, 0, 10, 0),
+    "proof-graph": (2, 4, 0, 9, 8),
+    "reachability": (4, 3, 0, 10, 6),
+    "mutation": (4, 2, 0, 9, 8),
+    "contract": (5, 3, 0, 10, 5),
+    "proof-graph+reachability": (6, 2, 0, 10, 5),
+    "proof-graph+mutation": (6, 2, 0, 10, 5),
+    "proof-graph+contract": (6, 3, 0, 10, 4),
+    "reachability+mutation": (7, 2, 0, 10, 4),
+    "reachability+contract": (9, 1, 0, 10, 3),
+    "mutation+contract": (9, 1, 0, 10, 3),
+    "proof-graph+reachability+mutation": (9, 1, 0, 10, 3),
+    "proof-graph+reachability+contract": (10, 1, 0, 10, 2),
+    "proof-graph+mutation+contract": (10, 1, 0, 10, 2),
+    "reachability+mutation+contract": (12, 0, 0, 10, 1),
+    "proof-graph+reachability+mutation+contract": (13, 0, 0, 10, 0),
 }
 
 
@@ -292,18 +292,18 @@ def test_a_superset_never_gains_a_false_positive_it_cannot_explain() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# False positives are measured, not assumed away
+# Legitimate controls are measured, not assumed away
 # --------------------------------------------------------------------------- #
-def test_the_only_measured_false_positive_is_the_docs_only_change() -> None:
+def test_full_verifier_clears_all_legitimate_controls() -> None:
     report = run_ablation()
-    assert report.full.false_positives == ("composed-legit-docs-only-change",)
+    assert report.full.false_positives == ()
     docs = next(
         case
         for case in report.full.results
         if case.case_id == "composed-legit-docs-only-change"
     )
-    assert docs.flagged_by == (VerifierComponent.REACHABILITY,)
-    assert "vacuous" in docs.reasons[0]
+    assert docs.outcome is CaseOutcome.CLEARED
+    assert docs.flagged_by == ()
 
 
 def test_no_component_flags_the_repo_control_case() -> None:
