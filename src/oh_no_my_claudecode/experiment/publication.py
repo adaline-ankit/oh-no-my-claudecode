@@ -198,6 +198,7 @@ def build_publication_bundle(
         "ONMC improves coding-agent quality and lowers cost versus plain coding agents."
     ),
     artifact_root: Path | None = None,
+    product_surface: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a deterministic report bundle without weakening any evidence gate."""
 
@@ -235,12 +236,14 @@ def build_publication_bundle(
         report,
         artifact_root=Path(".") if artifact_root is None else artifact_root,
     )
+    product_surface_gate = _product_surface_gate(product_surface)
     publication_ready = (
         validation.publication_ready
         and claim_readiness.quality_claim_ready
         and report_coverage.claim_ready
         and leakage_audit["complete"] is True
         and artifacts["complete"] is True
+        and product_surface_gate["ready"] is True
     )
 
     return {
@@ -264,6 +267,7 @@ def build_publication_bundle(
         "leakage_audit": leakage_audit,
         "failure_taxonomy": _json_value(report.get("failure_taxonomy", {})),
         "raw_artifact_index": artifacts,
+        "product_surface": product_surface_gate,
     }
 
 
@@ -283,6 +287,7 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     leakage = _optional_mapping(bundle.get("leakage_audit"))
     artifacts = _optional_mapping(bundle.get("raw_artifact_index"))
     claim = _optional_mapping(bundle.get("claim_readiness"))
+    product_surface = _optional_mapping(bundle.get("product_surface"))
 
     task_count = _int_or_zero(validation.get("task_count"))
     min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
@@ -311,6 +316,16 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "repositories_to_add": max(0, 2 - _int_or_zero(validation.get("repository_count"))),
         "missing_cost_cells": _int_or_zero(cost.get("missing_cells")),
         "missing_raw_artifact_entries": len(_optional_list(artifacts.get("missing"))),
+        "product_surface_ready": product_surface.get("ready") is True,
+        "product_surface_unexpected_visible": list(
+            _string_list(product_surface.get("unexpected_visible"))
+        ),
+        "product_surface_missing_primary": list(
+            _string_list(product_surface.get("missing_primary"))
+        ),
+        "product_surface_hidden_primary": list(
+            _string_list(product_surface.get("hidden_primary"))
+        ),
         "coverage_fields_to_fill": [
             str(field.get("name"))
             for value in _optional_list(report_coverage.get("fields"))
@@ -325,6 +340,9 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     per_cell_cost = benchmark_plan.get("per_cell_cost_usd")
 
     actions = [
+        "Keep the live product surface collapsed around `onmc run`, setup, "
+        "Mission Control, and operator views; advanced diagnostics must stay "
+        "behind `onmc commands --all`.",
         "Freeze one manifest revision with the five required arms and three seeds.",
         "Add or replace tasks until at least 50 external tasks include at least 10 "
         "calibration-discriminative tasks.",
@@ -458,6 +476,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     validation = _optional_mapping(bundle.get("manifest_validation"))
     readiness = _optional_mapping(bundle.get("claim_readiness"))
     report_coverage = _optional_mapping(bundle.get("report_coverage"))
+    product_surface = _optional_mapping(bundle.get("product_surface"))
 
     lines = [
         "# ONMC External Benchmark Evidence Report",
@@ -533,6 +552,19 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
             f"{artifacts.get('usable_cells', 0)}`",
             f"- missing entries: `{len(_optional_list(artifacts.get('missing')))}`",
             "",
+            "## Product Surface",
+            "",
+            f"- status: `{'READY' if product_surface.get('ready') is True else 'INCOMPLETE'}`",
+            f"- canonical entrypoint: "
+            f"`{product_surface.get('canonical_entrypoint', 'unknown')}`",
+            f"- visible primary commands: "
+            f"`{len(_optional_list(product_surface.get('visible_primary')))}/"
+            f"{product_surface.get('primary_limit', 'unknown')}`",
+            f"- hidden advanced commands: "
+            f"`{product_surface.get('hidden_advanced_count', 'unknown')}`",
+            f"- unexpected visible commands: "
+            f"`{len(_optional_list(product_surface.get('unexpected_visible')))}`",
+            "",
             "## Publication Blockers",
             "",
         ]
@@ -541,6 +573,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
         str(item) for item in _optional_list(validation.get("blockers"))
     ]
     blockers.extend(str(item) for item in _optional_list(readiness.get("reasons")))
+    blockers.extend(str(item) for item in _optional_list(product_surface.get("blockers")))
     fields = _optional_list(report_coverage.get("fields"))
     blockers.extend(
         f"report coverage missing {item.get('name')}: {item.get('reason')}"
@@ -574,6 +607,69 @@ def _cost_coverage(report: Mapping[str, object]) -> dict[str, object]:
         "missing_cells": len(usable) - len(costs),
         "mean_cost_usd": round(sum(costs) / len(costs), 6) if costs else None,
         "by_condition": dict(sorted(by_condition.items())),
+    }
+
+
+def _product_surface_gate(surface: Mapping[str, object] | None) -> dict[str, object]:
+    if surface is None:
+        return {
+            "schema_version": "onmc-product-surface-gate/v1",
+            "ready": False,
+            "evaluated": False,
+            "canonical_entrypoint": "unknown",
+            "primary_limit": 14,
+            "visible_primary": [],
+            "hidden_advanced_count": 0,
+            "missing_primary": [],
+            "hidden_primary": [],
+            "unexpected_visible": [],
+            "blockers": ["live product surface audit was not provided"],
+        }
+
+    visible_primary = _string_list(surface.get("visible_primary"))
+    missing_primary = _string_list(surface.get("missing_primary"))
+    hidden_primary = _string_list(surface.get("hidden_primary"))
+    unexpected_visible = _string_list(surface.get("unexpected_visible"))
+    canonical = surface.get("canonical_entrypoint")
+    primary_limit = _int_or_zero(surface.get("primary_limit")) or 14
+    hidden_advanced = _int_or_zero(surface.get("hidden_advanced_count"))
+
+    blockers: list[str] = []
+    if surface.get("ready") is not True:
+        blockers.append("live command surface audit is not ready")
+    if canonical != "run":
+        blockers.append("canonical product entrypoint must be `run`")
+    if len(visible_primary) > primary_limit:
+        blockers.append(
+            f"primary command surface has {len(visible_primary)} commands; "
+            f"limit is {primary_limit}"
+        )
+    if "run" not in visible_primary:
+        blockers.append("primary command surface must expose `run`")
+    if hidden_advanced <= 0:
+        blockers.append("advanced commands must remain hidden from root help")
+    if missing_primary:
+        blockers.append("missing primary command(s): " + ", ".join(missing_primary))
+    if hidden_primary:
+        blockers.append("hidden primary command(s): " + ", ".join(hidden_primary))
+    if unexpected_visible:
+        blockers.append(
+            "unexpected advanced command(s) visible in root help: "
+            + ", ".join(unexpected_visible)
+        )
+
+    return {
+        "schema_version": "onmc-product-surface-gate/v1",
+        "ready": not blockers,
+        "evaluated": True,
+        "canonical_entrypoint": canonical,
+        "primary_limit": primary_limit,
+        "visible_primary": list(visible_primary),
+        "hidden_advanced_count": hidden_advanced,
+        "missing_primary": list(missing_primary),
+        "hidden_primary": list(hidden_primary),
+        "unexpected_visible": list(unexpected_visible),
+        "blockers": blockers,
     }
 
 

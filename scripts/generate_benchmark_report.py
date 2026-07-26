@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest,
         proposed_claim=args.claim,
         artifact_root=args.report.parent if args.artifact_root is None else args.artifact_root,
+        product_surface=_live_product_surface(),
     )
     rendered_json = json.dumps(bundle, indent=2, sort_keys=True) + "\n"
     rendered_markdown = render_publication_markdown(bundle)
@@ -83,6 +84,29 @@ def _write(path: Path | None, content: str) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _live_product_surface() -> dict[str, object]:
+    """Collect the live root-help surface for publication evidence.
+
+    This keeps product coherence in the same evidence bundle as benchmark rigor:
+    a report can no longer look publication-ready while the CLI has drifted back
+    into a broad command catalog.
+    """
+    from oh_no_my_claudecode.cli import app
+    from oh_no_my_claudecode.command_registry import _command_name, _registered_names
+    from oh_no_my_claudecode.commands_help.core import audit_command_surface
+
+    visible: list[str] = []
+    for raw_info in (*app.registered_commands, *app.registered_groups):
+        callback = raw_info.callback
+        name = _command_name(raw_info.name, callback)
+        if name is not None and not getattr(raw_info, "hidden", False):
+            visible.append(name)
+    return audit_command_surface(
+        sorted(set(_registered_names(app))),
+        sorted(set(visible)),
+    ).to_dict()
 
 
 if __name__ == "__main__":

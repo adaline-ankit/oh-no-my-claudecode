@@ -24,6 +24,19 @@ def _load(path: Path) -> dict[str, object]:
     return value
 
 
+def _ready_product_surface() -> dict[str, object]:
+    return {
+        "ready": True,
+        "canonical_entrypoint": "run",
+        "primary_limit": 14,
+        "visible_primary": ["commands", "missioncontrol", "run", "setup"],
+        "hidden_advanced_count": 12,
+        "missing_primary": [],
+        "hidden_primary": [],
+        "unexpected_visible": [],
+    }
+
+
 def test_current_manifest_is_valid_but_not_publication_ready() -> None:
     validation = validate_benchmark_manifest(_load(V4_MANIFEST))
 
@@ -62,6 +75,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
         report,
         manifest,
         proposed_claim="ONMC is SOTA, better, and cheaper than plain coding agents.",
+        product_surface=_ready_product_surface(),
     )
     markdown = render_publication_markdown(bundle)
 
@@ -71,19 +85,39 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert bundle["paired"]["delta_ci95"] == [0.0, 0.0]
     assert bundle["cost_coverage"]["complete"] is False
     assert bundle["leakage_audit"]["complete"] is False
+    assert bundle["product_surface"]["ready"] is True
     assert "NOT PUBLICATION-READY" in markdown
     assert "Paired Delta" in markdown
     assert "95% CI" in markdown
     assert "Cost Coverage" in markdown
     assert "INCOMPLETE" in markdown
     assert "Leakage Audit" in markdown
+    assert "Product Surface" in markdown
     assert "SOTA" not in bundle["claim_language_gate"]["suggested_safe_claim"]
+
+
+def test_publication_report_fails_closed_without_product_surface_audit() -> None:
+    report = _load(SATURATED_REPORT)
+    manifest = _load(V4_MANIFEST)
+
+    bundle = build_publication_bundle(report, manifest)
+
+    assert bundle["publication_ready"] is False
+    assert bundle["product_surface"]["ready"] is False
+    assert bundle["product_surface"]["evaluated"] is False
+    assert bundle["product_surface"]["blockers"] == [
+        "live product surface audit was not provided"
+    ]
 
 
 def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
     report = _load(SATURATED_REPORT)
     manifest = _load(V4_MANIFEST)
-    bundle = build_publication_bundle(report, manifest)
+    bundle = build_publication_bundle(
+        report,
+        manifest,
+        product_surface=_ready_product_surface(),
+    )
 
     plan = build_publication_work_plan(bundle)
 
@@ -105,6 +139,7 @@ def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
         "trajectory-routed",
     ]
     assert plan["deficits"]["missing_cost_cells"] == 11
+    assert plan["deficits"]["product_surface_ready"] is True
     assert plan["spend_gate"]["paid_full_matrix_allowed"] is False
 
 

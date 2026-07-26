@@ -717,6 +717,34 @@
     "task_kind_coverage_ready": false,
     "verifier_count": 28
   },
+  "product_surface": {
+    "blockers": [],
+    "canonical_entrypoint": "run",
+    "evaluated": true,
+    "hidden_advanced_count": 137,
+    "hidden_primary": [],
+    "missing_primary": [],
+    "primary_limit": 14,
+    "ready": true,
+    "schema_version": "onmc-product-surface-gate/v1",
+    "unexpected_visible": [],
+    "visible_primary": [
+      "brief",
+      "commands",
+      "guard",
+      "init",
+      "mission",
+      "missioncontrol",
+      "quickstart",
+      "recall",
+      "run",
+      "serve",
+      "setup",
+      "status",
+      "ui",
+      "wrap"
+    ]
+  },
   "publication_ready": false,
   "raw_artifact_index": {
     "artifact_root": "datasets/experiment/reports",

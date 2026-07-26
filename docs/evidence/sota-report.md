@@ -50,6 +50,14 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - indexed cells: `0/48`
 - missing entries: `96`
 
+## Product Surface
+
+- status: `READY`
+- canonical entrypoint: `run`
+- visible primary commands: `14/14`
+- hidden advanced commands: `137`
+- unexpected visible commands: `0`
+
 ## Publication Blockers
 
 - at least 50 discriminative tasks are required; found 28

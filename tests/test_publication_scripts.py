@@ -64,11 +64,16 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     assert exit_code == 0
     assert payload["publication_ready"] is False
     assert payload["claim_language_gate"]["decision"] == "refuse"
+    assert payload["product_surface"]["ready"] is True
+    assert payload["product_surface"]["canonical_entrypoint"] == "run"
+    assert payload["product_surface"]["unexpected_visible"] == []
     assert artifact_index["complete"] is False
     assert work_plan["publication_ready"] is False
+    assert work_plan["deficits"]["product_surface_ready"] is True
     assert work_plan["deficits"]["tasks_to_add"] == 22
     assert work_plan["spend_gate"]["paid_full_matrix_allowed"] is False
     assert "NOT PUBLICATION-READY" in markdown_output.read_text(encoding="utf-8")
+    assert "Product Surface" in markdown_output.read_text(encoding="utf-8")
 
 
 def test_external_claim_gate_cli_refuses_strong_claim(tmp_path: Path) -> None:

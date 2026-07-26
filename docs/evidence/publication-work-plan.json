@@ -49,11 +49,16 @@
     ],
     "missing_cost_cells": 11,
     "missing_raw_artifact_entries": 96,
+    "product_surface_hidden_primary": [],
+    "product_surface_missing_primary": [],
+    "product_surface_ready": true,
+    "product_surface_unexpected_visible": [],
     "repositories_to_add": 0,
     "seeds_to_register": 3,
     "tasks_to_add": 22
   },
   "next_actions": [
+    "Keep the live product surface collapsed around `onmc run`, setup, Mission Control, and operator views; advanced diagnostics must stay behind `onmc commands --all`.",
     "Freeze one manifest revision with the five required arms and three seeds.",
     "Add or replace tasks until at least 50 external tasks include at least 10 calibration-discriminative tasks.",
     "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
