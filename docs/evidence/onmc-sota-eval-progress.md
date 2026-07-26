@@ -99,6 +99,11 @@ This is evidence for a stronger harness foundation:
 - OTel runtime-run export now surfaces that same reproducibility envelope as stable
   `onmc.runtime.run.*` attributes, allowing benchmark reports, receipts, and trace sinks to
   correlate results with the code/runtime state that produced them without leaking local paths.
+- Manifest-gated external report calibration now includes a `metadata_audit` that blocks external
+  claims unless the saved report carries audit status, leakage notes, the expected manifest code
+  SHA, and the actual code SHA under test.
+- `scripts/run_external_eval.py` now writes the portfolio leakage notes into saved reports, and the
+  calibration markdown renders a human-readable "Report Metadata Audit" section.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -149,6 +154,51 @@ Success: no issues found in 11 source files
 
 Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`, and
 `crewai`; these were not introduced by this slice.
+
+## External Eval Metadata Audit Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest -q tests/test_experiment_calibration.py tests/test_experiment_claim.py tests/test_experiment_power.py tests/test_experiment_coverage.py tests/test_experiment_contracts.py tests/test_experiment_kernel.py tests/test_experiment_portfolio.py
+```
+
+Result:
+
+```text
+70 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment scripts/run_external_eval.py scripts/calibrate_external_report.py tests/test_experiment_calibration.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment scripts/run_external_eval.py scripts/calibrate_external_report.py
+```
+
+Result:
+
+```text
+Success: no issues found in 12 source files
+```
+
+Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`, and
+`crewai`; these were not introduced by this metadata-audit slice.
+
+The current saved v3 report against the v4 manifest remains external-claim blocked. The new
+metadata audit adds two explicit blockers:
+
+```text
+report missing leakage/reproducibility fields: report.leakage_notes
+report metadata mismatch: report.code_sha
+```
 
 ```text
 python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py

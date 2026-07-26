@@ -23,6 +23,7 @@ __all__ = [
     "CalibrationDecision",
     "CalibrationReport",
     "ManifestCalibrationReport",
+    "ReportMetadataAudit",
     "TaskCalibration",
     "calibrate_external_report",
     "calibrate_portfolio_report",
@@ -99,6 +100,7 @@ class ManifestCalibrationReport:
     """Calibration plus manifest/report coverage gates."""
 
     calibration: CalibrationReport
+    metadata_audit: ReportMetadataAudit
     manifest_task_set_revision: str
     report_task_set_revision: str | None
     audit_status: str
@@ -117,6 +119,7 @@ class ManifestCalibrationReport:
     def to_dict(self) -> dict[str, object]:
         return {
             "calibration": self.calibration.to_dict(),
+            "metadata_audit": self.metadata_audit.to_dict(),
             "manifest_task_set_revision": self.manifest_task_set_revision,
             "report_task_set_revision": self.report_task_set_revision,
             "audit_status": self.audit_status,
@@ -130,6 +133,38 @@ class ManifestCalibrationReport:
             "reported_trials": self.reported_trials,
             "quality_claim_ready": self.quality_claim_ready,
             "cost_claim_ready": self.cost_claim_ready,
+            "reasons": list(self.reasons),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ReportMetadataAudit:
+    """Reproducibility and leakage metadata gate for saved benchmark reports."""
+
+    ready: bool
+    manifest_audit_status: str
+    report_audit_status: str | None
+    expected_code_sha: str | None
+    report_code_sha: str | None
+    code_sha_under_test: str | None
+    leakage_notes_present: bool
+    report_leakage_notes_present: bool
+    missing_fields: tuple[str, ...]
+    mismatched_fields: tuple[str, ...]
+    reasons: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ready": self.ready,
+            "manifest_audit_status": self.manifest_audit_status,
+            "report_audit_status": self.report_audit_status,
+            "expected_code_sha": self.expected_code_sha,
+            "report_code_sha": self.report_code_sha,
+            "code_sha_under_test": self.code_sha_under_test,
+            "leakage_notes_present": self.leakage_notes_present,
+            "report_leakage_notes_present": self.report_leakage_notes_present,
+            "missing_fields": list(self.missing_fields),
+            "mismatched_fields": list(self.mismatched_fields),
             "reasons": list(self.reasons),
         }
 
@@ -199,6 +234,7 @@ def calibrate_portfolio_report(
     expected_trials = _integer(experiment.get("trials"), "manifest.experiment.trials")
     reported_trials = _optional_integer(report.get("trials_per_cell"), "report.trials_per_cell")
     audit_status = _string(manifest.get("audit_status"), "manifest.audit_status")
+    metadata_audit = _audit_report_metadata(manifest, report)
     calibration = calibrate_external_report(
         report,
         min_discriminative_tasks=min_discriminative_tasks,
@@ -220,6 +256,8 @@ def calibrate_portfolio_report(
         )
     if audit_status != "valid":
         reasons.append(f"manifest audit_status is {audit_status}, not valid")
+    if not metadata_audit.ready:
+        reasons.extend(metadata_audit.reasons)
     if expected_trials < 2:
         reasons.append("manifest trials must be at least 2 for claim uncertainty")
     if missing:
@@ -231,6 +269,7 @@ def calibrate_portfolio_report(
         and expected_conditions == reported_conditions
         and reported_trials == expected_trials
         and audit_status == "valid"
+        and metadata_audit.ready
         and expected_trials >= 2
         and not missing
         and not unexpected
@@ -238,6 +277,7 @@ def calibrate_portfolio_report(
     quality_ready = structural_ready and calibration.quality_claim_ready
     return ManifestCalibrationReport(
         calibration=calibration,
+        metadata_audit=metadata_audit,
         manifest_task_set_revision=expected_revision,
         report_task_set_revision=report_revision,
         audit_status=audit_status,
@@ -252,6 +292,65 @@ def calibrate_portfolio_report(
         quality_claim_ready=quality_ready,
         cost_claim_ready=quality_ready and calibration.cost_claim_ready,
         reasons=tuple(dict.fromkeys(reasons)),
+    )
+
+
+def _audit_report_metadata(
+    manifest: Mapping[str, object],
+    report: Mapping[str, object],
+) -> ReportMetadataAudit:
+    experiment = _mapping(manifest.get("experiment"), "manifest.experiment")
+    environment = _mapping(experiment.get("environment"), "manifest.experiment.environment")
+    manifest_audit_status = _string(manifest.get("audit_status"), "manifest.audit_status")
+    expected_code_sha = _string(
+        environment.get("code_sha"),
+        "manifest.experiment.environment.code_sha",
+    )
+    report_audit_status = _optional_string(report.get("audit_status"), "report.audit_status")
+    report_code_sha = _optional_string(report.get("code_sha"), "report.code_sha")
+    code_sha_under_test = _optional_string(
+        report.get("code_sha_under_test"),
+        "report.code_sha_under_test",
+    )
+    leakage_notes = _optional_string(manifest.get("leakage_notes"), "manifest.leakage_notes")
+    report_leakage_notes = _optional_string(report.get("leakage_notes"), "report.leakage_notes")
+
+    missing: list[str] = []
+    mismatched: list[str] = []
+    reasons: list[str] = []
+    if report_audit_status is None:
+        missing.append("report.audit_status")
+    elif report_audit_status != manifest_audit_status:
+        mismatched.append("report.audit_status")
+    if report_code_sha is None:
+        missing.append("report.code_sha")
+    elif report_code_sha != expected_code_sha:
+        mismatched.append("report.code_sha")
+    if code_sha_under_test is None or code_sha_under_test == "unknown":
+        missing.append("report.code_sha_under_test")
+    if leakage_notes is None:
+        missing.append("manifest.leakage_notes")
+    if report_leakage_notes is None:
+        missing.append("report.leakage_notes")
+    elif leakage_notes is not None and report_leakage_notes != leakage_notes:
+        mismatched.append("report.leakage_notes")
+
+    if missing:
+        reasons.append("report missing leakage/reproducibility fields: " + ", ".join(missing))
+    if mismatched:
+        reasons.append("report metadata mismatch: " + ", ".join(mismatched))
+    return ReportMetadataAudit(
+        ready=not missing and not mismatched,
+        manifest_audit_status=manifest_audit_status,
+        report_audit_status=report_audit_status,
+        expected_code_sha=expected_code_sha,
+        report_code_sha=report_code_sha,
+        code_sha_under_test=code_sha_under_test,
+        leakage_notes_present=leakage_notes is not None,
+        report_leakage_notes_present=report_leakage_notes is not None,
+        missing_fields=tuple(missing),
+        mismatched_fields=tuple(mismatched),
+        reasons=tuple(reasons),
     )
 
 

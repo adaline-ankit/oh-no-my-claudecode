@@ -124,6 +124,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
     coverage = payload.get("coverage_gate")
     gap_plan = payload.get("portfolio_gap_plan")
     expansion_draft = payload.get("portfolio_expansion_draft")
+    metadata_audit = calibration.get("metadata_audit")
     claim = _mapping(payload["claim_readiness"])
     reasons = calibration.get("reasons", [])
     plan_reasons = plan.get("reasons", [])
@@ -171,6 +172,11 @@ def _render_markdown(payload: dict[str, object]) -> str:
         *(
             _expansion_draft_markdown(_mapping(expansion_draft))
             if expansion_draft is not None
+            else []
+        ),
+        *(
+            _metadata_audit_markdown(_mapping(metadata_audit))
+            if metadata_audit is not None
             else []
         ),
         "",
@@ -294,6 +300,25 @@ def _expansion_draft_markdown(draft: dict[str, Any]) -> list[str]:
             for slot in _list_value(draft.get("slots"))[:10]
             if isinstance(slot, dict)
         ],
+    ]
+
+
+def _metadata_audit_markdown(audit: dict[str, Any]) -> list[str]:
+    return [
+        "",
+        "## Report Metadata Audit",
+        "",
+        f"- ready: `{str(audit['ready']).lower()}`",
+        f"- manifest_audit_status: `{audit['manifest_audit_status']}`",
+        f"- report_audit_status: `{audit['report_audit_status']}`",
+        f"- expected_code_sha: `{audit['expected_code_sha']}`",
+        f"- report_code_sha: `{audit['report_code_sha']}`",
+        f"- code_sha_under_test: `{audit['code_sha_under_test']}`",
+        f"- leakage_notes_present: `{str(audit['leakage_notes_present']).lower()}`",
+        f"- report_leakage_notes_present: "
+        f"`{str(audit['report_leakage_notes_present']).lower()}`",
+        f"- missing_fields: `{audit['missing_fields']}`",
+        f"- mismatched_fields: `{audit['mismatched_fields']}`",
     ]
 
 

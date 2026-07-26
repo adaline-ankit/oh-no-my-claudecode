@@ -1231,6 +1231,7 @@ def main() -> int:
         "experiment_id": manifest.experiment.experiment_id.value,
         "task_set_revision": manifest.experiment.task_set_revision,
         "audit_status": manifest.audit_status.value,
+        "leakage_notes": manifest.leakage_notes,
         "code_sha": manifest.experiment.environment.code_sha,
         "code_sha_under_test": code_sha(),
         "trials_per_cell": trials,
