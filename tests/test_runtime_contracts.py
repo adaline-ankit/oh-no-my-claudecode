@@ -270,6 +270,15 @@ def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None
     assert run_payload["spec_digest"] == spec.digest
     assert run_payload["node_count"] == 1
     assert run_payload["result_count"] == 1
+    assert run_payload["node_status_counts"] == {
+        "failed": 0,
+        "skipped": 0,
+        "succeeded": 1,
+    }
+    assert run_payload["evidence_count"] == 1
+    assert run_payload["evidence_kinds"] == ["completion"]
+    assert run_payload["digest_evidence_count"] == 1
+    assert run_payload["completion_evidence_count"] == 1
     assert run_payload["max_workers"] == 1
     assert run_payload["duration_seconds"] >= payload["duration_seconds"]
 

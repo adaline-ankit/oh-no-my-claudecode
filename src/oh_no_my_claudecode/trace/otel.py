@@ -185,12 +185,47 @@ def _runtime_run_attributes(event: TraceEvent) -> list[dict[str, Any]]:
         "onmc.runtime.run.result_count",
         payload.get("result_count"),
     )
+    _append_node_status_count_attributes(attributes, payload.get("node_status_counts"))
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.evidence_count",
+        payload.get("evidence_count"),
+    )
+    _append_string_array_attribute(
+        attributes,
+        "onmc.runtime.run.evidence_kinds",
+        payload.get("evidence_kinds"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.digest_evidence_count",
+        payload.get("digest_evidence_count"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.run.completion_evidence_count",
+        payload.get("completion_evidence_count"),
+    )
     _append_int_attribute(
         attributes,
         "onmc.runtime.run.max_workers",
         payload.get("max_workers"),
     )
     return attributes
+
+
+def _append_node_status_count_attributes(
+    attributes: list[dict[str, Any]],
+    value: object,
+) -> None:
+    if not isinstance(value, dict):
+        return
+    for status in ("succeeded", "failed", "skipped"):
+        _append_int_attribute(
+            attributes,
+            f"onmc.runtime.run.node_status_count.{status}",
+            value.get(status),
+        )
 
 
 def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:

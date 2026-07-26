@@ -88,6 +88,11 @@ This is evidence for a stronger harness foundation:
 - OTel runtime-node export now surfaces that same proof metadata as stable
   `onmc.runtime.node.*evidence*` attributes without exporting evidence URIs, digest values, or
   node output payloads.
+- Runtime-run trace events now aggregate node status counts and the same privacy-preserving proof
+  metadata across all node results in the run.
+- OTel runtime-run export now surfaces those aggregate proof and status counts as stable
+  `onmc.runtime.run.*` attributes, giving Mission Control and trace backends a run-level proof
+  summary without leaking evidence contents.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -533,6 +538,61 @@ No whitespace errors
 ```
 
 For the runtime proof-metadata trace slice:
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+75 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 11 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by this trace slice.
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py tests/test_trace.py
+```
+
+Result:
+
+```text
+134 collected tests passed
+```
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+For the runtime-run proof-summary trace slice:
 
 ```text
 python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py

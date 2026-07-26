@@ -379,7 +379,7 @@ class NativeExecutionBackend:
             started_at=started_at,
             ended_at=time.time(),
             status=status,
-            result_count=len(results),
+            results=results,
             error=error,
         )
         return RunResult(
@@ -551,11 +551,17 @@ class NativeExecutionBackend:
         started_at: float,
         ended_at: float,
         status: RunResultStatus,
-        result_count: int,
+        results: tuple[NodeResult, ...],
         error: str | None,
     ) -> None:
         if self.repo_root is None:
             return
+        evidence = tuple(item for result in results for item in result.evidence)
+        evidence_kinds = sorted({item.kind for item in evidence})
+        status_counts = {
+            status.value: sum(1 for result in results if result.status.value == status.value)
+            for status in NodeResultStatus
+        }
         record_trace_event(
             self.repo_root,
             TraceEvent(
@@ -568,7 +574,14 @@ class NativeExecutionBackend:
                     "error": error,
                     "spec_digest": spec.digest,
                     "node_count": len(spec.nodes),
-                    "result_count": result_count,
+                    "result_count": len(results),
+                    "node_status_counts": status_counts,
+                    "evidence_count": len(evidence),
+                    "evidence_kinds": evidence_kinds,
+                    "digest_evidence_count": sum(1 for item in evidence if item.digest),
+                    "completion_evidence_count": sum(
+                        1 for item in evidence if item.kind == "completion"
+                    ),
                     "max_workers": self.max_workers,
                     "end_ts": ended_at,
                     "duration_seconds": max(0.0, ended_at - started_at),

@@ -824,6 +824,15 @@ class TestOtelSpans:
                     "spec_digest": "abc123",
                     "node_count": 3,
                     "result_count": 3,
+                    "node_status_counts": {
+                        "failed": 0,
+                        "skipped": 0,
+                        "succeeded": 3,
+                    },
+                    "evidence_count": 4,
+                    "evidence_kinds": ["completion", "mutation"],
+                    "digest_evidence_count": 3,
+                    "completion_evidence_count": 2,
                     "max_workers": 2,
                     "duration_ms": 50,
                 },
@@ -840,6 +849,16 @@ class TestOtelSpans:
         assert attr_map["onmc.runtime.run.spec_digest"]["stringValue"] == "abc123"
         assert attr_map["onmc.runtime.run.node_count"]["intValue"] == 3
         assert attr_map["onmc.runtime.run.result_count"]["intValue"] == 3
+        assert attr_map["onmc.runtime.run.node_status_count.succeeded"]["intValue"] == 3
+        assert attr_map["onmc.runtime.run.node_status_count.failed"]["intValue"] == 0
+        assert attr_map["onmc.runtime.run.node_status_count.skipped"]["intValue"] == 0
+        assert attr_map["onmc.runtime.run.evidence_count"]["intValue"] == 4
+        assert attr_map["onmc.runtime.run.digest_evidence_count"]["intValue"] == 3
+        assert attr_map["onmc.runtime.run.completion_evidence_count"]["intValue"] == 2
+        assert attr_map["onmc.runtime.run.evidence_kinds"]["arrayValue"]["values"] == [
+            {"stringValue": "completion"},
+            {"stringValue": "mutation"},
+        ]
         assert attr_map["onmc.runtime.run.max_workers"]["intValue"] == 2
         assert spans[0]["status"]["code"] == 1
 
