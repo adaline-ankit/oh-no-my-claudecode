@@ -1,0 +1,83 @@
+{
+  "schema_version": "context-engine-evidence/v1",
+  "generated_on": "2026-07-27",
+  "evaluated_commit": "e54fa1ca3bd90068bcc2bf39bdaa86f2450d368e",
+  "dataset": {
+    "path": "datasets/retrieval_code_v1.json",
+    "sha256": "8e8f6d527b9836b3bf1045c1de6b2e852f85d81612e4cdfebbe72aefefda62bc",
+    "cases": 40
+  },
+  "reproduction": {
+    "entrypoint": "run_code_evaluation(code_ablation_adapters())",
+    "network_calls": false,
+    "model_calls": false,
+    "randomness": false,
+    "latency_excluded": "wall-clock latency is machine-dependent and is not promotion evidence"
+  },
+  "production_policy": {
+    "selected_surface": "code-bm25",
+    "lexical_floor": true,
+    "candidate_default": "shadow",
+    "reason": "No candidate improves frozen offline retrieval quality; downstream evidence is also missing."
+  },
+  "surfaces": [
+    {
+      "surface": "code-bm25",
+      "status": "measured",
+      "recall_at_5": 0.95,
+      "recall_at_10": 1.0,
+      "precision_at_5": 0.19,
+      "mrr_at_10": 0.8101,
+      "ndcg_at_10": 0.8574,
+      "mean_context_tokens": 3299.3,
+      "provenance": "Okapi BM25 over frozen code chunks"
+    },
+    {
+      "surface": "code-hybrid",
+      "status": "rejected",
+      "recall_at_5": 0.875,
+      "recall_at_10": 0.95,
+      "precision_at_5": 0.175,
+      "mrr_at_10": 0.7637,
+      "ndcg_at_10": 0.8082,
+      "mean_context_tokens": 2887.3,
+      "ndcg_delta_vs_bm25": -0.0492,
+      "context_token_delta_vs_bm25": -412.0,
+      "reason": "offline_metric_not_improved"
+    },
+    {
+      "surface": "code-dense",
+      "status": "rejected",
+      "recall_at_5": 0.75,
+      "recall_at_10": 0.825,
+      "precision_at_5": 0.15,
+      "mrr_at_10": 0.6198,
+      "ndcg_at_10": 0.6683,
+      "mean_context_tokens": 2807.9,
+      "ndcg_delta_vs_bm25": -0.1891,
+      "context_token_delta_vs_bm25": -491.4,
+      "provenance": "hash-ngram-v1-d512; dense-only cosine similarity; frozen BM25 label set",
+      "reason": "offline_metric_not_improved"
+    },
+    {
+      "surface": "code-graph",
+      "status": "skipped",
+      "skip_code": "no_graph_query_ranker",
+      "reason": "No deterministic natural-language query-to-frozen-chunk graph ranker exists."
+    }
+  ],
+  "promotion_gate": {
+    "offline_metric": "ndcg_at_10",
+    "requires_offline_improvement": true,
+    "requires_downstream_non_regression": true,
+    "downstream_evidence": "missing",
+    "decision": "reject_all_candidates"
+  },
+  "remaining_gaps": [
+    "Run matched downstream coding A/B before promoting any retrieval candidate.",
+    "Evaluate a real code embedding backend on the same frozen labels; current dense evidence uses hash n-grams.",
+    "Build and freeze retrieval_external_v2 instead of claiming external generalization from retrieval_code_v1.",
+    "Implement and measure a query-to-chunk graph ranker before reporting graph metrics.",
+    "Inject and evaluate a real reranker backend; no reranker is installed or promoted."
+  ]
+}
