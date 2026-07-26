@@ -83,6 +83,13 @@ timeouts, budgets, retry policies, capabilities, and falsifiable completion
 conditions used for the run. Resuming a completed run rejects receipts whose
 runtime contract is missing, malformed, digest-mismatched, or for a different
 run/task.
+
+**Mission plan mode now exposes the canonical runtime contract (2026-07-26).**
+`run_mission(..., execute=False)` and `onmc mission --json` now compile the same
+`RunSpec` used by `onmc run` and surface its digest. The legacy offline
+`plan_mission()` composer remains pure, but the user-facing mission workflow is
+now visibly a view over the canonical harness contract instead of a separate
+planner with ignored runtime flags.
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |

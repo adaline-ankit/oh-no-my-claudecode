@@ -241,6 +241,8 @@ def test_run_mission_execute_delegates_to_harness(
     assert plan.harness is not None
     assert plan.harness["status"] == "completed"
     assert plan.harness["verified"] is True
+    assert plan.runtime_contract is not None
+    assert plan.runtime_contract_digest == planned.plan.to_run_spec().digest
     assert len(seen) == 1
     request = seen[0]
     assert request.execute is True
@@ -290,17 +292,32 @@ def test_run_mission_reports_learning_stage_independently(
     assert statuses["learn candidate"] == "succeeded"
 
 
-def test_run_mission_execute_false_matches_plan_mission(
+def test_run_mission_execute_false_exposes_runtime_contract(
     sample_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(sample_repo)
     storage = _storage(sample_repo)
 
-    via_run = render_mission_markdown(
-        run_mission(storage, sample_repo, "cache worker", execute=False)
+    via_run = run_mission(
+        storage,
+        sample_repo,
+        "cache worker",
+        execute=False,
+        agent="codex",
+        verifier="pytest tests/cache",
     )
-    via_plan = render_mission_markdown(plan_mission(storage, sample_repo, "cache worker"))
-    assert via_run == via_plan
+    via_plan = plan_mission(storage, sample_repo, "cache worker")
+
+    assert via_run.execute is False
+    assert via_run.harness is None
+    assert via_run.runtime_contract is not None
+    assert via_run.runtime_contract_digest
+    assert via_run.runtime_contract["run_id"] != ""
+    assert via_run.runtime_contract["task"] == "cache worker"
+    assert via_run.runtime_contract != via_plan.runtime_contract
+    rendered = render_mission_markdown(via_run)
+    assert "## Runtime contract" in rendered
+    assert "pytest tests/cache" in json.dumps(via_run.runtime_contract)
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +338,8 @@ def test_mission_cli_json_shape(sample_repo: Path, monkeypatch: pytest.MonkeyPat
     for key in ("dead_ends", "blast_radius", "swarm_units", "steps", "pack"):
         assert key in payload
     assert isinstance(payload["swarm_units"], list)
+    assert payload["runtime_contract"] is not None
+    assert payload["runtime_contract_digest"]
 
 
 def test_mission_cli_markdown_plan_mode(

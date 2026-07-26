@@ -144,6 +144,13 @@ class MissionPlan:
     harness:
         Serialized :class:`HarnessResult` from real execution. ``None`` in plan
         mode.
+    runtime_contract:
+        Canonical :class:`~oh_no_my_claudecode.runtime.contracts.RunSpec` dict
+        compiled from the same harness boundary that ``onmc run`` uses. ``None``
+        only for the legacy offline ``plan_mission`` helper.
+    runtime_contract_digest:
+        Digest of ``runtime_contract``. Surfaced so ``mission`` plan mode is a
+        view over the canonical runtime contract, not a parallel planner.
     """
 
     goal: str
@@ -155,6 +162,8 @@ class MissionPlan:
     execute: bool = False
     swarm: dict[str, Any] | None = None
     harness: dict[str, Any] | None = None
+    runtime_contract: dict[str, object] | None = None
+    runtime_contract_digest: str | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -173,6 +182,8 @@ class MissionPlan:
             "pack": self.pack.to_dict(),
             "swarm": self.swarm,
             "harness": self.harness,
+            "runtime_contract": self.runtime_contract,
+            "runtime_contract_digest": self.runtime_contract_digest,
         }
 
 
@@ -350,6 +361,23 @@ def _build_steps(
     return steps
 
 
+def _runtime_contract_from_result(result: HarnessResult) -> tuple[dict[str, object], str]:
+    """Return the canonical runtime contract and digest for a harness result."""
+    spec = result.plan.to_run_spec()
+    return spec.to_dict(), spec.digest
+
+
+def _compile_runtime_contract(
+    repo_root: Path,
+    request: RunRequest,
+) -> tuple[dict[str, object], str]:
+    """Compile mission's dry-run contract through the shared harness boundary."""
+    from oh_no_my_claudecode.harness_run.controller import HarnessController
+
+    result = HarnessController(repo_root).run(request)
+    return _runtime_contract_from_result(result)
+
+
 def plan_mission(
     storage: SQLiteStorage,
     repo_root: Path,
@@ -448,8 +476,38 @@ def run_mission(
         The plan, with ``harness`` populated from the real execution result.
     """
     plan = plan_mission(storage, repo_root, goal, budget=budget)
+    request = RunRequest(
+        task=plan.goal,
+        plan_only=not execute,
+        execute=execute,
+        agent=agent,
+        model=model,
+        verifier=verifier,
+        max_iterations=max_iterations,
+        max_cost_usd=max_cost_usd,
+        isolation=isolate,
+        risk=risk,
+        context_budget=context_budget,
+        budget_mode=budget_mode,
+        resume_run_id=resume_run_id,
+    )
     if not execute:
-        return plan
+        runtime_contract, runtime_contract_digest = _compile_runtime_contract(
+            repo_root, request
+        )
+        return MissionPlan(
+            goal=plan.goal,
+            pack=plan.pack,
+            dead_ends=plan.dead_ends,
+            blast_radius=plan.blast_radius,
+            swarm_units=plan.swarm_units,
+            steps=plan.steps,
+            execute=False,
+            swarm=None,
+            harness=None,
+            runtime_contract=runtime_contract,
+            runtime_contract_digest=runtime_contract_digest,
+        )
 
     # Preserve old keyword arguments for API compatibility while making
     # execution semantics honest. Inline swarm allocation remains an explicit
@@ -461,22 +519,8 @@ def run_mission(
 
         harness_runner = HarnessController(repo_root).run
 
-    result = harness_runner(
-        RunRequest(
-            task=plan.goal,
-            execute=True,
-            agent=agent,
-            model=model,
-            verifier=verifier,
-            max_iterations=max_iterations,
-            max_cost_usd=max_cost_usd,
-            isolation=isolate,
-            risk=risk,
-            context_budget=context_budget,
-            budget_mode=budget_mode,
-            resume_run_id=resume_run_id,
-        )
-    )
+    result = harness_runner(request)
+    runtime_contract, runtime_contract_digest = _runtime_contract_from_result(result)
     learn_stage = next(
         (stage for stage in result.stages if stage.name.value == "learn-candidate"),
         None,
@@ -495,6 +539,8 @@ def run_mission(
         execute=True,
         swarm=None,
         harness=result.to_dict(),
+        runtime_contract=runtime_contract,
+        runtime_contract_digest=runtime_contract_digest,
     )
 
 
@@ -545,6 +591,17 @@ def render_mission_markdown(plan: MissionPlan) -> str:
     else:
         lines.append("_(none)_")
     lines.append("")
+
+    if plan.runtime_contract_digest is not None:
+        run_id = (
+            str(plan.runtime_contract.get("run_id", "(unknown)"))
+            if plan.runtime_contract is not None
+            else "(unknown)"
+        )
+        lines.append("## Runtime contract")
+        lines.append(f"- run_id: `{run_id}`")
+        lines.append(f"- digest: `{plan.runtime_contract_digest}`")
+        lines.append("")
 
     if plan.execute and plan.harness is not None:
         harness_plan = plan.harness.get("plan", {})
