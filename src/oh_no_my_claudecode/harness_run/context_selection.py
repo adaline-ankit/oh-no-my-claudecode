@@ -32,7 +32,9 @@ class ContextSelectionManifest:
     abstained: bool
     fallback_decision: str
     fallbacks: tuple[str, ...]
+    explored_context_ids: tuple[str, ...]
     used_context_ids: tuple[str, ...]
+    excluded_context_ids: tuple[str, ...]
     used_provenance: tuple[str, ...]
     exclusion_reasons: tuple[tuple[str, int], ...]
     schema_version: str = _SCHEMA_VERSION
@@ -52,7 +54,9 @@ class ContextSelectionManifest:
             "abstained": self.abstained,
             "fallback_decision": self.fallback_decision,
             "fallbacks": list(self.fallbacks),
+            "explored_context_ids": list(self.explored_context_ids),
             "used_context_ids": list(self.used_context_ids),
+            "excluded_context_ids": list(self.excluded_context_ids),
             "used_provenance": list(self.used_provenance),
             "exclusion_reasons": [
                 {"reason": reason, "count": count}
@@ -88,6 +92,8 @@ def context_selection_manifest(
 
     used_count = len(packet.evidence)
     excluded_count = len(packet.exclusions)
+    used_context_ids = tuple(item.candidate_id for item in packet.evidence)
+    excluded_context_ids = tuple(item.candidate_id for item in packet.exclusions)
     mode = packet.mode.value if hasattr(packet.mode, "value") else str(packet.mode)
     return ContextSelectionManifest(
         policy=policy,
@@ -102,7 +108,9 @@ def context_selection_manifest(
         abstained=packet.no_op or used_count == 0,
         fallback_decision="degraded" if retrieval_fallbacks else "none",
         fallbacks=tuple(retrieval_fallbacks),
-        used_context_ids=tuple(item.candidate_id for item in packet.evidence),
+        explored_context_ids=tuple(dict.fromkeys((*used_context_ids, *excluded_context_ids))),
+        used_context_ids=used_context_ids,
+        excluded_context_ids=excluded_context_ids,
         used_provenance=tuple(dict.fromkeys(used_provenance)),
         exclusion_reasons=tuple(sorted(exclusion_counts.items())),
     )

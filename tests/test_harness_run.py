@@ -322,7 +322,9 @@ def test_default_dependencies_retrieve_relevant_repo_context(tmp_path: Path) -> 
     selection = plan.context_selection
     assert selection.explored_count >= 1
     assert selection.used_count == 1
+    assert selection.explored_context_ids == ("repo:src/cache.py",)
     assert selection.used_context_ids == ("repo:src/cache.py",)
+    assert selection.excluded_context_ids == ()
     assert selection.used_provenance == ("src/cache.py:1-2",)
     assert selection.used_tokens == plan.context_packet.used_tokens
     assert selection.token_budget == 500

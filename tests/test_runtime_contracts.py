@@ -712,7 +712,9 @@ def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     context_selection = spec.metadata["context_selection"]
     assert context_selection == plan.context_selection.to_dict()
     assert context_selection["token_budget"] == request.context_budget
+    assert "explored_context_ids" in context_selection
     assert "used_context_ids" in context_selection
+    assert "excluded_context_ids" in context_selection
     assert all(
         node.metadata["context_selection"] == context_selection
         for node in spec.nodes
