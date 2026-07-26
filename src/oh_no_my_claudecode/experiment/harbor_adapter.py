@@ -23,6 +23,8 @@ from oh_no_my_claudecode.experiment.contracts import (
 )
 from oh_no_my_claudecode.experiment.portfolio import PortfolioManifest, TaskSpec
 
+RegressionHunk = tuple[str, str, str]
+
 __all__ = [
     "HarborExportSummary",
     "HarborSmokePlan",
@@ -111,6 +113,8 @@ def harbor_task_payload(task: TaskSpec) -> dict[str, object]:
 def export_portfolio_to_harbor(
     manifest: PortfolioManifest,
     output_root: Path,
+    *,
+    regression_hunks: Mapping[str, Sequence[RegressionHunk]] | None = None,
 ) -> HarborExportSummary:
     """Write Harbor task directories for every ONMC portfolio task."""
 
@@ -125,6 +129,7 @@ def export_portfolio_to_harbor(
         "tasks": manifest_tasks,
     }
     for task in manifest.tasks:
+        hunks = _task_regression_hunks(task, regression_hunks)
         task_name = _harbor_task_name(task)
         task_names.append(task_name)
         task_dir = output_root / task_name
@@ -132,7 +137,10 @@ def export_portfolio_to_harbor(
         (task_dir / "tests").mkdir(parents=True, exist_ok=True)
         (task_dir / "instruction.md").write_text(_instruction(task), encoding="utf-8")
         (task_dir / "task.toml").write_text(_task_toml(task, task_name), encoding="utf-8")
-        (task_dir / "environment" / "Dockerfile").write_text(_dockerfile(task), encoding="utf-8")
+        (task_dir / "environment" / "Dockerfile").write_text(
+            _dockerfile(task, hunks),
+            encoding="utf-8",
+        )
         test_script = task_dir / "tests" / "test.sh"
         test_script.write_text(_test_script(task), encoding="utf-8")
         test_script.chmod(0o755)
@@ -354,22 +362,62 @@ def _task_toml(task: TaskSpec, task_name: str) -> str:
     )
 
 
-def _dockerfile(task: TaskSpec) -> str:
+def _dockerfile(task: TaskSpec, regression_hunks: Sequence[RegressionHunk] = ()) -> str:
     repo_url = _docker_shell_string(task.repo.url)
     pinned_sha = _docker_shell_string(task.repo.pinned_sha)
-    return "\n".join(
-        (
-            "FROM python:3.12-slim",
-            "RUN apt-get update \\",
-            "    && apt-get install -y --no-install-recommends git \\",
-            "    && rm -rf /var/lib/apt/lists/*",
-            "RUN python -m pip install --no-cache-dir pytest",
-            "WORKDIR /workspace",
-            f"RUN git clone {repo_url} /workspace \\",
-            f"    && git checkout {pinned_sha}",
-            "",
+    lines = [
+        "FROM python:3.12-slim",
+        "RUN apt-get update \\",
+        "    && apt-get install -y --no-install-recommends git \\",
+        "    && rm -rf /var/lib/apt/lists/*",
+        "RUN python -m pip install --no-cache-dir pytest",
+        "WORKDIR /workspace",
+        f"RUN git clone {repo_url} /workspace \\",
+        f"    && git checkout {pinned_sha}",
+        *_regression_docker_lines(task, regression_hunks),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _task_regression_hunks(
+    task: TaskSpec,
+    regression_hunks: Mapping[str, Sequence[RegressionHunk]] | None,
+) -> tuple[RegressionHunk, ...]:
+    if regression_hunks is None:
+        return ()
+    hunks = tuple(regression_hunks.get(task.task_id, ()))
+    if not hunks:
+        raise ValueError(f"no text regression hunks available for {task.task_id}")
+    return hunks
+
+
+def _regression_docker_lines(
+    task: TaskSpec,
+    regression_hunks: Sequence[RegressionHunk],
+) -> list[str]:
+    if not regression_hunks:
+        return []
+    lines: list[str] = []
+    for rel, old, new in regression_hunks:
+        script = (
+            "from pathlib import Path; "
+            f"p=Path({rel!r}); "
+            "s=p.read_text(encoding='utf-8'); "
+            f"old={old!r}; new={new!r}; "
+            "assert old in s, f'regression anchor not found: {p}'; "
+            "p.write_text(s.replace(old, new, 1), encoding='utf-8')"
         )
+        lines.append(f"RUN python -c {_docker_shell_string(script)}")
+    message = _docker_shell_string(f"seed regression: {task.task_id}")
+    lines.extend(
+        [
+            "RUN git config user.email eval@onmc.local \\",
+            "    && git config user.name onmc-eval",
+            f"RUN git commit --quiet --all -m {message}",
+        ]
     )
+    return lines
 
 
 def _test_script(task: TaskSpec) -> str:

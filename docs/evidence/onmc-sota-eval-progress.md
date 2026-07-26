@@ -151,6 +151,10 @@ This is evidence for a stronger harness foundation:
   the caller supplies explicit content-addressed trajectory and verifier artifacts. Missing
   trajectory/verifier evidence still fails closed, so aggregate Harbor pass counts cannot become
   ONMC proof receipts by themselves.
+- Harbor export can now seed supported text-hunk regressions from the same external-eval corpus
+  used by ONMC's native runner. A real `nop`/`local` Harbor Docker cell on
+  `six-bugfix-integer-types` failed with `passed=0.000` and `reward=0.000`, proving the seeded
+  Harbor task is non-vacuous instead of a pristine-repo smoke.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -664,6 +668,76 @@ claim-safe: it requires explicit trajectory and verifier artifacts, and this smo
 empty `nop` trajectory artifact, not evidence of coding-agent reasoning. U7 still needs a
 discriminative benchmark where seeded regressions make `nop` fail and coding-agent conditions are
 compared on identical tasks.
+
+## Harbor Seeded Regression Smoke Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+11 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py
+```
+
+Result:
+
+```text
+Success: no issues found in 2 source files
+```
+
+Seeded Harbor export command:
+
+```text
+python scripts/export_harbor_tasks.py datasets/experiment/portfolio_external_v4.json --out /private/tmp/onmc-harbor-seeded-smoke --limit-tasks 1 --seed-regressions --smoke-plan --max-cells 2
+```
+
+Observed result:
+
+```text
+task_count: 1
+task_names: onmc/six-bugfix-integer-types
+seed source: external text-hunk regression table
+total_cells: 2
+budget_ready: true
+```
+
+Real non-vacuity smoke:
+
+```text
+harbor run --job-name onmc-seeded-smoke-six-nop -p /private/tmp/onmc-harbor-seeded-smoke/onmc/six-bugfix-integer-types -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-seeded-jobs
+```
+
+Observed result:
+
+```text
+1/1 Harbor Docker cell completed with 0 exceptions.
+passed: 0.000
+reward: 0.000
+runtime: 6s
+```
+
+This proves the seeded Harbor export can produce a failing task for no-op agents. It is still a
+single-task smoke, not a publishable ONMC-vs-agent benchmark. Complex AST/removal/planted-file
+regressions are still handled by `scripts/run_external_eval.py` and need a later Harbor seeding
+adapter before the full v4 portfolio can move to Harbor.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:

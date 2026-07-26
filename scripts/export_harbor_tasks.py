@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from oh_no_my_claudecode.experiment.contracts import Condition  # noqa: E402
@@ -28,6 +29,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True, help="Output Harbor dataset dir.")
     parser.add_argument("--limit-tasks", type=int, default=None, help="Export first N tasks.")
     parser.add_argument(
+        "--seed-regressions",
+        action="store_true",
+        help=(
+            "Seed supported text-hunk regressions into Harbor task images. "
+            "Tasks without supported hunks fail closed."
+        ),
+    )
+    parser.add_argument(
         "--smoke-plan",
         action="store_true",
         help="Include local Docker smoke plan.",
@@ -39,7 +48,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest = _limited_manifest(load_portfolio(args.manifest), args.limit_tasks)
-    summary = export_portfolio_to_harbor(manifest, args.out)
+    summary = export_portfolio_to_harbor(
+        manifest,
+        args.out,
+        regression_hunks=_external_text_regressions() if args.seed_regressions else None,
+    )
     payload = {
         "schema_version": "onmc-harbor-export/v1",
         "manifest": str(args.manifest),
@@ -71,6 +84,14 @@ def _limited_manifest(manifest: PortfolioManifest, limit: int | None) -> Portfol
         audit_status=manifest.audit_status,
         leakage_notes=manifest.leakage_notes,
     )
+
+
+def _external_text_regressions() -> dict[str, tuple[tuple[str, str, str], ...]]:
+    try:
+        from run_external_eval import REGRESSIONS
+    except ImportError as exc:  # pragma: no cover - environment/config failure
+        raise RuntimeError("could not load external eval text regression table") from exc
+    return dict(REGRESSIONS)
 
 
 if __name__ == "__main__":  # pragma: no cover

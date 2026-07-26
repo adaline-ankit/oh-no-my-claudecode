@@ -168,6 +168,32 @@ def test_export_portfolio_to_harbor_writes_task_directory(tmp_path: Path) -> Non
     assert dataset["tasks"] == [{"name": "onmc/cache-bugfix", "path": "onmc/cache-bugfix"}]
 
 
+def test_export_portfolio_to_harbor_can_seed_text_regression(tmp_path: Path) -> None:
+    summary = export_portfolio_to_harbor(
+        _portfolio(),
+        tmp_path,
+        regression_hunks={
+            "cache-bugfix": (("src/cache.py", "return fresh", "return stale  # REGRESSION"),),
+        },
+    )
+
+    assert summary.task_count == 1
+    dockerfile = (tmp_path / "onmc" / "cache-bugfix" / "environment" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    assert "regression anchor not found" in dockerfile
+    assert "return fresh" in dockerfile
+    assert "return stale  # REGRESSION" in dockerfile
+    assert "git commit --quiet --all -m 'seed regression: cache-bugfix'" in dockerfile
+
+
+def test_export_portfolio_to_harbor_seed_regression_requires_supported_hunk(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="no text regression hunks"):
+        export_portfolio_to_harbor(_portfolio(), tmp_path, regression_hunks={})
+
+
 def test_plan_harbor_smoke_enforces_cell_budget(tmp_path: Path) -> None:
     plan = plan_harbor_smoke(
         ("onmc/cache-bugfix", "onmc/auth-bugfix"),
