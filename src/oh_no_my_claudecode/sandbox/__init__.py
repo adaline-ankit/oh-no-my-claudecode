@@ -7,9 +7,12 @@ from .contracts import (
     SandboxMount,
     SandboxPlanError,
     SandboxRole,
+    SandboxRoleCapabilityManifest,
     SandboxSpec,
     ScopedSecret,
     default_repo_sandbox,
+    sandbox_role_capability_manifest,
+    stage_repository_copy,
 )
 from .docker import (
     DockerSandboxPlan,
@@ -28,10 +31,13 @@ __all__ = [
     "SandboxExecutionStatus",
     "SandboxPlanError",
     "SandboxRole",
+    "SandboxRoleCapabilityManifest",
     "SandboxSpec",
     "ScopedSecret",
     "default_repo_sandbox",
     "docker_run_plan",
     "execute_docker_plan",
     "harbor_task_payload",
+    "sandbox_role_capability_manifest",
+    "stage_repository_copy",
 ]

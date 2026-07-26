@@ -8,6 +8,7 @@ into their own execution shape.
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
@@ -36,6 +37,7 @@ class SandboxMount:
     host_path: Path
     container_path: str
     read_only: bool = True
+    source: str = "repository"
 
     def __post_init__(self) -> None:
         if not self.container_path.startswith("/"):
@@ -44,6 +46,8 @@ class SandboxMount:
             raise SandboxPlanError("mount.container_path must not be container root")
         if not str(self.host_path):
             raise SandboxPlanError("mount.host_path must not be empty")
+        if not self.source or any(char.isspace() for char in self.source):
+            raise SandboxPlanError("mount.source must be a non-empty identifier")
 
     def host_contains(self, path: Path) -> bool:
         """True when *path* is inside this mount's host boundary."""
@@ -56,6 +60,15 @@ class SandboxMount:
             "host_path": str(self.host_path),
             "container_path": self.container_path,
             "read_only": self.read_only,
+            "source": self.source,
+        }
+
+    def capability_dict(self) -> dict[str, object]:
+        """Return the portable declaration without serializing a host path."""
+        return {
+            "source": self.source,
+            "container_path": self.container_path,
+            "access": "read-only" if self.read_only else "read-write",
         }
 
 
@@ -71,6 +84,10 @@ class ScopedSecret:
             raise SandboxPlanError("secret.env_name must be a non-empty environment name")
         if not self.roles:
             raise SandboxPlanError("secret.roles must not be empty")
+        if len(set(self.roles)) != len(self.roles):
+            raise SandboxPlanError("secret.roles must not contain duplicates")
+        if any(role not in {"agent", "verifier", "setup"} for role in self.roles):
+            raise SandboxPlanError("secret.roles contains an unsupported role")
 
     def exposed_to(self, role: SandboxRole) -> bool:
         return role in self.roles
@@ -142,6 +159,60 @@ class SandboxSpec:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class SandboxRoleCapabilityManifest:
+    """Portable, enforceable capability declaration for one sandbox role."""
+
+    role: SandboxRole
+    filesystem: tuple[dict[str, object], ...]
+    network: NetworkPolicy
+    egress_allowlist: tuple[str, ...]
+    secret_env: tuple[str, ...]
+    timeout_seconds: int
+    schema_version: str = "1"
+
+    def __post_init__(self) -> None:
+        if self.role not in {"agent", "verifier", "setup"}:
+            raise SandboxPlanError("sandbox role is unsupported")
+        if not self.filesystem:
+            raise SandboxPlanError(f"{self.role} filesystem declaration must not be empty")
+        if self.role in {"verifier", "setup"}:
+            if any(item.get("access") != "read-only" for item in self.filesystem):
+                raise SandboxPlanError(f"{self.role} filesystem must be read-only")
+            if self.network is not NetworkPolicy.DENY:
+                raise SandboxPlanError(f"{self.role} network must be denied")
+            if self.secret_env:
+                raise SandboxPlanError(f"{self.role} secrets must be empty")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "role": self.role,
+            "filesystem": [dict(item) for item in self.filesystem],
+            "network": self.network.value,
+            "egress_allowlist": list(self.egress_allowlist),
+            "secret_env": list(self.secret_env),
+            "timeout_seconds": self.timeout_seconds,
+        }
+
+
+def sandbox_role_capability_manifest(
+    spec: SandboxSpec,
+    *,
+    role: SandboxRole,
+) -> SandboxRoleCapabilityManifest:
+    """Compile and validate the capability boundary for *role*."""
+
+    return SandboxRoleCapabilityManifest(
+        role=role,
+        filesystem=tuple(mount.capability_dict() for mount in spec.mounts),
+        network=spec.network,
+        egress_allowlist=spec.egress_allowlist,
+        secret_env=spec.secret_env_for(role),
+        timeout_seconds=spec.timeout_seconds,
+    )
+
+
 def default_repo_sandbox(
     repo_root: Path,
     *,
@@ -150,6 +221,7 @@ def default_repo_sandbox(
     network: NetworkPolicy = NetworkPolicy.DENY,
     secrets: Iterable[ScopedSecret] = (),
     timeout_seconds: int = 600,
+    mount_source: str = "repository",
 ) -> SandboxSpec:
     """Build ONMC's conservative local repo sandbox contract."""
 
@@ -160,6 +232,7 @@ def default_repo_sandbox(
                 host_path=repo_root,
                 container_path="/workspace",
                 read_only=not writeable,
+                source=mount_source,
             ),
         ),
         workdir="/workspace",
@@ -169,12 +242,35 @@ def default_repo_sandbox(
     )
 
 
+def stage_repository_copy(source_root: Path, destination_root: Path) -> Path:
+    """Create an immutable-input repository snapshot for sandbox execution.
+
+    The destination must be new and outside the source tree. Provider payloads
+    identify this mount as ``repository-copy`` and never serialize its host path.
+    """
+
+    source = source_root.resolve()
+    destination = destination_root.resolve()
+    if not source.is_dir():
+        raise SandboxPlanError("repository copy source must be an existing directory")
+    if destination == source or source in destination.parents:
+        raise SandboxPlanError("repository copy destination must be outside the source tree")
+    if destination.exists():
+        raise SandboxPlanError("repository copy destination must not already exist")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination, symlinks=True)
+    return destination
+
+
 __all__ = [
     "NetworkPolicy",
     "SandboxMount",
     "SandboxPlanError",
     "SandboxRole",
+    "SandboxRoleCapabilityManifest",
     "SandboxSpec",
     "ScopedSecret",
     "default_repo_sandbox",
+    "sandbox_role_capability_manifest",
+    "stage_repository_copy",
 ]
