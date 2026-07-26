@@ -555,6 +555,8 @@ def render_mission_markdown(plan: MissionPlan) -> str:
     lines: list[str] = [
         "# Mission",
         "",
+        "> View of the canonical `onmc run` contract; this is not a second runtime.",
+        "",
         f"**Goal:** {plan.goal or '(none)'}",
         f"**Mode:** {mode}",
         "",

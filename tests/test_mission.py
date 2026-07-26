@@ -36,6 +36,7 @@ from oh_no_my_claudecode.mission.pipeline import (
 )
 from oh_no_my_claudecode.models import MemoryKind, SourceType
 from oh_no_my_claudecode.models.memory import MemoryEntry
+from oh_no_my_claudecode.runtime import RunSpec
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.text import stable_id
 from oh_no_my_claudecode.utils.time import utc_now
@@ -318,6 +319,42 @@ def test_run_mission_execute_false_exposes_runtime_contract(
     rendered = render_mission_markdown(via_run)
     assert "## Runtime contract" in rendered
     assert "pytest tests/cache" in json.dumps(via_run.runtime_contract)
+
+
+def test_mission_view_and_run_compile_equivalent_run_specs(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+    request = RunRequest(
+        task="cache worker",
+        plan_only=True,
+        agent="codex",
+        model="gpt-test",
+        verifier="pytest tests/cache",
+        max_iterations=4,
+        max_cost_usd=1.5,
+        isolation=True,
+        context_budget=2_000,
+    )
+    direct = HarnessController(sample_repo).run(request).plan.to_run_spec()
+    mission = run_mission(
+        storage,
+        sample_repo,
+        request.task,
+        execute=False,
+        agent=request.agent,
+        model=request.model,
+        verifier=request.verifier,
+        max_iterations=request.max_iterations,
+        max_cost_usd=request.max_cost_usd,
+        isolate=request.isolation,
+        context_budget=request.context_budget,
+    )
+
+    assert mission.runtime_contract is not None
+    assert RunSpec.from_dict(mission.runtime_contract).to_dict() == direct.to_dict()
+    assert mission.runtime_contract_digest == direct.digest
 
 
 # ---------------------------------------------------------------------------

@@ -7,13 +7,18 @@ from io import StringIO
 from pathlib import Path
 
 from rich.console import Console
+from typer.testing import CliRunner
 
+from oh_no_my_claudecode.cli import app
+from oh_no_my_claudecode.durable_runtime import RuntimeStore
 from oh_no_my_claudecode.missioncontrol import (
     build_dashboard,
     list_swarm_ids,
     render_dashboard,
     render_swarm_list,
 )
+
+runner = CliRunner()
 
 
 def _console() -> tuple[Console, StringIO]:
@@ -55,6 +60,30 @@ def _make_swarm(
         for name, body in receipts.items():
             (rdir / name).write_text(json.dumps(body), encoding="utf-8")
     return repo / ".onmc" / "swarm"
+
+
+def test_missioncontrol_cli_defaults_to_canonical_runtime(
+    sample_repo: Path, monkeypatch: object
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    store = RuntimeStore(sample_repo / ".onmc" / "harness-runtime")
+    store.create_run(
+        "run-ui",
+        node_ids=("prepare", "execute"),
+        repo=sample_repo,
+        idempotency_key="create",
+    )
+    store.start("run-ui", idempotency_key="start")
+    store.start_node("run-ui", "prepare", idempotency_key="prepare")
+
+    result = runner.invoke(app, ["missioncontrol", "--json"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["runs"] == 1
+    assert payload["summary"]["active"] == 1
+    assert payload["runs"][0]["run_id"] == "run-ui"
+    assert payload["runs"][0]["proof_state"] == "pending"
 
 
 def test_build_dashboard_reflects_unit_states_and_verified(tmp_path: Path) -> None:

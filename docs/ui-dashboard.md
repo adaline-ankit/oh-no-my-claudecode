@@ -12,6 +12,18 @@ coding-agent users who want a useful visual surface without operating a hosted s
 onmc ui --host 127.0.0.1 --port 8765
 ```
 
+Mission Control is a read-only view over the canonical `onmc run` runtime.
+It replays append-only events from `.onmc/harness-runtime`, shows the active
+node and persisted action, and labels proof as `pending`, `rejected`,
+`unproven`, or `verified`. `verified` requires a matching integrity-valid
+harness receipt; a completed event or agent summary is never enough.
+
+For a terminal-only view:
+
+```bash
+onmc missioncontrol
+```
+
 Options:
 
 - `--host`: bind address; defaults to loopback

@@ -223,7 +223,7 @@ def test_handle_land_action_calls_runner_with_correct_command() -> None:
 
 
 def test_handle_mission_action_calls_runner_with_correct_command() -> None:
-    """mission action passes onmc mission <goal> to runner."""
+    """Legacy mission action previews the canonical onmc run contract."""
     called: list[list[str]] = []
     result = _handle_agents_action(
         {"action": "mission", "goal": "add observability"},
@@ -231,7 +231,18 @@ def test_handle_mission_action_calls_runner_with_correct_command() -> None:
     )
 
     assert result["ok"] is True
-    assert called == [["onmc", "mission", "add observability"]]
+    assert called == [["onmc", "run", "add observability"]]
+
+
+def test_handle_run_action_calls_canonical_runtime() -> None:
+    called: list[list[str]] = []
+    result = _handle_agents_action(
+        {"action": "run", "goal": "add observability"},
+        _capturing_runner(called),  # type: ignore[arg-type]
+    )
+
+    assert result["ok"] is True
+    assert called == [["onmc", "run", "add observability"]]
 
 
 def test_handle_unknown_action_returns_error_without_calling_runner() -> None:

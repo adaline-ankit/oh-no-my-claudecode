@@ -8,7 +8,8 @@ Run `python scripts/generate-cli-reference.py` after changing CLI commands.
 ```text
 Usage: onmc [OPTIONS] COMMAND [ARGS]...
 
- Memory-grounded autonomous coding loops for Claude Code and Codex.
+ One evidence-driven coding runtime for Claude Code, Codex, and OpenCode. Plan
+ safely with `onmc run`; add `--execute` to act.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --version             -V        Show the onmc version and exit.              │
@@ -18,280 +19,31 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ --help                          Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ tui             Open the interactive terminal brain-browser for memory       │
-│                 curation.                                                    │
 │ setup           Run the interactive ONMC onboarding wizard.                  │
-│ uninstall       Remove all onmc integrations from this repo (the inverse of  │
-│                 setup).                                                      │
 │ init            Initialize ONMC state in the current git repository.         │
-│ ingest          Ingest repo knowledge into local structured memory.          │
 │ brief           Compile a task-specific context brief.                       │
-│ why             Explain why a file looks the way it does, from memory + git  │
-│                 history.                                                     │
-│ onboard         Give a new dev (or agent) the guided five-minute repo tour   │
-│                 from memory.                                                 │
-│ blame           Git blame for knowledge: map a file's symbols to the         │
-│                 memories that govern them.                                   │
-│ coverage        Show a knowledge-gap dashboard: coverage % + uncovered       │
-│                 hotspot files.                                               │
-│ memory-diff     Show what repo knowledge changed between two commits.        │
-│ digest          Show what the repo/team learned since a git ref.             │
 │ guard           Surface recorded dead-ends so you never repeat a known       │
 │                 failure.                                                     │
 │ recall          Search memory for past incidents matching an error or        │
 │                 stacktrace.                                                  │
-│ reuse           Surface existing code that already does a thing — reuse      │
-│                 before reimplementing.                                       │
-│ ask             Ask a natural-language question answered from repo memory.   │
-│ check           Flag staged/changed files that touch recorded invariants or  │
-│                 dead-ends.                                                   │
 │ ui              Open the local read-only ONMC visual dashboard.              │
 │ status          Show local ONMC status.                                      │
-│ statusline      Print a compact one-line brain health string for Claude Code │
-│                 statusLine.                                                  │
-│ hud             Display a rich multi-line memory health HUD panel.           │
-│ report          Generate a shareable agent-readiness report.                 │
-│ sync            Export, restore, or hook git-portable ONMC memory state.     │
-│ pull            Import another repo's .agent-memory/ export into this brain  │
-│                 (federated memories).                                        │
 │ serve           Serve ONMC over the requested runtime protocol.              │
-│ solve           Compile repo-aware context and ask the configured LLM for    │
-│                 the next best approach.                                      │
-│ review          Compile repo-aware review context and critique the proposed  │
-│                 approach.                                                    │
-│ teach           Compile repo-aware teaching context and generate a learning  │
-│                 artifact.                                                    │
-│ consolidate     Clean and strengthen the memory store (dedup, merge,         │
-│                 promote/demote, edge graph).                                 │
-│ mine            Mine Claude Code session transcripts into ONMC memory.       │
-│ capture         Heuristically capture durable memory from a session          │
-│                 transcript.                                                  │
-│ audit           Scan agent configuration for security risks and emit a       │
-│                 scored report.                                               │
-│ preflight       Run the exact CI quality gate locally, in the same order CI  │
-│                 runs it.                                                     │
-│ verify-diff     Adversarially verify the working diff against a base ref.    │
-│ bench           Measure whether onmc memory actually reduces wasted work.    │
-│ savings         Show a shareable 'Memory Wrapped' token-ROI card.            │
-│ evolution       Show the compounding-proof evolution card across             │
-│                 loop/autopilot runs.                                         │
-│ benchmark       Run a reproducible benchmark suite against the current repo  │
-│                 brain.                                                       │
-│ plug            Wire onmc into a target coding agent (one-shot idempotent    │
-│                 wizard).                                                     │
-│ feedback        Apply a human trust signal to a stored memory.               │
-│ import          Import skills or memories from an external tool into the     │
-│                 ONMC brain.                                                  │
-│ loop            Run a memory-grounded autonomous loop that avoids recorded   │
-│                 dead-ends.                                                   │
-│ loop-templates  List available built-in loop templates.                      │
-│ autopilot       Run the full KNOW→(PLAN)→ACT→PROVE→LEARN autopilot cycle on  │
-│                 a goal.                                                      │
-│ nomistakes      Run the No-Mistakes PR gate: audit + eval + autopilot +      │
-│                 receipt verdict.                                             │
-│ release         Draft the next release from conventional-commit history.     │
-│ achievements    Show your XP, level, streaks, and badges earned from         │
-│                 verified runs.                                               │
-│ context         Show codegraph blast radius and relevant memory for a file.  │
-│ approve         Turn an approved chat action into a real merge of verified   │
-│                 unit PR(s).                                                  │
-│ badge           Render a "No-Slop verified" proof-of-work badge from an onmc │
-│                 receipt.                                                     │
-│ bottleneck      Find what's slowing your agents down.                        │
 │ commands        Browse all onmc commands grouped by category.                │
-│ compare         Side-by-side, read-only comparison of two swarm runs.        │
-│ cost            Spend breakdown and forecast from run receipts.              │
-│ doctor          Diagnose onmc integration with Claude Code — repo, memory,   │
-│                 and provider health.                                         │
-│ estimate        Predict cost/time/outcome for <goal> from similar past runs. │
-│ explain         Plain-English verdict of a run receipt.                      │
-│ fix-ci          Read a failed PR's CI log and emit a deterministic fix plan. │
-│ flywheel        Mine verified run trajectories to recommend winning          │
-│                 approaches.                                                  │
-│ formats         Emit the spec of onmc's portable, open on-disk schemas.      │
 │ run             Plan safely by default, or execute ONMC's memory-grounded    │
 │                 loop.                                                        │
-│ heatmap         Render a GitHub-contributions-style heatmap of agent run     │
-│                 activity.                                                    │
-│ highlight       Curated highlight reel: the best moments from your verified  │
-│                 runs.                                                        │
-│ mission         Plan safely or run the verifier-backed engineering harness.  │
-│ missioncontrol  Live, read-only dashboard for an onmc swarm.                 │
-│ nightshift      Plan a bounded, verified overnight swarm + preview the       │
-│                 morning digest.                                              │
-│ pack            Build a per-task context pack: dead-ends, decisions, reuse,  │
-│                 files.                                                       │
-│ postmortem      LLM-free structured narrative recap of a completed swarm     │
-│                 run.                                                         │
-│ prbadge         Post a "verified-work" onmc badge comment on a GitHub PR.    │
-│ pulse           Live "is it stuck?" heartbeat for your swarms — push it to   │
-│                 your phone.                                                  │
+│ mission         View the canonical runtime as a mission plan.                │
+│ missioncontrol  Read-only progress and proof view over the canonical         │
+│                 runtime.                                                     │
 │ quickstart      Zero-config onboarding: init memory, integrate Claude Code,  │
 │                 activate control plane.                                      │
-│ race            Offline model/strategy tournament over recorded run          │
-│                 receipts.                                                    │
-│ registry-demo   Proof-of-concept command registered with zero edits to       │
-│                 ``cli.py``.                                                  │
-│ roast           Roast this repo's agent-readiness — a blunt 0-100 score +    │
-│                 findings.                                                    │
-│ route           Deterministically route a task to an                         │
-│                 agent/model/strategy/gate.                                   │
-│ sbom            Generate a CycloneDX 1.5 SBOM of this project's              │
-│                 dependencies.                                                │
-│ scorecard       One shareable agent-readiness + trust scorecard for this     │
-│                 repo.                                                        │
-│ session-search  Full-text search across all of onmc's persisted history.     │
-│ share           Publish a shareable snapshot of this repo's onmc state to a  │
-│                 Gist.                                                        │
-│ standup         Summarize recent agent run activity — a daily-standup-style  │
-│                 digest.                                                      │
-│ swarmreplay     Time-travel, step-by-step reconstruction of a swarm run.     │
-│ timeline        Tell this repo's evolution story from its brain.             │
-│ watch           Auto-refreshing terminal live monitor of active swarms.      │
-│ unwrap          Remove the onmc wrap layer — the perfect inverse of ``onmc   │
-│                 wrap``.                                                      │
-│ memory          Inspect stored memory.                                       │
-│ spec            Inspect and validate the Agent Memory open spec.             │
-│ task            Manage task lifecycle state.                                 │
-│ attempt         Track task-scoped attempts.                                  │
-│ llm             Configure optional LLM providers.                            │
-│ hooks           Install and run Claude Code compaction hooks.                │
-│ claude-md       Generate and maintain CLAUDE.md from ONMC memory.            │
-│ playbook        Synthesize and manage memory-derived playbooks.              │
-│ skill           Manage self-improving skills synthesized from playbooks and  │
-│                 memory patterns.                                             │
-│ user            Manage cross-repo user preferences (stored in ~/.onmc, not   │
-│                 repo-scoped).                                                │
-│ profile         Show and rebuild the derived user behavioral profile         │
-│                 (~/.onmc/user.db).                                           │
-│ notify          Inspect and test the context firewall notification sink.     │
-│ gh-aw           Scaffold memory-aware GitHub Actions agentic workflows.      │
-│ mcp             MCP Trust Gateway — classify tool calls against a policy.    │
-│ swarm           Parallel accountable agent loops — a bounded pool of         │
-│                 run_loop workers. Honest: 'many tasks' = a queue drained by  │
-│                 min(cpu-1, 8) workers, not unlimited simultaneous agents.    │
-│ conventions     Capture and inherit the repo's coding conventions            │
-│                 (.onmc/conventions.md).                                      │
-│ claim           Coordinate file/path leases for parallel agents.             │
-│ ledger          Agent-work accounting (cost / wall-time / success-rate /     │
-│                 ROI) over the run receipts that onmc loop and swarm write.   │
-│                 Honest: cost is n/a when a receipt did not report it — never │
-│                 fabricated.                                                  │
-│ fleet           Operator view for local agent fleets (swarm + claims +       │
-│                 receipts).                                                   │
-│ wiki            Generate wiki and knowledge-graph exports from stored        │
-│                 memory.                                                      │
-│ codegraph       Structural repo graph — tiny, smart context for agents.      │
-│                 Deterministic, offline (stdlib ast only).                    │
-│ trace           Agent Trace Observatory — instrument a session and get a     │
-│                 token-ROI report.                                            │
-│ eval            Measure and gate memory recall quality (offline,             │
-│                 deterministic).                                              │
-│ replay          Replay Lab — re-run a recorded session and produce a         │
-│                 regression report.                                           │
-│ arena           Model gladiator: head-to-head ELO scoreboard — record bouts  │
-│                 between models and track their ratings over time.            │
-│ attest          Verifiable, portable proof-of-work — turn a receipt into a   │
-│                 signed attestation.                                          │
-│ autoroute       Apply flywheel learning: recommend the historically-best     │
-│                 model for a goal.                                            │
-│ blackboard      Shared-memory coordination board for a swarm — post and read │
-│                 findings/claims/warnings.                                    │
-│ bounty          Wager points on tasks — post bounties, claim payouts, track  │
-│                 balance.                                                     │
-│ budget          Token/cost guardian: enforce a hard spend cap across         │
-│                 sessions, warn early, and block new runs when over budget.   │
-│ coach           Live hype/roast session commentator + streaks. Reacts to     │
-│                 coding-session events with personality-driven quips and      │
-│                 tracks your green/red streak.                                │
-│ codeindex       Incremental code-intelligence index (blob-SHA keyed, AST     │
-│                 chunks).                                                     │
-│ connect         Bidirectional ecosystem adapter: OpenClaw transport + Hermes │
-│                 memory.                                                      │
-│ contract        Spec-as-contract: generate a failing test + stub from an     │
-│                 interface spec.                                              │
-│ crews           Optional CrewAI interop: export an onmc plan as a crew spec  │
-│                 (pure, no extras needed) or run a crew spec under an onmc    │
-│                 receipt (requires the  extra).                               │
-│ crossrepo       Cross-repo brain: impact map + federated memory recall       │
-│                 across sibling repos.                                        │
-│ daily           Don't-break-the-chain calendar streak. Tracks which calendar │
-│                 days you were active and rewards consecutive-day runs.       │
-│ drift           Enforce institutional memory — flag CANDIDATE code           │
-│                 violations of recorded decisions/invariants for review       │
-│                 (heuristic, not a proof).                                    │
-│ gateway         Accountable agent gateway: webhook -> mission-bridge ->      │
-│                 trust decision.                                              │
-│ handoff         Package / resume portable cross-session task context.        │
-│ inbox           Ranked work queue: manual adds + TODO/FIXME + coverage gaps  │
-│                 + memory.                                                    │
-│ land            Safe PR lander: poll checks, rebase if behind, squash-merge  │
-│                 when green.                                                  │
-│ leash           Guardrails-as-game: define session rules, check compliance,  │
-│                 and score the agent.                                         │
-│ membudget       Memory-budget guard: report store size, flag over-budget,    │
-│                 suggest consolidations.                                      │
-│ memguard        Memory-integrity firewall: scan memory entries for           │
-│                 adversarial content.                                         │
-│ memprovider     Manage and query external memory providers that augment      │
-│                 onmc's built-in store (mem0, supermemory, builtin).          │
-│                 Providers run alongside the built-in store — they never      │
-│                 replace it.                                                  │
-│ memstage        Write-approval staging queue: propose memory writes, review  │
-│                 diffs, then approve or reject — nothing lands in the store   │
-│                 without your sign-off.                                       │
-│ mission-bridge  Turn a verified swarm run into a chat experience (card /     │
-│                 intake / approve / allow).                                   │
-│ orggraph        Institutional-memory knowledge graph — entities, typed       │
-│                 edges, lineage.                                              │
-│ persona         Selectable agent personality presets. Pick a voice           │
-│                 (drill-sergeant, hype-beast, zen-master, pirate,             │
-│                 professional) that flavours how the fun layer talks. Active  │
-│                 persona is persisted per repository.                         │
-│ proptest        Generate property/invariant tests for pure functions.        │
-│ proxy           OpenAI-compatible local proxy for onmc's configured LLM      │
-│                 provider.                                                    │
-│ quest           Gamified RPG backlog: XP from verified runs, levels, bosses, │
-│                 loot.                                                        │
-│ refinery        Bors-style serialised merge queue: enqueue PRs, process one  │
-│                 at a time.                                                   │
-│ registry        Agent reputation trust ledger — aggregate signed             │
-│                 attestations into a queryable, rankable track record.        │
-│ retrieval-eval  Run the offline retrieval quality evaluation harness. Scores │
-│                 the current retrieval surfaces against frozen labeled        │
-│                 datasets using Recall@5/10, MRR@10, nDCG@10, and P@5.        │
-│                 OFFLINE, DETERMINISTIC — no LLM calls, no network.           │
-│ selfimprove     After-turn learning review -- extract durable learnings from │
-│                 a transcript and propose memory updates for human approval.  │
-│ skillguard      Skill write-approval gate: propose skill create/edit/delete, │
-│                 review diffs, then approve or reject — nothing lands in the  │
-│                 skill store without your sign-off.                           │
-│ slash           Expose onmc's commands as Claude Code slash commands         │
-│                 (/onmc-*).                                                   │
-│ soundboard      Fun inline terminal reactions for session events (emoji /    │
-│                 ASCII / optional terminal bell).                             │
-│ teams           AutoGen / AG2 interop — export onmc plans as team specs and  │
-│                 run them under onmc receipts.  The ``export`` command is     │
-│                 always available; ``run`` requires the ```` extra.           │
-│ live            Live agent activity: snapshot active agents and recent       │
-│                 events.                                                      │
-│ twin            Rehearse a code change offline: predict blast radius,        │
-│                 surface covering tests, flag high-risk touches. Analysis     │
-│                 only — never runs or edits code.                             │
-│ vibe            Ambient agent-mood HUD: aggregates coach streak, whip        │
-│                 rewards, and quest level into a single glanceable status.    │
-│                 Read-only.                                                   │
-│ viz             Render onmc graphs as shareable diagrams (Mermaid or D2, no  │
-│                 server, no dep).                                             │
-│ whip            Steer a running agent and record reward signals (the reins + │
-│                 whip control surface).                                       │
 │ wrap            Make onmc the default layer for Claude Code; manage the      │
 │                 session switch.                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
- 137 commands total — run onmc commands to explore by category, or onmc
- quickstart to get started.
- Core commands:  setup  wrap  autopilot  brief  recall  ui  init
+ Default workflow:  onmc setup  →  onmc run "your task"  →  onmc missioncontrol
+ Advanced and compatibility commands remain callable. Run onmc commands --all
+ for the complete catalog.
 ```
 
 ## `onmc achievements`
@@ -5022,12 +4774,12 @@ Usage: onmc mine [OPTIONS]
 ```text
 Usage: onmc mission [OPTIONS] GOAL
 
- Plan safely or run the verifier-backed engineering harness.
+ View the canonical runtime as a mission plan.
 
- Composes recorded dead-ends (guard) + a deterministic context pack +
- the code-graph blast radius + a typed execution contract. Plan mode
- spawns no agents; ``--execute`` launches the selected agent through the
- shared ONMC harness and requires verifier-backed proof.
+ ``onmc run`` is the default task entry point. This command renders that
+ same runtime contract with recorded dead-ends, context, blast radius,
+ and progress detail. Plan mode spawns no agents; ``--execute`` remains
+ available for compatibility and delegates to the shared harness.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
 │ *    goal      TEXT  The mission goal — what you want done. [required]       │
@@ -5205,20 +4957,22 @@ Usage: onmc mission-bridge intake [OPTIONS] MESSAGE
 ## `onmc missioncontrol`
 
 ```text
-Usage: onmc missioncontrol [OPTIONS] [SWARM_ID]
+Usage: onmc missioncontrol [OPTIONS] [RUN_OR_SWARM_ID]
 
- Live, read-only dashboard for an onmc swarm.
+ Read-only progress and proof view over the canonical runtime.
 
- Reads the swarm manifest + tamper-evident receipts and shows each unit's
- state (pending/queued/running/done/failed/aborted), whether a receipt
- exists, its verified flag and diff_sha, plus the abort-sentinel state.
- Never mutates swarm state.
+ With no arguments, shows recent ``onmc run`` state reconstructed from
+ append-only durable events. ``verified`` appears only when the matching
+ tamper-evident harness receipt validates. Legacy swarm inspection remains
+ available by id or with ``--all``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   [swarm_id]      TEXT  Swarm id to inspect. Omit with --all to list swarms. │
+│   [run_or_swarm_id]      TEXT  Canonical run id to inspect. Legacy swarm ids │
+│                                remain accepted as an advanced compatibility  │
+│                                view.                                         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --all           List all swarms under .onmc/swarm and exit.                  │
+│ --all           Advanced: list legacy swarms under .onmc/swarm and exit.     │
 │ --json          Emit machine-readable JSON instead of a table.               │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯

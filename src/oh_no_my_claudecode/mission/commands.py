@@ -6,10 +6,10 @@ of ``CONTRIBUTING.md``): this module exposes a top-level ``register(app)`` that
 the registry invokes at CLI build time, so ``onmc mission`` ships with **zero
 edits** to ``cli.py`` or any other shared hub.  Rendering is done inline here.
 
-``onmc mission "<goal>"`` composes the shipped engineering pipeline
-(recall/guard → pack → codegraph → typed harness plan) into one mission plan.
-The default is plan mode: a deterministic dry-run that spawns no agents.
-``--execute`` delegates to the real verifier-backed ONMC harness.
+``onmc mission "<goal>"`` is the plan/progress view of the same canonical
+``RunSpec`` compiled by ``onmc run``. The default is a deterministic dry-run
+that spawns no agents. ``--execute`` remains as a compatibility alias over the
+real verifier-backed ONMC harness.
 """
 
 from __future__ import annotations
@@ -126,12 +126,12 @@ def register(app: typer.Typer) -> None:
             ),
         ] = False,
     ) -> None:
-        """Plan safely or run the verifier-backed engineering harness.
+        """View the canonical runtime as a mission plan.
 
-        Composes recorded dead-ends (guard) + a deterministic context pack +
-        the code-graph blast radius + a typed execution contract. Plan mode
-        spawns no agents; ``--execute`` launches the selected agent through the
-        shared ONMC harness and requires verifier-backed proof.
+        ``onmc run`` is the default task entry point. This command renders that
+        same runtime contract with recorded dead-ends, context, blast radius,
+        and progress detail. Plan mode spawns no agents; ``--execute`` remains
+        available for compatibility and delegates to the shared harness.
         """
         from oh_no_my_claudecode.harness import RiskLevel
         from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode

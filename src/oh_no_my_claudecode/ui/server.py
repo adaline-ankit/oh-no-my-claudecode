@@ -19,7 +19,11 @@ from urllib.parse import parse_qs, urlsplit
 
 from oh_no_my_claudecode.core.repo import path_bucket
 from oh_no_my_claudecode.core.service import OnmcService
-from oh_no_my_claudecode.missioncontrol import build_dashboard, list_swarm_ids
+from oh_no_my_claudecode.missioncontrol import (
+    build_dashboard,
+    build_runtime_dashboard,
+    list_swarm_ids,
+)
 from oh_no_my_claudecode.models import FileStat, RepoFileRecord, TaskStatus
 
 # Callable that runs a shell command and returns (returncode, combined output).
@@ -104,7 +108,7 @@ def _handle_agents_action(
 
     - ``abort`` — ``onmc swarm abort <swarm_id>``
     - ``land``  — ``gh pr merge <pr_url> --squash``
-    - ``mission`` — ``onmc mission <goal>``
+    - ``run`` / legacy ``mission`` — ``onmc run <goal>`` (safe plan preview)
     """
     action = str(data.get("action", ""))
     if action == "abort":
@@ -117,11 +121,11 @@ def _handle_agents_action(
         if not pr_url:
             return {"ok": False, "returncode": 1, "output": "pr_url required"}
         cmd = ["gh", "pr", "merge", pr_url, "--squash"]
-    elif action == "mission":
+    elif action in {"run", "mission"}:
         goal = str(data.get("goal", "")).strip()
         if not goal:
             return {"ok": False, "returncode": 1, "output": "goal required"}
-        cmd = ["onmc", "mission", goal]
+        cmd = ["onmc", "run", goal]
     else:
         return {"ok": False, "returncode": 1, "output": f"unknown action: {action!r}"}
 
@@ -181,6 +185,7 @@ def build_dashboard_payload(service: OnmcService) -> dict[str, Any]:
         },
         "report": service.agent_readiness_report(),
         "loops": _loops_payload(service),
+        "runtime": build_runtime_dashboard(Path(status["repo_root"])).to_dict(),
         "swarms": _swarms_payload(Path(status["repo_root"])),
         "global": _global_swarms_payload(),
         "performance": _performance_payload(Path(status["repo_root"])),

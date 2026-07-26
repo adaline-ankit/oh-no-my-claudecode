@@ -1,6 +1,22 @@
 # Harness Command Migration
 
 ONMC has one execution harness. Commands do not each become independent harnesses.
+
+## Public UX Contract
+
+The primary path is:
+
+```text
+onmc setup → onmc run "<task>" [--execute] → onmc missioncontrol
+```
+
+- `run` is the only default task entry point and owns the canonical `RunSpec`.
+- `mission` renders plan, context, blast radius, and progress for that contract.
+- strict interactive hooks compile the same contract.
+- Mission Control reconstructs progress from `.onmc/harness-runtime` events and
+  shows verified only when the matching harness receipt validates.
+- advanced commands remain callable through `onmc commands --all`; hiding them
+  from root help does not delete or rename them.
 They become workflows, graph nodes, operator surfaces, or deprecated extras.
 
 ## Target Runtime
@@ -39,8 +55,8 @@ runtime until that gate is met.
 
 These are user outcomes. They may own a complete graph:
 
-- `run`: canonical general-purpose harness.
-- `mission`: user-facing plan/execute view over `run`, not a second runtime.
+- `run`: canonical general-purpose harness and default task entry.
+- `mission`: user-facing plan/progress view over `run`, not a second runtime.
 - `autopilot`: full execute, verify, prove, and learn workflow.
 - `nomistakes`: protected PR-gate workflow.
 - `fixci`: CI-repair specialization.
