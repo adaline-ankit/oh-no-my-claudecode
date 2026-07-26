@@ -157,6 +157,7 @@ class CheckpointState:
                 verify_output=c["verify_output"],
                 outcome=c["outcome"],
                 tokens=c.get("tokens"),
+                route_decision=c.get("route_decision"),
             )
             for c in raw_iterations
         ]

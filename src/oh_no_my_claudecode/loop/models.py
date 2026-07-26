@@ -27,6 +27,7 @@ class IterationContract:
     verify_output: str
     outcome: Literal["win", "loss"]
     tokens: int | None = None
+    route_decision: dict[str, object] | None = None
 
 
 @dataclass

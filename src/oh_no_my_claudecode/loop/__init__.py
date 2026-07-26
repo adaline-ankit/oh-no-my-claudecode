@@ -25,6 +25,12 @@ from oh_no_my_claudecode.loop.models import (
     VerifyRunner,
 )
 from oh_no_my_claudecode.loop.templates import LoopTemplate, get_template, list_templates
+from oh_no_my_claudecode.loop.trajectory_router import (
+    TrajectoryRouteDecision,
+    TrajectorySignals,
+    render_route_prompt,
+    route_next_iteration,
+)
 
 __all__ = [
     "AgentRunResult",
@@ -40,7 +46,11 @@ __all__ = [
     "LoopTemplate",
     "VerifyOutcome",
     "VerifyRunner",
+    "TrajectoryRouteDecision",
+    "TrajectorySignals",
     "get_template",
     "list_templates",
+    "render_route_prompt",
+    "route_next_iteration",
     "run_loop",
 ]

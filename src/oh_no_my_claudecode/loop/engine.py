@@ -44,6 +44,11 @@ from oh_no_my_claudecode.loop.models import (
     VerifyOutcome,
     VerifyRunner,
 )
+from oh_no_my_claudecode.loop.trajectory_router import (
+    TrajectorySignals,
+    render_route_prompt,
+    route_next_iteration,
+)
 from oh_no_my_claudecode.models.memory import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.utils.text import stable_id
@@ -806,8 +811,26 @@ def run_loop(
         if should_continue is not None and not should_continue():
             return _make_result(False, "aborted")
 
+        route_decision = route_next_iteration(
+            TrajectorySignals(
+                iteration=i,
+                current_escalation_level=escalation_level,
+                consecutive_losses=consecutive_losses,
+                escalation_threshold=config.escalation_threshold,
+                consecutive_noops=consecutive_noops,
+                consecutive_same_error=consecutive_same_error,
+                total_tokens=total_tokens,
+                total_cost_usd=total_cost_usd,
+                last_loss=last_loss,
+            )
+        )
+        escalation_level = route_decision.escalation_level
+        if route_decision.reset_consecutive_losses:
+            consecutive_losses = 0
+
         # Build the memory-grounded prompt.
         brief = _build_brief(storage, spec.goal, last_loss, escalation_level)
+        route_prompt = render_route_prompt(route_decision)
         prompt = (
             f"## Goal\n\n{spec.goal}\n\n"
             + (
@@ -815,6 +838,7 @@ def run_loop(
                 if spec.success_criteria
                 else ""
             )
+            + (route_prompt + "\n\n" if route_prompt else "")
             + brief
         )
 
@@ -857,6 +881,7 @@ def run_loop(
                 verify_output=f"[agent-error] {agent_result.error}"[:_MAX_VERIFY_OUTPUT],
                 outcome="loss",
                 tokens=agent_result.tokens,
+                route_decision=route_decision.to_dict(),
             )
             iterations.append(error_contract)
             mid = _record_loss(storage, spec.goal, error_contract, ref_now)
@@ -885,6 +910,7 @@ def run_loop(
                 verify_output=verify_outcome.output[:_MAX_VERIFY_OUTPUT],
                 outcome="loss",
                 tokens=agent_result.tokens,
+                route_decision=route_decision.to_dict(),
             )
             iterations.append(infra_contract)
             # Still record the dead-end: a verifier that cannot run (missing
@@ -991,6 +1017,7 @@ def run_loop(
             verify_output=verify_output_text[:_MAX_VERIFY_OUTPUT],
             outcome=outcome,  # type: ignore[arg-type]
             tokens=agent_result.tokens,
+            route_decision=route_decision.to_dict(),
         )
         iterations.append(contract)
 
@@ -1011,11 +1038,6 @@ def run_loop(
                 recorded_memory_ids.append(mid)
             consecutive_losses += 1
             last_loss = contract
-
-            # Escalate after threshold consecutive losses.
-            if consecutive_losses >= config.escalation_threshold:
-                escalation_level += 1
-                consecutive_losses = 0
 
             # --- Circuit breaker 0: no-changes (vacuous pass) ---
             # A verify that passed while the agent changed nothing means the

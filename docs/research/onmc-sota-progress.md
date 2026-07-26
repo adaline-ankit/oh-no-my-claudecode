@@ -116,6 +116,14 @@ whether token/cost telemetry is reported, best-effort, or unavailable. This
 moves R17 forward by making provider limitations receipt-bound instead of hidden
 in adapter prose.
 
+**Loop escalation is now an observed-trajectory routing decision
+(2026-07-26).** `run_loop` now routes each bounded agent episode from live
+signals: prior losses, no-op/vacuous passes, repeated verifier heads, wide
+failed changes, token use, and observed cost. The decision is injected into the
+next episode prompt, stored on the `IterationContract`, and counted in the
+execute stage. This moves R14 forward from hidden threshold counters toward
+trajectory-grounded routing while preserving existing escalation behavior.
+
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |

@@ -324,6 +324,43 @@ def test_escalation_level_increments(tmp_path: Path) -> None:
     assert received_levels[6] == 2  # escalation again after next 3
 
 
+def test_loop_records_observed_trajectory_route_decisions(tmp_path: Path) -> None:
+    """Escalation is recorded as an observed-trajectory routing decision."""
+    received_levels: list[int] = []
+    prompts: list[str] = []
+
+    def _tracking_agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+        prompts.append(prompt)
+        received_levels.append(escalation_level)
+        return AgentRunResult(
+            output=f"tried at level {escalation_level}",
+            prediction="",
+            files_touched=["main.py"],
+            tokens=100,
+        )
+
+    result = run_loop(
+        _storage(tmp_path),
+        tmp_path,
+        LoopSpec(goal="Fix the deadlock"),
+        LoopConfig(max_iterations=4, escalation_threshold=3, no_progress_window=50),
+        agent_runner=_tracking_agent,
+        verify_runner=_alternating_verify([False, False, False, False]),
+        now=_FIXED_NOW,
+    )
+
+    assert received_levels == [0, 0, 0, 1]
+    assert result.iterations[0].route_decision is not None
+    assert result.iterations[0].route_decision["action"] == "start"
+    assert result.iterations[3].route_decision is not None
+    assert result.iterations[3].route_decision["action"] == "escalate"
+    assert result.iterations[3].route_decision["escalation_level"] == 1
+    assert "3 consecutive losses reached threshold" in (
+        result.iterations[3].route_decision["rationale"]
+    )
+    assert "## ONMC routing decision" in prompts[3]
+
+
 # ---------------------------------------------------------------------------
 # Test 8 — _build_brief surfaces dead-ends from a pre-seeded FAILED_APPROACH memory
 # ---------------------------------------------------------------------------

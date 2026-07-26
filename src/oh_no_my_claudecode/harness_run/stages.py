@@ -138,6 +138,12 @@ def execute_stage(
 ) -> StageRecord:
     """Record the real agent loop's outcome and the change it produced."""
     status = StageStatus.SUCCEEDED if result.converged else StageStatus.FAILED
+    routed = tuple(
+        iteration.route_decision
+        for iteration in result.iterations
+        if iteration.route_decision is not None
+    )
+    escalations = sum(1 for decision in routed if decision.get("action") == "escalate")
     return StageRecord(
         name=StageName.EXECUTE,
         status=status,
@@ -151,6 +157,8 @@ def execute_stage(
             ("stop_reason", result.stop_reason or "none"),
             ("files_touched", str(len(changed_files))),
             ("diff_lines", str(diff_line_count)),
+            ("routing_decisions", str(len(routed))),
+            ("routing_escalations", str(escalations)),
         ),
         reasons=() if result.converged else (result.stop_reason or "loop did not converge",),
     )
