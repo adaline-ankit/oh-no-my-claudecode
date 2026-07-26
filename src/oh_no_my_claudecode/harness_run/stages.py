@@ -23,6 +23,7 @@ from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
 from oh_no_my_claudecode.loop.models import LoopResult
 from oh_no_my_claudecode.proof_graph import ProofAssessment
 
+from .context_selection import context_selection_manifest
 from .run_policy import VerifierSignal, injection_findings
 
 _SCHEMA_VERSION = "1"
@@ -109,9 +110,13 @@ def context_stage(
     """
     joined = "\n".join(item.content for item in packet.evidence)
     findings = injection_findings(joined)
+    selection = context_selection_manifest(packet, retrieval_fallbacks=retrieval_fallbacks)
     reasons = tuple(f"quarantined: {finding.rule_id} {finding.title}" for finding in findings)
     reasons += tuple(f"retrieval-fallback: {reason}" for reason in retrieval_fallbacks)
-    summary = f"{len(packet.evidence)} evidence spans, {packet.used_tokens} tokens"
+    summary = (
+        f"{selection.used_count}/{selection.explored_count} context candidates used, "
+        f"{selection.used_tokens} tokens"
+    )
     if findings:
         summary += f"; {len(findings)} injection pattern(s) quarantined"
     if retrieval_fallbacks:
@@ -122,8 +127,14 @@ def context_stage(
         summary=summary,
         facts=(
             ("evidence_spans", str(len(packet.evidence))),
+            ("explored_context", str(selection.explored_count)),
+            ("excluded_context", str(selection.excluded_count)),
             ("used_tokens", str(packet.used_tokens)),
             ("token_budget", str(packet.token_budget)),
+            ("confidence", f"{selection.confidence:.4f}"),
+            ("low_confidence", str(selection.low_confidence).lower()),
+            ("abstained", str(selection.abstained).lower()),
+            ("fallback_decision", selection.fallback_decision),
             ("injection_findings", str(len(findings))),
         ),
         reasons=reasons,

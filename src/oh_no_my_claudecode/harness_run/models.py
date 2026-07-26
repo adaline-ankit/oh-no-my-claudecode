@@ -22,6 +22,7 @@ from oh_no_my_claudecode.runtime.contracts import (
     RetryPolicy as RuntimeRetryPolicy,
 )
 
+from .context_selection import ContextSelectionManifest
 from .isolation import IsolationProfile
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
@@ -126,6 +127,7 @@ class ExecutionPlan:
     run_id: str
     dag: TaskDAG
     context_packet: EvidencePacket
+    context_selection: ContextSelectionManifest
     proof_requirements: tuple[ProofRequirement, ...]
     policy_decisions: tuple[PolicyDecisionRecord, ...]
     isolation_profile: IsolationProfile
@@ -138,6 +140,7 @@ class ExecutionPlan:
         agent = self.dag.nodes[0].policy.agent if self.dag.nodes else "claude"
         adapter_capability = adapter_capability_payload(agent)
         isolation = self.isolation_profile.to_dict()
+        context_selection = self.context_selection.to_dict()
         nodes = tuple(
             NodeSpec(
                 node_id=node.node_id,
@@ -168,6 +171,7 @@ class ExecutionPlan:
                     "model": node.policy.model,
                     "adapter_capability": adapter_capability_payload(node.policy.agent),
                     "isolation_profile": isolation,
+                    "context_selection": context_selection,
                     "risk": self.dag.risk.value,
                     "verifier": node.policy.verifier,
                 },
@@ -184,6 +188,7 @@ class ExecutionPlan:
                 "state_path": self.state_path,
                 "adapter_capability": adapter_capability,
                 "isolation_profile": isolation,
+                "context_selection": context_selection,
             },
         )
 
@@ -193,6 +198,7 @@ class ExecutionPlan:
             "run_id": self.run_id,
             "dag": self.dag.to_dict(),
             "context_packet": self.context_packet.to_dict(),
+            "context_selection": self.context_selection.to_dict(),
             "proof_requirements": [item.to_dict() for item in self.proof_requirements],
             "policy_decisions": [item.to_dict() for item in self.policy_decisions],
             "isolation_profile": self.isolation_profile.to_dict(),
@@ -303,6 +309,14 @@ class HarnessResult:
                 "Context: "
                 f"{self.plan.context_packet.used_tokens}/"
                 f"{self.plan.context_packet.token_budget} tokens"
+            ),
+            (
+                "Context decision: "
+                f"explored={self.plan.context_selection.explored_count}, "
+                f"used={self.plan.context_selection.used_count}, "
+                f"confidence={self.plan.context_selection.confidence:.2f}, "
+                f"fallback={self.plan.context_selection.fallback_decision}, "
+                f"abstained={str(self.plan.context_selection.abstained).lower()}"
             ),
             f"Proof requirements: {len(self.plan.proof_requirements)}",
             "Policy: "

@@ -709,6 +709,14 @@ def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     assert execute.retry_policy == RetryPolicy(max_attempts=3, backoff_seconds=1.0)
     assert ("pytest", "tests/billing") in verify.capabilities.commands
     assert spec.metadata["source"] == "harness_run.ExecutionPlan"
+    context_selection = spec.metadata["context_selection"]
+    assert context_selection == plan.context_selection.to_dict()
+    assert context_selection["token_budget"] == request.context_budget
+    assert "used_context_ids" in context_selection
+    assert all(
+        node.metadata["context_selection"] == context_selection
+        for node in spec.nodes
+    )
 
 
 def test_runtime_contract_exposes_honest_adapter_capabilities(tmp_path: Path) -> None:

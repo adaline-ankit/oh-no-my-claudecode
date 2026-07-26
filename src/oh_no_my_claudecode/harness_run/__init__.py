@@ -1,6 +1,7 @@
 """Public typed execution harness used by ``onmc run``."""
 
 from .completion import CompletionGateDecision, evaluate_completion_gate
+from .context_selection import ContextSelectionManifest, context_selection_manifest
 from .controller import (
     ChangeSet,
     ChangesReader,
@@ -58,6 +59,7 @@ __all__ = [
     "ChangesReader",
     "CompletionGateDecision",
     "ControllerDependencies",
+    "ContextSelectionManifest",
     "ExecutionPlan",
     "HarnessController",
     "HarnessResult",
@@ -79,6 +81,7 @@ __all__ = [
     "VerifierSignal",
     "ViolationCode",
     "compute_verified",
+    "context_selection_manifest",
     "context_stage",
     "default_dependencies",
     "evaluate_run_policy",

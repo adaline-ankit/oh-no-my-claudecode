@@ -115,6 +115,7 @@ def test_plan_only_never_executes_agent_and_is_deterministic(tmp_path: Path) -> 
         "run_id",
         "dag",
         "context_packet",
+        "context_selection",
         "proof_requirements",
         "policy_decisions",
         "isolation_profile",
@@ -313,6 +314,14 @@ def test_default_dependencies_retrieve_relevant_repo_context(tmp_path: Path) -> 
     assert "never-read" not in rendered
     assert "binary.py" not in rendered
     assert plan.context_packet.used_tokens <= 500
+    selection = plan.context_selection
+    assert selection.explored_count >= 1
+    assert selection.used_count == 1
+    assert selection.used_context_ids == ("repo:src/cache.py",)
+    assert selection.used_provenance == ("src/cache.py:1-2",)
+    assert selection.used_tokens == plan.context_packet.used_tokens
+    assert selection.token_budget == 500
+    assert selection.abstained is False
 
 
 def test_execution_passes_planned_context_to_loop(tmp_path: Path) -> None:

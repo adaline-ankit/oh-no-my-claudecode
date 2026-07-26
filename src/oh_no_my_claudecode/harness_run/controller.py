@@ -75,6 +75,7 @@ from oh_no_my_claudecode.utils.time import utc_now
 from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
 from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
+from .context_selection import context_selection_manifest
 from .isolation import isolation_profile
 from .models import (
     ExecutionPlan,
@@ -531,6 +532,10 @@ class HarnessController:
             mode=RetrievalMode.LOCAL,
             token_budget=request.context_budget,
         )
+        context_selection = context_selection_manifest(
+            packet,
+            retrieval_fallbacks=tuple(self.dependencies.retrieval_fallbacks),
+        )
         proof_graph = _proof_graph(dag.task, verifier_argv)
         proof_requirements = tuple(
             ProofRequirement(
@@ -556,6 +561,7 @@ class HarnessController:
             run_id=run_id,
             dag=dag,
             context_packet=packet,
+            context_selection=context_selection,
             proof_requirements=proof_requirements,
             policy_decisions=decisions,
             isolation_profile=isolation_profile(requested=request.isolation),
