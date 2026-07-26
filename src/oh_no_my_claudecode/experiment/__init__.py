@@ -15,7 +15,14 @@ from .calibration import (
     calibrate_portfolio_report,
     calibrate_records,
 )
-from .claim import ClaimReadinessDecision, ClaimReadinessReport, build_claim_readiness
+from .claim import (
+    ClaimLanguageDecision,
+    ClaimLanguageGate,
+    ClaimReadinessDecision,
+    ClaimReadinessReport,
+    build_claim_readiness,
+    gate_claim_language,
+)
 from .contracts import (
     SCHEMA_VERSION,
     AdapterCapabilities,
@@ -67,6 +74,8 @@ __all__ = [
     "ManifestCalibrationReport",
     "TaskCalibration",
     "BenchmarkPowerPlan",
+    "ClaimLanguageDecision",
+    "ClaimLanguageGate",
     "ClaimReadinessDecision",
     "ClaimReadinessReport",
     "PortfolioCoverageGate",
@@ -81,6 +90,7 @@ __all__ = [
     "calibrate_portfolio_report",
     "calibrate_records",
     "gate_portfolio_coverage",
+    "gate_claim_language",
     "external_report_coverage_manifest",
     "plan_portfolio_expansion",
     "plan_external_report",

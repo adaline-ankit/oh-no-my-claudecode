@@ -40,6 +40,7 @@ class ClaimReadinessReport:
     cost_claim_ready: bool
     benchmark_plan_ready: bool
     portfolio_coverage_ready: bool
+    report_coverage_ready: bool
     calibration_ready: bool
     cost_calibration_ready: bool
     blocked_gates: tuple[str, ...]
@@ -53,6 +54,7 @@ class ClaimReadinessReport:
             "cost_claim_ready": self.cost_claim_ready,
             "benchmark_plan_ready": self.benchmark_plan_ready,
             "portfolio_coverage_ready": self.portfolio_coverage_ready,
+            "report_coverage_ready": self.report_coverage_ready,
             "calibration_ready": self.calibration_ready,
             "cost_calibration_ready": self.cost_calibration_ready,
             "blocked_gates": list(self.blocked_gates),
@@ -86,6 +88,7 @@ def build_claim_readiness(
     benchmark_plan: Mapping[str, object],
     calibration_gate: Mapping[str, object],
     coverage_gate: Mapping[str, object] | None = None,
+    report_coverage_gate: Mapping[str, object] | None = None,
 ) -> ClaimReadinessReport:
     """Combine separate benchmark gates into one externally-citable verdict."""
     benchmark_ready = _bool(benchmark_plan.get("claim_ready"), "benchmark_plan.claim_ready")
@@ -98,11 +101,21 @@ def build_claim_readiness(
         calibration_gate.get("quality_claim_ready"),
         "calibration_gate.quality_claim_ready",
     )
+    report_coverage_ready = (
+        True
+        if report_coverage_gate is None
+        else _bool(
+            report_coverage_gate.get("claim_ready"),
+            "report_coverage_gate.claim_ready",
+        )
+    )
     cost_ready = _bool(
         calibration_gate.get("cost_claim_ready"),
         "calibration_gate.cost_claim_ready",
     )
-    quality_claim_ready = benchmark_ready and coverage_ready and calibration_ready
+    quality_claim_ready = (
+        benchmark_ready and coverage_ready and calibration_ready and report_coverage_ready
+    )
     cost_claim_ready = quality_claim_ready and cost_ready
 
     blocked: list[str] = []
@@ -130,6 +143,13 @@ def build_claim_readiness(
         next_actions.append(
             "Run a fresh, complete, discriminative benchmark report against the current manifest."
         )
+    if report_coverage_gate is not None and not report_coverage_ready:
+        blocked.append("report_coverage")
+        _extend_report_coverage_reasons(reasons, report_coverage_gate)
+        next_actions.append(
+            "Capture complete report evidence for missing R13 fields before publishing "
+            "external claims."
+        )
     if calibration_ready and not cost_ready:
         blocked.append("cost_calibration")
         _extend_reasons(reasons, calibration_gate.get("reasons"))
@@ -146,6 +166,7 @@ def build_claim_readiness(
         cost_claim_ready=cost_claim_ready,
         benchmark_plan_ready=benchmark_ready,
         portfolio_coverage_ready=coverage_ready,
+        report_coverage_ready=report_coverage_ready,
         calibration_ready=calibration_ready,
         cost_calibration_ready=cost_ready,
         blocked_gates=tuple(dict.fromkeys(blocked)),
@@ -217,6 +238,29 @@ def _extend_reasons(dest: list[str], value: object) -> None:
     for item in value:
         if isinstance(item, str) and item.strip():
             dest.append(item)
+
+
+def _extend_report_coverage_reasons(
+    dest: list[str],
+    report_coverage_gate: Mapping[str, object],
+) -> None:
+    fields = report_coverage_gate.get("fields")
+    if not isinstance(fields, list):
+        dest.append("report coverage manifest is missing field-level evidence")
+        return
+    found_missing = False
+    for item in fields:
+        if not isinstance(item, Mapping):
+            continue
+        if item.get("covered") is not False:
+            continue
+        name = item.get("name")
+        reason = item.get("reason")
+        if isinstance(name, str) and name.strip() and isinstance(reason, str) and reason.strip():
+            dest.append(f"report coverage missing {name}: {reason}")
+            found_missing = True
+    if not found_missing:
+        dest.append("report coverage is incomplete")
 
 
 def _bool(value: object, path: str) -> bool:

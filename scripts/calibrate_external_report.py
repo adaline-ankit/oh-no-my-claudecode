@@ -106,6 +106,7 @@ def calibrate_report_file(
             benchmark_plan=_mapping(payload["benchmark_plan"]),
             coverage_gate=_mapping(payload["coverage_gate"]),
             calibration_gate=_mapping(payload["manifest_gate"]),
+            report_coverage_gate=_mapping(payload["report_coverage"]),
         ).to_dict()
     else:
         payload["benchmark_plan"] = plan_external_report(
@@ -125,10 +126,12 @@ def calibrate_report_file(
         payload["claim_readiness"] = build_claim_readiness(
             benchmark_plan=_mapping(payload["benchmark_plan"]),
             calibration_gate=_mapping(payload["calibration"]),
+            report_coverage_gate=_mapping(payload["report_coverage"]),
         ).to_dict()
     payload["claim_language_gate"] = gate_claim_language(
         _DEFAULT_EXTERNAL_CLAIM,
         _mapping(payload["claim_readiness"]),
+        report_coverage=_mapping(payload["report_coverage"]),
     ).to_dict()
     return payload
 

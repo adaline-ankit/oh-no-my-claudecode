@@ -782,7 +782,9 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
         "benchmark_plan",
         "portfolio_coverage",
         "calibration",
+        "report_coverage",
     ]
+    assert payload["claim_readiness"]["report_coverage_ready"] is False
     assert payload["calibration"]["decision"] == "needs-discrimination"
     assert payload["calibration"]["saturated_tasks"] == 24
     assert payload["report_coverage"]["claim_ready"] is False
@@ -798,6 +800,10 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     assert payload["claim_language_gate"]["detected_claims"] == ["quality", "cost"]
     assert any(
         "quality improvement claim" in reason
+        for reason in payload["claim_language_gate"]["reasons"]
+    )
+    assert any(
+        "receipt/report coverage is incomplete" in reason
         for reason in payload["claim_language_gate"]["reasons"]
     )
     assert "external improvement claims are blocked" in payload["claim_language_gate"][
@@ -867,7 +873,9 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
         "benchmark_plan",
         "portfolio_coverage",
         "calibration",
+        "report_coverage",
     ]
+    assert payload["claim_readiness"]["report_coverage_ready"] is False
     assert any(
         "Add at least 22 benchmark task" in action
         for action in payload["claim_readiness"]["next_actions"]

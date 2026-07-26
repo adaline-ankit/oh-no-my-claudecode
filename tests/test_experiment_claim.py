@@ -79,6 +79,41 @@ def test_report_without_manifest_cannot_support_external_claim() -> None:
     assert any("manifest missing" in reason for reason in report.reasons)
 
 
+def test_claim_readiness_blocks_supplied_incomplete_report_coverage() -> None:
+    report = build_claim_readiness(
+        benchmark_plan={"claim_ready": True, "reasons": []},
+        coverage_gate={"claim_ready": True, "reasons": []},
+        calibration_gate={
+            "quality_claim_ready": True,
+            "cost_claim_ready": True,
+            "reasons": [],
+        },
+        report_coverage_gate={
+            "claim_ready": False,
+            "fields": [
+                {
+                    "name": "raw_trajectories",
+                    "covered": False,
+                    "reason": "raw trajectory artifacts are missing",
+                },
+                {
+                    "name": "pass_rate",
+                    "covered": True,
+                    "reason": "condition pass rates are present",
+                },
+            ],
+        },
+    )
+
+    assert report.decision is ClaimReadinessDecision.NOT_READY
+    assert report.quality_claim_ready is False
+    assert report.cost_claim_ready is False
+    assert report.report_coverage_ready is False
+    assert report.blocked_gates == ("report_coverage",)
+    assert any("raw_trajectories" in reason for reason in report.reasons)
+    assert any("R13 fields" in action for action in report.next_actions)
+
+
 def test_claim_language_refuses_better_sota_when_gates_are_missing() -> None:
     readiness = build_claim_readiness(
         benchmark_plan={"claim_ready": False, "reasons": ["only 18 cells"]},
