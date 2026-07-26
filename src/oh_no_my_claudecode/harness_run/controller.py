@@ -36,8 +36,8 @@ from oh_no_my_claudecode.harness import (
     compile_task,
 )
 from oh_no_my_claudecode.loop import FileCheckpointStore, LoopConfig, LoopResult, LoopSpec, run_loop
-from oh_no_my_claudecode.loop.adapters import make_agent_runner
-from oh_no_my_claudecode.loop.models import VerifyOutcome, VerifyRunner
+from oh_no_my_claudecode.loop.adapters import CommandRunner, CompletedProc, make_agent_runner
+from oh_no_my_claudecode.loop.models import AgentRunner, VerifyOutcome, VerifyRunner
 from oh_no_my_claudecode.proof_graph import (
     Claim,
     ClaimKind,
@@ -58,7 +58,9 @@ from oh_no_my_claudecode.proof_graph import (
 from oh_no_my_claudecode.proof_graph.receipt import ProofReceipt
 from oh_no_my_claudecode.sandbox import (
     DockerSandboxPlan,
+    NetworkPolicy,
     SandboxExecutionResult,
+    ScopedSecret,
     default_repo_sandbox,
     docker_run_plan,
     execute_docker_plan,
@@ -345,7 +347,7 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
 
     result: LoopResult | None = None
     try:
-        agent_runner = make_agent_runner(
+        agent_runner: AgentRunner = make_agent_runner(
             request.agent,
             execution_root,
             model=None if request.model == "default" else request.model,
@@ -356,6 +358,7 @@ def _default_loop_executor(invocation: LoopInvocation) -> LoopResult:
                 raise RuntimeError(
                     f"sandbox provider {request.sandbox_provider} cannot execute locally yet"
                 )
+            agent_runner = _sandbox_agent_runner_for(execution_root, request)
             verify_runner = _sandbox_verify_runner_for(execution_root, request)
         result = run_loop(
             storage,
@@ -439,6 +442,116 @@ def _verify_runner_for(repo_root: Path) -> VerifyRunner:
             return VerifyOutcome(False, f"[verify error: {exc}]")
 
     return _run
+
+
+def _sandbox_agent_runner_for(
+    repo_root: Path,
+    request: RunRequest,
+    *,
+    executor: Callable[[DockerSandboxPlan], SandboxExecutionResult] = execute_docker_plan,
+) -> AgentRunner:
+    """Return an agent runner whose CLI invocation executes inside Docker."""
+
+    return make_agent_runner(
+        request.agent,
+        repo_root,
+        model=None if request.model == "default" else request.model,
+        command_runner=_sandbox_agent_command_runner_for(repo_root, request, executor=executor),
+    )
+
+
+def _sandbox_agent_command_runner_for(
+    repo_root: Path,
+    request: RunRequest,
+    *,
+    executor: Callable[[DockerSandboxPlan], SandboxExecutionResult] = execute_docker_plan,
+) -> CommandRunner:
+    """Return a command runner that sandboxes agent subprocesses.
+
+    Adapter-local ``git status`` probes remain local because they only observe
+    the already-mounted repository and should not require Git inside the agent
+    image. Agent CLI commands run in a writable, network-enabled container with
+    role-scoped secrets.
+    """
+
+    def _run(command: list[str], cwd: str, timeout: int) -> CompletedProc:
+        if command[:1] == ["git"]:
+            return _local_command(command, cwd, timeout)
+        try:
+            cwd_path = Path(cwd).resolve()
+            repo_path = repo_root.resolve()
+            if cwd_path != repo_path and repo_path not in cwd_path.parents:
+                return CompletedProc(
+                    returncode=1,
+                    stdout="",
+                    stderr=f"[sandbox agent error: cwd outside sandbox mount: {cwd}]",
+                )
+            spec = default_repo_sandbox(
+                repo_root,
+                image=request.sandbox_image,
+                writeable=True,
+                network=NetworkPolicy.ALLOW,
+                secrets=_agent_scoped_secrets(request.agent),
+                timeout_seconds=timeout,
+            )
+            plan = docker_run_plan(spec, tuple(command), role="agent")
+            result = executor(plan)
+        except (OSError, ValueError) as exc:
+            return CompletedProc(
+                returncode=1,
+                stdout="",
+                stderr=f"[sandbox agent error: {exc}]",
+            )
+
+        stderr = result.stderr
+        if not result.succeeded and result.reason:
+            stderr = f"{stderr}\n[{result.reason}]".strip()
+        return CompletedProc(
+            returncode=result.returncode if result.returncode is not None else 1,
+            stdout=result.stdout,
+            stderr=stderr,
+        )
+
+    return _run
+
+
+def _local_command(command: list[str], cwd: str, timeout: int) -> CompletedProc:
+    try:
+        completed = subprocess.run(  # noqa: S603
+            command,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return CompletedProc(
+            returncode=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+    except subprocess.TimeoutExpired:
+        return CompletedProc(
+            returncode=1,
+            stdout="",
+            stderr=f"[command timed out after {timeout}s]",
+        )
+    except FileNotFoundError as exc:
+        return CompletedProc(
+            returncode=127,
+            stdout="",
+            stderr=f"[binary not found: {exc}]",
+        )
+
+
+def _agent_scoped_secrets(agent: str) -> tuple[ScopedSecret, ...]:
+    common = (ScopedSecret("ANTHROPIC_API_KEY"),)
+    if agent == "claude":
+        return (*common, ScopedSecret("CLAUDE_CODE_OAUTH_TOKEN"))
+    if agent == "codex":
+        return (ScopedSecret("OPENAI_API_KEY"),)
+    if agent == "opencode":
+        return (*common, ScopedSecret("OPENAI_API_KEY"))
+    return ()
 
 
 def _sandbox_verify_runner_for(

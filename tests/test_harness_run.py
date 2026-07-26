@@ -26,6 +26,7 @@ from oh_no_my_claudecode.harness_run.context import (
 )
 from oh_no_my_claudecode.harness_run.controller import (
     _default_loop_executor,
+    _sandbox_agent_runner_for,
     _sandbox_verify_runner_for,
     default_dependencies,
 )
@@ -359,6 +360,47 @@ def test_sandbox_verifier_runner_classifies_missing_runner(tmp_path: Path) -> No
     assert "[sandbox verify error: verify command could not run" in outcome.output
 
 
+def test_sandbox_agent_runner_executes_cli_inside_writable_boundary(
+    tmp_path: Path,
+) -> None:
+    seen: list[DockerSandboxPlan] = []
+
+    def executor(plan: DockerSandboxPlan) -> SandboxExecutionResult:
+        seen.append(plan)
+        return SandboxExecutionResult(
+            status=SandboxExecutionStatus.SUCCEEDED,
+            returncode=0,
+            stdout='{"result":"changed code","usage":{"input_tokens":2,"output_tokens":3}}',
+            stderr="",
+            argv_sha256="abc",
+            timeout_seconds=600,
+            reason="sandbox command succeeded",
+        )
+
+    request = RunRequest(
+        task="agent in sandbox",
+        execute=True,
+        sandbox=True,
+        sandbox_provider="docker",
+        sandbox_image="onmc-agent:local",
+    )
+    runner = _sandbox_agent_runner_for(tmp_path, request, executor=executor)
+
+    result = runner("fix bug", escalation_level=0)
+
+    assert result.output == "changed code"
+    assert result.tokens == 5
+    assert len(seen) == 1
+    plan = seen[0]
+    assert plan.role == "agent"
+    assert plan.secret_env == ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
+    assert "--network" in plan.argv
+    assert "bridge" in plan.argv
+    assert f"{tmp_path}:/workspace:rw" in plan.argv
+    assert "onmc-agent:local" in plan.argv
+    assert "claude" in plan.argv
+
+
 def test_cli_json_and_help_expose_safe_execution_contract(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -535,8 +577,8 @@ def test_sandbox_execution_binds_verifier_to_docker_runner(
     write_config(default_config(tmp_path), tmp_path)
     seen: dict[str, object] = {}
 
-    def fake_agent_runner(agent: str, repo_root: Path, *, model: str | None = None) -> object:
-        seen["agent"] = (agent, repo_root, model)
+    def fake_sandbox_agent_runner(repo_root: Path, request: RunRequest) -> object:
+        seen["sandbox_agent"] = (repo_root, request.sandbox, request.sandbox_provider)
         return lambda prompt, escalation_level: None
 
     def fake_sandbox_verify_runner(repo_root: Path, request: RunRequest) -> object:
@@ -556,7 +598,11 @@ def test_sandbox_execution_binds_verifier_to_docker_runner(
         seen["verify_outcome"] = verifier("pytest -q")
         return _loop_result(converged=True)
 
-    monkeypatch.setattr(harness_controller_module, "make_agent_runner", fake_agent_runner)
+    monkeypatch.setattr(
+        harness_controller_module,
+        "_sandbox_agent_runner_for",
+        fake_sandbox_agent_runner,
+    )
     monkeypatch.setattr(
         harness_controller_module,
         "_sandbox_verify_runner_for",
@@ -581,7 +627,7 @@ def test_sandbox_execution_binds_verifier_to_docker_runner(
 
     outcome = seen["verify_outcome"]
     assert isinstance(outcome, VerifyOutcome)
-    assert seen["agent"] == ("claude", tmp_path, None)
+    assert seen["sandbox_agent"] == (tmp_path, True, "docker")
     assert seen["sandbox_verify"] == (tmp_path, True, "docker")
     assert outcome.output == "sandbox:pytest -q"
     assert result.converged is True

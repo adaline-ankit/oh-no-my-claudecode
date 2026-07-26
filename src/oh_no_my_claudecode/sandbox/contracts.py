@@ -147,7 +147,9 @@ def default_repo_sandbox(
     *,
     image: str = "python:3.12-slim",
     writeable: bool = False,
+    network: NetworkPolicy = NetworkPolicy.DENY,
     secrets: Iterable[ScopedSecret] = (),
+    timeout_seconds: int = 600,
 ) -> SandboxSpec:
     """Build ONMC's conservative local repo sandbox contract."""
 
@@ -161,8 +163,9 @@ def default_repo_sandbox(
             ),
         ),
         workdir="/workspace",
-        network=NetworkPolicy.DENY,
+        network=network,
         secrets=tuple(secrets),
+        timeout_seconds=timeout_seconds,
     )
 
 

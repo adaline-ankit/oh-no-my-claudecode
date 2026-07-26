@@ -121,16 +121,17 @@ This is evidence for a stronger harness foundation:
 - Saved external evals now persist each invoked agent's raw CLI trajectory next to the report under
   `artifacts/`, while the report JSON stores only path, size, command, and SHA-256 pointers.
   Manifest-gated calibration blocks external claims when usable cells lack raw trajectory artifacts.
-- `onmc run --execute --sandbox` now routes verifier commands through the Docker sandbox executor
-  for the Docker provider, using a no-network, no-secret verifier boundary instead of local shell
-  execution.
+- `onmc run --execute --sandbox` now routes both agent CLI invocations and verifier commands through
+  the Docker sandbox executor for the Docker provider. Agent commands run with a writable repository
+  mount, network enabled, and role-scoped agent secrets; verifier commands run with a read-only
+  repository mount, no network, and no secrets.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
 
-This is also not yet the full sandbox boundary. The agent execution path still uses the existing
-agent runner, Harbor is fail-closed for local execution, and a real Docker integration smoke test
-is still needed before claiming U5 complete.
+This is also not yet the full sandbox boundary. Harbor is fail-closed for local execution, the
+default `python:3.12-slim` image does not contain Claude/Codex/OpenCode CLIs, and a real Docker
+integration smoke test with an agent-capable image is still needed before claiming U5 complete.
 
 ## Validation Run
 
@@ -273,6 +274,44 @@ Success: no issues found in 21 source files
 Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
 `crewai`, `fastembed`, `langchain_community`, and `langchain_text_splitters`; these were not
 introduced by this sandbox-verifier slice.
+
+## Sandbox Agent Execution Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harness_run.py tests/test_sandbox_contracts.py tests/test_runtime_contracts.py
+```
+
+Result:
+
+```text
+56 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/harness_run/controller.py src/oh_no_my_claudecode/sandbox tests/test_harness_run.py tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/harness_run src/oh_no_my_claudecode/sandbox
+```
+
+Result:
+
+```text
+Success: no issues found in 21 source files
+```
+
+Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+`crewai`, `fastembed`, `langchain_community`, and `langchain_text_splitters`; these were not
+introduced by this sandbox-agent slice.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:
