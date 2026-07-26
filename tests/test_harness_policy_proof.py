@@ -177,6 +177,7 @@ def _controller(
         policy_decider=policy_decider or AllowPolicy(),
         loop_executor=loop,
         run_policy=run_policy or RunPolicy.permissive(),
+        verifier_false_green_check=lambda request, signals, change_set: False,
         changes_reader=changes_reader or _reader(ChangeSet.empty()),
     )
     return HarnessController(tmp_path, dependencies=dependencies)

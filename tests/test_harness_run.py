@@ -102,6 +102,7 @@ def _controller(
         runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
         policy_decider=policy or AllowPolicy(),
         loop_executor=loop,
+        verifier_false_green_check=lambda request, signals, change_set: False,
         changes_reader=_observed_change,
     )
     return HarnessController(tmp_path, dependencies=dependencies)

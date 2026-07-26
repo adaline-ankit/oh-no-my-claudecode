@@ -31,6 +31,8 @@ from oh_no_my_claudecode.tool_broker import (
     ToolBroker,
 )
 
+_DEFAULT_CLEARING_VERIFIER = object()
+
 
 class _AllowCaps:
     def decide(self, action: object) -> Decision:
@@ -94,17 +96,22 @@ def _controller(
     tmp_path: Path,
     *,
     monitor_factory: object | None = None,
-    false_green: object | None = None,
+    false_green: object | None = _DEFAULT_CLEARING_VERIFIER,
     changes: object | None = None,
     converged: bool = True,
 ) -> HarnessController:
+    verifier_check = (
+        (lambda request, signals, change_set: False)
+        if false_green is _DEFAULT_CLEARING_VERIFIER
+        else false_green
+    )
     deps = ControllerDependencies(
         context_engine=ContextEngine(),
         runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
         policy_decider=_AllowCaps(),
         loop_executor=_FakeLoop(_loop(converged=converged)),
         reference_monitor_factory=monitor_factory,  # type: ignore[arg-type]
-        verifier_false_green_check=false_green,  # type: ignore[arg-type]
+        verifier_false_green_check=verifier_check,  # type: ignore[arg-type]
         changes_reader=changes or _changes("src/app.py"),  # type: ignore[arg-type]
     )
     return HarnessController(tmp_path, dependencies=deps)
@@ -161,6 +168,29 @@ def test_verifier_false_green_downgrades_to_failed(tmp_path: Path) -> None:
     assert result.verified is False
 
 
+def test_missing_independent_verifier_fails_closed(tmp_path: Path) -> None:
+    controller = _controller(tmp_path, false_green=None)
+
+    result = controller.run(RunRequest(task="vacuous green suite", execute=True))
+
+    assert result.status is HarnessStatus.FAILED
+    assert result.verified is False
+    assert "independent verifier reported a false green" in result.proof_reasons
+
+
+def test_independent_verifier_error_fails_closed(tmp_path: Path) -> None:
+    def broken_verifier(*args: object) -> bool:
+        del args
+        raise RuntimeError("coverage artifact missing")
+
+    controller = _controller(tmp_path, false_green=broken_verifier)
+
+    result = controller.run(RunRequest(task="ungraded verifier", execute=True))
+
+    assert result.status is HarnessStatus.FAILED
+    assert result.verified is False
+
+
 def test_monitor_policy_allows_repo_run_but_denies_traversal(tmp_path: Path) -> None:
     # The default monitor policy makes enforced mode usable for a real run:
     # repo-scoped writes and verifier commands ALLOW; out-of-repo writes DENY.
@@ -176,8 +206,8 @@ def test_monitor_policy_allows_repo_run_but_denies_traversal(tmp_path: Path) -> 
     assert traversal.effect is not DecisionEffect.ALLOW
 
 
-def test_no_monitor_and_no_checker_is_behavior_preserving(tmp_path: Path) -> None:
-    controller = _controller(tmp_path)  # both seams unset
+def test_no_monitor_with_explicit_clearing_checker_can_complete(tmp_path: Path) -> None:
+    controller = _controller(tmp_path)
     result = controller.run(RunRequest(task="plain run", execute=True))
     assert result.status is HarnessStatus.COMPLETED
     assert result.verified is True
