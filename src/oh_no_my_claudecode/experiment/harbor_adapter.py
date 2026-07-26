@@ -24,6 +24,8 @@ from oh_no_my_claudecode.experiment.contracts import (
 from oh_no_my_claudecode.experiment.portfolio import PortfolioManifest, TaskSpec
 
 RegressionHunk = tuple[str, str, str]
+RemovalSpec = tuple[str, str]
+PlantedFile = tuple[str, str]
 
 __all__ = [
     "HarborExportSummary",
@@ -115,6 +117,9 @@ def export_portfolio_to_harbor(
     output_root: Path,
     *,
     regression_hunks: Mapping[str, Sequence[RegressionHunk]] | None = None,
+    removals: Mapping[str, Sequence[RemovalSpec]] | None = None,
+    planted_files: Mapping[str, Sequence[PlantedFile]] | None = None,
+    test_deps: Mapping[str, Sequence[str]] | None = None,
 ) -> HarborExportSummary:
     """Write Harbor task directories for every ONMC portfolio task."""
 
@@ -129,7 +134,13 @@ def export_portfolio_to_harbor(
         "tasks": manifest_tasks,
     }
     for task in manifest.tasks:
-        hunks = _task_regression_hunks(task, regression_hunks)
+        hunks, task_removals, task_planted = _task_seed_material(
+            task,
+            regression_hunks=regression_hunks,
+            removals=removals,
+            planted_files=planted_files,
+        )
+        deps = tuple(test_deps.get(task.repo.name, ())) if test_deps is not None else ()
         task_name = _harbor_task_name(task)
         task_names.append(task_name)
         task_dir = output_root / task_name
@@ -137,10 +148,14 @@ def export_portfolio_to_harbor(
         (task_dir / "tests").mkdir(parents=True, exist_ok=True)
         (task_dir / "instruction.md").write_text(_instruction(task), encoding="utf-8")
         (task_dir / "task.toml").write_text(_task_toml(task, task_name), encoding="utf-8")
+        has_seed = bool(hunks or task_removals or task_planted)
         (task_dir / "environment" / "Dockerfile").write_text(
-            _dockerfile(task, hunks),
+            _dockerfile(task, has_seed=has_seed, test_deps=deps),
             encoding="utf-8",
         )
+        seed_script = _seed_script(hunks, task_removals, task_planted)
+        if seed_script is not None:
+            (task_dir / "environment" / "onmc_seed.py").write_text(seed_script, encoding="utf-8")
         test_script = task_dir / "tests" / "test.sh"
         test_script.write_text(_test_script(task), encoding="utf-8")
         test_script.chmod(0o755)
@@ -362,62 +377,151 @@ def _task_toml(task: TaskSpec, task_name: str) -> str:
     )
 
 
-def _dockerfile(task: TaskSpec, regression_hunks: Sequence[RegressionHunk] = ()) -> str:
+def _dockerfile(
+    task: TaskSpec,
+    *,
+    has_seed: bool = False,
+    test_deps: Sequence[str] = (),
+) -> str:
     repo_url = _docker_shell_string(task.repo.url)
     pinned_sha = _docker_shell_string(task.repo.pinned_sha)
+    pip_packages = ("pytest", *test_deps)
     lines = [
         "FROM python:3.12-slim",
         "RUN apt-get update \\",
         "    && apt-get install -y --no-install-recommends git \\",
         "    && rm -rf /var/lib/apt/lists/*",
-        "RUN python -m pip install --no-cache-dir pytest",
+        "RUN python -m pip install --no-cache-dir "
+        + " ".join(map(_docker_shell_string, pip_packages)),
         "WORKDIR /workspace",
         f"RUN git clone {repo_url} /workspace \\",
         f"    && git checkout {pinned_sha}",
-        *_regression_docker_lines(task, regression_hunks),
+        *_seed_docker_lines(task, has_seed),
         "",
     ]
     return "\n".join(lines)
 
 
-def _task_regression_hunks(
+def _task_seed_material(
     task: TaskSpec,
+    *,
     regression_hunks: Mapping[str, Sequence[RegressionHunk]] | None,
-) -> tuple[RegressionHunk, ...]:
-    if regression_hunks is None:
-        return ()
-    hunks = tuple(regression_hunks.get(task.task_id, ()))
-    if not hunks:
-        raise ValueError(f"no text regression hunks available for {task.task_id}")
-    return hunks
+    removals: Mapping[str, Sequence[RemovalSpec]] | None,
+    planted_files: Mapping[str, Sequence[PlantedFile]] | None,
+) -> tuple[tuple[RegressionHunk, ...], tuple[RemovalSpec, ...], tuple[PlantedFile, ...]]:
+    hunks = tuple(regression_hunks.get(task.task_id, ())) if regression_hunks is not None else ()
+    removal_specs = tuple(removals.get(task.task_id, ())) if removals is not None else ()
+    planted = tuple(planted_files.get(task.task_id, ())) if planted_files is not None else ()
+    if (
+        any(source is not None for source in (regression_hunks, removals, planted_files))
+        and not hunks
+        and not removal_specs
+        and not planted
+    ):
+        raise ValueError(f"no supported regression seed available for {task.task_id}")
+    return hunks, removal_specs, planted
 
 
-def _regression_docker_lines(
+def _seed_docker_lines(
     task: TaskSpec,
-    regression_hunks: Sequence[RegressionHunk],
+    has_seed: bool,
 ) -> list[str]:
-    if not regression_hunks:
+    if not has_seed:
         return []
-    lines: list[str] = []
-    for rel, old, new in regression_hunks:
-        script = (
-            "from pathlib import Path; "
-            f"p=Path({rel!r}); "
-            "s=p.read_text(encoding='utf-8'); "
-            f"old={old!r}; new={new!r}; "
-            "assert old in s, f'regression anchor not found: {p}'; "
-            "p.write_text(s.replace(old, new, 1), encoding='utf-8')"
-        )
-        lines.append(f"RUN python -c {_docker_shell_string(script)}")
     message = _docker_shell_string(f"seed regression: {task.task_id}")
-    lines.extend(
-        [
-            "RUN git config user.email eval@onmc.local \\",
-            "    && git config user.name onmc-eval",
-            f"RUN git commit --quiet --all -m {message}",
-        ]
+    return [
+        "COPY onmc_seed.py /tmp/onmc_seed.py",
+        "RUN python /tmp/onmc_seed.py",
+        "RUN git config user.email eval@onmc.local \\",
+        "    && git config user.name onmc-eval",
+        f"RUN git commit --quiet --all -m {message}",
+    ]
+
+
+def _seed_script(
+    regression_hunks: Sequence[RegressionHunk],
+    removals: Sequence[RemovalSpec],
+    planted_files: Sequence[PlantedFile],
+) -> str | None:
+    if not (regression_hunks or removals or planted_files):
+        return None
+    payload = {
+        "regression_hunks": list(regression_hunks),
+        "removals": list(removals),
+        "planted_files": list(planted_files),
+    }
+    return "\n".join(
+        (
+            "from __future__ import annotations",
+            "",
+            "import ast",
+            "import json",
+            "from pathlib import Path",
+            "",
+            f"PAYLOAD = {json.dumps(payload, sort_keys=True)}",
+            "",
+            "",
+            "def replace_text(rel: str, old: str, new: str) -> None:",
+            "    target = Path(rel)",
+            "    text = target.read_text(encoding='utf-8')",
+            "    if old not in text:",
+            "        raise RuntimeError(f'regression anchor not found: {rel}')",
+            "    target.write_text(text.replace(old, new, 1), encoding='utf-8')",
+            "",
+            "",
+            "def remove_function_body(source: str, dotted: str) -> str:",
+            "    tree = ast.parse(source)",
+            "    parts = dotted.split('.')",
+            "    node: ast.AST = tree",
+            "    target = None",
+            "    for depth, name in enumerate(parts):",
+            "        found = None",
+            "        for child in ast.iter_child_nodes(node):",
+            "            if (",
+            "                isinstance(child, "
+            "(ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))",
+            "                and child.name == name",
+            "            ):",
+            "                found = child",
+            "                break",
+            "        if found is None:",
+            "            raise RuntimeError(f'{dotted}: {name!r} not found')",
+            "        node = found",
+            "        if depth == len(parts) - 1:",
+            "            if not isinstance(found, (ast.FunctionDef, ast.AsyncFunctionDef)):",
+            "                raise RuntimeError(f'{dotted} is not a function')",
+            "            target = found",
+            "    if target is None:",
+            "        raise RuntimeError(f'{dotted} not resolved')",
+            "    lines = source.splitlines(keepends=True)",
+            "    first = target.body[0]",
+            "    start = first.lineno - 1",
+            "    end = target.end_lineno",
+            "    if end is None:",
+            "        raise RuntimeError(f'{dotted}: missing end_lineno')",
+            "    indent = ' ' * first.col_offset",
+            "    replacement = f'{indent}raise NotImplementedError(\"REMOVED\")\\n'",
+            "    return ''.join(lines[:start]) + replacement + ''.join(lines[end:])",
+            "",
+            "",
+            "for rel, old, new in PAYLOAD['regression_hunks']:",
+            "    replace_text(rel, old, new)",
+            "",
+            "for rel, dotted in PAYLOAD['removals']:",
+            "    target = Path(rel)",
+            "    source = target.read_text(encoding='utf-8')",
+            "    target.write_text(remove_function_body(source, dotted), encoding='utf-8')",
+            "",
+            "for rel, content in PAYLOAD['planted_files']:",
+            "    target = Path(rel)",
+            "    if target.exists():",
+            "        raise RuntimeError(f'planted file would overwrite upstream content: {rel}')",
+            "    target.parent.mkdir(parents=True, exist_ok=True)",
+            "    target.write_text(content, encoding='utf-8')",
+            "",
+            "",
+        )
     )
-    return lines
 
 
 def _test_script(task: TaskSpec) -> str:

@@ -155,6 +155,11 @@ This is evidence for a stronger harness foundation:
   used by ONMC's native runner. A real `nop`/`local` Harbor Docker cell on
   `six-bugfix-integer-types` failed with `passed=0.000` and `reward=0.000`, proving the seeded
   Harbor task is non-vacuous instead of a pristine-repo smoke.
+- Harbor seeded export now also supports AST function-body removals, planted structural grader
+  files, and per-repository test-time dependencies from the same external-eval corpus. A real
+  `nop`/`local` Harbor Docker cell on `six-impl-with-metaclass` completed with 0 exceptions and
+  failed cleanly (`passed=0.000`, `reward=0.000`), proving the function-removal task path is
+  non-vacuous under Harbor too.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -735,9 +740,83 @@ runtime: 6s
 ```
 
 This proves the seeded Harbor export can produce a failing task for no-op agents. It is still a
-single-task smoke, not a publishable ONMC-vs-agent benchmark. Complex AST/removal/planted-file
-regressions are still handled by `scripts/run_external_eval.py` and need a later Harbor seeding
-adapter before the full v4 portfolio can move to Harbor.
+single-task smoke, not a publishable ONMC-vs-agent benchmark. At this point only the text-hunk seed
+path had been proven through Harbor; the next slice extends this to richer seed material.
+
+## Harbor Full Seed Material Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+13 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py
+```
+
+Result:
+
+```text
+Success: no issues found in 2 source files
+```
+
+Seeded Harbor export command covering text-hunk and AST-removal tasks:
+
+```text
+python scripts/export_harbor_tasks.py datasets/experiment/portfolio_external_v4.json --out /private/tmp/onmc-harbor-fullseed-smoke --limit-tasks 8 --seed-regressions --smoke-plan --max-cells 16
+```
+
+Observed result:
+
+```text
+task_count: 8
+tasks included: 6 text-hunk tasks, 2 AST-removal tasks
+total_cells: 16
+budget_ready: true
+```
+
+The generated removal seed script for `six-impl-with-metaclass` compiled successfully:
+
+```text
+python -m py_compile /private/tmp/onmc-harbor-fullseed-smoke/onmc/six-impl-with-metaclass/environment/onmc_seed.py
+```
+
+Real AST-removal non-vacuity smoke:
+
+```text
+harbor run --job-name onmc-fullseed-six-metaclass-nop-v2 -p /private/tmp/onmc-harbor-fullseed-smoke/onmc/six-impl-with-metaclass -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-fullseed-jobs
+```
+
+Observed result:
+
+```text
+1/1 Harbor Docker cell completed with 0 exceptions.
+passed: 0.000
+reward: 0.000
+runtime: 6s
+```
+
+This moves more of the v4 benchmark corpus into Harbor: text replacements, AST removals, planted
+grader files, and repo test dependencies now share one generated seed script per task. It is still
+not a publishable benchmark because no real coding-agent arm has been run and not every v4 task has
+been smoke-tested through Harbor.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:

@@ -32,8 +32,8 @@ def main(argv: list[str] | None = None) -> int:
         "--seed-regressions",
         action="store_true",
         help=(
-            "Seed supported text-hunk regressions into Harbor task images. "
-            "Tasks without supported hunks fail closed."
+            "Seed supported external-eval regressions into Harbor task images. "
+            "Tasks without supported seed material fail closed."
         ),
     )
     parser.add_argument(
@@ -48,11 +48,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     manifest = _limited_manifest(load_portfolio(args.manifest), args.limit_tasks)
-    summary = export_portfolio_to_harbor(
-        manifest,
-        args.out,
-        regression_hunks=_external_text_regressions() if args.seed_regressions else None,
-    )
+    if args.seed_regressions:
+        regression_hunks, removals, planted_files, test_deps = _external_seed_tables()
+        summary = export_portfolio_to_harbor(
+            manifest,
+            args.out,
+            regression_hunks=regression_hunks,
+            removals=removals,
+            planted_files=planted_files,
+            test_deps=test_deps,
+        )
+    else:
+        summary = export_portfolio_to_harbor(manifest, args.out)
     payload = {
         "schema_version": "onmc-harbor-export/v1",
         "manifest": str(args.manifest),
@@ -86,12 +93,17 @@ def _limited_manifest(manifest: PortfolioManifest, limit: int | None) -> Portfol
     )
 
 
-def _external_text_regressions() -> dict[str, tuple[tuple[str, str, str], ...]]:
+def _external_seed_tables() -> tuple[
+    dict[str, tuple[tuple[str, str, str], ...]],
+    dict[str, tuple[tuple[str, str], ...]],
+    dict[str, tuple[tuple[str, str], ...]],
+    dict[str, tuple[str, ...]],
+]:
     try:
-        from run_external_eval import REGRESSIONS
+        from run_external_eval import PLANTED_FILES, REGRESSIONS, REMOVALS, REPO_TEST_DEPS
     except ImportError as exc:  # pragma: no cover - environment/config failure
-        raise RuntimeError("could not load external eval text regression table") from exc
-    return dict(REGRESSIONS)
+        raise RuntimeError("could not load external eval regression tables") from exc
+    return dict(REGRESSIONS), dict(REMOVALS), dict(PLANTED_FILES), dict(REPO_TEST_DEPS)
 
 
 if __name__ == "__main__":  # pragma: no cover

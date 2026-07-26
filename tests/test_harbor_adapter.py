@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
+import runpy
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import ModuleType
@@ -178,19 +180,81 @@ def test_export_portfolio_to_harbor_can_seed_text_regression(tmp_path: Path) -> 
     )
 
     assert summary.task_count == 1
-    dockerfile = (tmp_path / "onmc" / "cache-bugfix" / "environment" / "Dockerfile").read_text(
+    env_dir = tmp_path / "onmc" / "cache-bugfix" / "environment"
+    dockerfile = (env_dir / "Dockerfile").read_text(
         encoding="utf-8"
     )
-    assert "regression anchor not found" in dockerfile
-    assert "return fresh" in dockerfile
-    assert "return stale  # REGRESSION" in dockerfile
+    seed_script = (env_dir / "onmc_seed.py").read_text(encoding="utf-8")
+    assert "COPY onmc_seed.py /tmp/onmc_seed.py" in dockerfile
+    assert "regression anchor not found" in seed_script
+    assert "return fresh" in seed_script
+    assert "return stale  # REGRESSION" in seed_script
     assert "git commit --quiet --all -m 'seed regression: cache-bugfix'" in dockerfile
+
+
+def test_export_portfolio_to_harbor_can_seed_removals_planted_files_and_deps(
+    tmp_path: Path,
+) -> None:
+    export_portfolio_to_harbor(
+        _portfolio(),
+        tmp_path,
+        removals={"cache-bugfix": (("src/cache.py", "Cache.refresh"),)},
+        planted_files={"cache-bugfix": (("tests/test_structure.py", "def test_shape(): pass\n"),)},
+        test_deps={"demo": ("hypothesis",)},
+    )
+
+    env_dir = tmp_path / "onmc" / "cache-bugfix" / "environment"
+    dockerfile = (env_dir / "Dockerfile").read_text(encoding="utf-8")
+    seed_script = (env_dir / "onmc_seed.py").read_text(encoding="utf-8")
+    assert "pytest hypothesis" in dockerfile
+    assert "Cache.refresh" in seed_script
+    assert "tests/test_structure.py" in seed_script
+    assert "def test_shape(): pass" in seed_script
+
+
+def test_generated_seed_script_applies_all_seed_material(tmp_path: Path) -> None:
+    export_portfolio_to_harbor(
+        _portfolio(),
+        tmp_path,
+        regression_hunks={
+            "cache-bugfix": (("src/cache.py", "return fresh", "return stale  # REGRESSION"),),
+        },
+        removals={"cache-bugfix": (("src/cache.py", "Cache.refresh"),)},
+        planted_files={"cache-bugfix": (("tests/test_structure.py", "def test_shape(): pass\n"),)},
+    )
+    repo = tmp_path / "repo"
+    (repo / "src").mkdir(parents=True)
+    (repo / "tests").mkdir()
+    (repo / "src" / "cache.py").write_text(
+        "def value():\n"
+        "    return fresh\n"
+        "\n"
+        "class Cache:\n"
+        "    def refresh(self):\n"
+        "        return fresh\n",
+        encoding="utf-8",
+    )
+
+    script = tmp_path / "onmc" / "cache-bugfix" / "environment" / "onmc_seed.py"
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(repo)
+        runpy.run_path(str(script))
+    finally:
+        os.chdir(old_cwd)
+
+    source = (repo / "src" / "cache.py").read_text(encoding="utf-8")
+    assert "return stale  # REGRESSION" in source
+    assert 'raise NotImplementedError("REMOVED")' in source
+    assert (repo / "tests" / "test_structure.py").read_text(encoding="utf-8") == (
+        "def test_shape(): pass\n"
+    )
 
 
 def test_export_portfolio_to_harbor_seed_regression_requires_supported_hunk(
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="no text regression hunks"):
+    with pytest.raises(ValueError, match="no supported regression seed"):
         export_portfolio_to_harbor(_portfolio(), tmp_path, regression_hunks={})
 
 
