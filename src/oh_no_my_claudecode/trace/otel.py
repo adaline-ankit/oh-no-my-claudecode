@@ -20,6 +20,7 @@ Key attributes used
 - ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
 - ``onmc.runtime.*``         — runtime graph/run/node attributes for runtime events
 - ``traceId`` / ``spanId``   — deterministic OTLP correlation identifiers
+- ``parentSpanId``           — runtime_node parent run span when runtime_run is present
 - ``links``                  — runtime_node dependency edges when dependency spans are present
 """
 
@@ -512,27 +513,33 @@ def _attach_runtime_dependency_links(
     events: list[TraceEvent],
     spans: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    runtime_spans: dict[tuple[str, str], dict[str, Any]] = {}
+    runtime_run_spans: dict[str, dict[str, Any]] = {}
+    runtime_node_spans: dict[tuple[str, str], dict[str, Any]] = {}
     for event, span in zip(events, spans, strict=True):
-        if event.kind != TraceEventKind.RUNTIME_NODE:
-            continue
-        run_id = event.payload.get("run_id")
-        node_id = event.payload.get("node_id")
-        if run_id is None or node_id is None:
-            continue
-        runtime_spans[(str(run_id), str(node_id))] = span
+        if event.kind == TraceEventKind.RUNTIME_RUN:
+            run_id = event.payload.get("run_id")
+            if run_id is not None:
+                runtime_run_spans[str(run_id)] = span
+        elif event.kind == TraceEventKind.RUNTIME_NODE:
+            run_id = event.payload.get("run_id")
+            node_id = event.payload.get("node_id")
+            if run_id is not None and node_id is not None:
+                runtime_node_spans[(str(run_id), str(node_id))] = span
 
     for event, span in zip(events, spans, strict=True):
         if event.kind != TraceEventKind.RUNTIME_NODE:
             continue
         run_id = event.payload.get("run_id")
+        run_span = runtime_run_spans.get(str(run_id)) if run_id is not None else None
+        if run_span is not None:
+            span["parentSpanId"] = run_span["spanId"]
         dependencies = event.payload.get("dependencies")
         if run_id is None or not isinstance(dependencies, list | tuple):
             continue
         links = []
         for dependency in dependencies:
             dependency_id = str(dependency)
-            dependency_span = runtime_spans.get((str(run_id), dependency_id))
+            dependency_span = runtime_node_spans.get((str(run_id), dependency_id))
             if dependency_span is None:
                 continue
             links.append(

@@ -608,6 +608,38 @@ class TestOtelSpans:
             }
         ]
 
+    def test_otel_runtime_nodes_use_runtime_run_as_parent_span(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_RUN,
+                ts=99.0,
+                payload={"run_id": "run-1", "status": "completed"},
+            ),
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={"run_id": "run-1", "node_id": "plan", "status": "succeeded"},
+            ),
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=101.0,
+                payload={
+                    "run_id": "run-1",
+                    "node_id": "execute",
+                    "status": "succeeded",
+                    "dependencies": ["plan"],
+                },
+            ),
+        ]
+        spans = to_otel_spans(events, session_id="tr_parent")
+
+        run_span, plan_span, execute_span = spans
+        assert plan_span["parentSpanId"] == run_span["spanId"]
+        assert execute_span["parentSpanId"] == run_span["spanId"]
+        assert execute_span["links"][0]["spanId"] == plan_span["spanId"]
+
     def test_to_otel_spans_from_report(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 
