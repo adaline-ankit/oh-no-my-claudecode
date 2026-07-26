@@ -105,6 +105,7 @@ def _verified_harness_receipt() -> HarnessRunReceipt:
         runtime_contract=runtime_contract,
         policy=policy,
         proof=proof,
+        report_coverage={"claim_ready": True},
     )
 
 

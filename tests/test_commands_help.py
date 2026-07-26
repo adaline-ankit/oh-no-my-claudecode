@@ -48,11 +48,11 @@ def runner() -> CliRunner:
 
 class TestGroupCommands:
     def test_known_commands_map_to_correct_category(self) -> None:
-        """setup/recall → Core; mission/swarm → Orchestrate."""
+        """setup/recall/mission → Core; swarm → Orchestrate."""
         grouped = group_commands(["setup", "recall", "mission", "swarm"])
         assert "setup" in grouped["Core"]
         assert "recall" in grouped["Core"]
-        assert "mission" in grouped["Orchestrate"]
+        assert "mission" in grouped["Core"]
         assert "swarm" in grouped["Orchestrate"]
 
     def test_unmapped_command_lands_in_other(self) -> None:
@@ -65,7 +65,8 @@ class TestGroupCommands:
     def test_core_commands_list_non_empty_and_contains_expected(self) -> None:
         """CORE_COMMANDS has entries and includes the canonical set."""
         assert len(CORE_COMMANDS) >= 5
-        for name in ("setup", "wrap", "recall"):
+        assert len(CORE_COMMANDS) <= 14
+        for name in ("run", "setup", "recall", "mission", "missioncontrol"):
             assert name in CORE_COMMANDS, f"{name!r} missing from CORE_COMMANDS"
 
     def test_output_is_deterministic_and_sorted_within_category(self) -> None:

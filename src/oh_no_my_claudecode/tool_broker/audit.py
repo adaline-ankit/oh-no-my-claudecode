@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -12,14 +11,28 @@ import threading
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ._serialization import canonical_json_bytes
 
 GENESIS_HASH = "0" * 64
 
+_fcntl: Any
+
+try:
+    import fcntl as _fcntl
+except ModuleNotFoundError:  # pragma: no cover - exercised by Windows CI smoke.
+    _fcntl = None
+
 
 def _event_hash(event_without_hash: Mapping[str, object]) -> str:
     return hashlib.sha256(canonical_json_bytes(event_without_hash)).hexdigest()
+
+
+def _lock_fd(fd: int, *, exclusive: bool) -> None:
+    if _fcntl is None:
+        return
+    _fcntl.flock(fd, _fcntl.LOCK_EX if exclusive else _fcntl.LOCK_SH)
 
 
 class AuditLog:
@@ -55,7 +68,7 @@ class AuditLog:
                 mode = os.fstat(fd).st_mode
                 if not stat.S_ISREG(mode):
                     raise ValueError("audit log target must be a regular file")
-                fcntl.flock(fd, fcntl.LOCK_EX)
+                _lock_fd(fd, exclusive=True)
                 with os.fdopen(fd, "r+", encoding="utf-8", closefd=False) as handle:
                     line_count = 0
                     last_line: str | None = None
@@ -104,7 +117,7 @@ class AuditLog:
             try:
                 if not stat.S_ISREG(os.fstat(fd).st_mode):
                     return False
-                fcntl.flock(fd, fcntl.LOCK_SH)
+                _lock_fd(fd, exclusive=False)
                 with os.fdopen(fd, "r", encoding="utf-8", closefd=False) as handle:
                     for sequence, line in enumerate(handle):
                         event = json.loads(line)
