@@ -42,9 +42,11 @@ Recorded fixtures:
 - `tests/fixtures/adapter_conformance/codex.json`
 - `tests/fixtures/adapter_conformance/opencode.json`
 
-Each fixture pins a recorded CLI-version label, start invocation, observation payload, cost
-expectation, and the explicit cancellation/resume limitation. The tests inject the recordings
-through `CommandRunner`; they also fail if a live subprocess path is used.
+Each fixture pins a start invocation, observation payload, cost expectation, and the explicit
+cancellation/resume limitation. They are labeled `offline-contract-recording`, and their CLI
+version is deliberately `unspecified`; they are not represented as captures from an installed
+provider version. The tests inject the recordings through `CommandRunner`; they also fail if a
+live subprocess path is used.
 
 ## Governed promotion contract
 

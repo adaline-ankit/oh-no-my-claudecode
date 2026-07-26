@@ -1,7 +1,8 @@
 {
   "schema_version": "1",
   "provider": "claude",
-  "cli_version": "recorded-claude-2.1",
+  "cli_version": "unspecified",
+  "fixture_source": "offline-contract-recording",
   "prompt": "Apply the recorded fixture change.",
   "model": "claude-sonnet-4-5",
   "stdout": "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"fixture complete\",\"usage\":{\"input_tokens\":120,\"output_tokens\":30},\"total_cost_usd\":0.0042}",

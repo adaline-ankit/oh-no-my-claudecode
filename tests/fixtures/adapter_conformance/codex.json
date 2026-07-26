@@ -1,7 +1,8 @@
 {
   "schema_version": "1",
   "provider": "codex",
-  "cli_version": "recorded-codex-0.84",
+  "cli_version": "unspecified",
+  "fixture_source": "offline-contract-recording",
   "prompt": "Apply the recorded fixture change.",
   "model": "gpt-5.6-codex",
   "stdout": "fixture complete\n\ntokens used: 1,234\n",
