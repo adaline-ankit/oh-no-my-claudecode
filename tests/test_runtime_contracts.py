@@ -254,6 +254,10 @@ def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None
     assert payload["status"] == "succeeded"
     assert payload["side_effecting"] is True
     assert payload["retry_attempts"] == 1
+    assert payload["evidence_count"] == 1
+    assert payload["evidence_kinds"] == ["completion"]
+    assert payload["digest_evidence_count"] == 1
+    assert payload["completion_evidence_count"] == 1
     assert payload["duration_seconds"] >= 0
     assert payload["end_ts"] >= runtime_events[0].ts
     assert payload["capabilities"]["filesystem_write"] is True

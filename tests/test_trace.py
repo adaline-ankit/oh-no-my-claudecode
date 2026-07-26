@@ -766,6 +766,10 @@ class TestOtelSpans:
                     "approval_required": False,
                     "retry_attempts": 2,
                     "dependencies": ["plan"],
+                    "evidence_count": 2,
+                    "evidence_kinds": ["completion", "mutation"],
+                    "digest_evidence_count": 1,
+                    "completion_evidence_count": 1,
                     "capabilities": {
                         "tools": ["edit"],
                         "commands": [["pytest", "tests/unit"]],
@@ -790,10 +794,17 @@ class TestOtelSpans:
         assert attr_map["onmc.runtime.node.status"]["stringValue"] == "succeeded"
         assert attr_map["onmc.runtime.node.side_effecting"]["boolValue"] is True
         assert attr_map["onmc.runtime.node.retry_attempts"]["intValue"] == 2
+        assert attr_map["onmc.runtime.node.evidence_count"]["intValue"] == 2
+        assert attr_map["onmc.runtime.node.digest_evidence_count"]["intValue"] == 1
+        assert attr_map["onmc.runtime.node.completion_evidence_count"]["intValue"] == 1
         assert attr_map["onmc.runtime.capabilities.filesystem_write"]["boolValue"] is True
         assert attr_map["onmc.runtime.capabilities.secret_count"]["intValue"] == 1
         assert attr_map["onmc.runtime.node.dependencies"]["arrayValue"]["values"] == [
             {"stringValue": "plan"}
+        ]
+        assert attr_map["onmc.runtime.node.evidence_kinds"]["arrayValue"]["values"] == [
+            {"stringValue": "completion"},
+            {"stringValue": "mutation"},
         ]
         assert attr_map["onmc.runtime.capabilities.commands"]["arrayValue"]["values"] == [
             {"stringValue": "pytest tests/unit"}

@@ -224,6 +224,26 @@ def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
         "onmc.runtime.node.dependencies",
         payload.get("dependencies"),
     )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.node.evidence_count",
+        payload.get("evidence_count"),
+    )
+    _append_string_array_attribute(
+        attributes,
+        "onmc.runtime.node.evidence_kinds",
+        payload.get("evidence_kinds"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.node.digest_evidence_count",
+        payload.get("digest_evidence_count"),
+    )
+    _append_int_attribute(
+        attributes,
+        "onmc.runtime.node.completion_evidence_count",
+        payload.get("completion_evidence_count"),
+    )
     capabilities = payload.get("capabilities")
     if isinstance(capabilities, dict):
         _append_string_array_attribute(

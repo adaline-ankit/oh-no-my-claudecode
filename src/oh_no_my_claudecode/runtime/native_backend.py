@@ -601,6 +601,8 @@ class NativeExecutionBackend:
             status_value = result.status.value
         else:
             status_value = NodeResultStatus.FAILED.value
+        evidence = () if result is None else result.evidence
+        evidence_kinds = sorted({item.kind for item in evidence})
         record_trace_event(
             self.repo_root,
             TraceEvent(
@@ -617,6 +619,12 @@ class NativeExecutionBackend:
                     "approval_required": node.approval_required,
                     "dependencies": list(node.dependencies),
                     "capabilities": node.capabilities.to_dict(),
+                    "evidence_count": len(evidence),
+                    "evidence_kinds": evidence_kinds,
+                    "digest_evidence_count": sum(1 for item in evidence if item.digest),
+                    "completion_evidence_count": sum(
+                        1 for item in evidence if item.kind == "completion"
+                    ),
                     "retry_attempts": retry_attempts,
                     "end_ts": ended_at,
                     "duration_seconds": max(0.0, ended_at - started_at),
