@@ -1385,14 +1385,17 @@ class HarnessController:
     ) -> bool:
         """Ask the independent verifier whether this pass is a false green.
 
-        Dormant by default (no check configured → ``False``), so a run without
-        coverage/contract evidence is never downgraded. Returns ``True`` only on
-        positive false-green evidence — it can fail a pass, never bless one.
+        Fail-closed: a missing or errored independent verifier is ungraded, not
+        clean, and therefore blocks completion. A configured legacy boolean
+        checker may clear (``False``) or flag (``True``) the run.
         """
         check = self.dependencies.verifier_false_green_check
         if check is None:
-            return False
-        return bool(check(request, signals, change_set))
+            return True
+        try:
+            return bool(check(request, signals, change_set))
+        except Exception:
+            return True
 
 
 def _proof_graph(task: str, verifier_argv: tuple[str, ...]) -> ProofGraph:

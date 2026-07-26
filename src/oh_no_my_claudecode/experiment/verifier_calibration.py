@@ -14,8 +14,8 @@ from dataclasses import dataclass
 from oh_no_my_claudecode.verifier.ablation import (
     AblationReport,
     CaseOutcome,
-    run_ablation,
 )
+from oh_no_my_claudecode.verifier.calibration import calibrate_external_corpus
 
 __all__ = [
     "VerifierCalibrationReport",
@@ -42,6 +42,16 @@ class VerifierCalibrationReport:
     min_false_green_cases: int
     min_legitimate_cases: int
     reasons: tuple[str, ...]
+    corpus_kind: str = "local-ablation"
+    corpus_revision: str = "repo-challenge-set"
+    sensitivity_ci_low: float = 0.0
+    sensitivity_ci_high: float = 1.0
+    specificity_ci_low: float = 0.0
+    specificity_ci_high: float = 1.0
+    point_gate_passed: bool = False
+    ci_gate_supported: bool = False
+    required_perfect_false_green_cases: int = 0
+    required_perfect_legitimate_cases: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -59,6 +69,14 @@ class VerifierCalibrationReport:
             "min_false_green_cases": self.min_false_green_cases,
             "min_legitimate_cases": self.min_legitimate_cases,
             "reasons": list(self.reasons),
+            "corpus_kind": self.corpus_kind,
+            "corpus_revision": self.corpus_revision,
+            "sensitivity_ci": [self.sensitivity_ci_low, self.sensitivity_ci_high],
+            "specificity_ci": [self.specificity_ci_low, self.specificity_ci_high],
+            "point_gate_passed": self.point_gate_passed,
+            "ci_gate_supported": self.ci_gate_supported,
+            "required_perfect_false_green_cases": self.required_perfect_false_green_cases,
+            "required_perfect_legitimate_cases": self.required_perfect_legitimate_cases,
         }
 
 
@@ -69,14 +87,39 @@ def calibrate_default_verifier(
     min_false_green_cases: int = 10,
     min_legitimate_cases: int = 10,
 ) -> VerifierCalibrationReport:
-    """Run the offline default verifier ablation and return its claim gate."""
+    """Run the frozen external verifier corpus used by the publication gate."""
 
-    return calibrate_verifier_ablation(
-        run_ablation(),
+    external = calibrate_external_corpus(
         min_sensitivity=min_sensitivity,
         min_specificity=min_specificity,
         min_false_green_cases=min_false_green_cases,
         min_legitimate_cases=min_legitimate_cases,
+    )
+    return VerifierCalibrationReport(
+        claim_ready=external.claim_ready,
+        sensitivity=external.sensitivity,
+        specificity=external.specificity,
+        false_green_cases=external.false_green_cases,
+        legitimate_cases=external.legitimate_cases,
+        caught_false_green=external.caught_false_green,
+        missed_false_green=external.missed_false_green,
+        cleared_legitimate=external.cleared_legitimate,
+        false_positive_legitimate=external.false_positive_legitimate,
+        min_sensitivity=external.min_sensitivity,
+        min_specificity=external.min_specificity,
+        min_false_green_cases=external.min_false_green_cases,
+        min_legitimate_cases=external.min_legitimate_cases,
+        reasons=external.reasons,
+        corpus_kind=external.corpus_kind,
+        corpus_revision=external.corpus_revision,
+        sensitivity_ci_low=external.sensitivity_ci_low,
+        sensitivity_ci_high=external.sensitivity_ci_high,
+        specificity_ci_low=external.specificity_ci_low,
+        specificity_ci_high=external.specificity_ci_high,
+        point_gate_passed=external.point_gate_passed,
+        ci_gate_supported=external.ci_gate_supported,
+        required_perfect_false_green_cases=external.required_perfect_false_green_cases,
+        required_perfect_legitimate_cases=external.required_perfect_legitimate_cases,
     )
 
 

@@ -35,6 +35,23 @@ from oh_no_my_claudecode.verifier.ablation import (
     SubsetResult,
     run_ablation,
 )
+from oh_no_my_claudecode.verifier.adjudication import (
+    CompletionAdjudication,
+    CompletionEvidence,
+    adjudicate_completion,
+)
+from oh_no_my_claudecode.verifier.calibration import (
+    DEFAULT_EXTERNAL_CORPUS_PATH,
+    CalibrationCaseResult,
+    ExpectedLabel,
+    ExternalCalibrationReport,
+    ExternalSource,
+    ExternalVerifierCase,
+    ExternalVerifierCorpus,
+    calibrate_external_corpus,
+    load_external_corpus,
+    wilson_interval,
+)
 from oh_no_my_claudecode.verifier.challenges import (
     CHALLENGE_SET,
     CaseProvenance,
@@ -85,6 +102,10 @@ from oh_no_my_claudecode.verifier.reachability import (
     assess_reachability,
     is_false_green,
 )
+from oh_no_my_claudecode.verifier.test_integrity import (
+    TestIntegrityReport,
+    assess_test_integrity,
+)
 
 __all__ = [
     "CHALLENGE_SET",
@@ -95,8 +116,11 @@ __all__ = [
     "CaseOutcome",
     "CaseProvenance",
     "CaseResult",
+    "CalibrationCaseResult",
     "ChallengeCase",
     "ChangedRegion",
+    "CompletionAdjudication",
+    "CompletionEvidence",
     "ComponentAttribution",
     "ComponentFinding",
     "ComponentRole",
@@ -105,6 +129,12 @@ __all__ = [
     "ContractInput",
     "ContractReview",
     "ContractVerdict",
+    "DEFAULT_EXTERNAL_CORPUS_PATH",
+    "ExpectedLabel",
+    "ExternalCalibrationReport",
+    "ExternalSource",
+    "ExternalVerifierCase",
+    "ExternalVerifierCorpus",
     "ForbiddenRegression",
     "FunctionUnderTest",
     "Invariant",
@@ -119,19 +149,25 @@ __all__ = [
     "SubsetResult",
     "TaskContract",
     "TestExecution",
+    "TestIntegrityReport",
     "UnreachedRegion",
     "VerifierCase",
     "VerifierComponent",
     "VerifierConfig",
     "assess_reachability",
+    "assess_test_integrity",
+    "adjudicate_completion",
+    "calibrate_external_corpus",
     "challenge_by_id",
     "challenge_cases",
     "component_subsets",
     "generate_mutants",
     "is_false_green",
+    "load_external_corpus",
     "review_contract",
     "run_ablation",
     "run_components",
     "run_mutation_campaign",
     "source_tests",
+    "wilson_interval",
 ]
