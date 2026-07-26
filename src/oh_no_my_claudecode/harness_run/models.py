@@ -17,6 +17,9 @@ from oh_no_my_claudecode.runtime.contracts import (
     NodeSpec,
     RunSpec,
 )
+from oh_no_my_claudecode.runtime.contracts import (
+    RetryPolicy as RuntimeRetryPolicy,
+)
 
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
@@ -144,6 +147,10 @@ class ExecutionPlan:
                 idempotency_key=f"{self.run_id}:node:{node.node_id}",
                 timeout_seconds=120.0,
                 budget=Budget(timeout_seconds=120.0, max_tokens=node.policy.context_budget),
+                retry_policy=RuntimeRetryPolicy(
+                    max_attempts=node.policy.retry.max_attempts,
+                    backoff_seconds=node.policy.retry.backoff_seconds,
+                ),
                 capabilities=_capabilities_for(
                     node.kind,
                     node.policy.tools,

@@ -16,6 +16,7 @@ from oh_no_my_claudecode.runtime import (
     NodeResult,
     NodeResultStatus,
     NodeSpec,
+    RetryPolicy,
     RunResultStatus,
     RunSpec,
     RuntimeContractError,
@@ -38,6 +39,9 @@ def _node(
         idempotency_key=f"idem:{node_id}" if side_effecting else None,
         timeout_seconds=30.0 if side_effecting else None,
         budget=Budget(timeout_seconds=30.0, max_tokens=100) if side_effecting else None,
+        retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=0.0)
+        if side_effecting
+        else None,
         capabilities=CapabilitySet(tools=("edit",), filesystem_write=side_effecting),
     )
 
@@ -54,6 +58,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             idempotency_key=None,
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
+            retry_policy=RetryPolicy(max_attempts=2),
             capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
@@ -68,6 +73,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             idempotency_key="idem:execute",
             timeout_seconds=None,
             budget=Budget(timeout_seconds=30.0),
+            retry_policy=RetryPolicy(max_attempts=2),
             capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
@@ -82,6 +88,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=None,
+            retry_policy=RetryPolicy(max_attempts=2),
             capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
@@ -96,7 +103,23 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
+            retry_policy=RetryPolicy(max_attempts=2),
             capabilities=CapabilitySet(),
+        )
+
+    with pytest.raises(RuntimeContractError, match="requires retry_policy"):
+        NodeSpec(
+            node_id="execute",
+            kind="execute",
+            objective="Make a change",
+            completion_condition="Verifier passed",
+            dependencies=(),
+            side_effecting=True,
+            idempotency_key="idem:execute",
+            timeout_seconds=30.0,
+            budget=Budget(timeout_seconds=30.0),
+            retry_policy=None,
+            capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
     with pytest.raises(RuntimeContractError, match="completion_condition"):
@@ -110,6 +133,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
+            retry_policy=RetryPolicy(max_attempts=2),
             capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
@@ -296,6 +320,7 @@ def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     verify = next(node for node in spec.nodes if node.node_id == "verify")
     assert execute.side_effecting is True
     assert execute.capabilities.filesystem_write is True
+    assert execute.retry_policy == RetryPolicy(max_attempts=3, backoff_seconds=1.0)
     assert ("pytest", "tests/billing") in verify.capabilities.commands
     assert spec.metadata["source"] == "harness_run.ExecutionPlan"
 

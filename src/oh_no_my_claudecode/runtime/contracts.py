@@ -30,6 +30,40 @@ class RunResultStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    """Bounded retry policy declared for one runtime node."""
+
+    max_attempts: int
+    backoff_seconds: float = 1.0
+
+    _FIELDS: ClassVar[frozenset[str]] = frozenset({"max_attempts", "backoff_seconds"})
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.max_attempts, int)
+            or isinstance(self.max_attempts, bool)
+            or self.max_attempts < 1
+        ):
+            raise RuntimeContractError("max_attempts must be a positive integer")
+        _nonnegative_number(self.backoff_seconds, "backoff_seconds")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "backoff_seconds": float(self.backoff_seconds),
+            "max_attempts": self.max_attempts,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: object, *, path: str = "retry_policy") -> RetryPolicy:
+        data = _object(payload, path)
+        _exact_fields(data, cls._FIELDS, path)
+        return cls(
+            max_attempts=_integer(data["max_attempts"], f"{path}.max_attempts"),
+            backoff_seconds=_number(data["backoff_seconds"], f"{path}.backoff_seconds"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class Budget:
     """Per-node spend and time ceiling."""
 
@@ -185,6 +219,7 @@ class NodeSpec:
     idempotency_key: str | None
     timeout_seconds: float | None
     budget: Budget | None
+    retry_policy: RetryPolicy | None
     capabilities: CapabilitySet
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -199,6 +234,7 @@ class NodeSpec:
             "idempotency_key",
             "timeout_seconds",
             "budget",
+            "retry_policy",
             "capabilities",
             "metadata",
         }
@@ -221,6 +257,8 @@ class NodeSpec:
             _positive_number(self.timeout_seconds, "timeout_seconds")
         if self.budget is not None and not isinstance(self.budget, Budget):
             raise RuntimeContractError("budget must be a Budget")
+        if self.retry_policy is not None and not isinstance(self.retry_policy, RetryPolicy):
+            raise RuntimeContractError("retry_policy must be a RetryPolicy")
         if not isinstance(self.capabilities, CapabilitySet):
             raise RuntimeContractError("capabilities must be a CapabilitySet")
         if not isinstance(self.metadata, dict):
@@ -236,6 +274,10 @@ class NodeSpec:
                 )
             if self.budget is None:
                 raise RuntimeContractError(f"side-effecting node {self.node_id!r} requires budget")
+            if self.retry_policy is None:
+                raise RuntimeContractError(
+                    f"side-effecting node {self.node_id!r} requires retry_policy"
+                )
             if self.capabilities.empty:
                 raise RuntimeContractError(
                     f"side-effecting node {self.node_id!r} requires declared capabilities"
@@ -256,6 +298,9 @@ class NodeSpec:
             "kind": self.kind,
             "metadata": _json_object(self.metadata, "metadata"),
             "objective": self.objective,
+            "retry_policy": (
+                self.retry_policy.to_dict() if self.retry_policy is not None else None
+            ),
             "side_effecting": self.side_effecting,
             "timeout_seconds": self.timeout_seconds,
         }
@@ -269,6 +314,7 @@ class NodeSpec:
         raw_key = data["idempotency_key"]
         raw_timeout = data["timeout_seconds"]
         raw_completion = data["completion_condition"]
+        raw_retry = data["retry_policy"]
         return cls(
             node_id=_string(data["id"], f"{path}.id"),
             kind=_string(data["kind"], f"{path}.kind"),
@@ -288,6 +334,11 @@ class NodeSpec:
                 None
                 if raw_budget is None
                 else Budget.from_dict(raw_budget, path=f"{path}.budget")
+            ),
+            retry_policy=(
+                None
+                if raw_retry is None
+                else RetryPolicy.from_dict(raw_retry, path=f"{path}.retry_policy")
             ),
             capabilities=CapabilitySet.from_dict(
                 data["capabilities"], path=f"{path}.capabilities"

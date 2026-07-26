@@ -34,6 +34,8 @@ This is evidence for a stronger harness foundation:
   spec digest differs from the stored one, preventing stale-result reuse across task changes.
 - Side-effecting runtime nodes now require a first-class `completion_condition`, and successful
   side-effecting results require digest-backed completion evidence before the backend accepts them.
+- Side-effecting runtime nodes now carry an explicit `retry_policy` in the canonical `RunSpec`,
+  preserving the harness DAG retry contract across backend implementations.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -186,6 +188,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 | Crash-window recovery | Pass | A persisted node result is reconciled without re-running the handler after a crash. |
 | RunSpec digest lock | Pass | Resuming with a changed task/graph contract is rejected before handlers run. |
 | Completion evidence lock | Pass | Successful side-effecting nodes cannot complete without digest-backed completion evidence. |
+| Retry policy contract | Pass | Harness DAG retry policy is serialized into side-effecting runtime nodes. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |
