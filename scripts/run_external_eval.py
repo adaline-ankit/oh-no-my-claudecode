@@ -559,6 +559,9 @@ class TrialRecord:
     infra_error: str | None = None
     notes: str = ""
     cost_usd: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    context_tokens: int | None = None
     diff_lines: int = 0
     tests_touched: bool = False
 
@@ -572,6 +575,9 @@ class TrialRecord:
             "infra_error": self.infra_error,
             "notes": self.notes,
             "cost_usd": None if self.cost_usd is None else round(self.cost_usd, 4),
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "context_tokens": self.context_tokens,
             "diff_lines": self.diff_lines,
             "tests_touched": self.tests_touched,
         }
@@ -839,6 +845,41 @@ def _extract_cost(out: str) -> float | None:
     return None
 
 
+def _extract_token_usage(out: str) -> dict[str, int | None]:
+    """Best-effort measured token telemetry from provider or ONMC JSON output."""
+    return {
+        "input_tokens": _extract_int(
+            out,
+            ("input_tokens", "prompt_tokens", "total_input_tokens"),
+        ),
+        "output_tokens": _extract_int(
+            out,
+            ("output_tokens", "completion_tokens", "total_output_tokens"),
+        ),
+        "context_tokens": _extract_int(out, ("context_tokens",)),
+    }
+
+
+def _extract_int(out: str, keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        marker = f'"{key}"'
+        idx = out.rfind(marker)
+        while idx != -1:
+            tail = out[idx + len(marker) :].lstrip()
+            if tail.startswith(":"):
+                num = tail[1:].strip()
+                buf = ""
+                for ch in num:
+                    if ch.isdigit():
+                        buf += ch
+                    else:
+                        break
+                if buf:
+                    return int(buf)
+            idx = out.rfind(marker, 0, idx)
+    return None
+
+
 def verifier_argv(task: TaskSpec, python: Path) -> list[str]:
     """The task's verifier argv, bound to the repo's own venv interpreter.
 
@@ -907,7 +948,7 @@ def guard_regression_active(
 
 def run_bare_agent(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
-) -> tuple[str | None, float | None]:
+) -> tuple[str | None, float | None, dict[str, int | None]]:
     """Control arm: the agent CLI directly, same prompt/permissions/verifier."""
     argv = [
         "claude",
@@ -921,19 +962,20 @@ def run_bare_agent(
     ]
     code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
     cost = _extract_cost(out)
+    usage = _extract_token_usage(out)
     if code == 127:
-        return f"agent CLI unavailable: {out[:200]}", cost
+        return f"agent CLI unavailable: {out[:200]}", cost, usage
     if "[timeout]" in out:
-        return "agent timeout", cost
-    return None, cost
+        return "agent timeout", cost, usage
+    return None, cost, usage
 
 
 def run_onmc(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
-) -> tuple[str | None, float | None]:
+) -> tuple[str | None, float | None, dict[str, int | None]]:
     """Treatment arm: the same task through the full `onmc run` vertical path."""
     if cfg.onmc_bin is None:
-        return "onmc entry point not prepared", None
+        return "onmc entry point not prepared", None, _extract_token_usage("")
     onmc = str(cfg.onmc_bin)
     _run([onmc, "init"], repo, 300, env=cell_env(repo))
     argv = [
@@ -953,10 +995,11 @@ def run_onmc(
     ]
     code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
     cost = _extract_cost(out)
+    usage = _extract_token_usage(out)
     if "[timeout]" in out:
-        return "onmc run timeout", cost
+        return "onmc run timeout", cost, usage
     if code == 127:
-        return f"onmc unavailable: {out[:200]}", cost
+        return f"onmc unavailable: {out[:200]}", cost, usage
     # A denied capability or an unavailable verifier means ONMC never executed.
     # That is an instrument failure, not evidence about the agent — record it
     # loudly instead of banking a free loss for the treatment arm (rule 13).
@@ -973,8 +1016,8 @@ def run_onmc(
         "agent-credentials",
     ):
         if marker in out:
-            return f"onmc did not execute ({marker})", cost
-    return None, cost
+            return f"onmc did not execute ({marker})", cost, usage
+    return None, cost, usage
 
 
 RUNNERS = {
@@ -1024,7 +1067,7 @@ def run_cell(
             task.task_id, condition.value, trial, False, 0.0, notes="dry-run: agent not invoked"
         )
 
-    infra, cost = RUNNERS[condition](task, dest, cfg, python)
+    infra, cost, usage = RUNNERS[condition](task, dest, cfg, python)
     diff_lines, tests_touched = _observed_change(dest)
     passed, out = verify(task, dest, cfg, python)
     latency = (time.monotonic() - started) * 1000.0
@@ -1043,6 +1086,9 @@ def run_cell(
         infra_error=infra,
         notes=note,
         cost_usd=cost,
+        input_tokens=usage["input_tokens"],
+        output_tokens=usage["output_tokens"],
+        context_tokens=usage["context_tokens"],
         diff_lines=diff_lines,
         tests_touched=tests_touched,
     )
@@ -1096,6 +1142,36 @@ def failure_taxonomy_report(
             cond.value: _taxonomy([row for row in records if row.condition == cond.value])
             for cond in conditions
         },
+    }
+
+
+def token_telemetry_report(
+    records: list[TrialRecord],
+    conditions: list[Condition],
+) -> dict[str, object]:
+    """Return measured token telemetry and coverage without inventing usage."""
+    return {
+        "overall": _token_summary(records),
+        "by_condition": {
+            cond.value: _token_summary([row for row in records if row.condition == cond.value])
+            for cond in conditions
+        },
+    }
+
+
+def _token_summary(rows: list[TrialRecord]) -> dict[str, int]:
+    return {
+        "cells": len(rows),
+        "reported_cells": sum(
+            1
+            for row in rows
+            if row.input_tokens is not None
+            or row.output_tokens is not None
+            or row.context_tokens is not None
+        ),
+        "input_tokens": sum(row.input_tokens or 0 for row in rows),
+        "output_tokens": sum(row.output_tokens or 0 for row in rows),
+        "context_tokens": sum(row.context_tokens or 0 for row in rows),
     }
 
 
@@ -1258,6 +1334,7 @@ def main() -> int:
         "budget_stopped_cells": budget_stopped,
         "summary": summarize(records, conditions, seed=seed),
         "failure_taxonomy": failure_taxonomy_report(records, conditions),
+        "token_telemetry": token_telemetry_report(records, conditions),
         "paired": (
             paired_analysis(records, conditions[0], conditions[1], seed=seed)
             if len(conditions) >= 2

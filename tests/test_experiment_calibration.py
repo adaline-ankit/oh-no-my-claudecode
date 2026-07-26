@@ -52,6 +52,34 @@ def _failure_taxonomy() -> dict[str, object]:
     }
 
 
+def _token_telemetry() -> dict[str, object]:
+    return {
+        "overall": {
+            "cells": 40,
+            "reported_cells": 20,
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "context_tokens": 250,
+        },
+        "by_condition": {
+            Condition.BARE_AGENT.value: {
+                "cells": 20,
+                "reported_cells": 10,
+                "input_tokens": 600,
+                "output_tokens": 300,
+                "context_tokens": 0,
+            },
+            Condition.ONMC_CURRENT.value: {
+                "cells": 20,
+                "reported_cells": 10,
+                "input_tokens": 400,
+                "output_tokens": 200,
+                "context_tokens": 250,
+            },
+        },
+    }
+
+
 def test_saturated_report_is_not_claim_ready() -> None:
     raw = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
 
@@ -205,6 +233,7 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
             "image": "local",
         },
         "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": _token_telemetry(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -221,6 +250,8 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
     assert gated.metadata_audit.environment_manifest_matches is True
     assert gated.metadata_audit.failure_taxonomy_present is True
     assert gated.metadata_audit.failure_taxonomy_complete is True
+    assert gated.metadata_audit.token_telemetry_present is True
+    assert gated.metadata_audit.token_telemetry_complete is True
     assert gated.missing_tasks == ()
     assert gated.unexpected_tasks == ()
     assert gated.reasons == ()
@@ -280,6 +311,7 @@ def test_manifest_gate_blocks_missing_report_metadata() -> None:
         "report.leakage_notes",
         "report.environment",
         "report.failure_taxonomy",
+        "report.token_telemetry",
     )
     assert any("leakage/reproducibility" in reason for reason in gated.reasons)
 
@@ -330,6 +362,7 @@ def test_manifest_gate_blocks_environment_manifest_mismatch() -> None:
             "image": "local",
         },
         "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": _token_telemetry(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -398,6 +431,7 @@ def test_manifest_gate_blocks_incomplete_failure_taxonomy() -> None:
                 Condition.BARE_AGENT.value: {"wrong_change": 20},
             },
         },
+        "token_telemetry": _token_telemetry(),
         "code_sha": "abc123",
         "code_sha_under_test": "def456",
         "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
@@ -411,6 +445,86 @@ def test_manifest_gate_blocks_incomplete_failure_taxonomy() -> None:
     assert gated.metadata_audit.failure_taxonomy_present is True
     assert gated.metadata_audit.failure_taxonomy_complete is False
     assert gated.metadata_audit.mismatched_fields == ("report.failure_taxonomy",)
+    assert gated.quality_claim_ready is False
+
+
+def test_manifest_gate_blocks_incomplete_token_telemetry() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 2,
+            "environment": {
+                "code_sha": "abc123",
+                "config_hash": "cfg1",
+                "model": "claude-test",
+                "provider": "anthropic",
+                "image": "local",
+            },
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records: list[dict[str, object]] = []
+    for task_id in task_ids:
+        for trial in range(2):
+            records.append(
+                {
+                    **_record(task_id, Condition.BARE_AGENT.value, False),
+                    "trial": trial + 1,
+                }
+            )
+            records.append(
+                {
+                    **_record(task_id, Condition.ONMC_CURRENT.value, True),
+                    "trial": trial + 1,
+                }
+            )
+    report = {
+        "task_set_revision": "rev-good",
+        "audit_status": "valid",
+        "leakage_notes": "audited public repo tasks",
+        "environment": {
+            "code_sha": "abc123",
+            "config_hash": "cfg1",
+            "model": "claude-test",
+            "provider": "anthropic",
+            "image": "local",
+        },
+        "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": {
+            "overall": {
+                "cells": 40,
+                "reported_cells": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "context_tokens": 0,
+            },
+            "by_condition": {
+                Condition.BARE_AGENT.value: {
+                    "cells": 20,
+                    "reported_cells": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "context_tokens": 0,
+                },
+            },
+        },
+        "code_sha": "abc123",
+        "code_sha_under_test": "def456",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 2,
+        "records": records,
+    }
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.calibration.quality_claim_ready is True
+    assert gated.metadata_audit.token_telemetry_present is True
+    assert gated.metadata_audit.token_telemetry_complete is False
+    assert gated.metadata_audit.mismatched_fields == ("report.token_telemetry",)
     assert gated.quality_claim_ready is False
 
 
@@ -511,9 +625,16 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
     assert gate["metadata_audit"]["environment_manifest_matches"] is False
     assert gate["metadata_audit"]["failure_taxonomy_present"] is False
     assert gate["metadata_audit"]["failure_taxonomy_complete"] is False
+    assert gate["metadata_audit"]["token_telemetry_present"] is False
+    assert gate["metadata_audit"]["token_telemetry_complete"] is False
     assert any(
         item in gate["metadata_audit"]["missing_fields"]
-        for item in ("report.leakage_notes", "report.environment", "report.failure_taxonomy")
+        for item in (
+            "report.leakage_notes",
+            "report.environment",
+            "report.failure_taxonomy",
+            "report.token_telemetry",
+        )
     )
     assert gate["manifest_tasks"] == 28
     assert gate["reported_tasks"] == 24

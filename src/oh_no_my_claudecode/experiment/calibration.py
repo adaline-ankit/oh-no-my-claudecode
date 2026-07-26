@@ -151,6 +151,8 @@ class ReportMetadataAudit:
     environment_manifest_matches: bool
     failure_taxonomy_present: bool
     failure_taxonomy_complete: bool
+    token_telemetry_present: bool
+    token_telemetry_complete: bool
     leakage_notes_present: bool
     report_leakage_notes_present: bool
     missing_fields: tuple[str, ...]
@@ -169,6 +171,8 @@ class ReportMetadataAudit:
             "environment_manifest_matches": self.environment_manifest_matches,
             "failure_taxonomy_present": self.failure_taxonomy_present,
             "failure_taxonomy_complete": self.failure_taxonomy_complete,
+            "token_telemetry_present": self.token_telemetry_present,
+            "token_telemetry_complete": self.token_telemetry_complete,
             "leakage_notes_present": self.leakage_notes_present,
             "report_leakage_notes_present": self.report_leakage_notes_present,
             "missing_fields": list(self.missing_fields),
@@ -331,6 +335,10 @@ def _audit_report_metadata(
         report,
         expected_conditions,
     )
+    token_telemetry_present, token_telemetry_complete = _audit_token_telemetry(
+        report,
+        expected_conditions,
+    )
 
     missing: list[str] = []
     mismatched: list[str] = []
@@ -365,6 +373,10 @@ def _audit_report_metadata(
         missing.append("report.failure_taxonomy")
     elif not failure_taxonomy_complete:
         mismatched.append("report.failure_taxonomy")
+    if not token_telemetry_present:
+        missing.append("report.token_telemetry")
+    elif not token_telemetry_complete:
+        mismatched.append("report.token_telemetry")
 
     if missing:
         reasons.append("report missing leakage/reproducibility fields: " + ", ".join(missing))
@@ -381,6 +393,8 @@ def _audit_report_metadata(
         environment_manifest_matches=environment_manifest_matches,
         failure_taxonomy_present=failure_taxonomy_present,
         failure_taxonomy_complete=failure_taxonomy_complete,
+        token_telemetry_present=token_telemetry_present,
+        token_telemetry_complete=token_telemetry_complete,
         leakage_notes_present=leakage_notes is not None,
         report_leakage_notes_present=report_leakage_notes is not None,
         missing_fields=tuple(missing),
@@ -412,6 +426,31 @@ def _audit_failure_taxonomy(
         if not isinstance(item, Mapping) or not _taxonomy_counts(item):
             return True, False
     return True, True
+
+
+def _audit_token_telemetry(
+    report: Mapping[str, object],
+    expected_conditions: Sequence[str],
+) -> tuple[bool, bool]:
+    raw = report.get("token_telemetry")
+    if not isinstance(raw, Mapping):
+        return False, False
+    by_condition = raw.get("by_condition")
+    overall = raw.get("overall")
+    if not isinstance(by_condition, Mapping) or not isinstance(overall, Mapping):
+        return True, False
+    if not _token_counts(overall):
+        return True, False
+    for condition in expected_conditions:
+        item = by_condition.get(condition)
+        if not isinstance(item, Mapping) or not _token_counts(item):
+            return True, False
+    return True, True
+
+
+def _token_counts(value: Mapping[object, object]) -> bool:
+    required = ("cells", "reported_cells", "input_tokens", "output_tokens", "context_tokens")
+    return all(_non_negative_int(value.get(key)) for key in required)
 
 
 def _taxonomy_counts(value: Mapping[object, object]) -> bool:
