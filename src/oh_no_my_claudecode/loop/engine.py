@@ -21,6 +21,16 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from oh_no_my_claudecode.autoroute.policy import (
+    RoutingAction,
+    ShadowRoutingDecision,
+    ShadowRoutingPolicy,
+)
+from oh_no_my_claudecode.autoroute.trajectory import (
+    TaskKind,
+    TrajectoryObservation,
+    VerifierState,
+)
 from oh_no_my_claudecode.guard.compiler import compile_guard
 from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall
 from oh_no_my_claudecode.loop.adapters import (
@@ -57,6 +67,56 @@ from oh_no_my_claudecode.utils.time import utc_now
 _VERIFY_TIMEOUT = 120  # seconds; subprocess guard
 _MAX_VERIFY_OUTPUT = 2000  # chars stored per contract
 _CHANGE_PROBE_TIMEOUT = 15  # seconds; git status guard
+
+
+def _shadow_model_advice(
+    *,
+    last_loss: IterationContract | None,
+    consecutive_losses: int,
+    consecutive_noops: int,
+    consecutive_same_error: int,
+    total_tokens: int,
+    token_budget: int | None,
+    token_telemetry_complete: bool,
+    total_cost_usd: float,
+    cost_budget_usd: float | None,
+    cost_telemetry_complete: bool,
+    prior_escalations: int,
+) -> ShadowRoutingDecision | None:
+    """Build provider-neutral shadow advice from the observed loop trajectory.
+
+    This function never changes ``escalation_level`` or calls an adapter. Its
+    result is only attached to the iteration receipt for later evaluation.
+    """
+    if last_loss is None:
+        return None
+
+    files = tuple(dict.fromkeys(last_loss.files_touched))
+    parents = {str(Path(path).parent) for path in files}
+    dependency_breadth = max(0, len(parents) - 1)
+    task_kind = (
+        TaskKind.CROSS_MODULE
+        if len(files) >= 4 or dependency_breadth >= 3
+        else TaskKind.LOCAL_EDIT
+    )
+    observation = TrajectoryObservation(
+        task_kind=task_kind,
+        repository_files=None,
+        files_explored=files,
+        dependency_breadth=dependency_breadth,
+        test_failures=consecutive_losses,
+        no_progress_events=max(consecutive_noops, consecutive_same_error),
+        uncertainty=None,
+        tool_errors=0,
+        verifier_state=VerifierState.FAILED,
+        tokens_used=total_tokens if token_telemetry_complete else None,
+        token_budget=token_budget,
+        cost_usd=total_cost_usd if cost_telemetry_complete else None,
+        cost_budget_usd=cost_budget_usd,
+        cost_is_reliable=cost_telemetry_complete,
+        prior_escalations=prior_escalations,
+    )
+    return ShadowRoutingPolicy("cheap-tier", "strong-tier").advise(observation)
 
 
 def _make_git_change_probe(repo_root: Path) -> ChangeProbe:
@@ -683,6 +743,9 @@ def run_loop(
     recorded_memory_ids: list[str] = []
     total_tokens: int = 0
     total_cost_usd: float = 0.0
+    token_telemetry_complete = True
+    cost_telemetry_complete = True
+    shadow_escalations = 0
     consecutive_losses: int = 0
     escalation_level: int = 0
     last_loss: IterationContract | None = None
@@ -712,6 +775,24 @@ def run_loop(
                 (c for c in reversed(iterations) if c.outcome == "loss"),
                 None,
             )
+            token_telemetry_complete = all(
+                contract.tokens is not None for contract in iterations
+            )
+            # IterationContract predates per-episode cost recording. On resume,
+            # incomplete cost coverage cannot be ruled out, so fail closed.
+            cost_telemetry_complete = not iterations
+            for contract in iterations:
+                route_state = contract.route_decision
+                if not isinstance(route_state, dict):
+                    continue
+                prior_advice = route_state.get("shadow_model_advice")
+                if (
+                    isinstance(prior_advice, dict)
+                    and prior_advice.get("action")
+                    == RoutingAction.RECOMMEND_ESCALATION.value
+                ):
+                    shadow_escalations = 1
+                    break
             # Continue from the iteration AFTER the last recorded one.
             _resume_from = (iterations[-1].iteration + 1) if iterations else 1
             _log.debug(
@@ -825,6 +906,24 @@ def run_loop(
                 last_loss=last_loss,
             )
         )
+        shadow_advice = _shadow_model_advice(
+            last_loss=last_loss,
+            consecutive_losses=consecutive_losses,
+            consecutive_noops=consecutive_noops,
+            consecutive_same_error=consecutive_same_error,
+            total_tokens=total_tokens,
+            token_budget=config.budget_tokens,
+            token_telemetry_complete=token_telemetry_complete,
+            total_cost_usd=total_cost_usd,
+            cost_budget_usd=config.max_cost_usd,
+            cost_telemetry_complete=cost_telemetry_complete,
+            prior_escalations=shadow_escalations,
+        )
+        route_receipt = route_decision.to_dict()
+        if shadow_advice is not None:
+            route_receipt["shadow_model_advice"] = shadow_advice.to_dict()
+            if shadow_advice.action is RoutingAction.RECOMMEND_ESCALATION:
+                shadow_escalations += 1
         escalation_level = route_decision.escalation_level
         if route_decision.reset_consecutive_losses:
             consecutive_losses = 0
@@ -854,8 +953,12 @@ def run_loop(
         agent_result: AgentRunResult = agent_runner(prompt, escalation_level=escalation_level)
         if agent_result.tokens is not None:
             total_tokens += agent_result.tokens
+        else:
+            token_telemetry_complete = False
         if agent_result.cost_usd is not None:
             total_cost_usd += agent_result.cost_usd
+        else:
+            cost_telemetry_complete = False
 
         # --- Hard agent failure (auth/API/OS error) ---
         # The agent invocation itself failed, so no real work happened.  Record
@@ -882,7 +985,7 @@ def run_loop(
                 verify_output=f"[agent-error] {agent_result.error}"[:_MAX_VERIFY_OUTPUT],
                 outcome="loss",
                 tokens=agent_result.tokens,
-                route_decision=route_decision.to_dict(),
+                route_decision=route_receipt,
             )
             iterations.append(error_contract)
             mid = _record_loss(storage, spec.goal, error_contract, ref_now)
@@ -911,7 +1014,7 @@ def run_loop(
                 verify_output=verify_outcome.output[:_MAX_VERIFY_OUTPUT],
                 outcome="loss",
                 tokens=agent_result.tokens,
-                route_decision=route_decision.to_dict(),
+                route_decision=route_receipt,
             )
             iterations.append(infra_contract)
             # Still record the dead-end: a verifier that cannot run (missing
@@ -1018,7 +1121,7 @@ def run_loop(
             verify_output=verify_output_text[:_MAX_VERIFY_OUTPUT],
             outcome=outcome,  # type: ignore[arg-type]
             tokens=agent_result.tokens,
-            route_decision=route_decision.to_dict(),
+            route_decision=route_receipt,
         )
         iterations.append(contract)
 

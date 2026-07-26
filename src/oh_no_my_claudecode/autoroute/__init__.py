@@ -22,5 +22,25 @@ from oh_no_my_claudecode.autoroute.autoroute import (
     suggest_from_repo,
     suggest_model,
 )
+from oh_no_my_claudecode.autoroute.policy import (
+    RoutingAction,
+    ShadowRoutingDecision,
+    ShadowRoutingPolicy,
+)
+from oh_no_my_claudecode.autoroute.trajectory import (
+    TaskKind,
+    TrajectoryObservation,
+    VerifierState,
+)
 
-__all__ = ["Suggestion", "suggest_from_repo", "suggest_model"]
+__all__ = [
+    "RoutingAction",
+    "ShadowRoutingDecision",
+    "ShadowRoutingPolicy",
+    "Suggestion",
+    "TaskKind",
+    "TrajectoryObservation",
+    "VerifierState",
+    "suggest_from_repo",
+    "suggest_model",
+]
