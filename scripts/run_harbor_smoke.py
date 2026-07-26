@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -21,6 +22,10 @@ from oh_no_my_claudecode.experiment.harbor_adapter import (  # noqa: E402
     run_harbor_smoke,
     validate_harbor_seed_manifest,
 )
+from oh_no_my_claudecode.experiment.harbor_repro import (  # noqa: E402
+    HarborReproManifest,
+    load_harbor_repro_manifest,
+)
 from oh_no_my_claudecode.experiment.portfolio import (  # noqa: E402
     PortfolioManifest,
     load_portfolio,
@@ -30,6 +35,12 @@ from oh_no_my_claudecode.experiment.portfolio import (  # noqa: E402
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path, help="ONMC portfolio manifest JSON.")
+    parser.add_argument(
+        "--repro-manifest",
+        type=Path,
+        default=REPO_ROOT / "benchmarks" / "onmc" / "harbor-repro-v1.json",
+        help="Pinned Harbor/Docker reproduction contract.",
+    )
     parser.add_argument("--out", type=Path, required=True, help="Fresh Harbor task directory.")
     parser.add_argument("--jobs-dir", type=Path, required=True, help="Fresh Harbor jobs directory.")
     parser.add_argument(
@@ -68,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    repro = load_harbor_repro_manifest(
+        args.repro_manifest,
+        repository_root=REPO_ROOT,
+        portfolio_path=args.manifest,
+    )
     if args.out.exists():
         raise ValueError(f"--out must not already exist: {args.out}")
     if args.jobs_dir.exists():
@@ -91,6 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         removals=removals,
         planted_files=planted_files,
         test_deps=test_deps,
+        container_image=repro.docker_image,
     )
     condition_values = (
         tuple(Condition(value) for value in args.condition)
@@ -110,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
     payload: dict[str, object] = {
         "schema_version": "onmc-harbor-smoke-run/v1",
         "executed": args.execute,
+        "reproduction": repro.to_dict(),
         "full_seed_validation": seed_validation.to_dict(),
         "export": summary.to_dict(),
         "smoke_plan": plan.to_dict(),
@@ -117,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
         "limitations": list(plan.limitations),
     }
     if args.execute:
+        _verify_harbor_version(repro)
         imported = run_harbor_smoke(
             plan,
             experiment_id=manifest.experiment.experiment_id.value,
@@ -127,6 +146,20 @@ def main(argv: list[str] | None = None) -> int:
     args.receipt.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
     return 0
+
+
+def _verify_harbor_version(repro: HarborReproManifest) -> None:
+    completed = subprocess.run(
+        ("harbor", "--version"),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError("could not verify pinned Harbor CLI version")
+    actual = completed.stdout.strip()
+    if actual != repro.harbor_version:
+        raise ValueError(f"Harbor version mismatch: expected {repro.harbor_version}, got {actual}")
 
 
 def _select_tasks(

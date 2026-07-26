@@ -22,6 +22,11 @@ from oh_no_my_claudecode.experiment.contracts import (
     RunId,
     TrialResult,
 )
+from oh_no_my_claudecode.experiment.harbor_repro import (
+    DEFAULT_HARBOR_DOCKER_IMAGE,
+    HARBOR_REQUIRED_ARTIFACTS,
+    require_digest_pinned_image,
+)
 from oh_no_my_claudecode.experiment.portfolio import PortfolioManifest, TaskSpec
 
 RegressionHunk = tuple[str, str, str]
@@ -294,9 +299,11 @@ def export_portfolio_to_harbor(
     removals: Mapping[str, Sequence[RemovalSpec]] | None = None,
     planted_files: Mapping[str, Sequence[PlantedFile]] | None = None,
     test_deps: Mapping[str, Sequence[str]] | None = None,
+    container_image: str = DEFAULT_HARBOR_DOCKER_IMAGE,
 ) -> HarborExportSummary:
     """Write Harbor task directories for every ONMC portfolio task."""
 
+    container_image = require_digest_pinned_image(container_image)
     if any(source is not None for source in (regression_hunks, removals, planted_files)):
         resolved_test_deps = test_deps
         if resolved_test_deps is None:
@@ -317,6 +324,10 @@ def export_portfolio_to_harbor(
         "experiment": manifest.experiment.to_dict(),
         "audit_status": manifest.audit_status.value,
         "task_set_revision": manifest.experiment.task_set_revision,
+        "environment": {
+            "provider": "docker",
+            "image": container_image,
+        },
         "tasks": manifest_tasks,
     }
     for task in manifest.tasks:
@@ -336,7 +347,12 @@ def export_portfolio_to_harbor(
         (task_dir / "task.toml").write_text(_task_toml(task, task_name), encoding="utf-8")
         has_seed = bool(hunks or task_removals or task_planted)
         (task_dir / "environment" / "Dockerfile").write_text(
-            _dockerfile(task, has_seed=has_seed, test_deps=deps),
+            _dockerfile(
+                task,
+                has_seed=has_seed,
+                test_deps=deps,
+                container_image=container_image,
+            ),
             encoding="utf-8",
         )
         seed_script = _seed_script(hunks, task_removals, task_planted)
@@ -471,13 +487,9 @@ def import_harbor_smoke_outputs(
                 f"{job_dir} must contain exactly one native trial result, found {len(trial_dirs)}"
             )
         trial_dir = trial_dirs[0]
-        required = (
-            ("trajectory", trial_dir / "agent" / "trajectory.json", "application/json"),
-            ("verifier-reward", trial_dir / "verifier" / "reward.json", "application/json"),
-            ("verifier-stdout", trial_dir / "verifier" / "test-stdout.txt", "text/plain"),
-            ("harbor-result", trial_dir / "result.json", "application/json"),
-            ("harbor-config", trial_dir / "config.json", "application/json"),
-            ("harbor-lock", trial_dir / "lock.json", "application/json"),
+        required = tuple(
+            (kind, trial_dir / relative_path, media_type)
+            for kind, relative_path, media_type in HARBOR_REQUIRED_ARTIFACTS
         )
         for _, path, _ in required:
             if not path.is_file():
@@ -798,12 +810,13 @@ def _dockerfile(
     *,
     has_seed: bool = False,
     test_deps: Sequence[str] = (),
+    container_image: str = DEFAULT_HARBOR_DOCKER_IMAGE,
 ) -> str:
     repo_url = _docker_shell_string(task.repo.url)
     pinned_sha = _docker_shell_string(task.repo.pinned_sha)
     pip_packages = ("pytest", *test_deps)
     lines = [
-        "FROM python:3.12-slim",
+        f"FROM {require_digest_pinned_image(container_image)}",
         "RUN apt-get update \\",
         "    && apt-get install -y --no-install-recommends git \\",
         "    && rm -rf /var/lib/apt/lists/*",

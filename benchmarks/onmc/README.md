@@ -18,6 +18,12 @@ tasks follow Harbor's task-directory shape: `instruction.md`, `task.toml`,
 ATIF trajectory artifacts, verifier artifacts, reward/pass state, and measured
 metrics before they enter ONMC reports.
 
+`harbor-repro-v1.json` is the bounded free-smoke contract. It binds the portfolio
+and task-set hashes, Harbor version, digest-pinned Docker base image, raw artifact
+set, and leakage boundary. It is deliberately non-claimable: upstream tests and
+the planted structural grader are visible, and no independent leakage audit has
+passed.
+
 ## Publication workflow
 
 All commands below are offline unless the operator explicitly launches Harbor
