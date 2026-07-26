@@ -13,6 +13,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from oh_no_my_claudecode.experiment.publication import (  # noqa: E402
     build_publication_bundle,
+    build_publication_work_plan,
     render_publication_markdown,
 )
 
@@ -30,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-out", type=Path, default=None)
     parser.add_argument("--markdown-out", type=Path, default=None)
     parser.add_argument("--artifact-index-out", type=Path, default=None)
+    parser.add_argument("--work-plan-out", type=Path, default=None)
     parser.add_argument(
         "--require-publication-ready",
         action="store_true",
@@ -55,6 +57,12 @@ def main(argv: list[str] | None = None) -> int:
         _write(
             args.artifact_index_out,
             json.dumps(artifact_index, indent=2, sort_keys=True) + "\n",
+        )
+    if args.work_plan_out is not None:
+        work_plan = build_publication_work_plan(bundle)
+        _write(
+            args.work_plan_out,
+            json.dumps(work_plan, indent=2, sort_keys=True) + "\n",
         )
     if args.json_out is None and args.markdown_out is None:
         print(rendered_json, end="")

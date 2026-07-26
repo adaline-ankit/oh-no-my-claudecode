@@ -40,6 +40,7 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     json_output = tmp_path / "report.json"
     markdown_output = tmp_path / "report.md"
     artifact_output = tmp_path / "raw-artifacts.json"
+    work_plan_output = tmp_path / "work-plan.json"
 
     exit_code = module.main(
         [
@@ -52,15 +53,21 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
             str(markdown_output),
             "--artifact-index-out",
             str(artifact_output),
+            "--work-plan-out",
+            str(work_plan_output),
         ]
     )
 
     payload = json.loads(json_output.read_text(encoding="utf-8"))
     artifact_index = json.loads(artifact_output.read_text(encoding="utf-8"))
+    work_plan = json.loads(work_plan_output.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert payload["publication_ready"] is False
     assert payload["claim_language_gate"]["decision"] == "refuse"
     assert artifact_index["complete"] is False
+    assert work_plan["publication_ready"] is False
+    assert work_plan["deficits"]["tasks_to_add"] == 22
+    assert work_plan["spend_gate"]["paid_full_matrix_allowed"] is False
     assert "NOT PUBLICATION-READY" in markdown_output.read_text(encoding="utf-8")
 
 

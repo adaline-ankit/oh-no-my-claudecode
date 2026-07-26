@@ -27,6 +27,7 @@ from .verifier_calibration import calibrate_default_verifier
 __all__ = [
     "BenchmarkManifestValidation",
     "build_publication_bundle",
+    "build_publication_work_plan",
     "index_raw_artifacts",
     "render_publication_markdown",
     "validate_benchmark_manifest",
@@ -56,6 +57,11 @@ class BenchmarkManifestValidation:
     condition_count: int
     trials_per_cell: int
     repository_count: int
+    benchmark_arms: tuple[str, ...]
+    missing_benchmark_arms: tuple[str, ...]
+    seeds_registered: int
+    agent_model_configurations_registered: int
+    languages: tuple[str, ...]
     errors: tuple[str, ...]
     blockers: tuple[str, ...]
 
@@ -69,6 +75,13 @@ class BenchmarkManifestValidation:
             "condition_count": self.condition_count,
             "trials_per_cell": self.trials_per_cell,
             "repository_count": self.repository_count,
+            "benchmark_arms": list(self.benchmark_arms),
+            "missing_benchmark_arms": list(self.missing_benchmark_arms),
+            "seeds_registered": self.seeds_registered,
+            "agent_model_configurations_registered": (
+                self.agent_model_configurations_registered
+            ),
+            "languages": list(self.languages),
             "errors": list(self.errors),
             "blockers": list(self.blockers),
         }
@@ -167,6 +180,11 @@ def validate_benchmark_manifest(
         condition_count=len(conditions),
         trials_per_cell=trials,
         repository_count=len(repositories),
+        benchmark_arms=tuple(sorted(benchmark_arms)),
+        missing_benchmark_arms=tuple(missing_arms),
+        seeds_registered=len(unique_seeds),
+        agent_model_configurations_registered=len(valid_configurations),
+        languages=tuple(sorted(languages)),
         errors=tuple(errors),
         blockers=tuple(blockers),
     )
@@ -246,6 +264,118 @@ def build_publication_bundle(
         "leakage_audit": leakage_audit,
         "failure_taxonomy": _json_value(report.get("failure_taxonomy", {})),
         "raw_artifact_index": artifacts,
+    }
+
+
+def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, object]:
+    """Convert a publication bundle into a deterministic next-run plan.
+
+    The publication report says whether evidence is strong enough. This planner
+    says what to do next before spending money on another external run.
+    """
+
+    validation = _optional_mapping(bundle.get("manifest_validation"))
+    benchmark_plan = _optional_mapping(bundle.get("benchmark_plan"))
+    calibration = _optional_mapping(bundle.get("calibration"))
+    calibration_inner = _optional_mapping(calibration.get("calibration"))
+    report_coverage = _optional_mapping(bundle.get("report_coverage"))
+    cost = _optional_mapping(bundle.get("cost_coverage"))
+    leakage = _optional_mapping(bundle.get("leakage_audit"))
+    artifacts = _optional_mapping(bundle.get("raw_artifact_index"))
+    claim = _optional_mapping(bundle.get("claim_readiness"))
+
+    task_count = _int_or_zero(validation.get("task_count"))
+    min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
+    trials = _int_or_zero(validation.get("trials_per_cell"))
+    recommended_trials = max(3, trials)
+    required_arms = tuple(sorted(_REQUIRED_ARMS))
+    arms_present = tuple(sorted(_string_list(validation.get("benchmark_arms"))))
+    missing_arms = tuple(sorted(_string_list(validation.get("missing_benchmark_arms"))))
+    seeds_registered = _int_or_zero(validation.get("seeds_registered"))
+    configs_registered = _int_or_zero(
+        validation.get("agent_model_configurations_registered")
+    )
+    languages_present = tuple(sorted(_string_list(validation.get("languages"))))
+    discriminative = _int_or_zero(calibration_inner.get("discriminative_tasks"))
+    min_discriminative = (
+        _int_or_zero(calibration_inner.get("min_discriminative_tasks")) or 10
+    )
+
+    deficits = {
+        "tasks_to_add": max(0, min_tasks - task_count),
+        "discriminative_tasks_to_find": max(0, min_discriminative - discriminative),
+        "missing_benchmark_arms": list(missing_arms),
+        "seeds_to_register": max(0, 3 - seeds_registered),
+        "agent_model_configurations_to_register": max(0, 3 - configs_registered),
+        "languages_to_add": max(0, 2 - len(languages_present)),
+        "repositories_to_add": max(0, 2 - _int_or_zero(validation.get("repository_count"))),
+        "missing_cost_cells": _int_or_zero(cost.get("missing_cells")),
+        "missing_raw_artifact_entries": len(_optional_list(artifacts.get("missing"))),
+        "coverage_fields_to_fill": [
+            str(field.get("name"))
+            for value in _optional_list(report_coverage.get("fields"))
+            if (field := _optional_mapping(value)) and field.get("covered") is False
+        ],
+        "leakage_audit_needed": leakage.get("complete") is not True,
+    }
+    current_cells = task_count * max(1, len(arms_present)) * max(1, trials)
+    target_cells = min_tasks * len(required_arms) * recommended_trials
+    missing_cells = max(0, target_cells - current_cells)
+    estimated_required_cost = benchmark_plan.get("estimated_required_cost_usd")
+    per_cell_cost = benchmark_plan.get("per_cell_cost_usd")
+
+    actions = [
+        "Freeze one manifest revision with the five required arms and three seeds.",
+        "Add or replace tasks until at least 50 external tasks include at least 10 "
+        "calibration-discriminative tasks.",
+        "Run a zero-cost structural validation and Harbor/Docker smoke before any "
+        "model spend.",
+        "Run a one-seed calibration slice, then regenerate the publication bundle "
+        "and this work plan.",
+        "Only request approval for the full paid matrix after cost telemetry and "
+        "raw artifact paths are complete on the calibration slice.",
+    ]
+
+    return {
+        "schema_version": "onmc-publication-work-plan/v1",
+        "publication_ready": bundle.get("publication_ready") is True,
+        "claim_decision": claim.get("decision", "unknown"),
+        "current_matrix": {
+            "tasks": task_count,
+            "arms": list(arms_present),
+            "trials_per_cell": trials,
+            "registered_seeds": seeds_registered,
+            "registered_agent_model_configurations": configs_registered,
+            "languages": list(languages_present),
+            "usable_cells": _int_or_zero(cost.get("usable_cells")),
+            "reported_cost_cells": _int_or_zero(cost.get("reported_cells")),
+        },
+        "target_matrix": {
+            "minimum_tasks": min_tasks,
+            "required_arms": list(required_arms),
+            "minimum_trials_per_cell": recommended_trials,
+            "minimum_seeds": 3,
+            "minimum_agent_model_configurations": 3,
+            "minimum_languages": 2,
+            "minimum_discriminative_tasks": min_discriminative,
+        },
+        "deficits": deficits,
+        "cell_delta": {
+            "current_cells": current_cells,
+            "target_cells": target_cells,
+            "additional_cells_before_calibration": missing_cells,
+            "per_cell_cost_usd": per_cell_cost,
+            "estimated_required_cost_usd": estimated_required_cost,
+        },
+        "blocked_gates": list(_optional_list(claim.get("blocked_gates"))),
+        "next_actions": actions,
+        "spend_gate": {
+            "paid_full_matrix_allowed": False,
+            "reason": (
+                "Full paid benchmark runs require explicit approval after a "
+                "successful smoke, calibration slice, and updated cost estimate."
+            ),
+        },
     }
 
 

@@ -1,0 +1,84 @@
+{
+  "blocked_gates": [
+    "benchmark_plan",
+    "portfolio_coverage",
+    "calibration",
+    "report_coverage",
+    "verifier_calibration"
+  ],
+  "cell_delta": {
+    "additional_cells_before_calibration": 582,
+    "current_cells": 168,
+    "estimated_required_cost_usd": null,
+    "per_cell_cost_usd": null,
+    "target_cells": 750
+  },
+  "claim_decision": "not-ready",
+  "current_matrix": {
+    "arms": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "languages": [],
+    "registered_agent_model_configurations": 0,
+    "registered_seeds": 0,
+    "reported_cost_cells": 37,
+    "tasks": 28,
+    "trials_per_cell": 3,
+    "usable_cells": 48
+  },
+  "deficits": {
+    "agent_model_configurations_to_register": 3,
+    "coverage_fields_to_fill": [
+      "raw_trajectories",
+      "verifier_artifacts",
+      "token_use",
+      "cost_coverage",
+      "failure_taxonomy",
+      "leakage_audit",
+      "environment_manifest"
+    ],
+    "discriminative_tasks_to_find": 10,
+    "languages_to_add": 2,
+    "leakage_audit_needed": true,
+    "missing_benchmark_arms": [
+      "context-only",
+      "onmc-single-agent",
+      "selective-swarm",
+      "trajectory-routed"
+    ],
+    "missing_cost_cells": 11,
+    "missing_raw_artifact_entries": 96,
+    "repositories_to_add": 0,
+    "seeds_to_register": 3,
+    "tasks_to_add": 22
+  },
+  "next_actions": [
+    "Freeze one manifest revision with the five required arms and three seeds.",
+    "Add or replace tasks until at least 50 external tasks include at least 10 calibration-discriminative tasks.",
+    "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
+    "Run a one-seed calibration slice, then regenerate the publication bundle and this work plan.",
+    "Only request approval for the full paid matrix after cost telemetry and raw artifact paths are complete on the calibration slice."
+  ],
+  "publication_ready": false,
+  "schema_version": "onmc-publication-work-plan/v1",
+  "spend_gate": {
+    "paid_full_matrix_allowed": false,
+    "reason": "Full paid benchmark runs require explicit approval after a successful smoke, calibration slice, and updated cost estimate."
+  },
+  "target_matrix": {
+    "minimum_agent_model_configurations": 3,
+    "minimum_discriminative_tasks": 10,
+    "minimum_languages": 2,
+    "minimum_seeds": 3,
+    "minimum_tasks": 50,
+    "minimum_trials_per_cell": 3,
+    "required_arms": [
+      "bare-agent",
+      "context-only",
+      "onmc-single-agent",
+      "selective-swarm",
+      "trajectory-routed"
+    ]
+  }
+}

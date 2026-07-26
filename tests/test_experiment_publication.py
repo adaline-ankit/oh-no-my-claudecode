@@ -5,6 +5,7 @@ from pathlib import Path
 
 from oh_no_my_claudecode.experiment.publication import (
     build_publication_bundle,
+    build_publication_work_plan,
     index_raw_artifacts,
     render_publication_markdown,
     validate_benchmark_manifest,
@@ -77,6 +78,34 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert "INCOMPLETE" in markdown
     assert "Leakage Audit" in markdown
     assert "SOTA" not in bundle["claim_language_gate"]["suggested_safe_claim"]
+
+
+def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
+    report = _load(SATURATED_REPORT)
+    manifest = _load(V4_MANIFEST)
+    bundle = build_publication_bundle(report, manifest)
+
+    plan = build_publication_work_plan(bundle)
+
+    assert plan["schema_version"] == "onmc-publication-work-plan/v1"
+    assert plan["publication_ready"] is False
+    assert plan["target_matrix"]["required_arms"] == [
+        "bare-agent",
+        "context-only",
+        "onmc-single-agent",
+        "selective-swarm",
+        "trajectory-routed",
+    ]
+    assert plan["deficits"]["tasks_to_add"] == 22
+    assert plan["deficits"]["discriminative_tasks_to_find"] == 10
+    assert plan["deficits"]["missing_benchmark_arms"] == [
+        "context-only",
+        "onmc-single-agent",
+        "selective-swarm",
+        "trajectory-routed",
+    ]
+    assert plan["deficits"]["missing_cost_cells"] == 11
+    assert plan["spend_gate"]["paid_full_matrix_allowed"] is False
 
 
 def test_raw_artifact_index_verifies_declared_files(tmp_path: Path) -> None:

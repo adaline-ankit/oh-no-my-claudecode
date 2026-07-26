@@ -10,7 +10,7 @@ This report is generated from committed evidence. A successful generation does n
 - task set: `external-v3-2026-07-25`
 - publication ready: `false`
 - claim decision: `refuse`
-- safe statement: ONMC records harness evidence, but external improvement claims are blocked until these gates pass: benchmark_plan, portfolio_coverage, calibration, report_coverage.
+- safe statement: ONMC records harness evidence, but external improvement claims are blocked until these gates pass: benchmark_plan, portfolio_coverage, calibration, report_coverage, verifier_calibration.
 
 ## Condition Results
 
@@ -67,10 +67,12 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - 24 task(s) saturated across conditions
 - cost telemetry incomplete for: bare-agent
 - task_set_revision mismatch: manifest=external-v4-2026-07-25, report=external-v3-2026-07-25
+- report.task_set_sha256 is missing
 - trial count mismatch: manifest=3, report=1
 - report missing leakage/reproducibility fields: report.leakage_notes, report.environment, report.failure_taxonomy, report.token_telemetry, report.trajectory_artifacts, report.verifier_artifacts
 - report metadata mismatch: report.code_sha
 - 4 manifest task(s) missing from report
+- 120 expected trial cell(s) missing from report
 - report coverage missing raw_trajectories: raw trajectory artifacts are missing or incomplete
 - report coverage missing verifier_artifacts: verifier output artifacts are missing or incomplete
 - report coverage missing token_use: token telemetry is missing or incomplete
@@ -78,3 +80,5 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - report coverage missing failure_taxonomy: failure taxonomy is missing or incomplete
 - report coverage missing leakage_audit: leakage notes are missing
 - report coverage missing environment_manifest: environment manifest is missing
+- sensitivity 95% confidence interval lower bound 0.758 below target 0.950
+- specificity 95% confidence interval lower bound 0.758 below target 0.980
