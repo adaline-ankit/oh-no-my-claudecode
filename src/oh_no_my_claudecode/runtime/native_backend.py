@@ -74,6 +74,8 @@ class NativeExecutionBackend:
             )
         if snapshot.state is RunState.AWAITING_APPROVAL:
             return self._interrupted_result(spec, results=[])
+        if snapshot.state is RunState.CANCELLED:
+            return self._cancelled_result(spec, results=[])
         if snapshot.state is not RunState.RUNNING:
             snapshot = self.store.start(spec.run_id, idempotency_key="runtime:start")
 
@@ -89,6 +91,8 @@ class NativeExecutionBackend:
                         self._validate_node_result(node, result)
                         results.append(result)
                         continue
+                    if state is NodeState.CANCELLED:
+                        return self._cancelled_result(spec, results)
                     if state is NodeState.AWAITING_APPROVAL:
                         return self._interrupted_result(spec, results, node=node)
                     if self._has_result(spec.run_id, node.node_id):
@@ -151,6 +155,10 @@ class NativeExecutionBackend:
                             spec.run_id,
                             reason=result.error or f"{node.node_id} skipped",
                             idempotency_key="runtime:cancel",
+                        )
+                        self._cancel_pending_nodes(
+                            spec,
+                            reason=result.error or f"{node.node_id} skipped",
                         )
                         return self._terminal_result_from_node_result(spec, results, result)
                     else:
@@ -324,6 +332,16 @@ class NativeExecutionBackend:
             error=result.error,
         )
 
+    def _cancelled_result(self, spec: RunSpec, results: list[NodeResult]) -> RunResult:
+        return RunResult(
+            run_id=spec.run_id,
+            status=RunResultStatus.CANCELLED,
+            results=tuple(results),
+            backend=self.backend_name,
+            spec_digest=spec.digest,
+            error="run cancelled",
+        )
+
     def _interrupted_result(
         self,
         spec: RunSpec,
@@ -352,6 +370,19 @@ class NativeExecutionBackend:
             ):
                 return True
         return False
+
+    def _cancel_pending_nodes(self, spec: RunSpec, *, reason: str) -> None:
+        snapshot = self.store.load(spec.run_id)
+        for node in spec.topological_order():
+            if snapshot.nodes[node.node_id].state is not NodeState.PENDING:
+                continue
+            self.store.cancel_node(
+                spec.run_id,
+                node.node_id,
+                reason=reason,
+                idempotency_key=f"runtime:{node.node_id}:cancel-pending",
+            )
+            snapshot = self.store.load(spec.run_id)
 
     def _run_node_with_retries(
         self,

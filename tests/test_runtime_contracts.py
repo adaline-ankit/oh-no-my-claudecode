@@ -379,6 +379,64 @@ def test_native_backend_resumes_approval_interrupt_without_duplicate_side_effect
     assert [item.node_id for item in completed.results] == ["deploy"]
 
 
+def test_native_backend_returns_cancelled_run_without_invoking_handlers(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-cancelled",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    backend.store.create_run(
+        spec.run_id,
+        node_ids=("execute",),
+        repo=tmp_path,
+        idempotency_key="runtime:create",
+    )
+    backend._write_spec_manifest(spec)
+    backend.store.cancel(spec.run_id, reason="operator", idempotency_key="cancel")
+
+    result = backend.execute(
+        spec,
+        {"execute": lambda node: pytest.fail(f"handler ran for {node.node_id}")},
+        resume=True,
+    )
+
+    assert result.status is RunResultStatus.CANCELLED
+    assert result.results == ()
+
+
+def test_native_backend_cancels_downstream_pending_nodes_on_skip(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-skip-cancel",
+        task="Build feature",
+        nodes=(
+            _node("gate", side_effecting=True),
+            _node("execute", dependencies=("gate",), side_effecting=True),
+        ),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+
+    def handler(node: NodeSpec) -> NodeResult:
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SKIPPED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            error="operator cancelled",
+        )
+
+    result = backend.execute(spec, {"gate": handler, "execute": handler})
+
+    assert result.status is RunResultStatus.CANCELLED
+    snapshot = backend.store.load(spec.run_id)
+    assert snapshot.state.value == "cancelled"
+    assert snapshot.nodes["gate"].state.value == "cancelled"
+    assert snapshot.nodes["execute"].state.value == "cancelled"
+
+
 def test_native_backend_exhausts_retry_policy_before_failed_result(
     tmp_path: Path,
 ) -> None:

@@ -42,6 +42,8 @@ This is evidence for a stronger harness foundation:
   `max_workers`, with deterministic fan-in order and sibling cleanup on parallel contract errors.
 - Runtime nodes can now declare `approval_required`; the native backend persists run/node approval
   interrupts before side effects and resumes after durable approval without duplicate execution.
+- The native runtime now treats durable cancellation as terminal, refuses to restart cancelled runs,
+  and propagates node-level skips to pending downstream graph nodes.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -184,6 +186,16 @@ Result:
 ```
 
 ```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py
+```
+
+Result:
+
+```text
+72 passed
+```
+
+```text
 python -m pytest -q tests/test_runtime_fanout.py tests/test_swarm.py tests/test_mission.py
 ```
 
@@ -238,6 +250,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 | Native retry execution | Pass | Retryable exceptions and failed results are retried within policy and recorded in durable history. |
 | Dependency-aware fan-out | Pass | Ready nodes can run in bounded parallel layers and fan in deterministically before dependents. |
 | Approval interrupt | Pass | Approval-required nodes persist run/node interrupts before side effects and resume after approval. |
+| Cancellation semantics | Pass | Cancelled runs do not restart and skipped nodes cancel pending downstream work. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |
