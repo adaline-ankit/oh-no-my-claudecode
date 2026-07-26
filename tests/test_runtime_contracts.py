@@ -746,6 +746,9 @@ def test_runtime_contract_exposes_honest_adapter_capabilities(tmp_path: Path) ->
     assert capability["cost"] == "not_reported"
     assert capability["tokens"] == "best_effort_human_stdout_parse"
     assert "Cost is never reported" in " ".join(capability["limitations"])
+    assert capability["conformance"]["resume"]["support"] == "unsupported"
+    assert capability["conformance"]["cancel"]["support"] == "partial"
+    assert capability["conformance"]["cost"]["support"] == "unsupported"
     assert all(node.metadata["adapter_capability"] == capability for node in spec.nodes)
 
 
