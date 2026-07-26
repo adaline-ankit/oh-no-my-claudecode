@@ -17,6 +17,16 @@ are planning and observation views over that same durable run, while advanced
 workflows remain available for operators. ONMC is local-first, cross-agent, and
 works without a hosted account.
 
+## Benchmark evidence status
+
+ONMC does not currently claim state-of-the-art performance. The committed
+[external benchmark report](docs/evidence/sota-report.md) is explicitly not
+publication-ready: its paired quality delta is zero on a saturated one-seed
+report, cost coverage is incomplete, and raw trajectory, verifier, and leakage
+audit artifacts are missing. The [reproduction guide](docs/evidence/reproduce.md)
+regenerates that verdict locally, and the external claim gate rejects stronger
+language until every pre-registered evidence gate passes.
+
 ## Install (one line)
 
 ```bash

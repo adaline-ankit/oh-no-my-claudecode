@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Generate deterministic ONMC benchmark evidence and raw-artifact indexes."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "src"))
+
+from oh_no_my_claudecode.experiment.publication import (  # noqa: E402
+    build_publication_bundle,
+    render_publication_markdown,
+)
+
+_DEFAULT_CLAIM = (
+    "ONMC improves coding-agent quality and lowers cost versus plain coding agents."
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("report", type=Path)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--artifact-root", type=Path, default=None)
+    parser.add_argument("--claim", default=_DEFAULT_CLAIM)
+    parser.add_argument("--json-out", type=Path, default=None)
+    parser.add_argument("--markdown-out", type=Path, default=None)
+    parser.add_argument("--artifact-index-out", type=Path, default=None)
+    parser.add_argument(
+        "--require-publication-ready",
+        action="store_true",
+        help="Exit 2 when the generated evidence does not satisfy every publication gate.",
+    )
+    args = parser.parse_args(argv)
+
+    report = _load_object(args.report, "report")
+    manifest = _load_object(args.manifest, "manifest")
+    bundle = build_publication_bundle(
+        report,
+        manifest,
+        proposed_claim=args.claim,
+        artifact_root=args.report.parent if args.artifact_root is None else args.artifact_root,
+    )
+    rendered_json = json.dumps(bundle, indent=2, sort_keys=True) + "\n"
+    rendered_markdown = render_publication_markdown(bundle)
+
+    _write(args.json_out, rendered_json)
+    _write(args.markdown_out, rendered_markdown)
+    if args.artifact_index_out is not None:
+        artifact_index = bundle["raw_artifact_index"]
+        _write(
+            args.artifact_index_out,
+            json.dumps(artifact_index, indent=2, sort_keys=True) + "\n",
+        )
+    if args.json_out is None and args.markdown_out is None:
+        print(rendered_json, end="")
+    if args.require_publication_ready and bundle["publication_ready"] is not True:
+        return 2
+    return 0
+
+
+def _load_object(path: Path, label: str) -> dict[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{label} JSON root must be an object")
+    return value
+
+
+def _write(path: Path | None, content: str) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
