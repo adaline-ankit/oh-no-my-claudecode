@@ -160,6 +160,16 @@ This is evidence for a stronger harness foundation:
   `nop`/`local` Harbor Docker cell on `six-impl-with-metaclass` completed with 0 exceptions and
   failed cleanly (`passed=0.000`, `reward=0.000`), proving the function-removal task path is
   non-vacuous under Harbor too.
+- Seeded Harbor export now validates the complete portfolio before creating task directories. The
+  current v4 manifest has supported seed material and repository dependency declarations for all
+  28 tasks; legacy seed-catalog entries outside v4 remain visible but do not invalidate v4.
+- The bounded Harbor smoke plan now materializes every requested trial as its own deterministic
+  job instead of counting trials it does not launch. The zero-cost runner is hard-limited to
+  `nop`/`local`; model-backed agents require a separately approved workflow.
+- Native Harbor batch import now fails closed unless every planned cell contains content-addressed
+  ATIF trajectory, verifier reward, verifier stdout, native result, config, and lock artifacts.
+  Harbor's `nop` adapter emits no trajectory, so the smoke runner writes an explicitly
+  non-claimable ATIF sentinel rather than presenting an empty file as coding-agent reasoning.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -817,6 +827,79 @@ This moves more of the v4 benchmark corpus into Harbor: text replacements, AST r
 grader files, and repo test dependencies now share one generated seed script per task. It is still
 not a publishable benchmark because no real coding-agent arm has been run and not every v4 task has
 been smoke-tested through Harbor.
+
+## Harbor Completion Preflight and Batch Import Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest -q tests/test_harbor_adapter.py tests/test_experiment_contracts.py tests/test_experiment_kernel.py
+```
+
+Result:
+
+```text
+51 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py scripts/import_harbor_results.py scripts/run_harbor_smoke.py tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/export_harbor_tasks.py scripts/import_harbor_results.py scripts/run_harbor_smoke.py
+```
+
+Result:
+
+```text
+Success: no issues found in 4 source files
+```
+
+The new approval-free dry run selected one text-hunk task and the planted structural-grader task:
+
+```text
+python scripts/run_harbor_smoke.py datasets/experiment/portfolio_external_v4.json \
+  --out /private/tmp/onmc-u7-dryrun-20260726/tasks \
+  --jobs-dir /private/tmp/onmc-u7-dryrun-20260726/jobs \
+  --receipt /private/tmp/onmc-u7-dryrun-20260726/receipt.json \
+  --task-id six-bugfix-integer-types \
+  --task-id jmespath-refactor-dedup-key-func \
+  --condition bare-agent --max-cells 2
+```
+
+Observed preflight:
+
+```text
+full manifest tasks: 28
+tasks with supported seed material: 28
+missing seed tasks: 0
+missing repository dependency declarations: 0
+selected task kinds: text-hunk; text-hunk + planted-structural-grader
+planned cells: 2
+executed: false
+claim_eligible: false
+```
+
+This slice labels the adapter boundary in machine-readable receipts:
+
+- condition names in this smoke are job labels only; `bare-agent` and `onmc-current` do not yet
+  select different execution wrappers;
+- `nop`/`local` proves Harbor, Docker, seeding, verifier, and import plumbing only;
+- the generated no-op ATIF sentinel is explicitly non-claimable and contains no coding reasoning;
+- local Docker is the only verified environment; the Daytona cloud path remains unverified.
+
+A new Docker run was deliberately not launched in this slice because the active completion
+instruction prohibited approval-dependent commands and network installs. The text-hunk and
+structural-grader task export, full-manifest preflight, repeated-cell planning, six-artifact
+completeness gate, no-op sentinel, and batch normalization are covered locally, but an additional
+live structural-grader Harbor cell remains unverified.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:
