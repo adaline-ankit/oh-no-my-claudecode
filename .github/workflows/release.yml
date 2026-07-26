@@ -138,6 +138,10 @@ jobs:
           python -m pip install build twine
           python -m build
           python -m twine check dist/*
+      - name: Install built wheel and run offline fixture smoke
+        run: |
+          python -m pip install .
+          python scripts/release_artifact_smoke.py --dist-dir dist --offline
       - name: Upload dist artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

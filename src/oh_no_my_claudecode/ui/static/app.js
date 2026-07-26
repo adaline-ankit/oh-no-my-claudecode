@@ -809,10 +809,14 @@ function drawCodegraph() {
 
 function renderMission() {
   const loops = state.data.loops || { evolution: null, recent_runs: [] };
-  const { evolution, recent_runs: runs } = loops;
+  const { evolution } = loops;
+  const runtime = state.data.runtime || { summary: {}, runs: [] };
+  const runs = runtime.runs || [];
   const runCount = runs.length;
 
-  byId("mission-run-count").textContent = runCount ? `${runCount} recent run${runCount === 1 ? "" : "s"}` : "";
+  byId("mission-run-count").textContent = runCount
+    ? `${runtime.summary.active || 0} active · ${runtime.summary.verified || 0} verified · ${runCount} recent`
+    : "";
 
   // Mark loop stages as "active" when runs exist
   document.querySelectorAll(".loop-stage").forEach((stage) => {
@@ -868,22 +872,22 @@ function renderMission() {
     </div>`;
   }
 
-  // Recent runs table
+  // Canonical runtime table, reconstructed from durable events.
   const runsEl = byId("runs-body");
   byId("runs-subtitle").textContent = runs.length ? `last ${runs.length}` : "";
   if (!runs.length) {
-    runsEl.innerHTML = '<div class="evolution-empty">No runs recorded yet. Receipts appear here after each <code>onmc autopilot</code> run.</div>';
+    runsEl.innerHTML = '<div class="evolution-empty">No canonical runs yet. Preview one with <code>onmc run "your task"</code>; execute it explicitly with <code>--execute</code>.</div>';
   } else {
     runsEl.innerHTML = `<div class="runs-table-shell"><table class="runs-table"><thead><tr>
-      <th>Goal</th><th>Agent</th><th>✓</th><th>Iters</th><th>Cost</th><th>When</th><th>Hash</th>
+      <th>Run</th><th>State</th><th>Active node</th><th>Proof</th><th>Evidence / action</th><th>Updated</th><th>Receipt</th>
     </tr></thead><tbody>${runs.map((run) => `<tr>
-      <td><span class="run-goal">${escapeHtml(truncate(run.goal, 60))}</span></td>
-      <td><span class="run-agent">${escapeHtml(run.agent)}</span></td>
-      <td class="${run.verified ? "run-verified-yes" : "run-verified-no"}">${run.verified ? "✓" : "✗"}</td>
-      <td>${formatNumber(run.iterations)}</td>
-      <td>${run.cost_usd !== null && run.cost_usd !== undefined ? `$${Number(run.cost_usd).toFixed(3)}` : "—"}</td>
-      <td>${escapeHtml(run.when ? formatDate(run.when) : "—")}</td>
-      <td><span class="run-hash">${escapeHtml(run.receipt_hash_short || "")}</span></td>
+      <td><span class="run-goal">${escapeHtml(truncate(run.task || run.run_id, 46))}</span></td>
+      <td><span class="run-agent">${escapeHtml(run.state || "unknown")}</span></td>
+      <td>${escapeHtml(run.active_node || "—")}</td>
+      <td class="${run.verified ? "run-verified-yes" : run.proof_state === "rejected" || run.proof_state === "unavailable" ? "run-verified-no" : ""}">${escapeHtml(run.proof_state || "pending")}</td>
+      <td>${escapeHtml((run.proof_reasons || [])[0] || run.action || run.last_event || "—")}</td>
+      <td>${escapeHtml(run.updated_at ? formatDate(run.updated_at) : "—")}</td>
+      <td><span class="run-hash">${escapeHtml((run.receipt_hash || "").slice(0, 12) || "—")}</span></td>
     </tr>`).join("")}</tbody></table></div>`;
   }
 }
@@ -1054,7 +1058,7 @@ document.querySelectorAll("[data-swarm-filter]").forEach((btn) => btn.addEventLi
   document.querySelectorAll("[data-swarm-filter]").forEach((b) => b.classList.toggle("is-active", b === btn));
   renderSwarms();
 }));
-// Agents orchestration: abort per-swarm, start mission, land PR.
+// Agents orchestration: abort per-swarm, preview canonical run, land PR.
 byId("agents-swarm-list").addEventListener("click", async (event) => {
   const btn = event.target.closest(".agents-abort-btn");
   if (!btn) return;
@@ -1069,7 +1073,7 @@ byId("agents-mission-btn").addEventListener("click", async () => {
   const goal = (input.value || "").trim();
   if (!goal) { showToast("Enter a mission goal first"); return; }
   byId("agents-mission-btn").disabled = true;
-  await agentAction({ action: "mission", goal });
+  await agentAction({ action: "run", goal });
   byId("agents-mission-btn").disabled = false;
   input.value = "";
 });

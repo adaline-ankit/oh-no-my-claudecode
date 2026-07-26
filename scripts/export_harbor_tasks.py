@@ -16,6 +16,7 @@ from oh_no_my_claudecode.experiment.contracts import Condition  # noqa: E402
 from oh_no_my_claudecode.experiment.harbor_adapter import (  # noqa: E402
     export_portfolio_to_harbor,
     plan_harbor_smoke,
+    validate_harbor_seed_manifest,
 )
 from oh_no_my_claudecode.experiment.portfolio import (  # noqa: E402
     PortfolioManifest,
@@ -45,11 +46,27 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-cells", type=int, default=4)
     parser.add_argument("--agent", default="nop", help="Harbor smoke agent.")
     parser.add_argument("--model", default="local", help="Harbor smoke model label.")
+    parser.add_argument(
+        "--jobs-dir",
+        type=Path,
+        default=None,
+        help="Harbor job output directory used in emitted smoke commands.",
+    )
     args = parser.parse_args(argv)
 
-    manifest = _limited_manifest(load_portfolio(args.manifest), args.limit_tasks)
+    full_manifest = load_portfolio(args.manifest)
+    manifest = _limited_manifest(full_manifest, args.limit_tasks)
+    seed_validation = None
     if args.seed_regressions:
         regression_hunks, removals, planted_files, test_deps = _external_seed_tables()
+        seed_validation = validate_harbor_seed_manifest(
+            full_manifest,
+            regression_hunks=regression_hunks,
+            removals=removals,
+            planted_files=planted_files,
+            test_deps=test_deps,
+        )
+        seed_validation.require_complete()
         summary = export_portfolio_to_harbor(
             manifest,
             args.out,
@@ -65,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         "manifest": str(args.manifest),
         "export": summary.to_dict(),
     }
+    if seed_validation is not None:
+        payload["full_seed_validation"] = seed_validation.to_dict()
     if args.smoke_plan:
         smoke = plan_harbor_smoke(
             summary.task_names,
@@ -74,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             max_cells=args.max_cells,
             agent=args.agent,
             model=args.model,
+            jobs_dir=args.jobs_dir,
         )
         payload["smoke_plan"] = smoke.to_dict()
     print(json.dumps(payload, indent=2, sort_keys=True))

@@ -37,6 +37,7 @@ from .contracts import (
     RunId,
     TrialResult,
     is_legal_transition,
+    task_set_sha256,
 )
 from .coverage import (
     PortfolioCoverageGate,
@@ -55,6 +56,12 @@ from .reporting import (
     ExternalReportCoverageManifest,
     external_report_coverage_manifest,
 )
+from .routing import (
+    RoutingArm,
+    RoutingEvaluation,
+    RoutingTrial,
+    evaluate_routing,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -69,6 +76,7 @@ __all__ = [
     "MetricLabel",
     "RunId",
     "TrialResult",
+    "task_set_sha256",
     "CalibrationDecision",
     "CalibrationReport",
     "ManifestCalibrationReport",
@@ -82,6 +90,9 @@ __all__ = [
     "PortfolioExpansionPlan",
     "ExternalReportCoverageField",
     "ExternalReportCoverageManifest",
+    "RoutingArm",
+    "RoutingEvaluation",
+    "RoutingTrial",
     "DraftTaskSlot",
     "PortfolioExpansionDraft",
     "build_claim_readiness",
@@ -92,6 +103,7 @@ __all__ = [
     "gate_portfolio_coverage",
     "gate_claim_language",
     "external_report_coverage_manifest",
+    "evaluate_routing",
     "plan_portfolio_expansion",
     "plan_external_report",
     "plan_portfolio_manifest",

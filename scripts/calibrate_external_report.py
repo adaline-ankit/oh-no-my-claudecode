@@ -68,6 +68,7 @@ def calibrate_report_file(
         "report_path": str(report_path),
         "experiment_id": raw.get("experiment_id"),
         "task_set_revision": raw.get("task_set_revision"),
+        "task_set_sha256": raw.get("task_set_sha256"),
         "report_coverage": external_report_coverage_manifest(raw).to_dict(),
         "verifier_calibration": calibrate_default_verifier().to_dict(),
     }
@@ -166,6 +167,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
         *([f"- manifest: `{payload['manifest_path']}`"] if "manifest_path" in payload else []),
         f"- experiment: `{payload.get('experiment_id')}`",
         f"- task_set_revision: `{payload.get('task_set_revision')}`",
+        f"- task_set_sha256: `{payload.get('task_set_sha256')}`",
         f"- external_claim_decision: `{claim['decision']}`",
         f"- external_quality_claim_ready: `{str(claim['quality_claim_ready']).lower()}`",
         f"- external_cost_claim_ready: `{str(claim['cost_claim_ready']).lower()}`",
@@ -179,6 +181,22 @@ def _render_markdown(payload: dict[str, object]) -> str:
         f"- discriminative_tasks: `{_nested(calibration, 'discriminative_tasks')}`",
         f"- saturated_tasks: `{_nested(calibration, 'saturated_tasks')}`",
         f"- incomplete_cell_count: `{_nested(calibration, 'incomplete_cell_count')}`",
+        *(
+            [
+                f"- manifest_task_set_sha256: `{calibration['manifest_task_set_sha256']}`",
+                (
+                    "- computed_manifest_task_set_sha256: "
+                    f"`{calibration['computed_manifest_task_set_sha256']}`"
+                ),
+                f"- expected_cells: `{calibration['expected_cells']}`",
+                f"- reported_cells: `{calibration['reported_cells']}`",
+                f"- missing_cells: `{calibration['missing_cells']}`",
+                f"- duplicate_cells: `{calibration['duplicate_cells']}`",
+                f"- unexpected_cells: `{calibration['unexpected_cells']}`",
+            ]
+            if gate is not None
+            else []
+        ),
         "",
         "## Benchmark Plan",
         "",
@@ -429,15 +447,25 @@ def _verifier_calibration_markdown(calibration: dict[str, Any]) -> list[str]:
         "",
         "## Verifier Calibration",
         "",
+        f"- corpus_kind: `{calibration.get('corpus_kind', 'unknown')}`",
+        f"- corpus_revision: `{calibration.get('corpus_revision', 'unknown')}`",
         f"- claim_ready: `{str(calibration['claim_ready']).lower()}`",
+        f"- point_gate_passed: `{str(calibration.get('point_gate_passed', False)).lower()}`",
+        f"- ci_gate_supported: `{str(calibration.get('ci_gate_supported', False)).lower()}`",
         f"- sensitivity: `{calibration['sensitivity']}`",
+        f"- sensitivity_ci: `{calibration.get('sensitivity_ci', [])}`",
         f"- specificity: `{calibration['specificity']}`",
+        f"- specificity_ci: `{calibration.get('specificity_ci', [])}`",
         f"- false_green_cases: `{calibration['false_green_cases']}`",
         f"- legitimate_cases: `{calibration['legitimate_cases']}`",
         f"- caught_false_green: `{calibration['caught_false_green']}`",
         f"- missed_false_green: `{calibration['missed_false_green']}`",
         f"- cleared_legitimate: `{calibration['cleared_legitimate']}`",
         f"- false_positive_legitimate: `{calibration['false_positive_legitimate']}`",
+        "- required_perfect_false_green_cases: "
+        f"`{calibration.get('required_perfect_false_green_cases', 'unknown')}`",
+        "- required_perfect_legitimate_cases: "
+        f"`{calibration.get('required_perfect_legitimate_cases', 'unknown')}`",
         "",
         "### Verifier Calibration Reasons",
         "",

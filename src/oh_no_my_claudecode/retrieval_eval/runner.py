@@ -18,7 +18,7 @@ import contextlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from oh_no_my_claudecode.retrieval_eval.dataset import EvalCase, RetrievalDataset, load_dataset
 from oh_no_my_claudecode.retrieval_eval.metrics import (
@@ -27,6 +27,9 @@ from oh_no_my_claudecode.retrieval_eval.metrics import (
     precision_at_k,
     recall_at_k,
 )
+
+if TYPE_CHECKING:
+    from oh_no_my_claudecode.retrieval_eval.promotion import RetrievalPromotionEvidence
 
 # Protocol for cases accepted by _score_surface — any object with these fields.
 # Both EvalCase and CodeEvalCase satisfy this at runtime.
@@ -221,12 +224,18 @@ class RetrievalReport:
 
     dataset_sha: str
     surface_reports: list[SurfaceReport] = field(default_factory=list)
+    promotion_evidence: list[RetrievalPromotionEvidence] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "dataset_sha": self.dataset_sha,
             "surfaces": [sr.to_dict() for sr in self.surface_reports],
         }
+        if self.promotion_evidence:
+            payload["promotion_evidence"] = [
+                evidence.to_dict() for evidence in self.promotion_evidence
+            ]
+        return payload
 
     def to_markdown(self) -> str:
         lines = [
@@ -246,6 +255,31 @@ class RetrievalReport:
             lines.append("Provenance:")
             for sr in noted:
                 lines.append(f"- `{sr.surface_name}`: {sr.notes}")
+        if self.promotion_evidence:
+            lines.extend(
+                [
+                    "",
+                    "### Retrieval candidate promotion gate",
+                    "",
+                    "| Candidate | BM25 baseline | Offline nDCG Δ | Context token Δ "
+                    "| Downstream Δ | Status | Reasons |",
+                    "|-----------|---------------|-----------------|-----------------"
+                    "|--------------|--------|---------|",
+                ]
+            )
+            for evidence in self.promotion_evidence:
+                downstream = (
+                    f"{evidence.downstream_delta:+.4f}"
+                    if evidence.downstream_delta is not None
+                    else "missing"
+                )
+                reasons = ", ".join(evidence.reasons) or "passed"
+                lines.append(
+                    f"| {evidence.candidate_surface} | {evidence.baseline_surface} "
+                    f"| {evidence.offline_delta:+.4f} "
+                    f"| {evidence.context_token_delta:+.1f} "
+                    f"| {downstream} | {evidence.status.value} | {reasons} |"
+                )
         lines.append("")
         lines.append(
             "> Metrics are offline and deterministic.  "
@@ -591,7 +625,29 @@ def run_code_evaluation(
             sr.notes = f"{sr.notes}; {note}" if sr.notes else note
         surface_reports.append(sr)
 
+    from oh_no_my_claudecode.retrieval_eval.promotion import (  # noqa: PLC0415
+        evaluate_retrieval_candidate,
+    )
+
+    promotion_evidence: list[RetrievalPromotionEvidence] = []
+    baseline = next(
+        (
+            report
+            for report in surface_reports
+            if report.surface_name == "code-bm25" and not report.skipped
+        ),
+        None,
+    )
+    if baseline is not None:
+        for candidate in surface_reports:
+            if candidate.surface_name == baseline.surface_name:
+                continue
+            promotion_evidence.append(
+                evaluate_retrieval_candidate(baseline, candidate)
+            )
+
     return RetrievalReport(
         dataset_sha=code_dataset.dataset_sha,
         surface_reports=surface_reports,
+        promotion_evidence=promotion_evidence,
     )

@@ -33,7 +33,7 @@ from oh_no_my_claudecode.runtime.contracts import (
 )
 from oh_no_my_claudecode.runtime.fanout import dependency_layers
 from oh_no_my_claudecode.trace.models import TraceEvent, TraceEventKind
-from oh_no_my_claudecode.trace.recorder import record_trace_event
+from oh_no_my_claudecode.trace.recorder import record_trace_event, trace_parent
 
 
 def _snapshot_trace_payload(snapshot: RunSnapshot | None) -> dict[str, object]:
@@ -75,6 +75,14 @@ def _stable_digest(value: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _runtime_run_span_id(run_id: str) -> str:
+    return f"runtime-run:{run_id}"
+
+
+def _runtime_node_span_id(run_id: str, node_id: str) -> str:
+    return f"runtime-node:{run_id}:{node_id}"
+
+
 class NativeExecutionBackend:
     """Execute a ``RunSpec`` with local event-sourced replay semantics."""
 
@@ -86,12 +94,14 @@ class NativeExecutionBackend:
         *,
         repo_root: Path | None = None,
         max_workers: int = 1,
+        executor: ThreadPoolExecutor | None = None,
     ) -> None:
         if max_workers < 1:
             raise ValueError("max_workers must be at least 1")
         self.store = store
         self.repo_root = None if repo_root is None else Path(repo_root)
         self.max_workers = max_workers
+        self.executor = executor
 
     def execute(
         self,
@@ -157,7 +167,7 @@ class NativeExecutionBackend:
                         if result.status is NodeResultStatus.SUCCEEDED:
                             continue
                         if result.status is NodeResultStatus.SKIPPED:
-                            self._cancel_pending_nodes(
+                            self._cancel_unfinished_nodes(
                                 spec,
                                 reason=result.error or f"{node.node_id} skipped",
                             )
@@ -220,7 +230,9 @@ class NativeExecutionBackend:
                             started_at=execute_started_at,
                         )
                     ready_nodes.append(node)
-                for node, result in self._run_ready_nodes(spec.run_id, ready_nodes, handlers):
+                layer_results = self._run_ready_nodes(spec.run_id, ready_nodes, handlers)
+                terminal_result: NodeResult | None = None
+                for node, result in layer_results:
                     self._write_result(spec.run_id, result)
                     results.append(result)
                     if result.status is NodeResultStatus.SUCCEEDED:
@@ -236,21 +248,8 @@ class NativeExecutionBackend:
                             reason=result.error or "skipped",
                             idempotency_key=f"runtime:{node.node_id}:skip",
                         )
-                        self._cancel_pending_nodes(
-                            spec,
-                            reason=result.error or f"{node.node_id} skipped",
-                        )
-                        self.store.cancel(
-                            spec.run_id,
-                            reason=result.error or f"{node.node_id} skipped",
-                            idempotency_key="runtime:cancel",
-                        )
-                        return self._terminal_result_from_node_result(
-                            spec,
-                            results,
-                            result,
-                            started_at=execute_started_at,
-                        )
+                        if terminal_result is None:
+                            terminal_result = result
                     else:
                         self.store.fail_node(
                             spec.run_id,
@@ -258,17 +257,37 @@ class NativeExecutionBackend:
                             reason=result.error or "failed",
                             idempotency_key=f"runtime:{node.node_id}:fail",
                         )
+                        # Failure outranks cancellation when a dependency-ready
+                        # parallel layer reports both terminal dispositions.
+                        terminal_result = result
+                if terminal_result is not None:
+                    disposition = (
+                        "skipped"
+                        if terminal_result.status is NodeResultStatus.SKIPPED
+                        else "failed"
+                    )
+                    reason = terminal_result.error or (
+                        f"{terminal_result.node_id} {disposition}"
+                    )
+                    self._cancel_unfinished_nodes(spec, reason=reason)
+                    if terminal_result.status is NodeResultStatus.SKIPPED:
+                        self.store.cancel(
+                            spec.run_id,
+                            reason=reason,
+                            idempotency_key="runtime:cancel",
+                        )
+                    else:
                         self.store.fail(
                             spec.run_id,
-                            reason=result.error or f"{node.node_id} failed",
+                            reason=reason,
                             idempotency_key="runtime:fail",
                         )
-                        return self._terminal_result_from_node_result(
-                            spec,
-                            results,
-                            result,
-                            started_at=execute_started_at,
-                        )
+                    return self._terminal_result_from_node_result(
+                        spec,
+                        results,
+                        terminal_result,
+                        started_at=execute_started_at,
+                    )
             self.store.complete(spec.run_id, idempotency_key="runtime:complete")
             return self._result_with_run_event(
                 spec,
@@ -385,6 +404,17 @@ class NativeExecutionBackend:
     ) -> list[tuple[NodeSpec, NodeResult]]:
         if not nodes:
             return []
+        if self.executor is not None:
+            futures = [
+                self.executor.submit(
+                    self._run_node_with_retries,
+                    run_id,
+                    node,
+                    handlers[node.node_id],
+                )
+                for node in nodes
+            ]
+            return [(node, future.result()) for node, future in zip(nodes, futures, strict=True)]
         if self.max_workers == 1 or len(nodes) == 1:
             results: list[tuple[NodeSpec, NodeResult]] = []
             for node in nodes:
@@ -496,16 +526,20 @@ class NativeExecutionBackend:
                 return True
         return False
 
-    def _cancel_pending_nodes(self, spec: RunSpec, *, reason: str) -> None:
+    def _cancel_unfinished_nodes(self, spec: RunSpec, *, reason: str) -> None:
         snapshot = self.store.load(spec.run_id)
         for node in spec.topological_order():
-            if snapshot.nodes[node.node_id].state is not NodeState.PENDING:
+            if snapshot.nodes[node.node_id].state in {
+                NodeState.SUCCEEDED,
+                NodeState.FAILED,
+                NodeState.CANCELLED,
+            }:
                 continue
             self.store.cancel_node(
                 spec.run_id,
                 node.node_id,
                 reason=reason,
-                idempotency_key=f"runtime:{node.node_id}:cancel-pending",
+                idempotency_key=f"runtime:{node.node_id}:cancel-unfinished",
             )
             now = time.time()
             self._record_runtime_node_event(
@@ -536,7 +570,8 @@ class NativeExecutionBackend:
             lease = self._acquire_node_lease(run_id, node)
             while True:
                 try:
-                    result = handler(node)
+                    with trace_parent(_runtime_node_span_id(run_id, node.node_id)):
+                        result = handler(node)
                     self._validate_node_result(node, result)
                 except RuntimeContractError:
                     raise
@@ -633,6 +668,7 @@ class NativeExecutionBackend:
                     "duration_seconds": max(0.0, ended_at - started_at),
                     "title": f"runtime run {spec.run_id} {status.value}",
                 },
+                span_id=_runtime_run_span_id(spec.run_id),
             ),
         )
     def _record_runtime_node_event(
@@ -688,6 +724,8 @@ class NativeExecutionBackend:
                     "duration_seconds": max(0.0, ended_at - started_at),
                     "title": f"runtime node {node.node_id} {status_value}",
                 },
+                span_id=_runtime_node_span_id(run_id, node.node_id),
+                parent_span_id=_runtime_run_span_id(run_id),
             ),
         )
 

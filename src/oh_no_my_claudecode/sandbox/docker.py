@@ -15,7 +15,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
-from .contracts import NetworkPolicy, SandboxPlanError, SandboxRole, SandboxSpec
+from .contracts import (
+    NetworkPolicy,
+    SandboxMount,
+    SandboxPlanError,
+    SandboxRole,
+    SandboxRoleCapabilityManifest,
+    SandboxSpec,
+    sandbox_role_capability_manifest,
+)
 
 
 class _DockerRunner(Protocol):
@@ -44,19 +52,24 @@ class DockerSandboxPlan:
     """A Docker command plus redacted execution metadata."""
 
     argv: tuple[str, ...]
+    command: tuple[str, ...]
     role: SandboxRole
     secret_env: tuple[str, ...]
     network: NetworkPolicy
     timeout_seconds: int
+    mounts: tuple[SandboxMount, ...]
+    capabilities: SandboxRoleCapabilityManifest
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "provider": "docker",
-            "argv": list(self.argv),
+            "argv": list(_redacted_argv(self.argv, self.mounts)),
+            "command": list(self.command),
             "role": self.role,
             "secret_env": list(self.secret_env),
             "network": self.network.value,
             "timeout_seconds": self.timeout_seconds,
+            "capabilities": self.capabilities.to_dict(),
         }
 
 
@@ -98,6 +111,7 @@ def docker_run_plan(
 
     if not command:
         raise SandboxPlanError("docker command must not be empty")
+    capabilities = sandbox_role_capability_manifest(spec, role=role)
     if spec.network is NetworkPolicy.ALLOWLIST:
         raise SandboxPlanError("docker provider cannot enforce egress allowlist")
 
@@ -127,10 +141,13 @@ def docker_run_plan(
     argv.extend(command)
     return DockerSandboxPlan(
         argv=tuple(argv),
+        command=command,
         role=role,
         secret_env=secret_env,
         network=spec.network,
         timeout_seconds=spec.timeout_seconds,
+        mounts=spec.mounts,
+        capabilities=capabilities,
     )
 
 
@@ -224,6 +241,23 @@ def _decode_timeout_output(value: bytes | str | None) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
+
+
+def _redacted_argv(
+    argv: tuple[str, ...],
+    mounts: tuple[SandboxMount, ...],
+) -> tuple[str, ...]:
+    """Redact daemon-only bind sources from serialized run plans."""
+
+    replacements = {
+        f"{mount.host_path}:{mount.container_path}:"
+        f"{'ro' if mount.read_only else 'rw'}": (
+            f"<{mount.source}>:{mount.container_path}:"
+            f"{'ro' if mount.read_only else 'rw'}"
+        )
+        for mount in mounts
+    }
+    return tuple(replacements.get(item, item) for item in argv)
 
 
 __all__ = [

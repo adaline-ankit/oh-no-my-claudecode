@@ -36,13 +36,16 @@ CATEGORY_ORDER: list[str] = [
 # ---------------------------------------------------------------------------
 
 CORE_COMMANDS: list[str] = [
+    "run",
     "setup",
-    "wrap",
-    "autopilot",
+    "quickstart",
     "brief",
+    "guard",
     "recall",
+    "mission",
+    "missioncontrol",
     "ui",
-    "init",
+    "commands",
 ]
 
 # ---------------------------------------------------------------------------
@@ -53,23 +56,26 @@ CORE_COMMANDS: list[str] = [
 
 CATEGORY_MAP: dict[str, str] = {
     # ── Core ─────────────────────────────────────────────────────────────
+    "run": "Core",
     "setup": "Core",
     "quickstart": "Core",
     "wrap": "Core",
-    "autopilot": "Core",
     "brief": "Core",
+    "guard": "Core",
     "recall": "Core",
     "ui": "Core",
     "init": "Core",
+    "commands": "Core",
+    "mission": "Core",
+    "missioncontrol": "Core",
     # ── Orchestrate ───────────────────────────────────────────────────────
-    "mission": "Orchestrate",
+    "autopilot": "Orchestrate",
     "swarm": "Orchestrate",
     "refinery": "Orchestrate",
     "land": "Orchestrate",
     "nightshift": "Orchestrate",
     "loop": "Orchestrate",
     "loop-templates": "Orchestrate",
-    "missioncontrol": "Orchestrate",
     "autoroute": "Orchestrate",
     "swarmreplay": "Orchestrate",
     # ── Memory ────────────────────────────────────────────────────────────
@@ -93,7 +99,6 @@ CATEGORY_MAP: dict[str, str] = {
     "registry-demo": "Trust",
     "badge": "Trust",
     "scorecard": "Trust",
-    "guard": "Trust",
     "check": "Trust",
     "preflight": "Trust",
     "verify-diff": "Trust",

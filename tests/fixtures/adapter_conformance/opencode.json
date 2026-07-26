@@ -1,0 +1,38 @@
+{
+  "schema_version": "1",
+  "provider": "opencode",
+  "cli_version": "recorded-opencode-1.0",
+  "prompt": "Apply the recorded fixture change.",
+  "model": "anthropic/claude-sonnet-4-5",
+  "stdout": "{\"type\":\"result\",\"text\":\"fixture complete\",\"usage\":{\"input\":80,\"output\":20}}\n",
+  "stderr": "",
+  "returncode": 0,
+  "expected": {
+    "output": "fixture complete",
+    "tokens": 100,
+    "cost_usd": null,
+    "error": null
+  },
+  "operations": {
+    "start": {
+      "support": "supported",
+      "evidence": "one-shot opencode run process invocation"
+    },
+    "observe": {
+      "support": "supported",
+      "evidence": "recorded JSON event stream"
+    },
+    "cancel": {
+      "support": "partial",
+      "evidence": "timeout terminates the process; no addressable run handle"
+    },
+    "resume": {
+      "support": "unsupported",
+      "evidence": "the adapter does not persist or accept an OpenCode session id"
+    },
+    "cost": {
+      "support": "unsupported",
+      "evidence": "the recorded event stream exposes usage but not cost"
+    }
+  }
+}

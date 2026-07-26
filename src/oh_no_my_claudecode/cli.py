@@ -4,7 +4,7 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -104,14 +104,17 @@ from oh_no_my_claudecode.wiki.logseq import build_logseq_vault
 from oh_no_my_claudecode.wiki.site import build_site
 
 _ROOT_EPILOG = (
-    "\n137 commands total — run [bold]onmc commands[/bold] to explore by category, "
-    "or [bold]onmc quickstart[/bold] to get started.\n\n"
-    "[bold]Core commands:[/bold]  "
-    "setup  wrap  autopilot  brief  recall  ui  init"
+    "\n[bold]Default workflow:[/bold]  onmc setup  →  onmc run \"your task\"  →  "
+    "onmc missioncontrol\n\n"
+    "Advanced and compatibility commands remain callable. Run "
+    "[bold]onmc commands --all[/bold] for the complete catalog."
 )
 
 app = typer.Typer(
-    help="Memory-grounded autonomous coding loops for Claude Code and Codex.",
+    help=(
+        "One evidence-driven coding runtime for Claude Code, Codex, and OpenCode. "
+        "Plan safely with `onmc run`; add `--execute` to act."
+    ),
     no_args_is_help=True,
     rich_markup_mode="rich",
     epilog=_ROOT_EPILOG,
@@ -139,7 +142,7 @@ def _root(
         ),
     ] = False,
 ) -> None:
-    """Memory-grounded autonomous coding loops for Claude Code and Codex."""
+    """Plan, execute, observe, verify, and prove repository work."""
 
 
 memory_app = typer.Typer(help="Inspect stored memory.", no_args_is_help=True)
@@ -5997,14 +6000,16 @@ def trace_report_command(
     sid: str | None = session_id if session_id else None
 
     try:
-        _, resolved_sid, report = _service().trace_report(sid)
+        repo_root, resolved_sid, report = _service().trace_report(sid)
     except FileNotFoundError as exc:
         raise typer.Exit(code=_fatal(str(exc))) from exc
 
     if otel_output:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
+        from oh_no_my_claudecode.trace.recorder import load_session_events
 
-        spans = to_otel_spans(report, session_id=resolved_sid)
+        _, events = load_session_events(repo_root, resolved_sid)
+        spans = to_otel_spans(events, session_id=resolved_sid)
         otel_path = Path(otel_output)
         try:
             otel_path.write_text(_json.dumps(spans, indent=2), encoding="utf-8")
@@ -7336,3 +7341,38 @@ def swarm_abort_command(
 # so a duplicate-name collision is logged loudly to stderr rather than crashing a
 # user's CLI; CI asserts ``detect_duplicate_commands(app) == []`` to fail the build.
 register_feature_commands(app, strict=False)
+
+
+_PRIMARY_COMMANDS = frozenset(
+    {
+        "run",
+        "setup",
+        "init",
+        "quickstart",
+        "brief",
+        "guard",
+        "recall",
+        "status",
+        "ui",
+        "mission",
+        "missioncontrol",
+        "wrap",
+        "serve",
+        "commands",
+    }
+)
+
+
+def _collapse_primary_help() -> None:
+    """Keep advanced commands callable while removing them from root help."""
+    from typer.main import get_command_name
+
+    for raw_info in (*app.registered_commands, *app.registered_groups):
+        info = cast(Any, raw_info)
+        callback = info.callback
+        raw_name = info.name or getattr(callback, "__name__", "")
+        name = get_command_name(raw_name)
+        info.hidden = name not in _PRIMARY_COMMANDS
+
+
+_collapse_primary_help()

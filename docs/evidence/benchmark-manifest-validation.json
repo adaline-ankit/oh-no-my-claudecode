@@ -1,0 +1,19 @@
+{
+  "blockers": [
+    "at least 50 discriminative tasks are required; found 28",
+    "five benchmark arms are required; missing context-only, onmc-single-agent, selective-swarm, trajectory-routed",
+    "three seeds must be pre-registered in publication.seeds",
+    "three agent/model configurations must be pre-registered in publication.agent_model_configurations",
+    "multiple languages must be declared in publication.languages",
+    "publication.leakage_audit must record a passed independent audit with hidden material unavailable to the agent"
+  ],
+  "condition_count": 2,
+  "errors": [],
+  "manifest_sha256": "c59fad164db295869546d152350964218489e1e0c1746132064df35710720c21",
+  "publication_ready": false,
+  "repository_count": 6,
+  "schema_version": "onmc-benchmark-manifest-validation/v1",
+  "structurally_valid": true,
+  "task_count": 28,
+  "trials_per_cell": 3
+}

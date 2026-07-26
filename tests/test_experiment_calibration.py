@@ -15,7 +15,7 @@ from oh_no_my_claudecode.experiment.calibration import (
     calibrate_portfolio_report,
     calibrate_records,
 )
-from oh_no_my_claudecode.experiment.contracts import Condition
+from oh_no_my_claudecode.experiment.contracts import Condition, task_set_sha256
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SATURATED_REPORT = REPO_ROOT / "datasets" / "experiment" / "reports" / (
@@ -40,6 +40,19 @@ def _record(
         "cost_usd": cost_usd,
         "infra_error": infra_error,
     }
+
+
+def _bind_task_set_revision(
+    manifest: dict[str, object],
+    report: dict[str, object] | None = None,
+) -> str:
+    tasks = manifest["tasks"]
+    assert isinstance(tasks, list)
+    digest = task_set_sha256(tasks)
+    manifest["task_set_sha256"] = digest
+    if report is not None:
+        report["task_set_sha256"] = digest
+    return digest
 
 
 def _failure_taxonomy() -> dict[str, object]:
@@ -304,6 +317,7 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
         "trials_per_cell": 2,
         "records": records,
     }
+    _bind_task_set_revision(manifest, report)
 
     gated = calibrate_portfolio_report(manifest, report)
 
@@ -322,7 +336,153 @@ def test_manifest_gate_accepts_complete_discriminative_report() -> None:
     assert gated.metadata_audit.verifier_artifacts_complete is True
     assert gated.missing_tasks == ()
     assert gated.unexpected_tasks == ()
+    assert gated.missing_cells == ()
+    assert gated.duplicate_cells == ()
+    assert gated.unexpected_cells == ()
     assert gated.reasons == ()
+
+
+def test_manifest_gate_rejects_missing_trial_cell_despite_claimed_trial_count() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "leakage_notes": "frozen public repo tasks audited for leakage",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 2,
+            "environment": {
+                "code_sha": "abc123",
+                "config_hash": "cfg1",
+                "model": "claude-test",
+                "provider": "anthropic",
+                "image": "local",
+            },
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records: list[dict[str, object]] = []
+    for task_id in task_ids:
+        for trial in range(2):
+            records.extend(
+                [
+                    {
+                        **_record(task_id, Condition.BARE_AGENT.value, False),
+                        "trial": trial + 1,
+                    },
+                    {
+                        **_record(task_id, Condition.ONMC_CURRENT.value, True),
+                        "trial": trial + 1,
+                    },
+                ]
+            )
+    missing = records.pop()
+    report = {
+        "task_set_revision": "rev-good",
+        "audit_status": "valid",
+        "leakage_notes": "frozen public repo tasks audited for leakage",
+        "environment": {
+            "code_sha": "abc123",
+            "config_hash": "cfg1",
+            "model": "claude-test",
+            "provider": "anthropic",
+            "image": "local",
+        },
+        "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": _token_telemetry(),
+        "trajectory_artifacts": _trajectory_artifacts(),
+        "verifier_artifacts": _verifier_artifacts(),
+        "code_sha": "abc123",
+        "code_sha_under_test": "def456",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 2,
+        "records": records,
+    }
+    _bind_task_set_revision(manifest, report)
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.calibration.quality_claim_ready is True
+    assert gated.quality_claim_ready is False
+    assert gated.cost_claim_ready is False
+    assert gated.expected_cells == 40
+    assert gated.reported_cells == 39
+    assert gated.missing_cells == (
+        f"{missing['task_id']}::{missing['condition']}::t{missing['trial']}",
+    )
+    assert any("expected trial cell" in reason for reason in gated.reasons)
+
+
+def test_manifest_gate_rejects_duplicate_trial_cell() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "leakage_notes": "frozen public repo tasks audited for leakage",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 1,
+            "environment": {
+                "code_sha": "abc123",
+                "config_hash": "cfg1",
+                "model": "claude-test",
+                "provider": "anthropic",
+                "image": "local",
+            },
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records = [
+        {
+            **_record(task_id, condition, condition == Condition.ONMC_CURRENT.value),
+            "trial": 1,
+        }
+        for task_id in task_ids
+        for condition in (Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value)
+    ]
+    records.append(dict(records[0]))
+    report = {
+        "task_set_revision": "rev-good",
+        "audit_status": "valid",
+        "leakage_notes": "frozen public repo tasks audited for leakage",
+        "environment": {
+            "code_sha": "abc123",
+            "config_hash": "cfg1",
+            "model": "claude-test",
+            "provider": "anthropic",
+            "image": "local",
+        },
+        "failure_taxonomy": _failure_taxonomy(),
+        "token_telemetry": _token_telemetry(),
+        "trajectory_artifacts": _trajectory_artifacts(),
+        "verifier_artifacts": _verifier_artifacts(),
+        "code_sha": "abc123",
+        "code_sha_under_test": "def456",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 1,
+        "records": records,
+    }
+    _bind_task_set_revision(manifest, report)
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.quality_claim_ready is False
+    assert gated.duplicate_cells == ("task-0::bare-agent::t1",)
+    assert any("duplicate trial cell" in reason for reason in gated.reasons)
+
+
+def test_manifest_gate_rejects_task_set_hash_mismatch() -> None:
+    manifest = json.loads(V4_MANIFEST.read_text(encoding="utf-8"))
+    report = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
+    manifest["task_set_sha256"] = "0" * 64
+    report["task_set_sha256"] = "0" * 64
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.quality_claim_ready is False
+    assert gated.manifest_task_set_sha256 == "0" * 64
+    assert gated.manifest_task_set_sha256 != gated.computed_manifest_task_set_sha256
+    assert any("does not match manifest tasks" in reason for reason in gated.reasons)
 
 
 def test_manifest_gate_blocks_missing_report_metadata() -> None:
@@ -783,15 +943,17 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
         "portfolio_coverage",
         "calibration",
         "report_coverage",
+        "verifier_calibration",
     ]
     assert payload["claim_readiness"]["report_coverage_ready"] is False
-    assert payload["claim_readiness"]["verifier_calibration_ready"] is True
+    assert payload["claim_readiness"]["verifier_calibration_ready"] is False
     assert payload["calibration"]["decision"] == "needs-discrimination"
     assert payload["calibration"]["saturated_tasks"] == 24
     assert payload["report_coverage"]["claim_ready"] is False
-    assert payload["verifier_calibration"]["claim_ready"] is True
-    assert payload["verifier_calibration"]["caught_false_green"] == 13
+    assert payload["verifier_calibration"]["claim_ready"] is False
+    assert payload["verifier_calibration"]["caught_false_green"] == 12
     assert payload["verifier_calibration"]["false_positive_legitimate"] == 0
+    assert payload["verifier_calibration"]["ci_gate_supported"] is False
     assert any(
         item["name"] == "raw_trajectories" and item["covered"] is False
         for item in payload["report_coverage"]["fields"]
@@ -828,9 +990,12 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     assert "external_claim_decision: `not-ready`" in markdown
     assert "claim_language_decision: `refuse`" in markdown
     assert "report_coverage_claim_ready: `false`" in markdown
-    assert "verifier_calibration_claim_ready: `true`" in markdown
+    assert "verifier_calibration_claim_ready: `false`" in markdown
     assert "## Report Coverage" in markdown
     assert "## Verifier Calibration" in markdown
+    assert "corpus_kind: `external-frozen`" in markdown
+    assert "ci_gate_supported: `false`" in markdown
+    assert "sensitivity_ci:" in markdown
     assert "raw_trajectories: missing" in markdown
     assert "## Claim Language Gate" in markdown
     assert "suggested_safe_claim: ONMC records harness evidence" in markdown
@@ -880,9 +1045,10 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
         "portfolio_coverage",
         "calibration",
         "report_coverage",
+        "verifier_calibration",
     ]
     assert payload["claim_readiness"]["report_coverage_ready"] is False
-    assert payload["claim_readiness"]["verifier_calibration_ready"] is True
+    assert payload["claim_readiness"]["verifier_calibration_ready"] is False
     assert any(
         "Add at least 22 benchmark task" in action
         for action in payload["claim_readiness"]["next_actions"]

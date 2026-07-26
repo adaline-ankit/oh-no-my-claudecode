@@ -22,10 +22,13 @@ Everything is offline, deterministic, and requires no LLM calls.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from oh_no_my_claudecode.embeddings.core import Embedder
+from oh_no_my_claudecode.embeddings.core import Embedder, embeddings_enabled
 from oh_no_my_claudecode.retrieval.bm25 import BM25Corpus
 from oh_no_my_claudecode.retrieval.dense import DenseRetriever
+from oh_no_my_claudecode.retrieval.query_plan import QueryPlan, build_query_plan
+from oh_no_my_claudecode.retrieval.rerank import Reranker, apply_reranker
 from oh_no_my_claudecode.retrieval.rrf import reciprocal_rank_fusion
 
 _VALID_MODES = frozenset({"hybrid", "bm25", "dense"})
@@ -39,6 +42,64 @@ class RetrievalHit:
     score: float
     evidence: str  # cited text for downstream context / provenance
     rank: int  # 1-based position in the final ranked list
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalProvenance:
+    """One retrieval stage actually explored for a measured decision."""
+
+    stage: str
+    backend: str
+    result_ids: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "backend": self.backend,
+            "result_ids": list(self.result_ids),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalDecision:
+    """Auditable result of the BM25-floor measured retrieval policy."""
+
+    query_plan: QueryPlan
+    selected_stage: str
+    hits: tuple[RetrievalHit, ...]
+    confidence: float
+    min_candidate_confidence: float
+    token_budget: int
+    used_tokens: int
+    abstained: bool
+    fallback_reason: str
+    candidate_promoted: bool
+    provenance: tuple[RetrievalProvenance, ...]
+    schema_version: str = "1"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "query_plan": self.query_plan.to_dict(),
+            "selected_stage": self.selected_stage,
+            "hits": [
+                {
+                    "doc_id": hit.doc_id,
+                    "score": hit.score,
+                    "evidence": hit.evidence,
+                    "rank": hit.rank,
+                }
+                for hit in self.hits
+            ],
+            "confidence": self.confidence,
+            "min_candidate_confidence": self.min_candidate_confidence,
+            "token_budget": self.token_budget,
+            "used_tokens": self.used_tokens,
+            "abstained": self.abstained,
+            "fallback_reason": self.fallback_reason,
+            "candidate_promoted": self.candidate_promoted,
+            "provenance": [item.to_dict() for item in self.provenance],
+        }
 
 
 class HybridRetriever:
@@ -94,9 +155,11 @@ class HybridRetriever:
             raise ValueError(msg)
 
         self._doc_ids: list[str] = list(doc_ids)
+        self._texts: list[str] = list(texts)
         self._evidence_texts: list[str] = (
             list(evidence_texts) if evidence_texts is not None else list(texts)
         )
+        self._embedder = embedder
         self._rrf_k = rrf_k
         self._min_score = min_score
         self._token_budget = token_budget
@@ -106,12 +169,14 @@ class HybridRetriever:
 
         # Sub-retrievers (index built once here).
         self._bm25 = BM25Corpus(doc_ids, texts)
-        self._dense = DenseRetriever(doc_ids, texts, embedder)
+        # Dense construction may load an optional local model.  Keep it lazy so
+        # the BM25 production floor never initializes an unselected dependency.
+        self._dense: DenseRetriever | None = None
 
     @property
     def embedder_id(self) -> str:
         """Stable ID of the dense embedder for provenance reporting."""
-        return self._dense.embedder_id
+        return self._dense_retriever().embedder_id
 
     @property
     def corpus_size(self) -> int:
@@ -157,48 +222,223 @@ class HybridRetriever:
         if mode == "bm25":
             ranked: list[tuple[str, float]] = self._bm25.retrieve(query, n)
         elif mode == "dense":
-            ranked = self._dense.retrieve(query, n)
+            ranked = self._dense_retriever().retrieve(query, n)
         else:  # hybrid
             bm25_ranked = self._bm25.retrieve(query, n)
-            dense_ranked = self._dense.retrieve(query, n)
+            dense_ranked = self._dense_retriever().retrieve(query, n)
             ranked = reciprocal_rank_fusion(
                 [bm25_ranked, dense_ranked], rrf_k=self._rrf_k
             )
 
-        if not ranked:
-            return []
+        hits, _used = self._pack(
+            ranked,
+            k=k,
+            token_budget=self._token_budget,
+            allow_oversized_first=True,
+        )
+        return list(hits)
 
-        # No-op threshold: if the top score is below min_score, signal "no evidence".
+    def retrieve_measured(
+        self,
+        query: str,
+        k: int,
+        *,
+        requested_mode: str = "bm25",
+        candidate_promoted: bool = False,
+        min_candidate_confidence: float = 0.65,
+        token_budget: int,
+        reranker: Reranker | None = None,
+    ) -> RetrievalDecision:
+        """Run the lexical floor plus eligible candidate stages.
+
+        Candidate results are explored and attributed, but they replace BM25
+        only for conceptual queries after an explicit promotion decision and a
+        query-level confidence pass.  The token budget is a hard gate here:
+        unlike the legacy raw ``retrieve`` API, an oversized first item is
+        omitted rather than allowed to overrun the budget.
+        """
+        if not 0.0 <= min_candidate_confidence <= 1.0:
+            raise ValueError("min_candidate_confidence must be between 0 and 1")
+        plan = build_query_plan(
+            query,
+            requested_mode=requested_mode,
+            k=k,
+            token_budget=token_budget,
+            dense_available=embeddings_enabled(),
+            reranker_available=reranker is not None,
+        )
+
+        n = len(self._doc_ids)
+        bm25_ranked = self._bm25.retrieve(query, n)
+        bm25_hits, bm25_tokens = self._pack(
+            bm25_ranked,
+            k=k,
+            token_budget=token_budget,
+            allow_oversized_first=False,
+        )
+        provenance: list[RetrievalProvenance] = [
+            RetrievalProvenance(
+                stage="bm25",
+                backend="okapi-bm25",
+                result_ids=tuple(doc_id for doc_id, _score in bm25_ranked[:k]),
+            )
+        ]
+        selected_stage = "bm25"
+        selected_hits = bm25_hits
+        used_tokens = bm25_tokens
+        confidence = _bm25_confidence(bm25_ranked)
+        fallback_reason = ""
+
+        if plan.candidate_stages:
+            dense = self._dense_retriever()
+            dense_ranked = dense.retrieve(query, n)
+            provenance.append(
+                RetrievalProvenance(
+                    stage="dense",
+                    backend=dense.embedder_id,
+                    result_ids=tuple(doc_id for doc_id, _score in dense_ranked[:k]),
+                )
+            )
+            candidate_ranked = dense_ranked
+            candidate_stage = "dense"
+            if "rrf" in plan.candidate_stages:
+                candidate_ranked = reciprocal_rank_fusion(
+                    [bm25_ranked, dense_ranked], rrf_k=self._rrf_k
+                )
+                candidate_stage = "hybrid"
+                provenance.append(
+                    RetrievalProvenance(
+                        stage="rrf",
+                        backend=f"rrf-k{self._rrf_k}",
+                        result_ids=tuple(
+                            doc_id for doc_id, _score in candidate_ranked[:k]
+                        ),
+                    )
+                )
+            if "rerank" in plan.candidate_stages and reranker is not None:
+                candidate_ranked = apply_reranker(
+                    reranker,
+                    query,
+                    candidate_ranked,
+                    dict(zip(self._doc_ids, self._texts, strict=True)),
+                )
+                candidate_stage = f"{candidate_stage}+rerank"
+                provenance.append(
+                    RetrievalProvenance(
+                        stage="rerank",
+                        backend=reranker.reranker_id,
+                        result_ids=tuple(
+                            doc_id for doc_id, _score in candidate_ranked[:k]
+                        ),
+                    )
+                )
+
+            candidate_hits, candidate_tokens = self._pack(
+                candidate_ranked,
+                k=k,
+                token_budget=token_budget,
+                allow_oversized_first=False,
+            )
+            candidate_confidence = _dense_confidence(dense_ranked)
+            if not candidate_promoted:
+                fallback_reason = "candidate_not_promoted"
+            elif candidate_confidence < min_candidate_confidence:
+                fallback_reason = "candidate_low_confidence"
+            elif not candidate_hits:
+                fallback_reason = "candidate_token_budget_exhausted"
+            else:
+                selected_stage = candidate_stage
+                selected_hits = candidate_hits
+                used_tokens = candidate_tokens
+                confidence = candidate_confidence
+        elif requested_mode != "bm25":
+            reasons = {reason for _stage, reason in plan.suppressed_stages}
+            fallback_reason = (
+                "lexical_dominant_query"
+                if "lexical_dominant_query" in reasons
+                else "candidate_dependency_unavailable"
+            )
+
+        if not selected_hits:
+            fallback_reason = (
+                "token_budget_exhausted"
+                if bm25_ranked and token_budget >= 0
+                else fallback_reason or "no_relevant_context"
+            )
+
+        return RetrievalDecision(
+            query_plan=plan,
+            selected_stage=selected_stage,
+            hits=selected_hits,
+            confidence=round(confidence, 6),
+            min_candidate_confidence=min_candidate_confidence,
+            token_budget=token_budget,
+            used_tokens=used_tokens,
+            abstained=not selected_hits,
+            fallback_reason=fallback_reason,
+            candidate_promoted=candidate_promoted,
+            provenance=tuple(provenance),
+        )
+
+    def _dense_retriever(self) -> DenseRetriever:
+        dense = self._dense
+        if dense is None:
+            dense = DenseRetriever(self._doc_ids, self._texts, self._embedder)
+            self._dense = dense
+        return dense
+
+    def _pack(
+        self,
+        ranked: list[tuple[str, float]],
+        *,
+        k: int,
+        token_budget: int | None,
+        allow_oversized_first: bool,
+    ) -> tuple[tuple[RetrievalHit, ...], int]:
+        if not ranked:
+            return (), 0
         top_score = ranked[0][1]
         if self._min_score > 0.0 and top_score < self._min_score:
-            return []
+            return (), 0
 
-        # Pack results, respecting the optional token budget.
         hits: list[RetrievalHit] = []
         accumulated_tokens = 0
-
-        for rank_0based, (doc_id, score) in enumerate(ranked[:k]):
+        for doc_id, score in ranked[:k]:
             idx = self._id_to_idx.get(doc_id, -1)
             evidence = self._evidence_texts[idx] if idx >= 0 else ""
-
-            # Token-budget check (whitespace-split token count as a proxy).
-            if self._token_budget is not None:
-                ev_tokens = len(evidence.split())
-                if accumulated_tokens + ev_tokens > self._token_budget and hits:
-                    # Budget exhausted; at least one result already collected.
-                    break
-                accumulated_tokens += ev_tokens
-
+            evidence_tokens = len(evidence.split())
+            if (
+                token_budget is not None
+                and accumulated_tokens + evidence_tokens > token_budget
+                and (hits or not allow_oversized_first)
+            ):
+                break
+            accumulated_tokens += evidence_tokens
             hits.append(
                 RetrievalHit(
                     doc_id=doc_id,
                     score=score,
                     evidence=evidence,
-                    rank=rank_0based + 1,
+                    rank=len(hits) + 1,
                 )
             )
+        return tuple(hits), accumulated_tokens
 
-        return hits
+
+def _bm25_confidence(ranking: list[tuple[str, float]]) -> float:
+    if not ranking:
+        return 0.0
+    top = max(0.0, ranking[0][1])
+    return min(1.0, top / (top + 1.0))
+
+
+def _dense_confidence(ranking: list[tuple[str, float]]) -> float:
+    if not ranking:
+        return 0.0
+    top = max(0.0, min(1.0, ranking[0][1]))
+    second = max(0.0, min(1.0, ranking[1][1])) if len(ranking) > 1 else 0.0
+    margin = max(0.0, top - second)
+    return min(1.0, 0.85 * top + 0.15 * margin)
 
 
 def retrieve(

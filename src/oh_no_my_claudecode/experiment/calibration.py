@@ -12,11 +12,12 @@ typed gate result. No agent, subprocess, network, or provider call is involved.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from oh_no_my_claudecode.experiment.contracts import Condition
+from oh_no_my_claudecode.experiment.contracts import Condition, task_set_sha256
 from oh_no_my_claudecode.experiment.stats import mean
 
 __all__ = [
@@ -103,6 +104,9 @@ class ManifestCalibrationReport:
     metadata_audit: ReportMetadataAudit
     manifest_task_set_revision: str
     report_task_set_revision: str | None
+    manifest_task_set_sha256: str | None
+    computed_manifest_task_set_sha256: str
+    report_task_set_sha256: str | None
     audit_status: str
     manifest_tasks: int
     reported_tasks: int
@@ -112,6 +116,11 @@ class ManifestCalibrationReport:
     reported_conditions: tuple[str, ...]
     expected_trials: int
     reported_trials: int | None
+    expected_cells: int
+    reported_cells: int
+    missing_cells: tuple[str, ...]
+    duplicate_cells: tuple[str, ...]
+    unexpected_cells: tuple[str, ...]
     quality_claim_ready: bool
     cost_claim_ready: bool
     reasons: tuple[str, ...]
@@ -122,6 +131,9 @@ class ManifestCalibrationReport:
             "metadata_audit": self.metadata_audit.to_dict(),
             "manifest_task_set_revision": self.manifest_task_set_revision,
             "report_task_set_revision": self.report_task_set_revision,
+            "manifest_task_set_sha256": self.manifest_task_set_sha256,
+            "computed_manifest_task_set_sha256": self.computed_manifest_task_set_sha256,
+            "report_task_set_sha256": self.report_task_set_sha256,
             "audit_status": self.audit_status,
             "manifest_tasks": self.manifest_tasks,
             "reported_tasks": self.reported_tasks,
@@ -131,6 +143,11 @@ class ManifestCalibrationReport:
             "reported_conditions": list(self.reported_conditions),
             "expected_trials": self.expected_trials,
             "reported_trials": self.reported_trials,
+            "expected_cells": self.expected_cells,
+            "reported_cells": self.reported_cells,
+            "missing_cells": list(self.missing_cells),
+            "duplicate_cells": list(self.duplicate_cells),
+            "unexpected_cells": list(self.unexpected_cells),
             "quality_claim_ready": self.quality_claim_ready,
             "cost_claim_ready": self.cost_claim_ready,
             "reasons": list(self.reasons),
@@ -232,6 +249,7 @@ def calibrate_portfolio_report(
     raw_tasks = manifest.get("tasks")
     if not isinstance(raw_tasks, list):
         raise ValueError("manifest.tasks must be a list")
+    task_payloads = [_mapping(item, "manifest.tasks[]") for item in raw_tasks]
     expected_tasks = tuple(sorted(_task_id(item) for item in raw_tasks))
     reported_tasks = tuple(sorted(_reported_task_ids(report)))
     missing = tuple(task for task in expected_tasks if task not in reported_tasks)
@@ -251,8 +269,23 @@ def calibrate_portfolio_report(
         "manifest.experiment.task_set_revision",
     )
     report_revision = _optional_string(report.get("task_set_revision"), "report.task_set_revision")
+    manifest_task_hash = _optional_string(
+        manifest.get("task_set_sha256"),
+        "manifest.task_set_sha256",
+    )
+    computed_task_hash = task_set_sha256(task_payloads)
+    report_task_hash = _optional_string(
+        report.get("task_set_sha256"),
+        "report.task_set_sha256",
+    )
     expected_trials = _integer(experiment.get("trials"), "manifest.experiment.trials")
     reported_trials = _optional_integer(report.get("trials_per_cell"), "report.trials_per_cell")
+    cell_coverage = _audit_trial_cells(
+        report,
+        task_ids=expected_tasks,
+        conditions=expected_conditions,
+        trials=expected_trials,
+    )
     audit_status = _string(manifest.get("audit_status"), "manifest.audit_status")
     metadata_audit = _audit_report_metadata(manifest, report)
     calibration = calibrate_external_report(
@@ -265,6 +298,14 @@ def calibrate_portfolio_report(
         reasons.append(
             f"task_set_revision mismatch: manifest={expected_revision}, report={report_revision}"
         )
+    if manifest_task_hash is None:
+        reasons.append("manifest.task_set_sha256 is missing")
+    elif manifest_task_hash != computed_task_hash:
+        reasons.append("manifest.task_set_sha256 does not match manifest tasks")
+    if report_task_hash is None:
+        reasons.append("report.task_set_sha256 is missing")
+    elif manifest_task_hash is not None and report_task_hash != manifest_task_hash:
+        reasons.append("report.task_set_sha256 does not match manifest.task_set_sha256")
     if expected_conditions != reported_conditions:
         reasons.append(
             "condition mismatch: "
@@ -284,8 +325,16 @@ def calibrate_portfolio_report(
         reasons.append(f"{len(missing)} manifest task(s) missing from report")
     if unexpected:
         reasons.append(f"{len(unexpected)} reported task(s) are absent from manifest")
+    if cell_coverage.missing:
+        reasons.append(f"{len(cell_coverage.missing)} expected trial cell(s) missing from report")
+    if cell_coverage.duplicates:
+        reasons.append(f"{len(cell_coverage.duplicates)} duplicate trial cell(s) in report")
+    if cell_coverage.unexpected:
+        reasons.append(f"{len(cell_coverage.unexpected)} unexpected trial cell(s) in report")
     structural_ready = (
         expected_revision == report_revision
+        and manifest_task_hash == computed_task_hash
+        and report_task_hash == manifest_task_hash
         and expected_conditions == reported_conditions
         and reported_trials == expected_trials
         and audit_status == "valid"
@@ -293,6 +342,9 @@ def calibrate_portfolio_report(
         and expected_trials >= 2
         and not missing
         and not unexpected
+        and not cell_coverage.missing
+        and not cell_coverage.duplicates
+        and not cell_coverage.unexpected
     )
     quality_ready = structural_ready and calibration.quality_claim_ready
     return ManifestCalibrationReport(
@@ -300,6 +352,9 @@ def calibrate_portfolio_report(
         metadata_audit=metadata_audit,
         manifest_task_set_revision=expected_revision,
         report_task_set_revision=report_revision,
+        manifest_task_set_sha256=manifest_task_hash,
+        computed_manifest_task_set_sha256=computed_task_hash,
+        report_task_set_sha256=report_task_hash,
         audit_status=audit_status,
         manifest_tasks=len(expected_tasks),
         reported_tasks=len(reported_tasks),
@@ -309,10 +364,67 @@ def calibrate_portfolio_report(
         reported_conditions=reported_conditions,
         expected_trials=expected_trials,
         reported_trials=reported_trials,
+        expected_cells=cell_coverage.expected,
+        reported_cells=cell_coverage.reported,
+        missing_cells=cell_coverage.missing,
+        duplicate_cells=cell_coverage.duplicates,
+        unexpected_cells=cell_coverage.unexpected,
         quality_claim_ready=quality_ready,
         cost_claim_ready=quality_ready and calibration.cost_claim_ready,
         reasons=tuple(dict.fromkeys(reasons)),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _CellCoverage:
+    expected: int
+    reported: int
+    missing: tuple[str, ...]
+    duplicates: tuple[str, ...]
+    unexpected: tuple[str, ...]
+
+
+def _audit_trial_cells(
+    report: Mapping[str, object],
+    *,
+    task_ids: Sequence[str],
+    conditions: Sequence[str],
+    trials: int,
+) -> _CellCoverage:
+    raw_records = _list(report.get("records"), "report.records")
+    expected_keys = {
+        (task_id, condition, trial)
+        for task_id in task_ids
+        for condition in conditions
+        for trial in range(1, trials + 1)
+    }
+    reported_keys: list[tuple[str, str, int]] = []
+    for item in raw_records:
+        record = _mapping(item, "report.records[]")
+        reported_keys.append(
+            (
+                _string(record.get("task_id"), "report.records[].task_id"),
+                _string(record.get("condition"), "report.records[].condition"),
+                _integer(record.get("trial"), "report.records[].trial"),
+            )
+        )
+    counts = Counter(reported_keys)
+    actual_keys = set(counts)
+    return _CellCoverage(
+        expected=len(expected_keys),
+        reported=len(reported_keys),
+        missing=tuple(_cell_id(key) for key in sorted(expected_keys - actual_keys)),
+        duplicates=tuple(
+            _cell_id(key)
+            for key in sorted(key for key, count in counts.items() if count > 1)
+        ),
+        unexpected=tuple(_cell_id(key) for key in sorted(actual_keys - expected_keys)),
+    )
+
+
+def _cell_id(key: tuple[str, str, int]) -> str:
+    task_id, condition, trial = key
+    return f"{task_id}::{condition}::t{trial}"
 
 
 def _audit_report_metadata(

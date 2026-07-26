@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.test_harness_run import AllowPolicy, FakeLoop, _loop_result
 
 from oh_no_my_claudecode.durable_runtime import RuntimeStore
 from oh_no_my_claudecode.harness_run import ControllerDependencies, HarnessController, RunRequest
@@ -24,6 +23,7 @@ from oh_no_my_claudecode.runtime import (
 )
 from oh_no_my_claudecode.trace.models import TraceEventKind
 from oh_no_my_claudecode.trace.recorder import load_session_events, start_session
+from test_harness_run import AllowPolicy, FakeLoop, _loop_result
 
 
 def _node(
@@ -262,8 +262,11 @@ def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None
     assert payload["duration_seconds"] >= 0
     assert payload["end_ts"] >= runtime_events[0].ts
     assert payload["capabilities"]["filesystem_write"] is True
+    assert runtime_events[0].span_id == "runtime-node:run-trace:execute"
+    assert runtime_events[0].parent_span_id == "runtime-run:run-trace"
     run_events = [event for event in events if event.kind == TraceEventKind.RUNTIME_RUN]
     assert len(run_events) == 1
+    assert run_events[0].span_id == runtime_events[0].parent_span_id
     run_payload = run_events[0].payload
     assert run_payload["backend"] == "native"
     assert run_payload["run_id"] == "run-trace"
@@ -746,6 +749,9 @@ def test_runtime_contract_exposes_honest_adapter_capabilities(tmp_path: Path) ->
     assert capability["cost"] == "not_reported"
     assert capability["tokens"] == "best_effort_human_stdout_parse"
     assert "Cost is never reported" in " ".join(capability["limitations"])
+    assert capability["conformance"]["resume"]["support"] == "unsupported"
+    assert capability["conformance"]["cancel"]["support"] == "partial"
+    assert capability["conformance"]["cost"]["support"] == "unsupported"
     assert all(node.metadata["adapter_capability"] == capability for node in spec.nodes)
 
 

@@ -6,14 +6,26 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Autonomous coding loops that remember what your repo learned and prove when work is done.**
+**One coding runtime that remembers what your repo learned and proves when work is done.**
 
 ONMC runs Claude Code, Codex, or OpenCode against a goal, injects relevant repository memory on every
 iteration, warns about known dead-ends, executes your real verifier, enforces time/cost/token
 limits, and writes a tamper-evident run receipt.
 
-Use the execution loop, the memory layer, or both. ONMC is local-first, cross-agent, and works
-without a hosted account.
+The default product is one command: `onmc run`. `mission` and Mission Control
+are planning and observation views over that same durable run, while advanced
+workflows remain available for operators. ONMC is local-first, cross-agent, and
+works without a hosted account.
+
+## Benchmark evidence status
+
+ONMC does not currently claim state-of-the-art performance. The committed
+[external benchmark report](docs/evidence/sota-report.md) is explicitly not
+publication-ready: its paired quality delta is zero on a saturated one-seed
+report, cost coverage is incomplete, and raw trajectory, verifier, and leakage
+audit artifacts are missing. The [reproduction guide](docs/evidence/reproduce.md)
+regenerates that verdict locally, and the external claim gate rejects stronger
+language until every pre-registered evidence gate passes.
 
 ## Install (one line)
 
@@ -48,7 +60,7 @@ Coding agents are capable. Their surrounding workflow still has expensive gaps:
 |---|---|
 | Every session starts cold | Repo memory compiled from git, docs, code, PRs, and transcripts |
 | Autonomous loops repeat failed ideas | `guard` injects recorded dead-ends before each attempt |
-| "Done" can mean the model stopped talking | `loop` and `autopilot` require convergence plus your verifier to mark a run verified |
+| "Done" can mean the model stopped talking | `run` requires convergence plus your verifier and proof receipt to mark a run verified |
 | Agent work is hard to inspect or reproduce | Tamper-evident receipts with git tree hash, model/tool hashes, iteration chain, and reproducibility envelope |
 | No proof of agent improvement over time | `evolution` compares cost and iterations across runs; receipt-backed trend showing cheaper and faster loops |
 | Expensive models do all the work | Cost-split execution: `--plan-with <expensive> --execute-with <cheap>` runs precise planning once, cheap execution per iteration |
@@ -70,26 +82,17 @@ hooks/MCP configuration, shows the first useful recall, and offers the local das
 
 No provider required. Use `onmc setup --no-llm` for a fully deterministic first run.
 
-### 2. Ask what the repo already knows
+### 2. Run one task
+
+Preview the exact runtime contract without spending tokens or changing files:
 
 ```bash
-onmc brief --task "fix checkout coupon failures"
-onmc guard --task "fix checkout coupon failures"
-onmc why src/checkout/service.py
-onmc ui
-```
-
-### 3. Run the full loop
-
-Preview ONMC's adaptive execution plan before spending tokens or changing files:
-
-```bash
-onmc run "fix checkout coupon failures" --json
+onmc run "fix checkout coupon failures"
 ```
 
 The plan compiles a typed task DAG, retrieves minimal cited repo context, checks
 agent and verifier capabilities, declares proof requirements, and assigns durable
-state. Execute that exact controller explicitly:
+state. Execute that exact runtime explicitly:
 
 ```bash
 onmc run "fix checkout coupon failures" --execute \
@@ -99,29 +102,34 @@ onmc run "fix checkout coupon failures" --execute \
   --isolate
 ```
 
-The simplest way — one command runs the complete KNOW→PLAN(opt)→ACT→PROVE→LEARN cycle:
+### 3. Watch the same run
+
+`mission` is the detailed plan view; Mission Control replays the durable event
+stream and accepts “verified” only from a valid proof receipt:
 
 ```bash
-onmc autopilot "fix checkout coupon failures" \
-  --verify "pytest -q" \
-  --max-cost-usd 2.00
+onmc mission "fix checkout coupon failures"
+onmc missioncontrol
+onmc ui
 ```
 
-This compiles the brief, injects dead-ends, runs Claude Code in a loop, verifies success,
-records a receipt, and captures what the repo learned.
+The equivalent Claude Code hook and Codex entry paths compile the same `RunSpec`;
+they do not start separate orchestration systems.
 
-Prefer `--plan-with` + `--execute-with` to split cost: expensive model plans once,
-cheap model executes:
+### 4. Inspect memory when you need it
 
 ```bash
-onmc autopilot "fix the cache invalidation bug" \
-  --plan-with claude-opus-4-5 \
-  --execute-with claude-haiku-4-5 \
-  --verify "pytest -q" \
-  --max-cost-usd 2.00
+onmc brief --task "fix checkout coupon failures"
+onmc guard --task "fix checkout coupon failures"
+onmc why src/checkout/service.py
 ```
 
-Or use the lower-level `onmc loop` for more control:
+Advanced presets such as `autopilot`, `nomistakes`, `loop`, and `swarm` remain
+callable and are listed by `onmc commands --all`. They are specialized controls
+over the same proof and receipt boundaries, not the default onboarding path.
+
+For example, the lower-level loop remains available when its extra controls are
+needed:
 
 ```bash
 onmc loop \
@@ -137,7 +145,7 @@ Use `--agent codex` or `--agent opencode` to swap agents. Use `--isolate` to run
 an isolated git worktree so failed attempts don't pollute your working tree. Use
 `--resume` to pick up from the last checkpoint.
 
-### 4. Gate a PR with No-Mistakes mode
+### 5. Gate a PR with No-Mistakes mode
 
 `nomistakes` is the merge gate: it runs deterministic preflight, lets the agent act
 inside an isolated worktree, verifies with your command, and approves only when ONMC

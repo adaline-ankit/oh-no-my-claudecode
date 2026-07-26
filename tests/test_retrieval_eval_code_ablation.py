@@ -114,6 +114,27 @@ class TestAblationCoverage:
                 assert "mrr@10" in surf
                 assert "ndcg@10" in surf
 
+    def test_report_emits_candidate_promotion_evidence(self) -> None:
+        report = run_code_evaluation(code_ablation_adapters())
+        payload = report.to_dict()
+        evidence = {
+            str(item["candidate"]): item
+            for item in payload["promotion_evidence"]  # type: ignore[index]
+        }
+
+        assert evidence["code-hybrid"]["baseline"] == "code-bm25"
+        assert evidence["code-hybrid"]["status"] == "rejected"
+        assert "offline_metric_not_improved" in evidence["code-hybrid"]["reasons"]
+        assert evidence["code-dense"]["candidate_provenance"]
+        assert evidence["code-graph"]["status"] == "rejected"
+        assert "candidate_skipped" in evidence["code-graph"]["reasons"]
+
+    def test_markdown_surfaces_bm25_promotion_gate(self) -> None:
+        markdown = run_code_evaluation(code_ablation_adapters()).to_markdown()
+        assert "Retrieval candidate promotion gate" in markdown
+        assert "code-bm25" in markdown
+        assert "downstream" in markdown.lower()
+
 
 # ---------------------------------------------------------------------------
 # Frozen baseline must not regress when the new surfaces are added

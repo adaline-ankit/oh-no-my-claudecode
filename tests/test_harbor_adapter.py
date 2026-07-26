@@ -5,7 +5,9 @@ import io
 import json
 import os
 import runpy
+import subprocess
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 
@@ -23,8 +25,12 @@ from oh_no_my_claudecode.experiment.harbor_adapter import (
     harbor_task_payload,
     import_harbor_native_trial,
     import_harbor_results,
+    import_harbor_smoke_outputs,
     import_harbor_trial,
+    materialize_nop_smoke_trajectory,
     plan_harbor_smoke,
+    run_harbor_smoke,
+    validate_harbor_seed_manifest,
 )
 from oh_no_my_claudecode.experiment.portfolio import (
     PortfolioManifest,
@@ -36,6 +42,8 @@ from oh_no_my_claudecode.experiment.portfolio import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IMPORT_SCRIPT_PATH = REPO_ROOT / "scripts" / "import_harbor_results.py"
 EXPORT_SCRIPT_PATH = REPO_ROOT / "scripts" / "export_harbor_tasks.py"
+RUN_SCRIPT_PATH = REPO_ROOT / "scripts" / "run_harbor_smoke.py"
+PORTFOLIO_V4_PATH = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.json"
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 
@@ -110,6 +118,11 @@ def _native_harbor_trial() -> dict[str, object]:
     return {
         "task_name": "onmc/cache-bugfix",
         "trial_name": "cache-bugfix__abc123",
+        "agent_info": {
+            "name": "nop",
+            "version": "1.0.0",
+            "model_info": {"name": "local", "provider": None},
+        },
         "agent_result": {
             "n_input_tokens": 11,
             "n_cache_tokens": None,
@@ -126,6 +139,62 @@ def _artifact_payload(data: bytes, media_type: str = "application/json") -> dict
     from oh_no_my_claudecode.experiment.contracts import ArtifactRef
 
     return ArtifactRef.of(data, media_type).to_dict()
+
+
+def _write_native_smoke_trial(
+    jobs_dir: Path,
+    *,
+    job_name: str,
+    task_name: str,
+    with_trajectory: bool = True,
+) -> Path:
+    trial_dir = jobs_dir / job_name / f"{task_name.rsplit('/', 1)[-1]}__abc123"
+    (trial_dir / "agent").mkdir(parents=True)
+    (trial_dir / "verifier").mkdir()
+    result = _native_harbor_trial()
+    result["task_name"] = task_name
+    (trial_dir / "result.json").write_text(json.dumps(result), encoding="utf-8")
+    (trial_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "agent": {"name": "nop", "model_name": "local"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (trial_dir / "lock.json").write_text(
+        json.dumps(
+            {
+                "agent": {"name": "nop", "model_name": "local"},
+                "environment": {"type": "docker"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (trial_dir / "verifier" / "reward.json").write_text(
+        '{"reward":1.0,"passed":true}\n', encoding="utf-8"
+    )
+    (trial_dir / "verifier" / "test-stdout.txt").write_text("1 passed\n", encoding="utf-8")
+    if with_trajectory:
+        (trial_dir / "agent" / "trajectory.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "ATIF-v1.7",
+                    "session_id": "smoke-session",
+                    "agent": {"name": "nop", "version": "1.0.0", "model_name": "local"},
+                    "steps": [
+                        {
+                            "step_id": 1,
+                            "source": "agent",
+                            "message": "No-op smoke agent performed no actions.",
+                            "llm_call_count": 0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+    return trial_dir
 
 
 def _load_script(path: Path, module_name: str) -> ModuleType:
@@ -181,9 +250,7 @@ def test_export_portfolio_to_harbor_can_seed_text_regression(tmp_path: Path) -> 
 
     assert summary.task_count == 1
     env_dir = tmp_path / "onmc" / "cache-bugfix" / "environment"
-    dockerfile = (env_dir / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (env_dir / "Dockerfile").read_text(encoding="utf-8")
     seed_script = (env_dir / "onmc_seed.py").read_text(encoding="utf-8")
     assert "COPY onmc_seed.py /tmp/onmc_seed.py" in dockerfile
     assert "regression anchor not found" in seed_script
@@ -254,8 +321,44 @@ def test_generated_seed_script_applies_all_seed_material(tmp_path: Path) -> None
 def test_export_portfolio_to_harbor_seed_regression_requires_supported_hunk(
     tmp_path: Path,
 ) -> None:
+    output = tmp_path / "harbor"
     with pytest.raises(ValueError, match="no supported regression seed"):
-        export_portfolio_to_harbor(_portfolio(), tmp_path, regression_hunks={})
+        export_portfolio_to_harbor(_portfolio(), output, regression_hunks={})
+    assert not output.exists()
+
+
+def test_validate_harbor_seed_manifest_checks_full_coverage_before_export() -> None:
+    portfolio = _portfolio()
+    second = replace(portfolio.tasks[0], task_id="auth-bugfix")
+    manifest = replace(portfolio, tasks=(*portfolio.tasks, second))
+
+    validation = validate_harbor_seed_manifest(
+        manifest,
+        regression_hunks={"cache-bugfix": (("src/cache.py", "old", "new"),)},
+        removals={"auth-bugfix": (("src/auth.py", "authenticate"),)},
+        planted_files={},
+        test_deps={"demo": ()},
+    )
+
+    assert validation.complete is True
+    assert validation.task_count == 2
+    assert validation.seeded_task_count == 2
+    assert validation.seed_kinds == {
+        "cache-bugfix": ("text-hunk",),
+        "auth-bugfix": ("ast-removal",),
+    }
+
+    incomplete = validate_harbor_seed_manifest(
+        manifest,
+        regression_hunks={"cache-bugfix": (("src/cache.py", "old", "new"),)},
+        removals={"unknown-task": (("src/auth.py", "authenticate"),)},
+        planted_files={},
+        test_deps={},
+    )
+    assert incomplete.complete is False
+    assert incomplete.missing_seed_task_ids == ("auth-bugfix",)
+    assert incomplete.unknown_seed_task_ids == ("unknown-task",)
+    assert incomplete.missing_test_dependency_repos == ("demo",)
 
 
 def test_plan_harbor_smoke_enforces_cell_budget(tmp_path: Path) -> None:
@@ -281,6 +384,8 @@ def test_plan_harbor_smoke_enforces_cell_budget(tmp_path: Path) -> None:
     assert "--env" in plan.commands[0]
     assert "docker" in plan.commands[0]
     assert "--metadata" not in plan.commands[0]
+    assert plan.claim_eligible is False
+    assert "condition-label-only" in plan.limitations
 
     with pytest.raises(ValueError, match="exceeding max_cells"):
         plan_harbor_smoke(
@@ -289,6 +394,32 @@ def test_plan_harbor_smoke_enforces_cell_budget(tmp_path: Path) -> None:
             trials=2,
             max_cells=4,
         )
+
+
+def test_plan_harbor_smoke_materializes_every_repeated_trial(tmp_path: Path) -> None:
+    plan = plan_harbor_smoke(
+        ("onmc/cache-bugfix", "onmc/auth-bugfix"),
+        output_root=tmp_path,
+        trials=2,
+        max_cells=8,
+    )
+
+    assert plan.total_cells == 8
+    assert len(plan.cells) == 8
+    assert len(plan.commands) == 8
+    assert plan.cells[0].trial == 0
+    assert plan.cells[1].trial == 1
+    assert plan.cells[0].job_name.endswith("-t0")
+    assert plan.cells[1].job_name.endswith("-t1")
+    assert plan.commands[0][-7:] == (
+        "-n",
+        "1",
+        "-y",
+        "--jobs-dir",
+        str(plan.jobs_dir),
+        "--max-retries",
+        "0",
+    )
 
 
 def test_import_harbor_trial_requires_trajectory_and_verifier_artifacts() -> None:
@@ -349,6 +480,151 @@ def test_import_harbor_native_trial_requires_explicit_proof_artifacts() -> None:
         )
 
 
+def test_import_harbor_smoke_outputs_requires_complete_native_artifacts(
+    tmp_path: Path,
+) -> None:
+    jobs_dir = tmp_path / "jobs"
+    plan = plan_harbor_smoke(
+        ("onmc/cache-bugfix",),
+        output_root=tmp_path / "tasks",
+        conditions=(Condition.BARE_AGENT,),
+        max_cells=1,
+        jobs_dir=jobs_dir,
+    )
+    cell = plan.cells[0]
+    trial_dir = _write_native_smoke_trial(
+        jobs_dir,
+        job_name=cell.job_name,
+        task_name=cell.task_name,
+    )
+
+    imported = import_harbor_smoke_outputs(
+        plan,
+        experiment_id="harbor-smoke",
+    )
+
+    assert imported.complete is True
+    assert imported.expected_cells == 1
+    assert imported.imported_cells == 1
+    assert imported.claim_eligible is False
+    assert imported.trials[0].trial.run_id.slug == ("harbor-smoke.bare-agent.cache-bugfix.t0")
+    assert len(imported.trials[0].trial.artifacts) == 6
+    assert {artifact.kind for artifact in imported.trials[0].evidence} == {
+        "trajectory",
+        "verifier-reward",
+        "verifier-stdout",
+        "harbor-result",
+        "harbor-config",
+        "harbor-lock",
+    }
+
+    (trial_dir / "verifier" / "test-stdout.txt").unlink()
+    with pytest.raises(ValueError, match="verifier/test-stdout.txt"):
+        import_harbor_smoke_outputs(plan, experiment_id="harbor-smoke")
+    (trial_dir / "verifier" / "test-stdout.txt").write_text("", encoding="utf-8")
+    with pytest.raises(ValueError, match="artifact is empty"):
+        import_harbor_smoke_outputs(plan, experiment_id="harbor-smoke")
+
+
+def test_import_harbor_smoke_outputs_fails_closed_before_partial_import(
+    tmp_path: Path,
+) -> None:
+    jobs_dir = tmp_path / "jobs"
+    plan = plan_harbor_smoke(
+        ("onmc/cache-bugfix", "onmc/auth-bugfix"),
+        output_root=tmp_path / "tasks",
+        conditions=(Condition.BARE_AGENT,),
+        max_cells=2,
+        jobs_dir=jobs_dir,
+    )
+    _write_native_smoke_trial(
+        jobs_dir,
+        job_name=plan.cells[0].job_name,
+        task_name=plan.cells[0].task_name,
+    )
+    _write_native_smoke_trial(
+        jobs_dir,
+        job_name=plan.cells[1].job_name,
+        task_name=plan.cells[1].task_name,
+        with_trajectory=False,
+    )
+
+    with pytest.raises(ValueError, match="agent/trajectory.json"):
+        import_harbor_smoke_outputs(plan, experiment_id="harbor-smoke")
+
+
+def test_materialize_nop_smoke_trajectory_is_explicitly_non_claimable(
+    tmp_path: Path,
+) -> None:
+    trial_dir = _write_native_smoke_trial(
+        tmp_path,
+        job_name="job",
+        task_name="onmc/cache-bugfix",
+        with_trajectory=False,
+    )
+
+    trajectory = materialize_nop_smoke_trajectory(trial_dir)
+    payload = json.loads(trajectory.read_text(encoding="utf-8"))
+
+    assert payload["agent"]["name"] == "nop"
+    assert payload["agent"]["extra"]["onmc_claim_eligible"] is False
+    assert payload["steps"][0]["llm_call_count"] == 0
+    assert payload["steps"][0]["extra"]["onmc_generated_nop_sentinel"] is True
+
+
+def test_run_harbor_smoke_executes_and_imports_all_cells(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jobs_dir = tmp_path / "jobs"
+    plan = plan_harbor_smoke(
+        ("onmc/cache-bugfix",),
+        output_root=tmp_path / "tasks",
+        conditions=(Condition.BARE_AGENT,),
+        max_cells=1,
+        jobs_dir=jobs_dir,
+    )
+    seen: list[tuple[str, ...]] = []
+
+    def fake_run(command: tuple[str, ...], *, check: bool) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        seen.append(command)
+        cell = plan.cells[0]
+        _write_native_smoke_trial(
+            jobs_dir,
+            job_name=cell.job_name,
+            task_name=cell.task_name,
+            with_trajectory=False,
+        )
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.experiment.harbor_adapter.subprocess.run",
+        fake_run,
+    )
+
+    imported = run_harbor_smoke(plan, experiment_id="harbor-smoke")
+
+    assert seen == [plan.commands[0]]
+    assert imported.complete is True
+    trajectory = jobs_dir / plan.cells[0].job_name
+    assert list(trajectory.glob("*/agent/trajectory.json"))
+
+
+def test_run_harbor_smoke_refuses_model_backed_agents(tmp_path: Path) -> None:
+    plan = plan_harbor_smoke(
+        ("onmc/cache-bugfix",),
+        output_root=tmp_path / "tasks",
+        conditions=(Condition.BARE_AGENT,),
+        max_cells=1,
+        agent="codex",
+        model="gpt-5",
+    )
+
+    with pytest.raises(ValueError, match="separately approved workflow"):
+        run_harbor_smoke(plan, experiment_id="harbor-smoke")
+
+
 def test_import_harbor_results_script_writes_normalized_json(tmp_path: Path) -> None:
     script = _load_script(IMPORT_SCRIPT_PATH, "_import_harbor_results_under_test")
     bundle = tmp_path / "harbor-results.json"
@@ -357,9 +633,7 @@ def test_import_harbor_results_script_writes_normalized_json(tmp_path: Path) -> 
 
     stdout = io.StringIO()
     with redirect_stdout(stdout):
-        exit_code = script.main(
-            [str(bundle), "--experiment-id", "harbor-smoke", "--out", str(out)]
-        )
+        exit_code = script.main([str(bundle), "--experiment-id", "harbor-smoke", "--out", str(out)])
 
     assert exit_code == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
@@ -367,9 +641,7 @@ def test_import_harbor_results_script_writes_normalized_json(tmp_path: Path) -> 
     assert payload["schema_version"] == "onmc-harbor-import/v1"
     assert payload["source_format"] == "onmc-bundle"
     assert payload["trial_count"] == 1
-    assert payload["trials"][0]["trial"]["run_id"] == (
-        "harbor-smoke.onmc-current.cache-bugfix.t1"
-    )
+    assert payload["trials"][0]["trial"]["run_id"] == ("harbor-smoke.onmc-current.cache-bugfix.t1")
 
 
 def test_import_harbor_results_script_imports_native_trial_json(tmp_path: Path) -> None:
@@ -407,9 +679,7 @@ def test_import_harbor_results_script_imports_native_trial_json(tmp_path: Path) 
     payload = json.loads(stdout.getvalue())
     assert payload == json.loads(out.read_text(encoding="utf-8"))
     assert payload["source_format"] == "harbor-native-trial"
-    assert payload["trials"][0]["trial"]["run_id"] == (
-        "harbor-smoke.onmc-current.cache-bugfix.t0"
-    )
+    assert payload["trials"][0]["trial"]["run_id"] == ("harbor-smoke.onmc-current.cache-bugfix.t0")
     assert payload["trials"][0]["trial"]["context_tokens"] == 18
 
 
@@ -441,3 +711,52 @@ def test_export_harbor_tasks_script_writes_bundle_and_smoke_plan(tmp_path: Path)
     assert payload["smoke_plan"]["total_cells"] == 2
     assert payload["smoke_plan"]["budget_ready"] is True
     assert (out / "onmc" / "cache-bugfix" / "task.toml").exists()
+
+
+def test_run_harbor_smoke_script_validates_full_manifest_before_dry_run(
+    tmp_path: Path,
+) -> None:
+    script = _load_script(RUN_SCRIPT_PATH, "_run_harbor_smoke_under_test")
+    out = tmp_path / "tasks"
+    jobs = tmp_path / "jobs"
+    receipt = tmp_path / "receipt.json"
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = script.main(
+            [
+                str(PORTFOLIO_V4_PATH),
+                "--out",
+                str(out),
+                "--jobs-dir",
+                str(jobs),
+                "--receipt",
+                str(receipt),
+                "--task-id",
+                "six-bugfix-integer-types",
+                "--task-id",
+                "jmespath-refactor-dedup-key-func",
+                "--condition",
+                "bare-agent",
+                "--max-cells",
+                "2",
+            ]
+        )
+
+    assert exit_code == 0
+    payload = json.loads(stdout.getvalue())
+    assert payload == json.loads(receipt.read_text(encoding="utf-8"))
+    assert payload["executed"] is False
+    assert payload["full_seed_validation"]["complete"] is True
+    assert payload["full_seed_validation"]["task_count"] == 28
+    assert payload["full_seed_validation"]["seeded_task_count"] == 28
+    assert payload["full_seed_validation"]["seed_kinds"]["six-bugfix-integer-types"] == [
+        "text-hunk"
+    ]
+    assert payload["full_seed_validation"]["seed_kinds"]["jmespath-refactor-dedup-key-func"] == [
+        "text-hunk",
+        "planted-structural-grader",
+    ]
+    assert payload["claim_eligible"] is False
+    assert "condition-label-only" in payload["limitations"]
+    assert jobs.exists() is False

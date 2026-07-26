@@ -1,0 +1,818 @@
+{
+  "benchmark_plan": {
+    "assumed_task_delta_sd": 0.35,
+    "budget_ceiling_usd": 35.0,
+    "budget_ready": false,
+    "claim_ready": false,
+    "condition_count": 2,
+    "estimated_cost_usd": null,
+    "estimated_required_cost_usd": null,
+    "min_effect": 0.15,
+    "min_tasks_floor": 50,
+    "min_tasks_required": 50,
+    "min_total_cells_required": 300,
+    "per_cell_cost_usd": null,
+    "reasons": [
+      "only 28 task(s); requires 50 for a 0.150 paired pass-rate delta planning target",
+      "per-cell cost estimate missing; budget risk is unknown"
+    ],
+    "sample_size_ready": false,
+    "task_count": 28,
+    "total_cells": 168,
+    "trials_per_cell": 3
+  },
+  "calibration": {
+    "audit_status": "valid",
+    "calibration": {
+      "cost_claim_ready": false,
+      "decision": "needs-discrimination",
+      "discriminative_tasks": 0,
+      "incomplete_cell_count": 0,
+      "incomplete_cost_conditions": [
+        "bare-agent"
+      ],
+      "min_discriminative_tasks": 10,
+      "min_pass_delta": 0.05,
+      "quality_claim_ready": false,
+      "reasons": [
+        "only 0 discriminative task(s); requires 10",
+        "24 task(s) saturated across conditions",
+        "cost telemetry incomplete for: bare-agent"
+      ],
+      "saturated_tasks": 24,
+      "tasks": [
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-bugfix-asdict-recurse",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-asdict",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-assoc",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-has",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-serialisation-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-multisite-filter-ignored",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-base64-encode",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-base64-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-int-bytes-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-want-bytes",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-by-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-merge",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-sort-by",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-starts-with",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-to-number",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-bugfix-integer-types",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-impl-with-metaclass",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-multisite-type-aliases",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "slugify-impl-slugify",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "slugify-impl-smart-truncate",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-bugfix-find-ordinal",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-impl-ordinal-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-impl-to-seconds",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-multisite-ordinal-suffixes",
+          "usable_cells": 2
+        }
+      ],
+      "total_tasks": 24
+    },
+    "cost_claim_ready": false,
+    "expected_conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "expected_trials": 3,
+    "manifest_task_set_revision": "external-v4-2026-07-25",
+    "manifest_tasks": 28,
+    "metadata_audit": {
+      "code_sha_under_test": "3b58232e675c65373f192f9c0054bc9d451b8d77",
+      "environment_manifest_matches": false,
+      "environment_manifest_present": false,
+      "expected_code_sha": "5e21a00",
+      "failure_taxonomy_complete": false,
+      "failure_taxonomy_present": false,
+      "leakage_notes_present": true,
+      "manifest_audit_status": "valid",
+      "mismatched_fields": [
+        "report.code_sha"
+      ],
+      "missing_fields": [
+        "report.leakage_notes",
+        "report.environment",
+        "report.failure_taxonomy",
+        "report.token_telemetry",
+        "report.trajectory_artifacts",
+        "report.verifier_artifacts"
+      ],
+      "ready": false,
+      "reasons": [
+        "report missing leakage/reproducibility fields: report.leakage_notes, report.environment, report.failure_taxonomy, report.token_telemetry, report.trajectory_artifacts, report.verifier_artifacts",
+        "report metadata mismatch: report.code_sha"
+      ],
+      "report_audit_status": "valid",
+      "report_code_sha": "88669ff",
+      "report_leakage_notes_present": false,
+      "token_telemetry_complete": false,
+      "token_telemetry_present": false,
+      "trajectory_artifacts_complete": false,
+      "trajectory_artifacts_present": false,
+      "verifier_artifacts_complete": false,
+      "verifier_artifacts_present": false
+    },
+    "missing_tasks": [
+      "attrs-longrunning-four-modules",
+      "itsdangerous-crossfile-want-bytes",
+      "itsdangerous-misleading-base64-padding",
+      "jmespath-refactor-dedup-key-func"
+    ],
+    "quality_claim_ready": false,
+    "reasons": [
+      "only 0 discriminative task(s); requires 10",
+      "24 task(s) saturated across conditions",
+      "cost telemetry incomplete for: bare-agent",
+      "task_set_revision mismatch: manifest=external-v4-2026-07-25, report=external-v3-2026-07-25",
+      "trial count mismatch: manifest=3, report=1",
+      "report missing leakage/reproducibility fields: report.leakage_notes, report.environment, report.failure_taxonomy, report.token_telemetry, report.trajectory_artifacts, report.verifier_artifacts",
+      "report metadata mismatch: report.code_sha",
+      "4 manifest task(s) missing from report"
+    ],
+    "report_task_set_revision": "external-v3-2026-07-25",
+    "reported_conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "reported_tasks": 24,
+    "reported_trials": 1,
+    "unexpected_tasks": []
+  },
+  "claim_language_gate": {
+    "claim_text": "ONMC improves coding-agent quality and lowers cost versus plain coding agents.",
+    "decision": "refuse",
+    "detected_claims": [
+      "quality",
+      "cost"
+    ],
+    "reasons": [
+      "quality improvement claim lacks a ready matched benchmark gate",
+      "cost claim lacks complete cost telemetry and cost gate readiness",
+      "receipt/report coverage is incomplete for external claims"
+    ],
+    "suggested_safe_claim": "ONMC records harness evidence, but external improvement claims are blocked until these gates pass: benchmark_plan, portfolio_coverage, calibration, report_coverage."
+  },
+  "claim_readiness": {
+    "benchmark_plan_ready": false,
+    "blocked_gates": [
+      "benchmark_plan",
+      "portfolio_coverage",
+      "calibration",
+      "report_coverage"
+    ],
+    "calibration_ready": false,
+    "cost_calibration_ready": false,
+    "cost_claim_ready": false,
+    "decision": "not-ready",
+    "next_actions": [
+      "Add at least 22 benchmark task(s) to reach the 50-task planning target.",
+      "Set an explicit per-cell cost estimate and budget ceiling that covers the claim-sized benchmark run.",
+      "Rebalance the portfolio so required task kinds, repo spread, metadata, and dominance thresholds pass.",
+      "Run a fresh, complete, discriminative benchmark report against the current manifest.",
+      "Capture complete report evidence for missing R13 fields before publishing external claims."
+    ],
+    "portfolio_coverage_ready": false,
+    "quality_claim_ready": false,
+    "reasons": [
+      "only 28 task(s); requires 50 for a 0.150 paired pass-rate delta planning target",
+      "per-cell cost estimate missing; budget risk is unknown",
+      "task kind 'refactor' has 1 task(s); requires 3",
+      "task kind 'long-running' has 1 task(s); requires 3",
+      "task kind 'feature' is 67.9% of portfolio; maximum is 60.0%",
+      "only 0 discriminative task(s); requires 10",
+      "24 task(s) saturated across conditions",
+      "cost telemetry incomplete for: bare-agent",
+      "task_set_revision mismatch: manifest=external-v4-2026-07-25, report=external-v3-2026-07-25",
+      "trial count mismatch: manifest=3, report=1",
+      "report missing leakage/reproducibility fields: report.leakage_notes, report.environment, report.failure_taxonomy, report.token_telemetry, report.trajectory_artifacts, report.verifier_artifacts",
+      "report metadata mismatch: report.code_sha",
+      "4 manifest task(s) missing from report",
+      "report coverage missing raw_trajectories: raw trajectory artifacts are missing or incomplete",
+      "report coverage missing verifier_artifacts: verifier output artifacts are missing or incomplete",
+      "report coverage missing token_use: token telemetry is missing or incomplete",
+      "report coverage missing cost_coverage: one or more usable cells lack measured cost",
+      "report coverage missing failure_taxonomy: failure taxonomy is missing or incomplete",
+      "report coverage missing leakage_audit: leakage notes are missing",
+      "report coverage missing environment_manifest: environment manifest is missing"
+    ],
+    "report_coverage_ready": false,
+    "verifier_calibration_ready": true
+  },
+  "conditions": [
+    "bare-agent",
+    "onmc-current"
+  ],
+  "cost_coverage": {
+    "by_condition": {
+      "bare-agent": {
+        "reported_cells": 13,
+        "usable_cells": 24
+      },
+      "onmc-current": {
+        "reported_cells": 24,
+        "usable_cells": 24
+      }
+    },
+    "complete": false,
+    "mean_cost_usd": 0.793762,
+    "missing_cells": 11,
+    "reported_cells": 37,
+    "usable_cells": 48
+  },
+  "experiment_id": "external-v3",
+  "failure_taxonomy": {},
+  "leakage_audit": {
+    "auditor": null,
+    "complete": false,
+    "hidden_material_exposed_to_agent": null,
+    "independent_audit_recorded": false,
+    "manifest_notes_present": true,
+    "method": null,
+    "notes_match": false,
+    "report_notes_present": false
+  },
+  "manifest_validation": {
+    "blockers": [
+      "at least 50 discriminative tasks are required; found 28",
+      "five benchmark arms are required; missing context-only, onmc-single-agent, selective-swarm, trajectory-routed",
+      "three seeds must be pre-registered in publication.seeds",
+      "three agent/model configurations must be pre-registered in publication.agent_model_configurations",
+      "multiple languages must be declared in publication.languages",
+      "publication.leakage_audit must record a passed independent audit with hidden material unavailable to the agent"
+    ],
+    "condition_count": 2,
+    "errors": [],
+    "manifest_sha256": "c59fad164db295869546d152350964218489e1e0c1746132064df35710720c21",
+    "publication_ready": false,
+    "repository_count": 6,
+    "schema_version": "onmc-benchmark-manifest-validation/v1",
+    "structurally_valid": true,
+    "task_count": 28,
+    "trials_per_cell": 3
+  },
+  "paired": {
+    "baseline": "bare-agent",
+    "delta_ci95": [
+      0.0,
+      0.0
+    ],
+    "mean_delta": 0.0,
+    "paired_tasks": 24,
+    "per_task_delta": {
+      "attrs-bugfix-asdict-recurse": 0.0,
+      "attrs-impl-asdict": 0.0,
+      "attrs-impl-assoc": 0.0,
+      "attrs-impl-has": 0.0,
+      "attrs-impl-serialisation-pair": 0.0,
+      "attrs-multisite-filter-ignored": 0.0,
+      "itsdangerous-impl-base64-encode": 0.0,
+      "itsdangerous-impl-base64-pair": 0.0,
+      "itsdangerous-impl-int-bytes-pair": 0.0,
+      "itsdangerous-impl-want-bytes": 0.0,
+      "jmespath-impl-by-pair": 0.0,
+      "jmespath-impl-merge": 0.0,
+      "jmespath-impl-sort-by": 0.0,
+      "jmespath-impl-starts-with": 0.0,
+      "jmespath-impl-to-number": 0.0,
+      "six-bugfix-integer-types": 0.0,
+      "six-impl-with-metaclass": 0.0,
+      "six-multisite-type-aliases": 0.0,
+      "slugify-impl-slugify": 0.0,
+      "slugify-impl-smart-truncate": 0.0,
+      "tenacity-bugfix-find-ordinal": 0.0,
+      "tenacity-impl-ordinal-pair": 0.0,
+      "tenacity-impl-to-seconds": 0.0,
+      "tenacity-multisite-ordinal-suffixes": 0.0
+    },
+    "significant": false,
+    "treatment": "onmc-current"
+  },
+  "portfolio_coverage": {
+    "balance_ready": false,
+    "claim_ready": false,
+    "expected_outcome_count": 28,
+    "max_kind_fraction": 0.6,
+    "max_repo_fraction": 0.4,
+    "metadata_ready": true,
+    "min_repos": 5,
+    "min_task_kinds": 4,
+    "reasons": [
+      "task kind 'refactor' has 1 task(s); requires 3",
+      "task kind 'long-running' has 1 task(s); requires 3",
+      "task kind 'feature' is 67.9% of portfolio; maximum is 60.0%"
+    ],
+    "repo_count": 6,
+    "repo_counts": {
+      "attrs": 7,
+      "itsdangerous": 6,
+      "jmespath.py": 6,
+      "python-slugify": 2,
+      "six": 3,
+      "tenacity": 4
+    },
+    "repo_coverage_ready": true,
+    "required_kind_minimums": {
+      "bugfix": 5,
+      "feature": 5,
+      "long-running": 3,
+      "refactor": 3
+    },
+    "task_count": 28,
+    "task_kind_count": 4,
+    "task_kind_counts": {
+      "bugfix": 7,
+      "feature": 19,
+      "long-running": 1,
+      "refactor": 1
+    },
+    "task_kind_coverage_ready": false,
+    "verifier_count": 28
+  },
+  "publication_ready": false,
+  "raw_artifact_index": {
+    "artifact_root": "datasets/experiment/reports",
+    "artifacts": [],
+    "complete": false,
+    "indexed_cells": 0,
+    "missing": [
+      "attrs-bugfix-asdict-recurse/bare-agent/trial-1: trajectory_path",
+      "attrs-bugfix-asdict-recurse/bare-agent/trial-1: verifier_path",
+      "attrs-bugfix-asdict-recurse/onmc-current/trial-1: trajectory_path",
+      "attrs-bugfix-asdict-recurse/onmc-current/trial-1: verifier_path",
+      "attrs-impl-asdict/bare-agent/trial-1: trajectory_path",
+      "attrs-impl-asdict/bare-agent/trial-1: verifier_path",
+      "attrs-impl-asdict/onmc-current/trial-1: trajectory_path",
+      "attrs-impl-asdict/onmc-current/trial-1: verifier_path",
+      "attrs-impl-assoc/bare-agent/trial-1: trajectory_path",
+      "attrs-impl-assoc/bare-agent/trial-1: verifier_path",
+      "attrs-impl-assoc/onmc-current/trial-1: trajectory_path",
+      "attrs-impl-assoc/onmc-current/trial-1: verifier_path",
+      "attrs-impl-has/bare-agent/trial-1: trajectory_path",
+      "attrs-impl-has/bare-agent/trial-1: verifier_path",
+      "attrs-impl-has/onmc-current/trial-1: trajectory_path",
+      "attrs-impl-has/onmc-current/trial-1: verifier_path",
+      "attrs-impl-serialisation-pair/bare-agent/trial-1: trajectory_path",
+      "attrs-impl-serialisation-pair/bare-agent/trial-1: verifier_path",
+      "attrs-impl-serialisation-pair/onmc-current/trial-1: trajectory_path",
+      "attrs-impl-serialisation-pair/onmc-current/trial-1: verifier_path",
+      "attrs-multisite-filter-ignored/bare-agent/trial-1: trajectory_path",
+      "attrs-multisite-filter-ignored/bare-agent/trial-1: verifier_path",
+      "attrs-multisite-filter-ignored/onmc-current/trial-1: trajectory_path",
+      "attrs-multisite-filter-ignored/onmc-current/trial-1: verifier_path",
+      "itsdangerous-impl-base64-encode/bare-agent/trial-1: trajectory_path",
+      "itsdangerous-impl-base64-encode/bare-agent/trial-1: verifier_path",
+      "itsdangerous-impl-base64-encode/onmc-current/trial-1: trajectory_path",
+      "itsdangerous-impl-base64-encode/onmc-current/trial-1: verifier_path",
+      "itsdangerous-impl-base64-pair/bare-agent/trial-1: trajectory_path",
+      "itsdangerous-impl-base64-pair/bare-agent/trial-1: verifier_path",
+      "itsdangerous-impl-base64-pair/onmc-current/trial-1: trajectory_path",
+      "itsdangerous-impl-base64-pair/onmc-current/trial-1: verifier_path",
+      "itsdangerous-impl-int-bytes-pair/bare-agent/trial-1: trajectory_path",
+      "itsdangerous-impl-int-bytes-pair/bare-agent/trial-1: verifier_path",
+      "itsdangerous-impl-int-bytes-pair/onmc-current/trial-1: trajectory_path",
+      "itsdangerous-impl-int-bytes-pair/onmc-current/trial-1: verifier_path",
+      "itsdangerous-impl-want-bytes/bare-agent/trial-1: trajectory_path",
+      "itsdangerous-impl-want-bytes/bare-agent/trial-1: verifier_path",
+      "itsdangerous-impl-want-bytes/onmc-current/trial-1: trajectory_path",
+      "itsdangerous-impl-want-bytes/onmc-current/trial-1: verifier_path",
+      "jmespath-impl-by-pair/bare-agent/trial-1: trajectory_path",
+      "jmespath-impl-by-pair/bare-agent/trial-1: verifier_path",
+      "jmespath-impl-by-pair/onmc-current/trial-1: trajectory_path",
+      "jmespath-impl-by-pair/onmc-current/trial-1: verifier_path",
+      "jmespath-impl-merge/bare-agent/trial-1: trajectory_path",
+      "jmespath-impl-merge/bare-agent/trial-1: verifier_path",
+      "jmespath-impl-merge/onmc-current/trial-1: trajectory_path",
+      "jmespath-impl-merge/onmc-current/trial-1: verifier_path",
+      "jmespath-impl-sort-by/bare-agent/trial-1: trajectory_path",
+      "jmespath-impl-sort-by/bare-agent/trial-1: verifier_path",
+      "jmespath-impl-sort-by/onmc-current/trial-1: trajectory_path",
+      "jmespath-impl-sort-by/onmc-current/trial-1: verifier_path",
+      "jmespath-impl-starts-with/bare-agent/trial-1: trajectory_path",
+      "jmespath-impl-starts-with/bare-agent/trial-1: verifier_path",
+      "jmespath-impl-starts-with/onmc-current/trial-1: trajectory_path",
+      "jmespath-impl-starts-with/onmc-current/trial-1: verifier_path",
+      "jmespath-impl-to-number/bare-agent/trial-1: trajectory_path",
+      "jmespath-impl-to-number/bare-agent/trial-1: verifier_path",
+      "jmespath-impl-to-number/onmc-current/trial-1: trajectory_path",
+      "jmespath-impl-to-number/onmc-current/trial-1: verifier_path",
+      "six-bugfix-integer-types/bare-agent/trial-1: trajectory_path",
+      "six-bugfix-integer-types/bare-agent/trial-1: verifier_path",
+      "six-bugfix-integer-types/onmc-current/trial-1: trajectory_path",
+      "six-bugfix-integer-types/onmc-current/trial-1: verifier_path",
+      "six-impl-with-metaclass/bare-agent/trial-1: trajectory_path",
+      "six-impl-with-metaclass/bare-agent/trial-1: verifier_path",
+      "six-impl-with-metaclass/onmc-current/trial-1: trajectory_path",
+      "six-impl-with-metaclass/onmc-current/trial-1: verifier_path",
+      "six-multisite-type-aliases/bare-agent/trial-1: trajectory_path",
+      "six-multisite-type-aliases/bare-agent/trial-1: verifier_path",
+      "six-multisite-type-aliases/onmc-current/trial-1: trajectory_path",
+      "six-multisite-type-aliases/onmc-current/trial-1: verifier_path",
+      "slugify-impl-slugify/bare-agent/trial-1: trajectory_path",
+      "slugify-impl-slugify/bare-agent/trial-1: verifier_path",
+      "slugify-impl-slugify/onmc-current/trial-1: trajectory_path",
+      "slugify-impl-slugify/onmc-current/trial-1: verifier_path",
+      "slugify-impl-smart-truncate/bare-agent/trial-1: trajectory_path",
+      "slugify-impl-smart-truncate/bare-agent/trial-1: verifier_path",
+      "slugify-impl-smart-truncate/onmc-current/trial-1: trajectory_path",
+      "slugify-impl-smart-truncate/onmc-current/trial-1: verifier_path",
+      "tenacity-bugfix-find-ordinal/bare-agent/trial-1: trajectory_path",
+      "tenacity-bugfix-find-ordinal/bare-agent/trial-1: verifier_path",
+      "tenacity-bugfix-find-ordinal/onmc-current/trial-1: trajectory_path",
+      "tenacity-bugfix-find-ordinal/onmc-current/trial-1: verifier_path",
+      "tenacity-impl-ordinal-pair/bare-agent/trial-1: trajectory_path",
+      "tenacity-impl-ordinal-pair/bare-agent/trial-1: verifier_path",
+      "tenacity-impl-ordinal-pair/onmc-current/trial-1: trajectory_path",
+      "tenacity-impl-ordinal-pair/onmc-current/trial-1: verifier_path",
+      "tenacity-impl-to-seconds/bare-agent/trial-1: trajectory_path",
+      "tenacity-impl-to-seconds/bare-agent/trial-1: verifier_path",
+      "tenacity-impl-to-seconds/onmc-current/trial-1: trajectory_path",
+      "tenacity-impl-to-seconds/onmc-current/trial-1: verifier_path",
+      "tenacity-multisite-ordinal-suffixes/bare-agent/trial-1: trajectory_path",
+      "tenacity-multisite-ordinal-suffixes/bare-agent/trial-1: verifier_path",
+      "tenacity-multisite-ordinal-suffixes/onmc-current/trial-1: trajectory_path",
+      "tenacity-multisite-ordinal-suffixes/onmc-current/trial-1: verifier_path"
+    ],
+    "schema_version": "onmc-raw-artifact-index/v1",
+    "usable_cells": 48
+  },
+  "report_coverage": {
+    "claim_ready": false,
+    "covered_count": 5,
+    "fields": [
+      {
+        "covered": false,
+        "name": "raw_trajectories",
+        "reason": "raw trajectory artifacts are missing or incomplete",
+        "source": "report.trajectory_artifacts"
+      },
+      {
+        "covered": false,
+        "name": "verifier_artifacts",
+        "reason": "verifier output artifacts are missing or incomplete",
+        "source": "report.verifier_artifacts"
+      },
+      {
+        "covered": true,
+        "name": "pass_rate",
+        "reason": "condition pass rates are present",
+        "source": "report.summary.*.pass_at_1"
+      },
+      {
+        "covered": true,
+        "name": "pass_at_k",
+        "reason": "pass@1 is present as the report's pass@k statistic",
+        "source": "report.summary.*.pass_at_1"
+      },
+      {
+        "covered": true,
+        "name": "paired_deltas",
+        "reason": "paired deltas and confidence interval are present",
+        "source": "report.paired"
+      },
+      {
+        "covered": true,
+        "name": "uncertainty",
+        "reason": "condition and paired confidence intervals are present",
+        "source": "report.summary.*.pass_at_1_ci95 + report.paired.delta_ci95"
+      },
+      {
+        "covered": true,
+        "name": "latency",
+        "reason": "per-cell and aggregate latency are present",
+        "source": "report.records[].latency_ms + report.summary.*.mean_latency_ms"
+      },
+      {
+        "covered": false,
+        "name": "token_use",
+        "reason": "token telemetry is missing or incomplete",
+        "source": "report.token_telemetry"
+      },
+      {
+        "covered": false,
+        "name": "cost_coverage",
+        "reason": "one or more usable cells lack measured cost",
+        "source": "report.records[].cost_usd"
+      },
+      {
+        "covered": false,
+        "name": "failure_taxonomy",
+        "reason": "failure taxonomy is missing or incomplete",
+        "source": "report.failure_taxonomy"
+      },
+      {
+        "covered": false,
+        "name": "leakage_audit",
+        "reason": "leakage notes are missing",
+        "source": "report.leakage_notes"
+      },
+      {
+        "covered": false,
+        "name": "environment_manifest",
+        "reason": "environment manifest is missing",
+        "source": "report.environment"
+      }
+    ],
+    "missing_count": 7,
+    "schema_version": "1"
+  },
+  "schema_version": "onmc-publication-report/v1",
+  "status": "not-publication-ready",
+  "summary": {
+    "bare-agent": {
+      "cells": 24,
+      "cost_reported_cells": 13,
+      "failure_taxonomy": {},
+      "false_greens_blocked": 0,
+      "infra_failures": 0,
+      "latency_variance": 3666617334.4,
+      "mean_cost_usd": 0.6352,
+      "mean_latency_ms": 106258.6,
+      "median_latency_ms": 90221.6,
+      "pass_at_1": 1.0,
+      "pass_at_1_ci95": [
+        1.0,
+        1.0
+      ],
+      "pass_hat_k": 1.0,
+      "passed": 24,
+      "total_cost_usd": 8.2579,
+      "usable": 24
+    },
+    "onmc-current": {
+      "cells": 24,
+      "cost_reported_cells": 24,
+      "failure_taxonomy": {},
+      "false_greens_blocked": 0,
+      "infra_failures": 0,
+      "latency_variance": 1138367500.0,
+      "mean_cost_usd": 0.8796,
+      "mean_latency_ms": 102712.9,
+      "median_latency_ms": 95082.5,
+      "pass_at_1": 1.0,
+      "pass_at_1_ci95": [
+        1.0,
+        1.0
+      ],
+      "pass_hat_k": 1.0,
+      "passed": 24,
+      "total_cost_usd": 21.1113,
+      "usable": 24
+    }
+  },
+  "task_set_revision": "external-v3-2026-07-25",
+  "verifier_calibration": {
+    "caught_false_green": 13,
+    "claim_ready": true,
+    "cleared_legitimate": 10,
+    "false_green_cases": 13,
+    "false_positive_legitimate": 0,
+    "legitimate_cases": 10,
+    "min_false_green_cases": 10,
+    "min_legitimate_cases": 10,
+    "min_sensitivity": 0.95,
+    "min_specificity": 0.98,
+    "missed_false_green": 0,
+    "reasons": [],
+    "sensitivity": 1.0,
+    "specificity": 1.0
+  }
+}

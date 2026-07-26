@@ -17,6 +17,7 @@ from oh_no_my_claudecode.experiment.contracts import (
     ExperimentManifest,
     RunId,
     TrialResult,
+    task_set_sha256,
 )
 from oh_no_my_claudecode.experiment.kernel import ExperimentReport
 from oh_no_my_claudecode.experiment.portfolio import (
@@ -80,6 +81,7 @@ def make_manifest(
         tasks=tasks,
         audit_status=audit,
         leakage_notes="test corpus",
+        task_set_sha256=task_set_sha256([task.to_dict() for task in tasks]),
     )
 
 
@@ -124,6 +126,30 @@ def test_portfolio_rejects_empty_and_duplicate_tasks() -> None:
     dup = make_task("same")
     with pytest.raises(ValueError):
         PortfolioManifest(experiment=make_experiment(), tasks=(dup, make_task("same")))
+
+
+def test_portfolio_rejects_task_set_hash_that_does_not_bind_tasks() -> None:
+    task = make_task("task-0")
+
+    with pytest.raises(ValueError, match="task_set_sha256"):
+        PortfolioManifest(
+            experiment=make_experiment(audit=BenchmarkAuditStatus.VALID),
+            tasks=(task,),
+            audit_status=BenchmarkAuditStatus.VALID,
+            task_set_sha256="0" * 64,
+        )
+
+
+def test_valid_portfolio_without_task_set_hash_stays_internal() -> None:
+    manifest = PortfolioManifest(
+        experiment=make_experiment(audit=BenchmarkAuditStatus.VALID),
+        tasks=(make_task("task-0"),),
+        audit_status=BenchmarkAuditStatus.VALID,
+        leakage_notes="audited but not content-bound",
+    )
+
+    assert manifest.is_claim_ready is False
+    assert manifest.claim_level() is ClaimLevel.INTERNAL
 
 
 # --------------------------------------------------------------------------- #

@@ -177,6 +177,7 @@ def _controller(
         policy_decider=policy_decider or AllowPolicy(),
         loop_executor=loop,
         run_policy=run_policy or RunPolicy.permissive(),
+        verifier_false_green_check=lambda request, signals, change_set: False,
         changes_reader=changes_reader or _reader(ChangeSet.empty()),
     )
     return HarnessController(tmp_path, dependencies=dependencies)
@@ -571,6 +572,7 @@ def test_receipt_build_is_deterministic() -> None:
         runtime_contract=_runtime_contract(run_id="run-1", task="t"),
         policy=policy,
         proof=proof,
+        report_coverage={"claim_ready": True},
     )
     second = HarnessRunReceipt.build(
         run_id="run-1",
@@ -581,6 +583,7 @@ def test_receipt_build_is_deterministic() -> None:
         runtime_contract=_runtime_contract(run_id="run-1", task="t"),
         policy=policy,
         proof=proof,
+        report_coverage={"claim_ready": True},
     )
     assert first.receipt_hash == second.receipt_hash
     assert first.verified is True

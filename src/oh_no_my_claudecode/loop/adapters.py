@@ -39,12 +39,15 @@ import json
 import re
 import shutil
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from oh_no_my_claudecode.loop.models import AgentRunResult
+from oh_no_my_claudecode.trace.models import TraceEvent, TraceEventKind
+from oh_no_my_claudecode.trace.recorder import record_trace_event
 
 # ---------------------------------------------------------------------------
 # Injectable subprocess boundary
@@ -236,6 +239,85 @@ def _parse_claude_json(raw: str) -> tuple[str, int | None, float | None]:
     return text, tokens, cost_usd
 
 
+def _nonnegative_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if not isinstance(value, int | float | str | bytes | bytearray):
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _parse_claude_usage(raw: str) -> dict[str, int]:
+    """Return only token fields measured in Claude's structured response."""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict) or not isinstance(data.get("usage"), dict):
+        return {}
+    usage = data["usage"]
+    aliases = {
+        "input_tokens": ("input_tokens", "input"),
+        "output_tokens": ("output_tokens", "output"),
+        "cache_read_input_tokens": ("cache_read_input_tokens", "cache_read_tokens"),
+        "cache_creation_input_tokens": (
+            "cache_creation_input_tokens",
+            "cache_creation_tokens",
+        ),
+        "reasoning_output_tokens": ("reasoning_output_tokens", "reasoning_tokens"),
+    }
+    measured: dict[str, int] = {}
+    for normalized, candidates in aliases.items():
+        for candidate in candidates:
+            if candidate not in usage:
+                continue
+            parsed = _nonnegative_int(usage[candidate])
+            if parsed is not None:
+                measured[normalized] = parsed
+            break
+    return measured
+
+
+def _record_model_call(
+    repo_root: str,
+    *,
+    provider: str,
+    model: str | None,
+    started_at: float,
+    ended_at: float,
+    usage: dict[str, int],
+    total_tokens: int | None,
+    cost_usd: float | None,
+    failed: bool,
+) -> None:
+    """Record observed adapter metadata without prompts, outputs, or estimates."""
+    payload: dict[str, object] = {
+        "provider": provider,
+        "end_ts": ended_at,
+        "duration_seconds": max(0.0, ended_at - started_at),
+        "status": "error" if failed else "ok",
+    }
+    if model is not None:
+        payload["model"] = model
+    payload.update(usage)
+    if total_tokens is not None:
+        payload["total"] = total_tokens
+    if cost_usd is not None:
+        payload["cost_usd"] = cost_usd
+    record_trace_event(
+        Path(repo_root),
+        TraceEvent(
+            kind=TraceEventKind.MODEL_CALL,
+            ts=started_at,
+            payload=payload,
+        ),
+    )
+
+
 #: Claude `-p` result subtypes that set is_error=true but are *soft* — the run
 #: may have applied useful edits (ran out of turns, or a non-edit tool blocked).
 #: These are not fatal agent errors; ONMC's own verifier grades the outcome.
@@ -356,13 +438,16 @@ class ClaudeCliAdapter:
         if effective_model:
             cmd.extend(["--model", effective_model])
 
+        call_started_at = time.time()
         proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
+        call_ended_at = time.time()
 
         # Snapshot git status after running.
         after = _git_status_paths(self._cmd_runner, self._repo_root, 30)
         files_touched = _compute_files_touched(before, after)
 
         output, tokens, cost_usd = _parse_claude_json(proc.stdout)
+        measured_usage = _parse_claude_usage(proc.stdout)
 
         # Detect an API/auth error reported inside the JSON envelope (e.g. 401).
         error: str | None = _detect_claude_error(proc.stdout)
@@ -384,6 +469,17 @@ class ClaudeCliAdapter:
 
         # Derive a short prediction from the first non-empty line of output.
         prediction = _first_line(output)
+        _record_model_call(
+            self._repo_root,
+            provider="anthropic",
+            model=effective_model,
+            started_at=call_started_at,
+            ended_at=call_ended_at,
+            usage=measured_usage if error is None else {},
+            total_tokens=tokens,
+            cost_usd=cost_usd,
+            failed=error is not None,
+        )
 
         return AgentRunResult(
             output=output,
@@ -607,7 +703,9 @@ class CodexCliAdapter:
         if self._model is not None:
             cmd.extend(["--model", self._model])
         cmd.append(effective_prompt)
+        call_started_at = time.time()
         proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
+        call_ended_at = time.time()
 
         # Snapshot git status after running.
         after = _git_status_paths(self._cmd_runner, self._repo_root, 30)
@@ -642,6 +740,17 @@ class CodexCliAdapter:
             tokens = None
 
         prediction = _first_line(output)
+        _record_model_call(
+            self._repo_root,
+            provider="openai",
+            model=self._model,
+            started_at=call_started_at,
+            ended_at=call_ended_at,
+            usage={},
+            total_tokens=tokens,
+            cost_usd=None,
+            failed=error is not None,
+        )
 
         return AgentRunResult(
             output=output,
@@ -754,6 +863,38 @@ def _parse_opencode_json(raw: str) -> tuple[str, int | None]:
     return text, total_tokens
 
 
+def _parse_opencode_usage(raw: str) -> dict[str, int]:
+    """Return the last provider-reported OpenCode usage components."""
+    measured: dict[str, int] = {}
+    aliases = {
+        "input_tokens": ("input_tokens", "input"),
+        "output_tokens": ("output_tokens", "output"),
+        "cache_read_input_tokens": ("cache_read_input_tokens", "cache_read_tokens"),
+        "cache_creation_input_tokens": (
+            "cache_creation_input_tokens",
+            "cache_creation_tokens",
+        ),
+        "reasoning_output_tokens": ("reasoning_output_tokens", "reasoning_tokens"),
+    }
+    for raw_line in raw.splitlines():
+        try:
+            event = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or not isinstance(event.get("usage"), dict):
+            continue
+        usage = event["usage"]
+        for normalized, candidates in aliases.items():
+            for candidate in candidates:
+                if candidate not in usage:
+                    continue
+                parsed = _nonnegative_int(usage[candidate])
+                if parsed is not None:
+                    measured[normalized] = parsed
+                break
+    return measured
+
+
 class OpenCodeCliAdapter:
     """Agent adapter that drives the OpenCode CLI in non-interactive run mode.
 
@@ -806,13 +947,16 @@ class OpenCodeCliAdapter:
             cmd.extend(["--model", self._model])
         cmd.append(effective_prompt)
 
+        call_started_at = time.time()
         proc = self._cmd_runner(cmd, self._repo_root, self._timeout)
+        call_ended_at = time.time()
 
         # Snapshot git status after running.
         after = _git_status_paths(self._cmd_runner, self._repo_root, 30)
         files_touched = _compute_files_touched(before, after)
 
         output, tokens = _parse_opencode_json(proc.stdout)
+        measured_usage = _parse_opencode_usage(proc.stdout)
 
         # Surface OS-level errors cleanly.
         error: str | None = None
@@ -823,6 +967,17 @@ class OpenCodeCliAdapter:
             error = output
 
         prediction = _first_line(output)
+        _record_model_call(
+            self._repo_root,
+            provider="opencode",
+            model=self._model,
+            started_at=call_started_at,
+            ended_at=call_ended_at,
+            usage=measured_usage if error is None else {},
+            total_tokens=tokens,
+            cost_usd=None,
+            failed=error is not None,
+        )
 
         return AgentRunResult(
             output=output,

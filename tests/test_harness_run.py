@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,7 +12,7 @@ from typer.testing import CliRunner
 import oh_no_my_claudecode.harness_run.controller as harness_controller_module
 from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.config import default_config, write_config
-from oh_no_my_claudecode.context_engine import ContextEngine
+from oh_no_my_claudecode.context_engine import ContextEngine, RetrievalMode
 from oh_no_my_claudecode.durable_runtime import NodeState, RunState, RuntimeStore
 from oh_no_my_claudecode.harness_run import (
     ChangeSet,
@@ -33,6 +34,7 @@ from oh_no_my_claudecode.harness_run.controller import (
 from oh_no_my_claudecode.loop.adapters import CodexCliAdapter
 from oh_no_my_claudecode.loop.engine import _default_verify_runner
 from oh_no_my_claudecode.loop.models import IterationContract, LoopResult, VerifyOutcome
+from oh_no_my_claudecode.missioncontrol import build_runtime_dashboard
 from oh_no_my_claudecode.retrieval import HybridRetriever
 from oh_no_my_claudecode.sandbox import (
     DockerSandboxPlan,
@@ -101,6 +103,7 @@ def _controller(
         runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
         policy_decider=policy or AllowPolicy(),
         loop_executor=loop,
+        verifier_false_green_check=lambda request, signals, change_set: False,
         changes_reader=_observed_change,
     )
     return HarnessController(tmp_path, dependencies=dependencies)
@@ -150,6 +153,33 @@ def test_execute_persists_run_and_node_transitions(tmp_path: Path) -> None:
     assert all(node.state is NodeState.SUCCEEDED for node in snapshot.nodes.values())
     assert result.resume_run_id == result.plan.run_id
     assert Path(result.plan.state_path, "events.jsonl").exists()
+
+
+def test_mission_control_proof_state_requires_matching_valid_receipt(tmp_path: Path) -> None:
+    controller = _controller(tmp_path, FakeLoop(_loop_result(converged=True)))
+    result = controller.run(RunRequest(task="Implement cache fix", execute=True))
+
+    visible = build_runtime_dashboard(tmp_path)
+    run = next(item for item in visible.runs if item.run_id == result.plan.run_id)
+    assert run.state == "completed"
+    assert run.proof_state == "verified"
+    assert run.verified is True
+    assert run.receipt_hash == result.receipt.receipt_hash  # type: ignore[union-attr]
+    assert run.event_count > 0
+    assert all(node.state == "succeeded" for node in run.nodes)
+
+    receipt_path = (
+        tmp_path / ".agent-memory" / "receipts" / f"run-{result.plan.run_id}.json"
+    )
+    wrapper = json.loads(receipt_path.read_text(encoding="utf-8"))
+    wrapper["harness"]["receipt_hash"] = "0" * 64
+    receipt_path.write_text(json.dumps(wrapper), encoding="utf-8")
+
+    tampered = build_runtime_dashboard(tmp_path)
+    run = next(item for item in tampered.runs if item.run_id == result.plan.run_id)
+    assert run.proof_state == "unproven"
+    assert run.verified is False
+    assert run.receipt_hash is None
 
 
 def test_policy_denial_prevents_loop_execution(tmp_path: Path) -> None:
@@ -300,8 +330,80 @@ def test_render_text_exposes_planned_sandbox_boundary(tmp_path: Path) -> None:
     text = result.render_text()
 
     assert "Sandbox: requested=true, provider=docker, enforced=false" in text
+    assert result.plan.sandbox_manifest.validated is True
     assert result.plan.sandbox_manifest.verifier_plan is not None
     assert result.plan.sandbox_manifest.verifier_plan["secret_env"] == []
+    capabilities = result.plan.sandbox_manifest.capability_manifest
+    assert capabilities["agent"]["filesystem"][0]["access"] == "read-write"
+    assert capabilities["agent"]["network"] == "allow"
+    assert capabilities["agent"]["secret_env"] == [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+    ]
+    assert capabilities["verifier"]["filesystem"][0]["access"] == "read-only"
+    assert capabilities["verifier"]["network"] == "deny"
+    assert capabilities["verifier"]["secret_env"] == []
+    assert str(tmp_path) not in repr(result.plan.sandbox_manifest.to_dict())
+
+
+def test_sandbox_execution_fails_before_agent_when_manifest_is_unvalidated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+    original = harness_controller_module.harness_sandbox_manifest
+
+    def invalid_manifest(**kwargs: object) -> object:
+        return replace(original(**kwargs), validated=False)
+
+    monkeypatch.setattr(
+        harness_controller_module,
+        "harness_sandbox_manifest",
+        invalid_manifest,
+    )
+
+    result = controller.run(
+        RunRequest(
+            task="Refuse unvalidated autonomous execution",
+            execute=True,
+            sandbox=True,
+        )
+    )
+
+    assert result.status is HarnessStatus.BLOCKED
+    assert result.stop_reason == "sandbox-plan-invalid"
+    assert "not validated" in result.proof_reasons[0]
+    assert loop.calls == 0
+
+
+def test_harbor_remains_config_only_for_local_execution(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+
+    planned = controller.run(
+        RunRequest(
+            task="Plan Harbor sandbox",
+            plan_only=True,
+            sandbox=True,
+            sandbox_provider="harbor",
+        )
+    )
+    executed = controller.run(
+        RunRequest(
+            task="Do not execute Harbor locally",
+            execute=True,
+            sandbox=True,
+            sandbox_provider="harbor",
+        )
+    )
+
+    assert planned.status is HarnessStatus.PLANNED
+    assert planned.plan.sandbox_manifest.validated is True
+    assert executed.status is HarnessStatus.BLOCKED
+    assert executed.stop_reason == "sandbox-plan-invalid"
+    assert "configuration-only" in executed.proof_reasons[0]
+    assert loop.calls == 0
 
 
 def test_sandbox_verifier_runner_executes_command_without_agent_secret(tmp_path: Path) -> None:
@@ -502,6 +604,10 @@ def test_default_dependencies_retrieve_relevant_repo_context(tmp_path: Path) -> 
     assert selection.used_tokens == plan.context_packet.used_tokens
     assert selection.token_budget == 500
     assert selection.abstained is False
+    assert selection.query_intent == "conceptual"
+    assert selection.retrieval_stage == "bm25"
+    assert selection.lexical_floor is True
+    assert selection.candidate_promoted is False
 
 
 def test_execution_passes_planned_context_to_loop(tmp_path: Path) -> None:
@@ -711,17 +817,17 @@ def test_hybrid_provider_invokes_retrieval_and_returns_ranked_candidates(
         "def greet(): return 'hello'\n", encoding="utf-8"
     )
 
-    # Track HybridRetriever.retrieve calls via monkeypatch.
+    # Track the measured policy entry point via monkeypatch.
     retrieve_calls: list[tuple[str, int]] = []
-    _original_retrieve = HybridRetriever.retrieve
+    _original_retrieve = HybridRetriever.retrieve_measured
 
     def _spy_retrieve(
-        self: HybridRetriever, query: str, k: int, *, mode: str = "hybrid"
-    ) -> list:
+        self: HybridRetriever, query: str, k: int, **kwargs: object
+    ) -> object:
         retrieve_calls.append((query, k))
-        return _original_retrieve(self, query, k, mode=mode)
+        return _original_retrieve(self, query, k, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(HybridRetriever, "retrieve", _spy_retrieve)
+    monkeypatch.setattr(HybridRetriever, "retrieve_measured", _spy_retrieve)
 
     provider = HybridRepositoryCandidateProvider(tmp_path, top_k=10)
     from oh_no_my_claudecode.context_engine import RetrievalMode
@@ -742,9 +848,9 @@ def test_hybrid_provider_invokes_retrieval_and_returns_ranked_candidates(
         assert cand.content
         assert cand.source
         assert cand.token_count >= 1
-        assert cand.provenance == (cand.id,)
+        assert cand.provenance == (cand.id, "retrieval:bm25", "query-plan:1")
         assert 0.0 <= cand.structural_score <= 1.0
-        assert cand.semantic_score is not None and 0.0 <= cand.semantic_score <= 1.0
+        assert cand.semantic_score is None
         # retrieval_rank metadata must be present.
         meta = dict(cand.metadata)
         assert "retrieval_rank" in meta
@@ -772,6 +878,58 @@ def test_hybrid_provider_token_budget_limits_candidates(tmp_path: Path) -> None:
     # Must not exceed budget: each hit's evidence has ≤ 5 whitespace tokens
     # OR only one hit was collected before the budget was hit.
     assert len(candidates) <= 2  # at most 2 files in this tiny corpus
+
+
+def test_hybrid_provider_reports_measured_query_decision_and_provenance(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "policy.py").write_text(
+        "# authorization architecture\n"
+        "def enforce_capability_boundary():\n"
+        "    return 'allow'\n",
+        encoding="utf-8",
+    )
+
+    decisions: list[object] = []
+    provider = HybridRepositoryCandidateProvider(
+        tmp_path,
+        retrieval_mode="dense",
+        candidate_promoted=False,
+        on_decision=decisions.append,
+    )
+    candidates = provider.candidates(
+        "authorization architecture",
+        RetrievalMode.LOCAL,
+    )
+
+    assert len(decisions) == 1
+    decision = decisions[0]
+    assert decision.selected_stage == "bm25"
+    assert decision.fallback_reason == "candidate_not_promoted"
+    assert candidates
+    metadata = dict(candidates[0].metadata)
+    assert metadata["query_intent"] == "conceptual"
+    assert metadata["retrieval_stage"] == "bm25"
+    assert metadata["lexical_floor"] == "true"
+    assert candidates[0].provenance[1:] == (
+        "retrieval:bm25",
+        "query-plan:1",
+    )
+
+
+def test_controller_does_not_reuse_a_stale_retrieval_decision(tmp_path: Path) -> None:
+    source = tmp_path / "cache.py"
+    source.write_text("def invalidate_cache(): return True\n", encoding="utf-8")
+    controller = HarnessController(tmp_path)
+
+    first = controller.plan(RunRequest(task="Fix cache invalidation", plan_only=True))
+    source.unlink()
+    second = controller.plan(RunRequest(task="Unrelated missing symbol", plan_only=True))
+
+    assert first.context_selection.query_intent == "conceptual"
+    assert second.context_selection.query_intent == "unknown"
+    assert second.context_selection.retrieval_stage == "unspecified"
 
 
 def test_hybrid_provider_noop_on_empty_corpus(tmp_path: Path) -> None:
@@ -841,10 +999,9 @@ def test_harness_run_context_from_hybrid_retrieval_end_to_end(tmp_path: Path) ->
     assert "never-read" not in rendered
     assert "binary.py" not in rendered
     assert plan.context_packet.used_tokens <= 500
-    # Confirm semantic_score is populated (from hybrid retrieval).
+    # BM25 evidence is never mislabeled as a semantic score.
     evidence = plan.context_packet.evidence[0]
-    assert evidence.signals.semantic is not None
-    assert 0.0 <= evidence.signals.semantic <= 1.0
+    assert evidence.signals.semantic is None
 
 
 def test_duplicate_index_records_do_not_collide_candidate_ids(

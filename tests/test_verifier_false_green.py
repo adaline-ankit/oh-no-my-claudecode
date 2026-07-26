@@ -14,6 +14,8 @@ rather than re-deriving it.
 
 from __future__ import annotations
 
+import pytest
+
 from oh_no_my_claudecode.proof_graph import (
     Claim,
     ClaimKind,
@@ -45,6 +47,7 @@ from oh_no_my_claudecode.verifier import (
     TestExecution,
     VerifierConfig,
     assess_reachability,
+    assess_test_integrity,
     is_false_green,
     review_contract,
     run_components,
@@ -318,6 +321,75 @@ def test_no_challenge_reports_verified() -> None:
 
     # Every challenge must have been caught (each boolean is a "caught" flag).
     assert all(verdicts)
+
+
+@pytest.mark.parametrize(
+    ("attack", "diff_text", "reason"),
+    [
+        (
+            "test-deletion",
+            "--- a/tests/test_api.py\n+++ /dev/null\n"
+            "@@ -1,2 +0,0 @@\n-def test_api():\n-    assert api() == 1\n",
+            "test file deleted",
+        ),
+        (
+            "skip-injection",
+            "--- a/tests/test_api.py\n+++ b/tests/test_api.py\n"
+            "@@ -1 +1,2 @@\n+@pytest.mark.skip\n def test_api():\n",
+            "skip injection",
+        ),
+        (
+            "assertion-weakening",
+            "--- a/tests/test_api.py\n+++ b/tests/test_api.py\n"
+            "@@ -1 +1 @@\n-    assert api() == 1\n+    assert True\n",
+            "vacuous assertion",
+        ),
+        (
+            "verifier-narrowing",
+            "--- a/pyproject.toml\n+++ b/pyproject.toml\n"
+            "@@ -1 +1 @@\n-addopts = \"-q\"\n+addopts = \"-q -k smoke\"\n",
+            "verifier narrowing",
+        ),
+        (
+            "fixture-tampering",
+            "--- a/tests/conftest.py\n+++ b/tests/conftest.py\n"
+            "@@ -1 +1 @@\n-@pytest.fixture\n+@pytest.fixture(autouse=True)\n",
+            "fixture infrastructure modified",
+        ),
+    ],
+)
+def test_protected_suite_weakening_is_blocked(
+    attack: str, diff_text: str, reason: str
+) -> None:
+    report = assess_test_integrity(
+        diff_text,
+        protected_paths=("tests/**",),
+        baseline_failure_reproduced=True,
+        final_verifier_passed=True,
+    )
+
+    assert report.safe is False, attack
+    assert any(reason in finding for finding in report.reasons)
+
+
+def test_legitimate_test_update_with_reproduced_bug_and_stronger_assertion_is_accepted() -> None:
+    diff_text = (
+        "--- a/tests/test_api.py\n"
+        "+++ b/tests/test_api.py\n"
+        "@@ -1 +1 @@\n"
+        "-    assert api().ok\n"
+        "+    assert api().status_code == 200\n"
+    )
+
+    report = assess_test_integrity(
+        diff_text,
+        protected_paths=(),
+        baseline_failure_reproduced=True,
+        final_verifier_passed=True,
+    )
+
+    assert report.safe is True
+    assert report.reasons == ()
 
 
 # --------------------------------------------------------------------------- #

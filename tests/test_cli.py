@@ -3,9 +3,24 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
+
+
+def test_primary_help_collapses_to_one_runtime_without_removing_advanced_commands() -> None:
+    command = get_command(app)
+    primary = sorted(
+        name for name, child in command.commands.items() if not child.hidden
+    )
+
+    assert "run" in primary
+    assert "mission" in primary
+    assert "missioncontrol" in primary
+    assert len(primary) < 15
+    assert "autopilot" in command.commands
+    assert command.commands["autopilot"].hidden is True
 
 
 def test_cli_happy_path(sample_repo: Path, monkeypatch: object) -> None:

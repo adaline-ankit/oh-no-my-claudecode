@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from oh_no_my_claudecode.loop.adapter_contract import contract_for
+
 AgentName = Literal["claude", "codex", "opencode"]
 
 _SUPPORTED_AGENTS: tuple[AgentName, ...] = ("claude", "codex", "opencode")
@@ -41,6 +43,7 @@ class AdapterCapability:
             "structured_output": self.structured_output,
             "isolation": self.isolation,
             "limitations": list(self.limitations),
+            "conformance": contract_for(self.agent).to_dict()["capabilities"],
         }
 
 

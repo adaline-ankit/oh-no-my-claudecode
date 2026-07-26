@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import math
 
+import pytest
+
 from oh_no_my_claudecode.retrieval_eval.dataset import EXPECTED_DATASET_SHA, load_dataset
 from oh_no_my_claudecode.retrieval_eval.metrics import (
     mrr_at_k,
@@ -516,3 +518,55 @@ class TestDefaultAdaptersIntegration:
         md = report.to_markdown()
         assert len(md) > 100
         assert "recall" in md.lower()
+
+
+class TestRetrievalPromotionEvidence:
+    def test_recall_gain_is_rejected_when_downstream_completion_regresses(self) -> None:
+        from oh_no_my_claudecode.retrieval_eval.promotion import (
+            PromotionStatus,
+            evaluate_retrieval_candidate,
+        )
+        from oh_no_my_claudecode.retrieval_eval.runner import SurfaceReport
+
+        baseline = SurfaceReport(
+            surface_name="code-bm25",
+            mean_recall_at_10=0.70,
+            mean_ndcg_at_10=0.70,
+            mean_context_tokens=1_000,
+        )
+        candidate = SurfaceReport(
+            surface_name="code-hybrid",
+            mean_recall_at_10=0.90,
+            mean_ndcg_at_10=0.80,
+            mean_context_tokens=900,
+            notes="embedder=test/concept-v1; reranker=none",
+        )
+
+        evidence = evaluate_retrieval_candidate(
+            baseline,
+            candidate,
+            downstream_baseline=0.80,
+            downstream_candidate=0.70,
+        )
+
+        assert evidence.status is PromotionStatus.REJECTED
+        assert "downstream_regression" in evidence.reasons
+        assert evidence.offline_delta == pytest.approx(0.10)
+        assert evidence.downstream_delta == pytest.approx(-0.10)
+        assert evidence.candidate_provenance == "embedder=test/concept-v1; reranker=none"
+
+    def test_offline_gain_without_downstream_measurement_is_not_promoted(self) -> None:
+        from oh_no_my_claudecode.retrieval_eval.promotion import (
+            PromotionStatus,
+            evaluate_retrieval_candidate,
+        )
+        from oh_no_my_claudecode.retrieval_eval.runner import SurfaceReport
+
+        baseline = SurfaceReport(surface_name="code-bm25", mean_ndcg_at_10=0.70)
+        candidate = SurfaceReport(surface_name="code-dense", mean_ndcg_at_10=0.80)
+
+        evidence = evaluate_retrieval_candidate(baseline, candidate)
+
+        assert evidence.status is PromotionStatus.INSUFFICIENT_EVIDENCE
+        assert evidence.reasons == ("downstream_evidence_missing",)
+        assert evidence.to_dict()["status"] == "insufficient_evidence"
