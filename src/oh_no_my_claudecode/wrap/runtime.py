@@ -55,6 +55,7 @@ _ALLOWED_VERIFIER_PREFIXES = {
     "uv",
     "yarn",
 }
+_CONTROL_PATH_PREFIXES = (b".onmc/", b".agent-memory/")
 
 
 def _parse_int(value: object) -> int:
@@ -188,7 +189,12 @@ def workspace_fingerprint(repo_root: Path) -> str:
             check=False,
             timeout=20,
         )
-        for raw_path in sorted(filter(None, untracked.stdout.split(b"\0"))):
+        candidates = (
+            path
+            for path in filter(None, untracked.stdout.split(b"\0"))
+            if not path.startswith(_CONTROL_PATH_PREFIXES)
+        )
+        for raw_path in sorted(candidates):
             digest.update(raw_path)
             path = repo_root / os.fsdecode(raw_path)
             if path.is_file() and not path.is_symlink():

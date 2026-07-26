@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from oh_no_my_claudecode.wrap.runtime import (
     evaluate_completion,
     load_mission,
     prompt_is_coding_work,
+    workspace_fingerprint,
 )
 
 _NOW = datetime(2026, 7, 26, 12, 0, tzinfo=UTC)
@@ -40,6 +42,25 @@ def test_actionable_prompt_arms_strict_mission(tmp_path: Path) -> None:
     assert mission.verifier == "pytest"
     assert mission.status is MissionStatus.ACTIVE
     assert load_mission(tmp_path, "session-1") == mission
+
+
+def test_workspace_fingerprint_excludes_onmc_control_state(tmp_path: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "test"], cwd=tmp_path, check=True)
+    source = tmp_path / "app.py"
+    source.write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "app.py"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "baseline"], cwd=tmp_path, check=True)
+    baseline = workspace_fingerprint(tmp_path)
+
+    control = tmp_path / ".onmc" / "runtime" / "state.json"
+    control.parent.mkdir(parents=True)
+    control.write_text('{"status":"active"}\n', encoding="utf-8")
+    assert workspace_fingerprint(tmp_path) == baseline
+
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    assert workspace_fingerprint(tmp_path) != baseline
 
 
 def test_non_coding_and_soft_prompts_do_not_arm(tmp_path: Path) -> None:
