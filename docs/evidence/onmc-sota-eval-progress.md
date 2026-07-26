@@ -1434,6 +1434,46 @@ These are contract-level checks, not proof of true runtime isolation yet. U5 rem
 `onmc run` can execute autonomous work through a real sandbox provider and demonstrate filesystem,
 network, process, timeout, cleanup, and secret boundaries in an integration smoke.
 
+## Docker Sandbox Executor Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+7 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/sandbox tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/sandbox
+```
+
+Result:
+
+```text
+Success: no issues found in 4 source files
+```
+
+The Docker sandbox layer now has an injectable executor that runs a precompiled sandbox plan,
+captures stdout/stderr, classifies success/failure/timeout/missing-Docker, records an argv digest,
+and scopes the child environment to Docker basics plus declared secret names. This is still not a
+full U5 pass: the public `onmc run` execution path has not yet been switched to execute agent and
+verifier nodes through this sandbox executor.
+
 ## Sandbox Manifest Wiring Slice
 
 Commands run on 2026-07-26:

@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import subprocess
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
 
 from oh_no_my_claudecode.sandbox import (
     NetworkPolicy,
+    SandboxExecutionStatus,
     SandboxPlanError,
     SandboxSpec,
     ScopedSecret,
     default_repo_sandbox,
     docker_run_plan,
+    execute_docker_plan,
     harbor_task_payload,
 )
 
@@ -94,3 +98,114 @@ def test_harbor_payload_preserves_boundary_without_secret_values(tmp_path: Path)
     rendered = repr(payload)
     assert "PYPI_TOKEN" not in payload["secret_env"]
     assert "sk-" not in rendered
+
+
+def test_execute_docker_plan_scopes_environment_and_captures_success(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    spec = default_repo_sandbox(
+        repo,
+        secrets=(ScopedSecret("ANTHROPIC_API_KEY", roles=("agent",)),),
+    )
+    plan = docker_run_plan(spec, ("python", "-V"), role="agent")
+    home = str(tmp_path / "home")
+    seen: dict[str, object] = {}
+
+    def runner(
+        argv: Sequence[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+        env: Mapping[str, str],
+    ) -> subprocess.CompletedProcess[str]:
+        seen.update(
+            {
+                "argv": tuple(argv),
+                "capture_output": capture_output,
+                "text": text,
+                "timeout": timeout,
+                "env": dict(env),
+            }
+        )
+        return subprocess.CompletedProcess(list(argv), 0, "ok", "")
+
+    result = execute_docker_plan(
+        plan,
+        env={
+            "PATH": "/bin",
+            "HOME": home,
+            "ANTHROPIC_API_KEY": "secret-value",
+            "OPENAI_API_KEY": "must-not-leak",
+        },
+        runner=runner,
+    )
+
+    assert result.status is SandboxExecutionStatus.SUCCEEDED
+    assert result.succeeded is True
+    assert result.returncode == 0
+    assert result.stdout == "ok"
+    assert seen["timeout"] == float(plan.timeout_seconds)
+    assert seen["env"] == {
+        "PATH": "/bin",
+        "HOME": home,
+        "ANTHROPIC_API_KEY": "secret-value",
+    }
+    assert "must-not-leak" not in repr(result.to_dict())
+
+
+def test_execute_docker_plan_classifies_failure_timeout_and_missing_docker(
+    tmp_path: Path,
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    plan = docker_run_plan(default_repo_sandbox(repo), ("python", "-m", "pytest"))
+
+    def fail_runner(
+        argv: Sequence[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+        env: Mapping[str, str],
+    ) -> subprocess.CompletedProcess[str]:
+        del capture_output, text, timeout, env
+        return subprocess.CompletedProcess(list(argv), 2, "", "failed")
+
+    failed = execute_docker_plan(plan, env={}, runner=fail_runner)
+    assert failed.status is SandboxExecutionStatus.FAILED
+    assert failed.returncode == 2
+    assert failed.stderr == "failed"
+
+    def timeout_runner(
+        argv: Sequence[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+        env: Mapping[str, str],
+    ) -> subprocess.CompletedProcess[str]:
+        del capture_output, text, timeout, env
+        raise subprocess.TimeoutExpired(list(argv), timeout=1, output=b"out", stderr=b"err")
+
+    timed_out = execute_docker_plan(plan, env={}, runner=timeout_runner)
+    assert timed_out.status is SandboxExecutionStatus.TIMED_OUT
+    assert timed_out.stdout == "out"
+    assert timed_out.stderr == "err"
+
+    def missing_runner(
+        argv: Sequence[str],
+        *,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+        env: Mapping[str, str],
+    ) -> subprocess.CompletedProcess[str]:
+        del argv, capture_output, text, timeout, env
+        raise FileNotFoundError("docker")
+
+    unavailable = execute_docker_plan(plan, env={}, runner=missing_runner)
+    assert unavailable.status is SandboxExecutionStatus.UNAVAILABLE
+    assert unavailable.returncode is None
