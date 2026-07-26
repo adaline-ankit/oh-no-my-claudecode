@@ -86,6 +86,60 @@ def test_v4_loads_and_is_claim_ready() -> None:
     assert manifest.claim_level().value == "external"
 
 
+def test_trajectory_artifact_is_persisted_and_summarized(
+    runner: ModuleType,
+    tmp_path: Path,
+) -> None:
+    cfg = runner.EvalConfig(
+        workdir=tmp_path,
+        trials=1,
+        dry_run=False,
+        artifact_dir=tmp_path / "artifacts",
+    )
+
+    artifact = runner.write_text_artifact(
+        cfg,
+        "task-1.bare-agent.t1",
+        "agent-trajectory.txt",
+        "raw agent output",
+        kind="raw-agent-trajectory",
+        command="claude -p task",
+    )
+
+    assert artifact is not None
+    assert artifact["kind"] == "raw-agent-trajectory"
+    assert artifact["path"] == "artifacts/task-1.bare-agent.t1/agent-trajectory.txt"
+    assert artifact["size_bytes"] == len(b"raw agent output")
+    artifact_path = tmp_path / str(artifact["path"])
+    assert artifact_path.read_text(encoding="utf-8") == "raw agent output"
+    records = [
+        runner.TrialRecord(
+            "task-1",
+            runner.Condition.BARE_AGENT.value,
+            1,
+            True,
+            10.0,
+            trajectory_artifact=artifact,
+        ),
+        runner.TrialRecord(
+            "task-2",
+            runner.Condition.BARE_AGENT.value,
+            1,
+            False,
+            10.0,
+            infra_error="agent unavailable",
+            trajectory_artifact=artifact,
+        ),
+    ]
+
+    summary = runner.trajectory_artifacts_report(records, [runner.Condition.BARE_AGENT])
+
+    assert summary["overall"]["cells"] == 2
+    assert summary["overall"]["usable_cells"] == 1
+    assert summary["overall"]["artifact_cells"] == 1
+    assert summary["overall"]["missing_artifacts"] == 0
+
+
 def test_v4_carries_the_v3_tasks_over_unchanged() -> None:
     """v4 extends v3; it must not silently edit an already-measured task."""
     v3 = json.loads(V3_PATH.read_text(encoding="utf-8"))

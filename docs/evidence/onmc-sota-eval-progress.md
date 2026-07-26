@@ -118,6 +118,9 @@ This is evidence for a stronger harness foundation:
   pass/fail adjudication, output size, and output SHA-256 hash. Manifest-gated calibration blocks
   external claims when verifier artifacts are missing or incomplete, so reports cannot cite only
   agent prose or aggregate pass counts as proof.
+- Saved external evals now persist each invoked agent's raw CLI trajectory next to the report under
+  `artifacts/`, while the report JSON stores only path, size, command, and SHA-256 pointers.
+  Manifest-gated calibration blocks external claims when usable cells lack raw trajectory artifacts.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -181,6 +184,26 @@ Result:
 
 ```text
 74 passed
+```
+
+```text
+python -m pytest -q tests/test_external_corpus.py tests/test_experiment_calibration.py
+```
+
+Result:
+
+```text
+27 passed
+```
+
+```text
+python -m pytest tests/test_external_corpus.py tests/test_experiment_calibration.py tests/test_experiment_claim.py tests/test_experiment_power.py tests/test_experiment_coverage.py tests/test_experiment_contracts.py tests/test_experiment_kernel.py tests/test_experiment_portfolio.py
+```
+
+Result:
+
+```text
+87 passed
 ```
 
 ```text

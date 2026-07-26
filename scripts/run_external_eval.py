@@ -551,6 +551,15 @@ def remove_function_body(source: str, dotted: str) -> tuple[str, str | None]:
 
 
 @dataclass
+class AgentRunResult:
+    infra_error: str | None
+    cost_usd: float | None
+    usage: dict[str, int | None]
+    command: str
+    output: str
+
+
+@dataclass
 class TrialRecord:
     task_id: str
     condition: str
@@ -565,6 +574,7 @@ class TrialRecord:
     context_tokens: int | None = None
     diff_lines: int = 0
     tests_touched: bool = False
+    trajectory_artifact: dict[str, object] | None = None
     verifier_artifact: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -582,6 +592,7 @@ class TrialRecord:
             "context_tokens": self.context_tokens,
             "diff_lines": self.diff_lines,
             "tests_touched": self.tests_touched,
+            "trajectory_artifact": self.trajectory_artifact,
             "verifier_artifact": self.verifier_artifact,
         }
 
@@ -596,12 +607,17 @@ class EvalConfig:
     max_iterations: int = 4
     max_cost_usd: float = 1.0
     max_total_usd: float = 10.0
+    artifact_dir: Path | None = None
     onmc_bin: Path | None = None
     extra_env: dict[str, str] = field(default_factory=dict)
 
 
 def _run(
-    argv: list[str], cwd: Path, timeout: int, env: dict[str, str] | None = None
+    argv: list[str],
+    cwd: Path,
+    timeout: int,
+    env: dict[str, str] | None = None,
+    output_limit: int | None = 4000,
 ) -> tuple[int, str]:
     try:
         proc = subprocess.run(  # noqa: S603
@@ -611,7 +627,10 @@ def _run(
         return 124, "[timeout]"
     except OSError as exc:
         return 127, f"[oserror] {exc}"
-    return proc.returncode, (proc.stdout + proc.stderr)[-4000:]
+    output = proc.stdout + proc.stderr
+    if output_limit is None:
+        return proc.returncode, output
+    return proc.returncode, output[-output_limit:]
 
 
 #: Directory (inside the cell checkout) holding that cell's verifier interpreter.
@@ -934,6 +953,36 @@ def verifier_artifact(task: TaskSpec, python: Path, out: str, passed: bool) -> d
     }
 
 
+def write_text_artifact(
+    cfg: EvalConfig,
+    slug: str,
+    name: str,
+    content: str,
+    *,
+    kind: str,
+    command: str,
+) -> dict[str, object] | None:
+    """Persist raw per-cell evidence and return a compact report pointer."""
+    if cfg.artifact_dir is None:
+        return None
+    cell_dir = cfg.artifact_dir / slug
+    cell_dir.mkdir(parents=True, exist_ok=True)
+    path = cell_dir / name
+    path.write_text(content, encoding="utf-8")
+    encoded = content.encode("utf-8", errors="replace")
+    try:
+        relative_path = path.relative_to(cfg.artifact_dir.parent)
+    except ValueError:  # pragma: no cover - defensive for unusual paths
+        relative_path = path
+    return {
+        "kind": kind,
+        "command": command,
+        "path": relative_path.as_posix(),
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+        "size_bytes": len(encoded),
+    }
+
+
 def guard_pristine_verifier(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
 ) -> str | None:
@@ -963,7 +1012,7 @@ def guard_regression_active(
 
 def run_bare_agent(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
-) -> tuple[str | None, float | None, dict[str, int | None]]:
+) -> AgentRunResult:
     """Control arm: the agent CLI directly, same prompt/permissions/verifier."""
     argv = [
         "claude",
@@ -975,22 +1024,30 @@ def run_bare_agent(
         "--permission-mode",
         "acceptEdits",
     ]
-    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
+    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo), output_limit=None)
     cost = _extract_cost(out)
     usage = _extract_token_usage(out)
     if code == 127:
-        return f"agent CLI unavailable: {out[:200]}", cost, usage
+        return AgentRunResult(
+            f"agent CLI unavailable: {out[:200]}", cost, usage, shlex.join(argv), out
+        )
     if "[timeout]" in out:
-        return "agent timeout", cost, usage
-    return None, cost, usage
+        return AgentRunResult("agent timeout", cost, usage, shlex.join(argv), out)
+    return AgentRunResult(None, cost, usage, shlex.join(argv), out)
 
 
 def run_onmc(
     task: TaskSpec, repo: Path, cfg: EvalConfig, python: Path
-) -> tuple[str | None, float | None, dict[str, int | None]]:
+) -> AgentRunResult:
     """Treatment arm: the same task through the full `onmc run` vertical path."""
     if cfg.onmc_bin is None:
-        return "onmc entry point not prepared", None, _extract_token_usage("")
+        return AgentRunResult(
+            "onmc entry point not prepared",
+            None,
+            _extract_token_usage(""),
+            "onmc run",
+            "",
+        )
     onmc = str(cfg.onmc_bin)
     _run([onmc, "init"], repo, 300, env=cell_env(repo))
     argv = [
@@ -1008,13 +1065,13 @@ def run_onmc(
         shlex.join(verifier_argv(task, python)),
         "--json",
     ]
-    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo))
+    code, out = _run(argv, repo, cfg.timeout_s, env=cell_env(repo), output_limit=None)
     cost = _extract_cost(out)
     usage = _extract_token_usage(out)
     if "[timeout]" in out:
-        return "onmc run timeout", cost, usage
+        return AgentRunResult("onmc run timeout", cost, usage, shlex.join(argv), out)
     if code == 127:
-        return f"onmc unavailable: {out[:200]}", cost, usage
+        return AgentRunResult(f"onmc unavailable: {out[:200]}", cost, usage, shlex.join(argv), out)
     # A denied capability or an unavailable verifier means ONMC never executed.
     # That is an instrument failure, not evidence about the agent — record it
     # loudly instead of banking a free loss for the treatment arm (rule 13).
@@ -1031,8 +1088,10 @@ def run_onmc(
         "agent-credentials",
     ):
         if marker in out:
-            return f"onmc did not execute ({marker})", cost, usage
-    return None, cost, usage
+            return AgentRunResult(
+                f"onmc did not execute ({marker})", cost, usage, shlex.join(argv), out
+            )
+    return AgentRunResult(None, cost, usage, shlex.join(argv), out)
 
 
 RUNNERS = {
@@ -1082,8 +1141,16 @@ def run_cell(
             task.task_id, condition.value, trial, False, 0.0, notes="dry-run: agent not invoked"
         )
 
-    infra, cost, usage = RUNNERS[condition](task, dest, cfg, python)
+    agent_result = RUNNERS[condition](task, dest, cfg, python)
     diff_lines, tests_touched = _observed_change(dest)
+    trajectory = write_text_artifact(
+        cfg,
+        slug,
+        "agent-trajectory.txt",
+        agent_result.output,
+        kind="raw-agent-trajectory",
+        command=agent_result.command,
+    )
     passed, out = verify(task, dest, cfg, python)
     artifact = verifier_artifact(task, python, out, passed)
     latency = (time.monotonic() - started) * 1000.0
@@ -1099,14 +1166,15 @@ def run_cell(
         trial,
         passed,
         latency,
-        infra_error=infra,
+        infra_error=agent_result.infra_error,
         notes=note,
-        cost_usd=cost,
-        input_tokens=usage["input_tokens"],
-        output_tokens=usage["output_tokens"],
-        context_tokens=usage["context_tokens"],
+        cost_usd=agent_result.cost_usd,
+        input_tokens=agent_result.usage["input_tokens"],
+        output_tokens=agent_result.usage["output_tokens"],
+        context_tokens=agent_result.usage["context_tokens"],
         diff_lines=diff_lines,
         tests_touched=tests_touched,
+        trajectory_artifact=trajectory,
         verifier_artifact=artifact,
     )
 
@@ -1192,9 +1260,52 @@ def verifier_artifacts_report(
     }
 
 
+def trajectory_artifacts_report(
+    records: list[TrialRecord],
+    conditions: list[Condition],
+) -> dict[str, object]:
+    """Return raw-trajectory artifact coverage without embedding the raw logs."""
+    return {
+        "overall": _trajectory_artifact_summary(records),
+        "by_condition": {
+            cond.value: _trajectory_artifact_summary(
+                [row for row in records if row.condition == cond.value]
+            )
+            for cond in conditions
+        },
+    }
+
+
+def _trajectory_artifact_summary(rows: list[TrialRecord]) -> dict[str, object]:
+    hashes: set[str] = set()
+    for row in rows:
+        if row.infra_error is not None:
+            continue
+        artifact = row.trajectory_artifact
+        if not isinstance(artifact, dict):
+            continue
+        digest = artifact.get("sha256")
+        if isinstance(digest, str):
+            hashes.add(digest)
+    usable_cells = sum(1 for row in rows if row.infra_error is None)
+    artifact_cells = sum(
+        1 for row in rows if row.infra_error is None and row.trajectory_artifact is not None
+    )
+    return {
+        "cells": len(rows),
+        "usable_cells": usable_cells,
+        "artifact_cells": artifact_cells,
+        "missing_artifacts": max(usable_cells - artifact_cells, 0),
+        "unique_trajectory_hashes": len(hashes),
+        "trajectory_hashes": sorted(hashes),
+    }
+
+
 def _verifier_artifact_summary(rows: list[TrialRecord]) -> dict[str, object]:
     hash_values: set[str] = set()
     for row in rows:
+        if row.infra_error is not None:
+            continue
         artifact = row.verifier_artifact
         if not isinstance(artifact, dict):
             continue
@@ -1203,7 +1314,9 @@ def _verifier_artifact_summary(rows: list[TrialRecord]) -> dict[str, object]:
             hash_values.add(output_sha)
     hashes = sorted(hash_values)
     usable_cells = sum(1 for row in rows if row.infra_error is None)
-    artifact_cells = sum(1 for row in rows if row.verifier_artifact is not None)
+    artifact_cells = sum(
+        1 for row in rows if row.infra_error is None and row.verifier_artifact is not None
+    )
     return {
         "cells": len(rows),
         "usable_cells": usable_cells,
@@ -1327,6 +1440,7 @@ def main() -> int:
         dry_run=args.dry_run,
         max_cost_usd=args.max_cost_usd,
         max_total_usd=args.max_total_usd,
+        artifact_dir=Path(args.out).resolve().parent / "artifacts",
     )
 
     onmc_bin, onmc_err = prepare_onmc_venv(workdir)
@@ -1390,6 +1504,7 @@ def main() -> int:
         "summary": summarize(records, conditions, seed=seed),
         "failure_taxonomy": failure_taxonomy_report(records, conditions),
         "token_telemetry": token_telemetry_report(records, conditions),
+        "trajectory_artifacts": trajectory_artifacts_report(records, conditions),
         "verifier_artifacts": verifier_artifacts_report(records, conditions),
         "paired": (
             paired_analysis(records, conditions[0], conditions[1], seed=seed)
