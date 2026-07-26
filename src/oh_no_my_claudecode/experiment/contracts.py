@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import ClassVar
@@ -110,6 +111,19 @@ def _require_id(value: str, name: str) -> str:
     if not isinstance(value, str) or not _ID_RE.match(value):
         raise ValueError(f"{name} must match {_ID_RE.pattern!r}, got {value!r}")
     return value
+
+
+def task_set_sha256(tasks: Sequence[Mapping[str, object]]) -> str:
+    """Return the canonical digest that freezes an ordered task-set payload."""
+    if not tasks:
+        raise ValueError("task set must contain at least one task")
+    payload = json.dumps(
+        list(tasks),
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -347,4 +361,5 @@ __all__ = [
     "RunId",
     "TrialResult",
     "is_legal_transition",
+    "task_set_sha256",
 ]

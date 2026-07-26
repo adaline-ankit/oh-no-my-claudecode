@@ -37,6 +37,7 @@ from .contracts import (
     RunId,
     TrialResult,
     is_legal_transition,
+    task_set_sha256,
 )
 from .coverage import (
     PortfolioCoverageGate,
@@ -75,6 +76,7 @@ __all__ = [
     "MetricLabel",
     "RunId",
     "TrialResult",
+    "task_set_sha256",
     "CalibrationDecision",
     "CalibrationReport",
     "ManifestCalibrationReport",
