@@ -8,6 +8,13 @@ All notable changes to this project are documented here.
 
 
 
+
+## [0.113.0] — 2026-07-26
+
+### Added
+
+- gate publication on runtime delegation
+
 ## [0.112.0] — 2026-07-26
 
 ### Added
