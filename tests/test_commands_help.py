@@ -32,6 +32,9 @@ from oh_no_my_claudecode.commands_help.core import (
     CATEGORY_MAP,
     CATEGORY_ORDER,
     CORE_COMMANDS,
+    PRIMARY_COMMAND_LIMIT,
+    PRIMARY_WORKFLOW_COMMANDS,
+    audit_command_surface,
     group_commands,
 )
 
@@ -123,6 +126,27 @@ class TestGroupCommands:
         for cat in CATEGORY_ORDER:
             assert grouped[cat] == [], f"Expected empty list for {cat!r}"
 
+    def test_product_surface_audit_passes_for_focused_primary_workflow(self) -> None:
+        """The product surface stays below the primary command limit."""
+        live = [*PRIMARY_WORKFLOW_COMMANDS, "swarm", "autopilot", "whip"]
+        visible = list(PRIMARY_WORKFLOW_COMMANDS)
+        audit = audit_command_surface(live, visible)
+
+        assert audit.ready is True
+        assert audit.primary_limit == PRIMARY_COMMAND_LIMIT
+        assert audit.primary_limit_ok is True
+        assert audit.hidden_advanced_count == 3
+        assert audit.unexpected_visible == ()
+
+    def test_product_surface_audit_flags_visible_advanced_drift(self) -> None:
+        """A new advanced command appearing in root help breaks readiness."""
+        live = [*PRIMARY_WORKFLOW_COMMANDS, "whip"]
+        visible = [*PRIMARY_WORKFLOW_COMMANDS, "whip"]
+        audit = audit_command_surface(live, visible)
+
+        assert audit.ready is False
+        assert audit.unexpected_visible == ("whip",)
+
 
 # ---------------------------------------------------------------------------
 # CLI integration tests (CliRunner)
@@ -164,6 +188,20 @@ class TestCommandsCli:
         data: dict[str, Any] = json.loads(result.output)
         for cat in CATEGORY_ORDER:
             assert cat in data["groups"], f"Missing group key {cat!r}"
+
+    def test_json_surface_reports_runtime_product_contract(self, runner: CliRunner) -> None:
+        """--json exposes the audited primary/advanced command surface."""
+        result = runner.invoke(app, ["commands", "--json"], catch_exceptions=False)
+        assert result.exit_code == 0
+        data: dict[str, Any] = json.loads(result.output)
+        surface = data["surface"]
+
+        assert surface["ready"] is True
+        assert surface["canonical_entrypoint"] == "run"
+        assert len(surface["visible_primary"]) <= PRIMARY_COMMAND_LIMIT
+        assert surface["unexpected_visible"] == []
+        assert "run" in surface["visible_primary"]
+        assert surface["hidden_advanced_count"] > 0
 
     def test_all_flag_exits_zero(self, runner: CliRunner) -> None:
         """--all exits with code 0."""

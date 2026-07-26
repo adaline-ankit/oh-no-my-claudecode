@@ -10,6 +10,7 @@ import typer
 
 from oh_no_my_claudecode.claim import DEFAULT_TTL_SECONDS, Claim, ClaimLedger
 from oh_no_my_claudecode.command_registry import register_feature_commands
+from oh_no_my_claudecode.commands_help.core import PRIMARY_WORKFLOW_COMMANDS
 from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.hooks import session_start_context_json
@@ -7343,24 +7344,7 @@ def swarm_abort_command(
 register_feature_commands(app, strict=False)
 
 
-_PRIMARY_COMMANDS = frozenset(
-    {
-        "run",
-        "setup",
-        "init",
-        "quickstart",
-        "brief",
-        "guard",
-        "recall",
-        "status",
-        "ui",
-        "mission",
-        "missioncontrol",
-        "wrap",
-        "serve",
-        "commands",
-    }
-)
+_PRIMARY_COMMANDS = frozenset(PRIMARY_WORKFLOW_COMMANDS)
 
 
 def _collapse_primary_help() -> None:

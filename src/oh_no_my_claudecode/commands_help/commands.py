@@ -14,7 +14,8 @@ filters to a single category; ``--json`` emits a machine-readable envelope.
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any, cast
 
 import typer
 
@@ -23,6 +24,7 @@ from oh_no_my_claudecode.commands_help.core import (
 )
 from oh_no_my_claudecode.commands_help.core import (
     CATEGORY_ORDER,
+    audit_command_surface,
     group_commands,
 )
 
@@ -88,10 +90,12 @@ def register(app: typer.Typer) -> None:
         # cli.py → command_registry → this module (import time)
         # This function body only runs after cli.py is fully initialised.
         from oh_no_my_claudecode.cli import app as root_app
-        from oh_no_my_claudecode.command_registry import _registered_names
+        from oh_no_my_claudecode.command_registry import _command_name, _registered_names
 
         live_names = sorted(set(_registered_names(root_app)))
+        visible_names = _visible_registered_names(root_app, _command_name)
         grouped = group_commands(live_names)
+        surface = audit_command_surface(live_names, visible_names)
 
         # ── JSON output ──────────────────────────────────────────────────
         if as_json:
@@ -99,6 +103,7 @@ def register(app: typer.Typer) -> None:
                 "total": len(live_names),
                 "core": grouped.get("Core", []),
                 "groups": {cat: grouped.get(cat, []) for cat in CATEGORY_ORDER},
+                "surface": surface.to_dict(),
             }
             typer.echo(json.dumps(payload, indent=2))
             return
@@ -124,6 +129,19 @@ def register(app: typer.Typer) -> None:
         from rich.text import Text
 
         con = Console()
+
+        con.print("[bold cyan]Primary workflow[/bold cyan]")
+        con.print(
+            "  [dim]setup -> run -> missioncontrol; advanced controls stay callable "
+            "through `onmc commands --all`[/dim]"
+        )
+        _print_columns(con, list(surface.visible_primary), col_width=20, cols=5)
+        if not surface.ready:
+            con.print(
+                "  [yellow]surface audit needs attention; run "
+                "`onmc commands --json` for exact missing or visible commands[/yellow]"
+            )
+        con.print()
 
         categories_to_show = [category] if category else CATEGORY_ORDER
         expand = all_commands or category is not None
@@ -172,3 +190,23 @@ def _print_columns(con: object, items: list[str], col_width: int, cols: int) -> 
         row = items[i : i + cols]
         line = "  " + "  ".join(item.ljust(col_width) for item in row).rstrip()
         con.print(line)
+
+
+def _visible_registered_names(
+    root_app: typer.Typer,
+    resolver: Callable[[str | None, object], str | None],
+) -> list[str]:
+    """Return top-level names visible in root help.
+
+    This mirrors ``cli._collapse_primary_help`` without importing that private
+    helper.  It lets ``onmc commands`` report whether the live CLI still presents
+    the focused product surface.
+    """
+    names: list[str] = []
+    for raw_info in (*root_app.registered_commands, *root_app.registered_groups):
+        info = cast(Any, raw_info)
+        callback = info.callback
+        name = resolver(info.name, callback)
+        if name is not None and not getattr(raw_info, "hidden", False):
+            names.append(name)
+    return sorted(set(names))

@@ -1,10 +1,13 @@
-"""Pure-logic helpers for ``onmc commands`` help tiering.
+"""Pure-logic helpers for ``onmc commands`` help tiering and product surface.
 
 Separated from the Typer surface so they can be tested without importing the
 CLI or registering any commands.  The only external dependency is stdlib.
 
 Design
 ------
+- ``PRIMARY_WORKFLOW_COMMANDS``: the small user-facing product surface.  The
+  large command catalog remains callable, but primary help must stay focused on
+  the runtime workflow described in the SOTA plan.
 - ``CATEGORY_MAP``: maintained dict ``command-name → category``.  Any command
   name absent from the map automatically lands in ``"Other"``, so new commands
   added to the app remain discoverable without a forced update here.
@@ -16,6 +19,7 @@ Design
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Category order (display sequence)
@@ -32,21 +36,47 @@ CATEGORY_ORDER: list[str] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Core commands — shown in the root epilog
+# Product surface — shown in root help and treated as the primary workflow
 # ---------------------------------------------------------------------------
 
-CORE_COMMANDS: list[str] = [
+PRIMARY_COMMAND_LIMIT = 14
+
+PRIMARY_WORKFLOW_COMMANDS: tuple[str, ...] = (
     "run",
     "setup",
+    "init",
     "quickstart",
     "brief",
     "guard",
     "recall",
+    "status",
     "mission",
     "missioncontrol",
     "ui",
+    "wrap",
+    "serve",
     "commands",
-]
+)
+
+CORE_COMMANDS: list[str] = list(PRIMARY_WORKFLOW_COMMANDS)
+"""Backward-compatible alias for tests and users of the older help tier."""
+
+PRIMARY_COMMAND_ROLES: dict[str, str] = {
+    "setup": "one-time install and hook setup",
+    "init": "repo-local project bootstrap",
+    "quickstart": "first-run guided bootstrap",
+    "run": "canonical verified runtime entry point",
+    "mission": "plan and progress view over the runtime contract",
+    "missioncontrol": "observed run, evidence, and worker state",
+    "ui": "local Mission Control UI",
+    "wrap": "Claude Code hook integration for the same runtime contract",
+    "serve": "local service surface for UI and integrations",
+    "status": "repo and ONMC health summary",
+    "brief": "context briefing before a run",
+    "guard": "policy and safety context",
+    "recall": "measured memory/context recall",
+    "commands": "advanced catalog browser",
+}
 
 # ---------------------------------------------------------------------------
 # Category map — command-name → category
@@ -65,6 +95,8 @@ CATEGORY_MAP: dict[str, str] = {
     "recall": "Core",
     "ui": "Core",
     "init": "Core",
+    "serve": "Core",
+    "status": "Core",
     "commands": "Core",
     "mission": "Core",
     "missioncontrol": "Core",
@@ -132,7 +164,6 @@ CATEGORY_MAP: dict[str, str] = {
     "sbom": "Integrations",
     "plug": "Integrations",
     "mcp": "Integrations",
-    "serve": "Integrations",
     "live": "Integrations",
 }
 
@@ -140,6 +171,81 @@ CATEGORY_MAP: dict[str, str] = {
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CommandSurfaceAudit:
+    """Auditable shape of the user-facing command surface.
+
+    This is intentionally stricter than category grouping: it answers whether
+    the live CLI still presents ONMC as one runtime with advanced operator tools
+    behind it, instead of drifting back into a 100-command product surface.
+    """
+
+    total_commands: int
+    primary_limit: int
+    expected_primary: tuple[str, ...]
+    visible_primary: tuple[str, ...]
+    hidden_advanced_count: int
+    missing_primary: tuple[str, ...]
+    hidden_primary: tuple[str, ...]
+    unexpected_visible: tuple[str, ...]
+
+    @property
+    def primary_limit_ok(self) -> bool:
+        return len(self.visible_primary) <= self.primary_limit
+
+    @property
+    def ready(self) -> bool:
+        return (
+            self.primary_limit_ok
+            and not self.missing_primary
+            and not self.hidden_primary
+            and not self.unexpected_visible
+            and "run" in self.visible_primary
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ready": self.ready,
+            "total_commands": self.total_commands,
+            "primary_limit": self.primary_limit,
+            "primary_limit_ok": self.primary_limit_ok,
+            "expected_primary": list(self.expected_primary),
+            "visible_primary": list(self.visible_primary),
+            "hidden_advanced_count": self.hidden_advanced_count,
+            "missing_primary": list(self.missing_primary),
+            "hidden_primary": list(self.hidden_primary),
+            "unexpected_visible": list(self.unexpected_visible),
+            "canonical_entrypoint": "run",
+            "advanced_catalog": "commands --all",
+            "roles": dict(PRIMARY_COMMAND_ROLES),
+        }
+
+
+def audit_command_surface(
+    names: Iterable[str],
+    visible_names: Iterable[str],
+    *,
+    primary_limit: int = PRIMARY_COMMAND_LIMIT,
+) -> CommandSurfaceAudit:
+    """Return the product-surface audit for a live command registry."""
+    live = set(names)
+    visible = set(visible_names)
+    expected = tuple(PRIMARY_WORKFLOW_COMMANDS)
+    expected_set = set(expected)
+    visible_primary = tuple(sorted(visible & expected_set))
+    hidden_advanced = live - expected_set - visible
+    return CommandSurfaceAudit(
+        total_commands=len(live),
+        primary_limit=primary_limit,
+        expected_primary=expected,
+        visible_primary=visible_primary,
+        hidden_advanced_count=len(hidden_advanced),
+        missing_primary=tuple(sorted(expected_set - live)),
+        hidden_primary=tuple(sorted((expected_set & live) - visible)),
+        unexpected_visible=tuple(sorted(visible - expected_set)),
+    )
 
 
 def group_commands(names: Iterable[str]) -> dict[str, list[str]]:
