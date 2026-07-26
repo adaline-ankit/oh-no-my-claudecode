@@ -179,6 +179,7 @@ class NodeSpec:
     node_id: str
     kind: str
     objective: str
+    completion_condition: str | None
     dependencies: tuple[str, ...]
     side_effecting: bool
     idempotency_key: str | None
@@ -192,6 +193,7 @@ class NodeSpec:
             "id",
             "kind",
             "objective",
+            "completion_condition",
             "dependencies",
             "side_effecting",
             "idempotency_key",
@@ -206,6 +208,8 @@ class NodeSpec:
         _nonempty(self.node_id, "id")
         _nonempty(self.kind, "kind")
         _nonempty(self.objective, "objective")
+        if self.completion_condition is not None:
+            _nonempty(self.completion_condition, "completion_condition")
         _string_tuple(self.dependencies, "dependencies")
         if len(set(self.dependencies)) != len(self.dependencies):
             raise RuntimeContractError(f"node {self.node_id!r} dependencies must be unique")
@@ -236,11 +240,16 @@ class NodeSpec:
                 raise RuntimeContractError(
                     f"side-effecting node {self.node_id!r} requires declared capabilities"
                 )
+            if self.completion_condition is None:
+                raise RuntimeContractError(
+                    f"side-effecting node {self.node_id!r} requires completion_condition"
+                )
 
     def to_dict(self) -> dict[str, object]:
         return {
             "budget": self.budget.to_dict() if self.budget is not None else None,
             "capabilities": self.capabilities.to_dict(),
+            "completion_condition": self.completion_condition,
             "dependencies": list(self.dependencies),
             "id": self.node_id,
             "idempotency_key": self.idempotency_key,
@@ -259,10 +268,14 @@ class NodeSpec:
         raw_budget = data["budget"]
         raw_key = data["idempotency_key"]
         raw_timeout = data["timeout_seconds"]
+        raw_completion = data["completion_condition"]
         return cls(
             node_id=_string(data["id"], f"{path}.id"),
             kind=_string(data["kind"], f"{path}.kind"),
             objective=_string(data["objective"], f"{path}.objective"),
+            completion_condition=None
+            if raw_completion is None
+            else _string(raw_completion, f"{path}.completion_condition"),
             dependencies=_string_tuple(data["dependencies"], f"{path}.dependencies"),
             side_effecting=_bool(data["side_effecting"], f"{path}.side_effecting"),
             idempotency_key=None

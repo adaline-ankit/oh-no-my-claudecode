@@ -18,6 +18,7 @@ from oh_no_my_claudecode.runtime.backend import NodeHandler
 from oh_no_my_claudecode.runtime.contracts import (
     NodeResult,
     NodeResultStatus,
+    NodeSpec,
     RunResult,
     RunResultStatus,
     RunSpec,
@@ -67,10 +68,13 @@ class NativeExecutionBackend:
                 current = self.store.load(spec.run_id)
                 state = current.nodes[node.node_id].state
                 if state is NodeState.SUCCEEDED:
-                    results.append(self._load_result(spec.run_id, node.node_id))
+                    result = self._load_result(spec.run_id, node.node_id)
+                    self._validate_node_result(node, result)
+                    results.append(result)
                     continue
                 if self._has_result(spec.run_id, node.node_id):
                     result = self._load_result(spec.run_id, node.node_id)
+                    self._validate_node_result(node, result)
                     self._apply_persisted_result(spec.run_id, result)
                     results.append(result)
                     if result.status is NodeResultStatus.SUCCEEDED:
@@ -106,14 +110,7 @@ class NativeExecutionBackend:
                         idempotency_key=f"runtime:{node.node_id}:start",
                     )
                 result = handlers[node.node_id](node)
-                if result.node_id != node.node_id:
-                    raise RuntimeContractError(
-                        f"handler for {node.node_id!r} returned result for {result.node_id!r}"
-                    )
-                if result.idempotency_key != (node.idempotency_key or f"runtime:{node.node_id}"):
-                    raise RuntimeContractError(
-                        f"handler for {node.node_id!r} returned wrong idempotency key"
-                    )
+                self._validate_node_result(node, result)
                 self._write_result(spec.run_id, result)
                 results.append(result)
                 if result.status is NodeResultStatus.SUCCEEDED:
@@ -273,6 +270,25 @@ class NativeExecutionBackend:
     def _result_path(self, run_id: str, node_id: str) -> Path:
         return self.store.root / "runs" / run_id / "node-results" / f"{node_id}.json"
 
+    def _validate_node_result(self, node: NodeSpec, result: NodeResult) -> None:
+        node_id = node.node_id
+        if result.node_id != node_id:
+            raise RuntimeContractError(
+                f"handler for {node_id!r} returned result for {result.node_id!r}"
+            )
+        expected_key = node.idempotency_key or f"runtime:{node_id}"
+        if result.idempotency_key != expected_key:
+            raise RuntimeContractError(f"handler for {node_id!r} returned wrong idempotency key")
+        if (
+            node.side_effecting
+            and result.status is NodeResultStatus.SUCCEEDED
+            and not any(item.kind == "completion" and item.digest for item in result.evidence)
+        ):
+            raise RuntimeContractError(
+                f"successful side-effecting node {node_id!r} requires digest-backed "
+                "completion evidence"
+            )
+
     def _spec_path(self, run_id: str) -> Path:
         return self.store.root / "runs" / run_id / "runtime-spec.json"
 
@@ -327,6 +343,9 @@ class NativeExecutionBackend:
         return NodeResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
 
     def _load_results(self, spec: RunSpec) -> tuple[NodeResult, ...]:
-        return tuple(
-            self._load_result(spec.run_id, node.node_id) for node in spec.topological_order()
-        )
+        results: list[NodeResult] = []
+        for node in spec.topological_order():
+            result = self._load_result(spec.run_id, node.node_id)
+            self._validate_node_result(node, result)
+            results.append(result)
+        return tuple(results)

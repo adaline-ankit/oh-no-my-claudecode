@@ -11,6 +11,7 @@ from oh_no_my_claudecode.harness_run import ControllerDependencies, HarnessContr
 from oh_no_my_claudecode.runtime import (
     Budget,
     CapabilitySet,
+    EvidenceRef,
     NativeExecutionBackend,
     NodeResult,
     NodeResultStatus,
@@ -31,6 +32,7 @@ def _node(
         node_id=node_id,
         kind="test",
         objective=f"Run {node_id}",
+        completion_condition=f"{node_id} produced verifier evidence" if side_effecting else None,
         dependencies=dependencies,
         side_effecting=side_effecting,
         idempotency_key=f"idem:{node_id}" if side_effecting else None,
@@ -46,6 +48,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             node_id="execute",
             kind="execute",
             objective="Make a change",
+            completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
             idempotency_key=None,
@@ -59,6 +62,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             node_id="execute",
             kind="execute",
             objective="Make a change",
+            completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
             idempotency_key="idem:execute",
@@ -72,6 +76,7 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             node_id="execute",
             kind="execute",
             objective="Make a change",
+            completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
             idempotency_key="idem:execute",
@@ -85,12 +90,27 @@ def test_side_effecting_nodes_require_idempotency_timeout_budget_and_capabilitie
             node_id="execute",
             kind="execute",
             objective="Make a change",
+            completion_condition="Verifier passed",
             dependencies=(),
             side_effecting=True,
             idempotency_key="idem:execute",
             timeout_seconds=30.0,
             budget=Budget(timeout_seconds=30.0),
             capabilities=CapabilitySet(),
+        )
+
+    with pytest.raises(RuntimeContractError, match="completion_condition"):
+        NodeSpec(
+            node_id="execute",
+            kind="execute",
+            objective="Make a change",
+            completion_condition=None,
+            dependencies=(),
+            side_effecting=True,
+            idempotency_key="idem:execute",
+            timeout_seconds=30.0,
+            budget=Budget(timeout_seconds=30.0),
+            capabilities=CapabilitySet(tools=("edit",), filesystem_write=True),
         )
 
 
@@ -136,6 +156,7 @@ def test_native_backend_replays_completed_idempotency_without_side_effect(tmp_pa
             node_id=node.node_id,
             status=NodeResultStatus.SUCCEEDED,
             idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node) if node.side_effecting else (),
             output={"call": len(calls)},
         )
 
@@ -178,6 +199,7 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
         node_id="execute",
         status=NodeResultStatus.SUCCEEDED,
         idempotency_key="idem:execute",
+        evidence=_completion_evidence(spec.nodes[0]),
         output={"written_before_crash": True},
     )
     backend._write_result(spec.run_id, result)
@@ -192,6 +214,32 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
     snapshot = backend.store.load(spec.run_id)
     assert snapshot.state.value == "completed"
     assert snapshot.nodes["execute"].state.value == "succeeded"
+
+
+def test_native_backend_rejects_successful_side_effect_without_completion_evidence(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-vacuous",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+
+    result = backend.execute(
+        spec,
+        {
+            "execute": lambda node: NodeResult(
+                node_id=node.node_id,
+                status=NodeResultStatus.SUCCEEDED,
+                idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            )
+        },
+    )
+
+    assert result.status is RunResultStatus.FAILED
+    assert result.error is not None
+    assert "completion evidence" in result.error
 
 
 def test_native_backend_rejects_resume_with_mismatched_run_spec(tmp_path: Path) -> None:
@@ -250,3 +298,14 @@ def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     assert execute.capabilities.filesystem_write is True
     assert ("pytest", "tests/billing") in verify.capabilities.commands
     assert spec.metadata["source"] == "harness_run.ExecutionPlan"
+
+
+def _completion_evidence(node: NodeSpec) -> tuple[EvidenceRef, ...]:
+    return (
+        EvidenceRef(
+            evidence_id=f"{node.node_id}:completion",
+            kind="completion",
+            uri=f"onmc://runtime/{node.node_id}/completion",
+            digest="sha256:" + ("0" * 64),
+        ),
+    )

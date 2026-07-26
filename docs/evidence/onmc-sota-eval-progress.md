@@ -32,6 +32,8 @@ This is evidence for a stronger harness foundation:
   does not re-run the node handler, closing a duplicate-side-effect recovery gap.
 - Native runtime runs now persist a `RunSpec` manifest and reject replay/resume when the requested
   spec digest differs from the stored one, preventing stale-result reuse across task changes.
+- Side-effecting runtime nodes now require a first-class `completion_condition`, and successful
+  side-effecting results require digest-backed completion evidence before the backend accepts them.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -134,6 +136,16 @@ Result:
 ```
 
 ```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py
+```
+
+Result:
+
+```text
+63 passed
+```
+
+```text
 ruff check src/oh_no_my_claudecode/experiment src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py scripts/run_external_eval.py scripts/calibrate_external_report.py tests/test_experiment_calibration.py tests/test_experiment_power.py tests/test_runtime_contracts.py
 ```
 
@@ -173,6 +185,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 | Durable replay | Pass | Re-running a completed graph returns persisted results without new node execution. |
 | Crash-window recovery | Pass | A persisted node result is reconciled without re-running the handler after a crash. |
 | RunSpec digest lock | Pass | Resuming with a changed task/graph contract is rejected before handlers run. |
+| Completion evidence lock | Pass | Successful side-effecting nodes cannot complete without digest-backed completion evidence. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |

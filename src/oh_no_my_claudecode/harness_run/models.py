@@ -134,6 +134,11 @@ class ExecutionPlan:
                 node_id=node.node_id,
                 kind=node.kind.value,
                 objective=node.objective,
+                completion_condition=_completion_condition_for(
+                    node.kind,
+                    node.objective,
+                    self.proof_requirements,
+                ),
                 dependencies=node.dependencies,
                 side_effecting=_node_has_side_effects(node.kind),
                 idempotency_key=f"{self.run_id}:node:{node.node_id}",
@@ -338,6 +343,20 @@ def _capabilities_for(
     if kind in {NodeKind.VERIFY, NodeKind.PROVE}:
         return CapabilitySet(tools=tools, commands=commands)
     return CapabilitySet(tools=tools, commands=commands, filesystem_write=True)
+
+
+def _completion_condition_for(
+    kind: NodeKind,
+    objective: str,
+    proof_requirements: tuple[ProofRequirement, ...],
+) -> str | None:
+    """Return the falsifiable condition required before a node can succeed."""
+    if not _node_has_side_effects(kind):
+        return None
+    if kind in {NodeKind.VERIFY, NodeKind.PROVE} and proof_requirements:
+        rendered = ", ".join(" ".join(requirement.argv) for requirement in proof_requirements)
+        return f"Verifier command succeeds with digest-backed evidence: {rendered}"
+    return f"Node objective has digest-backed completion evidence: {objective}"
 
 
 def _evidence_refs(packet: EvidencePacket) -> tuple[EvidenceRef, ...]:
