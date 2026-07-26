@@ -39,8 +39,9 @@ _ACTION_RE = re.compile(
     re.IGNORECASE,
 )
 _CODE_RE = re.compile(
-    r"\b(api|app|bug|ci|class|cli|code|component|database|endpoint|feature|"
-    r"function|module|package|pr|repo|repository|schema|service|test|tests|ui)\b",
+    r"\b(api|app|auth|authentication|backend|bug|ci|class|cli|code|component|"
+    r"database|endpoint|feature|frontend|function|gateway|integration|login|module|"
+    r"package|payment|pr|repo|repository|schema|service|test|tests|ui|webhook)\b",
     re.IGNORECASE,
 )
 _ALLOWED_VERIFIER_PREFIXES = {

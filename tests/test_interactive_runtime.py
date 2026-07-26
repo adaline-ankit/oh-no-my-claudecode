@@ -68,6 +68,11 @@ def test_non_coding_and_soft_prompts_do_not_arm(tmp_path: Path) -> None:
     )
 
 
+def test_product_feature_prompt_is_recognized_as_coding_work() -> None:
+    assert prompt_is_coding_work("Implement a payment gateway")
+    assert prompt_is_coding_work("Fix login")
+
+
 def test_stop_blocks_without_a_non_vacuous_change(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
     arm_mission(
@@ -217,4 +222,3 @@ def test_wrap_installs_runtime_hooks_idempotently(tmp_path: Path) -> None:
     assert serialized.count(DECISION_INTERCEPT_COMMAND) == 1
     assert serialized.count(RUNTIME_STOP_COMMAND) == 1
     assert wrap_hooks_installed(settings_path=settings)
-
