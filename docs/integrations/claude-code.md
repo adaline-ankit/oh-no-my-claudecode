@@ -57,6 +57,31 @@ Re-running `onmc plug claude-code` is always safe.
 
 ---
 
+## Optional: make ONMC the active runtime
+
+Base plugin installation provides memory, telemetry, and MCP integration. To
+make ONMC enforce autonomous, verifier-backed completion for coding work:
+
+```bash
+onmc wrap --strict --default-active
+```
+
+Strict wrapping adds four idempotent controls:
+
+| Event | Command | Effect |
+|---|---|---|
+| `UserPromptSubmit` | `onmc hooks prompt-router` | Routes the prompt and arms a session completion contract for coding work |
+| `PreToolUse:Task` | `onmc hooks task-intercept` | Keeps fan-out on accountable ONMC paths |
+| `PreToolUse:AskUserQuestion` | `onmc hooks decision-intercept` | Chooses recommended reversible defaults; material-risk questions still reach the user |
+| `Stop` | `onmc hooks runtime-stop` | Blocks completion until a real change passes the detected repository verifier |
+
+The completion guard is bounded to six blocks or 45 minutes. Missing, broken,
+or repeatedly failing verifiers therefore return control to the user rather
+than creating an infinite loop. Soft wrapping remains advisory and never arms
+or blocks a mission.
+
+---
+
 ## What gets installed
 
 ### Hooks (`.claude/settings.json` or `hooks/hooks.json`)

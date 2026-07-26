@@ -14,6 +14,8 @@ LEGACY_POST_COMPACT_COMMAND = "onmc hooks post-compact"
 # ``onmc wrap`` layer — make onmc the default layer for Claude Code.
 TASK_INTERCEPT_COMMAND = "onmc hooks task-intercept"
 PROMPT_ROUTER_COMMAND = "onmc hooks prompt-router"
+DECISION_INTERCEPT_COMMAND = "onmc hooks decision-intercept"
+RUNTIME_STOP_COMMAND = "onmc hooks runtime-stop"
 # Telemetry live event capture — PostToolUse + SubagentStop/Stop.
 POST_TOOL_USE_COMMAND = "onmc hooks post-tool-use"
 SUBAGENT_STOP_COMMAND = "onmc hooks subagent-stop"
@@ -23,12 +25,15 @@ MCP_SERVER_NAME = "onmc"
 _PRE_TOOL_USE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 # Matcher for the ``onmc wrap`` Task intercept: the native agent-spawning tool.
 _TASK_INTERCEPT_MATCHER = "Task"
+_DECISION_INTERCEPT_MATCHER = "AskUserQuestion"
 
 # Commands ``onmc wrap`` installs (and ``onmc unwrap`` removes, exactly).
 _WRAP_COMMANDS = frozenset(
     {
         TASK_INTERCEPT_COMMAND,
         PROMPT_ROUTER_COMMAND,
+        DECISION_INTERCEPT_COMMAND,
+        RUNTIME_STOP_COMMAND,
     }
 )
 
@@ -42,6 +47,8 @@ _ONMC_COMMANDS = frozenset(
         LEGACY_POST_COMPACT_COMMAND,
         TASK_INTERCEPT_COMMAND,
         PROMPT_ROUTER_COMMAND,
+        DECISION_INTERCEPT_COMMAND,
+        RUNTIME_STOP_COMMAND,
         POST_TOOL_USE_COMMAND,
         SUBAGENT_STOP_COMMAND,
     }
@@ -274,12 +281,16 @@ def install_wrap_hooks(
 ) -> HookInstallResult:
     """Install the ``onmc wrap`` layer hooks into ``settings.json``.
 
-    Merges two command hooks (idempotently) alongside any existing hooks:
+    Merges four command hooks (idempotently) alongside any existing hooks:
 
     - ``PreToolUse`` (matcher ``"Task"``) → ``onmc hooks task-intercept`` —
       intercepts native agent-spawning and redirects it to ``onmc swarm``.
     - ``UserPromptSubmit`` (matcher ``""``) → ``onmc hooks prompt-router`` —
       routes each prompt and injects a "prefer onmc paths" nudge.
+    - ``PreToolUse`` (matcher ``"AskUserQuestion"``) → ``onmc hooks
+      decision-intercept`` — resolves low-risk implementation choices.
+    - ``Stop`` (matcher ``""``) → ``onmc hooks runtime-stop`` — refuses
+      premature completion while a strict mission contract remains unverified.
 
     A pristine backup of the pre-wrap settings is written exactly once (never
     overwriting an earlier onmc backup). ``strict`` is conveyed to the running
@@ -318,6 +329,18 @@ def install_wrap_hooks(
         event_name="UserPromptSubmit",
         matcher="",
         command=PROMPT_ROUTER_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_DECISION_INTERCEPT_MATCHER,
+        command=DECISION_INTERCEPT_COMMAND,
+    )
+    _merge_command_hook(
+        hooks,
+        event_name="Stop",
+        matcher="",
+        command=RUNTIME_STOP_COMMAND,
     )
     _write_json(settings_path, settings)
     return HookInstallResult(
@@ -367,6 +390,16 @@ def wrap_hooks_installed(*, settings_path: Path) -> bool:
         event_name="UserPromptSubmit",
         matcher="",
         command=PROMPT_ROUTER_COMMAND,
+    ) and _has_command_hook(
+        hooks,
+        event_name="PreToolUse",
+        matcher=_DECISION_INTERCEPT_MATCHER,
+        command=DECISION_INTERCEPT_COMMAND,
+    ) and _has_command_hook(
+        hooks,
+        event_name="Stop",
+        matcher="",
+        command=RUNTIME_STOP_COMMAND,
     )
 
 

@@ -299,11 +299,10 @@ def register(app: typer.Typer) -> None:
     ) -> None:
         """Make onmc the default layer for Claude Code in this repo.
 
-        Installs a Task intercept (PreToolUse matcher ``Task``) that redirects
-        native agent-spawning to ``onmc swarm``, plus a prompt router
-        (UserPromptSubmit) that nudges toward onmc paths.  Also writes the
-        ``/onmc`` Claude Code slash command that toggles the deep-wrap session
-        switch without leaving the editor.
+        Installs an accountable Task intercept, prompt-time mission arming,
+        low-risk decision defaults, and a bounded Stop guard that requires a
+        real change plus a passing repository verifier. Also writes the
+        ``/onmc`` Claude Code slash command that toggles the runtime.
 
         Use ``--managed`` to write the same hooks into the OS-level
         managed-settings.json for org-wide hard-lock enforcement (users cannot
@@ -352,7 +351,9 @@ def register(app: typer.Typer) -> None:
         scope = "global" if global_scope else "project"
         _echo(f"onmc wrap active ({mode}, {scope}).")
         _echo("  - Task intercept installed (PreToolUse matcher 'Task').")
-        _echo("  - Prompt router installed (UserPromptSubmit).")
+        _echo("  - Prompt router + mission arming installed (UserPromptSubmit).")
+        _echo("  - Reversible decision defaults installed (AskUserQuestion).")
+        _echo("  - Verified completion guard installed (Stop).")
         if result.backup_created:
             _echo(f"  - Backup written: {result.backup_path}")
         _echo(f"  - Policy stanza added to: {claude_md}")

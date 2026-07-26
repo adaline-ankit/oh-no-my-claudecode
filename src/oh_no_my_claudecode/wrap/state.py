@@ -45,9 +45,14 @@ defaults:
 - Fan-out work via `onmc swarm plan` (receipted), not raw `Task` subagents.
 - Recall prior context with `onmc recall` and check `onmc guard` for dead-ends
   before retrying an approach.
-- Iterate to green with `onmc loop`; run `onmc preflight` before declaring done.
+- For coding tasks, keep working until ONMC's completion contract observes a
+  non-vacuous change and the detected repository verifier passes.
+- Make the best reversible assumption for low-risk implementation choices.
+  Ask the user before material security, production, payment, deletion,
+  migration, compliance, or credential decisions.
 
-Remove this layer at any time with `onmc unwrap`.\
+The runtime is bounded: it returns control after its retry or wall-clock limit
+instead of looping forever. Remove this layer at any time with `onmc unwrap`.\
 """
 
 
