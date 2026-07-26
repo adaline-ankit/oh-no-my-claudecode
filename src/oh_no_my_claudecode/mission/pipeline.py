@@ -1,4 +1,4 @@
-"""Mission planner — compose the shipped engineering pipeline into one plan.
+"""Mission planner and executable harness entry point.
 
 ``plan_mission`` is the keystone: it threads a single goal through the existing,
 already-shipped *pure* compilers and assembles a single :class:`MissionPlan`.
@@ -12,8 +12,8 @@ logic.  The composed pieces are:
 - :func:`oh_no_my_claudecode.codegraph.builder.build_codegraph` +
   :func:`~oh_no_my_claudecode.codegraph.builder.neighbors` — the blast radius
   (which files depend on the ones the pack points at).
-- :func:`oh_no_my_claudecode.swarm.inline.plan_inline_swarm` — the swarm units
-  the mission *would* run (only when ``run_mission(execute=True)``).
+- :class:`oh_no_my_claudecode.harness_run.controller.HarnessController` — the
+  real execution path used by ``run_mission(execute=True)``.
 
 Every composed compiler degrades gracefully to empty on a fresh brain or an
 empty repo, so ``plan_mission`` never crashes — it emits an empty-but-valid
@@ -21,23 +21,25 @@ plan.  The planner itself performs no I/O beyond what those compilers do, and is
 deterministic for a fixed ``(storage, repo_root, goal)``: two calls produce
 byte-identical plans.
 
-**Plan mode is the default.**  ``plan_mission`` and ``run_mission(execute=False)``
-NEVER spawn agents and NEVER touch the swarm state directory — they are a safe,
-offline dry-run.  ``run_mission(execute=True)`` calls ``plan_inline_swarm`` to
-allocate the swarm manifest and returns the swarm plan, but it too stops short
-of spawning any agent: spawning is the model's job, driven from the emitted
-plan.
+**Plan mode is the default.** ``plan_mission`` and ``run_mission(execute=False)``
+never spawn agents. ``run_mission(execute=True)`` delegates to the same
+verifier-backed harness used by ``onmc run --execute``. Mission no longer
+pretends that writing a pending swarm manifest is execution.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from oh_no_my_claudecode.codegraph import build_codegraph, neighbors
 from oh_no_my_claudecode.guard.compiler import compile_guard
+from oh_no_my_claudecode.harness import RiskLevel
+from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode
+from oh_no_my_claudecode.harness_run.models import AgentName, HarnessResult, RunRequest
 from oh_no_my_claudecode.pack.builder import (
     DEFAULT_BUDGET,
     ContextPack,
@@ -85,9 +87,12 @@ _PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
     ("recall / guard", "Surface recorded dead-ends to avoid (compile_guard)."),
     ("pack", "Assemble the offline context pack (build_pack)."),
     ("codegraph", "Compute the blast radius of the context files (neighbors)."),
-    ("plan swarm", "Derive the swarm units the mission would run."),
-    ("summary", "Emit one mission plan + receipt (no agents spawned in plan mode)."),
+    ("compile harness", "Compile the typed execution DAG, context, policy, and proof contract."),
+    ("execute / verify / prove", "Run the agent loop and accept only verifier-backed proof."),
+    ("learn candidate", "Propose a quarantined learning candidate from the observed outcome."),
 )
+
+HarnessRunner = Callable[[RunRequest], HarnessResult]
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +100,7 @@ class MissionStep:
     """One ordered step of the composed mission pipeline.
 
     ``name`` is the short stage label; ``detail`` explains what it did; ``status``
-    is ``"planned"`` in plan mode and ``"queued"`` for the swarm step under
+    is ``"planned"`` in plan mode and the real harness stage outcome under
     ``--execute``.
     """
 
@@ -125,17 +130,20 @@ class MissionPlan:
         Repo-relative files that depend on the pack's context files — the
         downstream surface a change is likely to disturb.
     swarm_units:
-        The goal strings of the swarm units the mission would run.  Always
-        populated in the plan (so the user sees the intended fan-out); only
-        *materialised* into a swarm manifest under ``run_mission(execute=True)``.
+        Deterministic candidate work units retained for plan compatibility.
+        Mission execution currently runs the typed harness against the complete
+        goal; explicit swarm execution remains a separate workflow.
     steps:
         The ordered pipeline stages, for a legible "here's what I did" trace.
     execute:
-        ``False`` in plan mode (the default).  ``True`` only when the caller
-        explicitly handed off to the swarm.
+        ``False`` in plan mode (the default). ``True`` when the caller delegated
+        execution to the shared harness.
     swarm:
-        The swarm plan dict from ``plan_inline_swarm`` — present ONLY when
-        ``execute`` is ``True``.  ``None`` in plan mode.
+        Deprecated compatibility field. Mission no longer allocates an inline
+        swarm manifest; callers should use ``onmc swarm plan`` explicitly.
+    harness:
+        Serialized :class:`HarnessResult` from real execution. ``None`` in plan
+        mode.
     """
 
     goal: str
@@ -146,6 +154,7 @@ class MissionPlan:
     steps: list[MissionStep] = field(default_factory=list)
     execute: bool = False
     swarm: dict[str, Any] | None = None
+    harness: dict[str, Any] | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -163,6 +172,7 @@ class MissionPlan:
             "steps": [s.to_dict() for s in self.steps],
             "pack": self.pack.to_dict(),
             "swarm": self.swarm,
+            "harness": self.harness,
         }
 
 
@@ -319,11 +329,23 @@ def _derive_swarm_units(
     return units
 
 
-def _build_steps(execute: bool) -> list[MissionStep]:
-    """The ordered pipeline trace; the swarm step is ``queued`` under execute."""
+def _build_steps(
+    execute: bool,
+    *,
+    harness_status: str | None = None,
+    learn_status: str | None = None,
+) -> list[MissionStep]:
+    """Build the ordered pipeline trace with an honest execution status."""
     steps: list[MissionStep] = []
     for name, detail in _PIPELINE_STEPS:
-        status = "queued" if (execute and name == "plan swarm") else "planned"
+        if not execute:
+            status = "planned"
+        elif name in {"recall / guard", "pack", "codegraph", "compile harness"}:
+            status = "completed"
+        elif name == "learn candidate":
+            status = learn_status or harness_status or "executed"
+        else:
+            status = harness_status or "executed"
         steps.append(MissionStep(name=name, detail=detail, status=status))
     return steps
 
@@ -355,9 +377,8 @@ def plan_mission(
     Returns
     -------
     MissionPlan
-        The assembled plan.  ``execute`` is always ``False`` here; use
-        :func:`run_mission` with ``execute=True`` to additionally materialise a
-        swarm manifest.
+        The assembled plan. ``execute`` is always ``False`` here; use
+        :func:`run_mission` with ``execute=True`` to run the shared harness.
     """
     clean_goal = goal.strip()
 
@@ -376,6 +397,7 @@ def plan_mission(
         steps=steps,
         execute=False,
         swarm=None,
+        harness=None,
     )
 
 
@@ -388,46 +410,76 @@ def run_mission(
     execute: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
     swarm_id: str | None = None,
+    agent: AgentName = "claude",
+    model: str = "default",
+    verifier: str = "pytest",
+    max_iterations: int = 10,
+    max_cost_usd: float | None = None,
+    isolate: bool = True,
+    risk: RiskLevel = RiskLevel.MEDIUM,
+    context_budget: int = 4_000,
+    budget_mode: BudgetMode = BudgetMode.STANDARD,
+    resume_run_id: str | None = None,
+    harness_runner: HarnessRunner | None = None,
 ) -> MissionPlan:
-    """Plan the mission and, when ``execute``, hand the plan to the swarm.
+    """Plan the mission and, when ``execute``, run the real ONMC harness.
 
     With ``execute=False`` (the default) this is exactly :func:`plan_mission` —
-    a safe, offline dry-run that spawns nothing.
+    a safe dry-run that spawns nothing.
 
-    With ``execute=True`` it additionally calls
-    :func:`oh_no_my_claudecode.swarm.inline.plan_inline_swarm` to ALLOCATE a
-    swarm manifest for the derived units and attaches the resulting swarm plan to
-    the returned :class:`MissionPlan`.  It still does **not** spawn any agent —
-    spawning is the model's job, driven from the emitted plan (the inline swarm
-    is the accountability ledger, not the spawner).
+    With ``execute=True`` it delegates to
+    :class:`oh_no_my_claudecode.harness_run.controller.HarnessController`.
+    That path launches the selected headless agent, runs the configured verifier,
+    enforces limits and policy, persists durable state, and writes a proof receipt.
 
     Parameters
     ----------
     execute:
-        When ``True``, materialise the swarm manifest via ``plan_inline_swarm``.
-    concurrency:
-        Advisory fan-out width recorded on the swarm manifest.
-    swarm_id:
-        Optional explicit swarm id (tests inject a deterministic value).
+        When ``True``, invoke the shared verifier-backed harness.
+    concurrency, swarm_id:
+        Deprecated compatibility arguments from the old manifest-only Mission.
+        They are ignored. Use ``onmc swarm plan`` for inline swarm allocation.
+    harness_runner:
+        Injectable execution boundary for tests.
 
     Returns
     -------
     MissionPlan
-        The plan, with ``execute`` reflecting the requested mode and ``swarm``
-        populated only when ``execute`` is ``True``.
+        The plan, with ``harness`` populated from the real execution result.
     """
     plan = plan_mission(storage, repo_root, goal, budget=budget)
     if not execute:
         return plan
 
-    # Import here so plan mode never imports the swarm machinery.
-    from oh_no_my_claudecode.swarm.inline import plan_inline_swarm
+    # Preserve old keyword arguments for API compatibility while making
+    # execution semantics honest. Inline swarm allocation remains an explicit
+    # `onmc swarm plan` operation.
+    _ = (concurrency, swarm_id)
 
-    swarm_plan = plan_inline_swarm(
-        repo_root,
-        plan.swarm_units,
-        concurrency=concurrency,
-        swarm_id=swarm_id,
+    if harness_runner is None:
+        from oh_no_my_claudecode.harness_run.controller import HarnessController
+
+        harness_runner = HarnessController(repo_root).run
+
+    result = harness_runner(
+        RunRequest(
+            task=plan.goal,
+            execute=True,
+            agent=agent,
+            model=model,
+            verifier=verifier,
+            max_iterations=max_iterations,
+            max_cost_usd=max_cost_usd,
+            isolation=isolate,
+            risk=risk,
+            context_budget=context_budget,
+            budget_mode=budget_mode,
+            resume_run_id=resume_run_id,
+        )
+    )
+    learn_stage = next(
+        (stage for stage in result.stages if stage.name.value == "learn-candidate"),
+        None,
     )
     return MissionPlan(
         goal=plan.goal,
@@ -435,9 +487,14 @@ def run_mission(
         dead_ends=plan.dead_ends,
         blast_radius=plan.blast_radius,
         swarm_units=plan.swarm_units,
-        steps=_build_steps(execute=True),
+        steps=_build_steps(
+            execute=True,
+            harness_status=result.status.value,
+            learn_status=learn_stage.status.value if learn_stage is not None else None,
+        ),
         execute=True,
-        swarm=swarm_plan,
+        swarm=None,
+        harness=result.to_dict(),
     )
 
 
@@ -448,7 +505,7 @@ def render_mission_markdown(plan: MissionPlan) -> str:
     plan.  Sections with no items render a short placeholder so the shape of the
     mission is always legible.
     """
-    mode = "EXECUTE (hand off to swarm)" if plan.execute else "PLAN (dry-run, no agents)"
+    mode = "EXECUTE (verifier-backed harness)" if plan.execute else "PLAN (dry-run, no agents)"
     lines: list[str] = [
         "# Mission",
         "",
@@ -482,19 +539,21 @@ def render_mission_markdown(plan: MissionPlan) -> str:
         lines.append("_(none)_")
     lines.append("")
 
-    lines.append("## Swarm units (would run)")
+    lines.append("## Candidate work units")
     if plan.swarm_units:
         lines.extend(f"- {shorten(unit, max_length=160)}" for unit in plan.swarm_units)
     else:
         lines.append("_(none)_")
     lines.append("")
 
-    if plan.execute and plan.swarm is not None:
-        sid = plan.swarm.get("swarm_id", "(unknown)")
-        lines.append("## Swarm")
-        lines.append(f"- swarm_id: `{sid}`")
-        lines.append(f"- manifest: `{plan.swarm.get('manifest_path', '')}`")
-        lines.append("- agents spawned: **none** (drive the fan-out from this plan)")
+    if plan.execute and plan.harness is not None:
+        harness_plan = plan.harness.get("plan", {})
+        run_id = harness_plan.get("run_id", "(unknown)") if isinstance(harness_plan, dict) else ""
+        lines.append("## Harness result")
+        lines.append(f"- run_id: `{run_id}`")
+        lines.append(f"- status: **{plan.harness.get('status', 'unknown')}**")
+        lines.append(f"- verified: **{plan.harness.get('verified', False)}**")
+        lines.append(f"- stop_reason: `{plan.harness.get('stop_reason', 'unknown')}`")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"

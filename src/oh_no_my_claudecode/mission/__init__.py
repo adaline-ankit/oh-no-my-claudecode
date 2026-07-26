@@ -1,14 +1,11 @@
-"""Mission — the keystone command that composes the shipped pipeline.
+"""Mission — plan safely or execute the shared ONMC harness.
 
-``onmc mission "<goal>"`` runs the full engineering pipeline end-to-end and
-produces ONE result + plan: recall/guard (dead-ends) → pack (context) →
-codegraph (blast radius) → swarm plan.  It does not reimplement any of those —
-it *orchestrates* the existing pure compilers.
+``onmc mission "<goal>"`` composes recall/guard, context packing, codegraph
+blast radius, and the typed execution contract into one inspectable plan.
 
 The default is **plan mode** (a deterministic, offline dry-run): assemble the
-mission plan and show it without spawning a single agent.  ``--execute`` hands
-the plan to ``onmc swarm`` (emitting the inline-swarm plan) but never spawns
-agents in this build.
+mission plan and show it without spawning an agent. ``--execute`` delegates to
+the real verifier-backed harness used by ``onmc run --execute``.
 
 See :mod:`oh_no_my_claudecode.mission.pipeline` for the planner and
 :mod:`oh_no_my_claudecode.mission.commands` for the auto-discovered CLI surface.

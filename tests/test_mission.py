@@ -9,7 +9,7 @@ Covers :func:`oh_no_my_claudecode.mission.pipeline.plan_mission` /
 - a fresh (empty) brain yields a valid, non-crashing plan;
 - the plan is deterministic across repeated builds;
 - the default is plan-only — NO agent spawned, NO swarm manifest written;
-- ``run_mission(execute=True)`` materialises a swarm manifest but spawns nothing;
+- ``run_mission(execute=True)`` delegates to the real shared harness boundary;
 - the ``--json`` CLI surface has the expected shape;
 - CLI flags (``--execute``, ``--json``) are exercised (never ``--help``).
 """
@@ -17,6 +17,7 @@ Covers :func:`oh_no_my_claudecode.mission.pipeline.plan_mission` /
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -24,7 +25,11 @@ from typer.testing import CliRunner
 
 from oh_no_my_claudecode import init
 from oh_no_my_claudecode.cli import app
+from oh_no_my_claudecode.harness_run.controller import HarnessController
+from oh_no_my_claudecode.harness_run.models import HarnessStatus, RunRequest
+from oh_no_my_claudecode.harness_run.stages import StageName, StageRecord, StageStatus
 from oh_no_my_claudecode.mission.pipeline import (
+    MissionPlan,
     plan_mission,
     render_mission_markdown,
     run_mission,
@@ -118,8 +123,9 @@ def test_plan_mission_composes_all_sources(
         "recall / guard",
         "pack",
         "codegraph",
-        "plan swarm",
-        "summary",
+        "compile harness",
+        "execute / verify / prove",
+        "learn candidate",
     ]
 
 
@@ -136,9 +142,8 @@ def test_plan_mission_default_is_plan_only(
     assert plan.swarm is None
     # NO swarm state directory was created by plan mode
     assert not (sample_repo / ".onmc" / "swarm").exists()
-    # the swarm step is "planned", not "queued"
-    swarm_step = next(s for s in plan.steps if s.name == "plan swarm")
-    assert swarm_step.status == "planned"
+    # all execution stages remain planned in dry-run mode
+    assert {step.status for step in plan.steps} == {"planned"}
 
 
 # ---------------------------------------------------------------------------
@@ -195,38 +200,94 @@ def test_plan_mission_is_deterministic(
 
 
 # ---------------------------------------------------------------------------
-# Execute mode: materialise the swarm manifest, spawn nothing
+# Execute mode: delegate to the shared harness
 # ---------------------------------------------------------------------------
 
 
-def test_run_mission_execute_allocates_swarm_but_spawns_nothing(
+def test_run_mission_execute_delegates_to_harness(
     sample_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(sample_repo)
     storage = _storage(sample_repo)
+    planned = HarnessController(sample_repo).run(
+        RunRequest(task="fix cache invalidation", plan_only=True)
+    )
+    completed = replace(
+        planned,
+        status=HarnessStatus.COMPLETED,
+        loop_converged=True,
+        proof_complete=True,
+        verified=True,
+        stop_reason="converged",
+    )
+    seen: list[RunRequest] = []
 
     plan = run_mission(
         storage,
         sample_repo,
         "fix cache invalidation",
         execute=True,
-        swarm_id="deadbeefdeadbeef",
+        agent="codex",
+        model="test-model",
+        verifier="pytest -q",
+        max_iterations=4,
+        max_cost_usd=1.25,
+        isolate=True,
+        harness_runner=lambda request: (seen.append(request), completed)[1],
     )
 
     assert plan.execute is True
-    assert plan.swarm is not None
-    assert plan.swarm["swarm_id"] == "deadbeefdeadbeef"
-    assert plan.swarm["mode"] == "inline"
-    # the manifest was written...
-    manifest_path = Path(plan.swarm["manifest_path"])
-    assert manifest_path.exists()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    # ...with every unit PENDING — no agent was spawned, none ran
-    statuses = {u["status"] for u in manifest["units"].values()}
-    assert statuses == {"pending"}
-    # the swarm step is queued under execute
-    swarm_step = next(s for s in plan.steps if s.name == "plan swarm")
-    assert swarm_step.status == "queued"
+    assert plan.swarm is None
+    assert plan.harness is not None
+    assert plan.harness["status"] == "completed"
+    assert plan.harness["verified"] is True
+    assert len(seen) == 1
+    request = seen[0]
+    assert request.execute is True
+    assert request.agent == "codex"
+    assert request.model == "test-model"
+    assert request.verifier == "pytest -q"
+    assert request.max_iterations == 4
+    assert request.max_cost_usd == 1.25
+    assert request.isolation is True
+    assert {
+        step.status for step in plan.steps if step.name in {"execute / verify / prove"}
+    } == {"completed"}
+    assert not (sample_repo / ".onmc" / "swarm").exists()
+
+
+def test_run_mission_reports_learning_stage_independently(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(sample_repo)
+    storage = _storage(sample_repo)
+    planned = HarnessController(sample_repo).run(
+        RunRequest(task="fix cache invalidation", plan_only=True)
+    )
+    failed_with_learning = replace(
+        planned,
+        status=HarnessStatus.FAILED,
+        stop_reason="verification-failed",
+        stages=(
+            StageRecord(
+                name=StageName.LEARN_CANDIDATE,
+                status=StageStatus.SUCCEEDED,
+                summary="recorded failed approach as a quarantined candidate",
+            ),
+        ),
+    )
+
+    plan = run_mission(
+        storage,
+        sample_repo,
+        "fix cache invalidation",
+        execute=True,
+        harness_runner=lambda _request: failed_with_learning,
+    )
+
+    statuses = {step.name: step.status for step in plan.steps}
+    assert statuses["execute / verify / prove"] == "failed"
+    assert statuses["learn candidate"] == "succeeded"
 
 
 def test_run_mission_execute_false_matches_plan_mission(
@@ -370,13 +431,47 @@ def test_plan_mission_greenfield_fan_out_is_capped(
 
 def test_mission_cli_execute_flag(sample_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(sample_repo)
-    _storage(sample_repo)
+    storage = _storage(sample_repo)
+    base = plan_mission(storage, sample_repo, "fix cache invalidation")
+    completed = replace(
+        base,
+        execute=True,
+        harness={
+            "status": "completed",
+            "verified": True,
+            "stop_reason": "converged",
+            "plan": {"run_id": "run-test"},
+        },
+    )
+    seen: list[dict[str, object]] = []
+
+    def _fake_run_mission(*args: object, **kwargs: object) -> MissionPlan:
+        seen.append(dict(kwargs))
+        return completed
+
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.mission.commands.run_mission",
+        _fake_run_mission,
+    )
 
     result = runner.invoke(
-        app, ["mission", "fix cache invalidation", "--execute", "--json"]
+        app,
+        [
+            "mission",
+            "fix cache invalidation",
+            "--execute",
+            "--agent",
+            "codex",
+            "--verifier",
+            "pytest -q",
+            "--json",
+        ],
     )
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
     assert payload["execute"] is True
-    assert payload["swarm"] is not None
-    assert payload["swarm"]["mode"] == "inline"
+    assert payload["swarm"] is None
+    assert payload["harness"]["status"] == "completed"
+    assert seen[0]["execute"] is True
+    assert seen[0]["agent"] == "codex"
+    assert seen[0]["verifier"] == "pytest -q"

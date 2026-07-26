@@ -7,10 +7,9 @@ the registry invokes at CLI build time, so ``onmc mission`` ships with **zero
 edits** to ``cli.py`` or any other shared hub.  Rendering is done inline here.
 
 ``onmc mission "<goal>"`` composes the shipped engineering pipeline
-(recall/guard → pack → codegraph → swarm plan) into one mission plan.  The
-default is plan mode: a deterministic, offline dry-run that spawns no agents.
-``--execute`` hands the plan to the swarm (materialising its manifest) but still
-spawns nothing in this build.
+(recall/guard → pack → codegraph → typed harness plan) into one mission plan.
+The default is plan mode: a deterministic dry-run that spawns no agents.
+``--execute`` delegates to the real verifier-backed ONMC harness.
 """
 
 from __future__ import annotations
@@ -48,18 +47,68 @@ def register(app: typer.Typer) -> None:
             bool,
             typer.Option(
                 "--execute",
-                help="Hand the plan to the swarm (materialise its manifest). "
-                "Default is plan mode: a safe, offline dry-run that spawns nothing.",
+                help="Run the verifier-backed harness. Default is a safe dry-run.",
             ),
         ] = False,
         concurrency: Annotated[
             int,
-            typer.Option("--concurrency", min=1, help="Advisory swarm fan-out width."),
+            typer.Option(
+                "--concurrency",
+                min=1,
+                help="Deprecated compatibility option; ignored by Mission execution.",
+            ),
         ] = DEFAULT_CONCURRENCY,
         budget: Annotated[
             int,
             typer.Option("--budget", min=400, help="Context-pack markdown character budget."),
         ] = DEFAULT_BUDGET,
+        agent: Annotated[
+            str,
+            typer.Option("--agent", help="Agent CLI: claude, codex, or opencode."),
+        ] = "claude",
+        model: Annotated[
+            str,
+            typer.Option("--model", help="Model selector passed to the chosen agent."),
+        ] = "default",
+        verifier: Annotated[
+            str,
+            typer.Option("--verifier", help="Verifier command that defines task completion."),
+        ] = "pytest",
+        max_iterations: Annotated[
+            int,
+            typer.Option("--max-iterations", min=1, help="Maximum agent loop iterations."),
+        ] = 10,
+        max_cost_usd: Annotated[
+            float | None,
+            typer.Option("--max-cost-usd", min=0.0, help="Optional run cost ceiling in USD."),
+        ] = None,
+        isolate: Annotated[
+            bool,
+            typer.Option(
+                "--isolate/--no-isolate",
+                help="Execute in an isolated git worktree (default: enabled).",
+            ),
+        ] = True,
+        risk: Annotated[
+            str,
+            typer.Option("--risk", help="Execution risk: low, medium, high, or critical."),
+        ] = "medium",
+        context_budget: Annotated[
+            int,
+            typer.Option(
+                "--context-budget",
+                min=1,
+                help="Maximum retrieved-context token budget for the harness.",
+            ),
+        ] = 4_000,
+        budget_mode: Annotated[
+            str,
+            typer.Option("--budget-mode", help="Retrieval preset: tiny, standard, or deep."),
+        ] = "standard",
+        resume_run_id: Annotated[
+            str | None,
+            typer.Option("--resume", help="Resume the durable state for a matching run ID."),
+        ] = None,
         as_json: Annotated[
             bool,
             typer.Option("--json", help="Emit the mission plan as JSON instead of markdown."),
@@ -77,13 +126,16 @@ def register(app: typer.Typer) -> None:
             ),
         ] = False,
     ) -> None:
-        """Run the engineering pipeline end-to-end into one mission plan.
+        """Plan safely or run the verifier-backed engineering harness.
 
         Composes recorded dead-ends (guard) + a deterministic context pack +
-        the code-graph blast radius + the swarm units the mission would run.
-        Plan mode (the default) is offline and deterministic and spawns no
-        agents; ``--execute`` additionally allocates the swarm manifest.
+        the code-graph blast radius + a typed execution contract. Plan mode
+        spawns no agents; ``--execute`` launches the selected agent through the
+        shared ONMC harness and requires verifier-backed proof.
         """
+        from oh_no_my_claudecode.harness import RiskLevel
+        from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode
+
         service = OnmcService(Path.cwd())
         try:
             repo_root, _config, storage = service._load_context()
@@ -105,6 +157,19 @@ def register(app: typer.Typer) -> None:
                 )
                 raise typer.Exit(code=1)
 
+        if agent not in {"claude", "codex", "opencode"}:
+            typer.echo("agent must be claude, codex, or opencode", err=True)
+            raise typer.Exit(code=2)
+        try:
+            resolved_risk = RiskLevel(risk)
+            resolved_budget_mode = BudgetMode(budget_mode)
+        except ValueError as exc:
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=2) from exc
+        if resume_run_id is not None and not execute:
+            typer.echo("--resume requires --execute", err=True)
+            raise typer.Exit(code=2)
+
         plan = run_mission(
             storage,
             repo_root,
@@ -112,9 +177,22 @@ def register(app: typer.Typer) -> None:
             budget=budget,
             execute=execute,
             concurrency=concurrency,
+            agent=agent,  # type: ignore[arg-type]
+            model=model,
+            verifier=verifier,
+            max_iterations=max_iterations,
+            max_cost_usd=max_cost_usd,
+            isolate=isolate,
+            risk=resolved_risk,
+            context_budget=context_budget,
+            budget_mode=resolved_budget_mode,
+            resume_run_id=resume_run_id,
         )
 
         if as_json:
             typer.echo(json.dumps(plan.to_dict(), indent=2, sort_keys=True))
-            return
-        typer.echo(render_mission_markdown(plan))
+        else:
+            typer.echo(render_mission_markdown(plan))
+
+        if execute and plan.harness is not None and plan.harness.get("status") != "completed":
+            raise typer.Exit(code=1)
