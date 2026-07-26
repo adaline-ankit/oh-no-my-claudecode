@@ -51,6 +51,10 @@ from oh_no_my_claudecode.swarm.models import (
     SwarmUnit,
     SwarmUnitResult,
 )
+from oh_no_my_claudecode.swarm.runtime_contract import (
+    SwarmContractUnit,
+    build_swarm_run_spec,
+)
 
 # ---------------------------------------------------------------------------
 # Typing aliases
@@ -106,13 +110,35 @@ def _write_manifest(
     started_at: str,
 ) -> None:
     """Write initial manifest.json listing all units as 'pending'."""
+    runtime_spec = build_swarm_run_spec(
+        swarm_id=swarm_id,
+        units=tuple(
+            SwarmContractUnit(
+                unit_id=unit.id,
+                goal=unit.goal,
+                verify_command=unit.verify_command,
+                allowed_paths=tuple(unit.allowed_paths),
+                protected_paths=tuple(unit.protected_paths),
+            )
+            for unit in units
+        ),
+        agent=config.agent,
+        mode="process",
+        concurrency=config.concurrency,
+        max_cost_usd=config.max_cost_usd,
+        max_tokens=config.budget_tokens,
+        timeout_seconds=float(config.agent_timeout_seconds),
+    )
     manifest: dict[str, Any] = {
         "swarm_id": swarm_id,
+        "mode": "process",
         "started_at": started_at,
         "agent": config.agent,
         "concurrency": config.concurrency,
         "agent_timeout_seconds": config.agent_timeout_seconds,
         "preserve_failed_worktrees": config.preserve_failed_worktrees,
+        "runtime_contract": runtime_spec.to_dict(),
+        "runtime_contract_digest": runtime_spec.digest,
         "swarm_max_cost_usd": config.swarm_max_cost_usd,
         "units": {
             u.id: {

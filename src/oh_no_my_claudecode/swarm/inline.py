@@ -40,6 +40,10 @@ from oh_no_my_claudecode.swarm.orchestrator import (
     _manifest_path,
     _swarm_dir,
 )
+from oh_no_my_claudecode.swarm.runtime_contract import (
+    SwarmContractUnit,
+    build_swarm_run_spec,
+)
 
 
 def _now_iso(now: datetime | None) -> str:
@@ -111,6 +115,20 @@ def plan_inline_swarm(
         units = annotate_units_with_models(units, auto_model_report)
 
     claimed = _acquire_unit_claims(repo_root, sid, units, claim_paths)
+    runtime_spec = build_swarm_run_spec(
+        swarm_id=sid,
+        units=tuple(
+            SwarmContractUnit(
+                unit_id=str(unit["id"]),
+                goal=str(unit["goal"]),
+                allowed_paths=tuple(claimed.get(str(unit["id"]), [])),
+            )
+            for unit in units
+        ),
+        agent=agent,
+        mode="inline",
+        concurrency=concurrency,
+    )
 
     manifest: dict[str, Any] = {
         "swarm_id": sid,
@@ -118,6 +136,8 @@ def plan_inline_swarm(
         "started_at": started_at,
         "agent": agent,
         "concurrency": concurrency,
+        "runtime_contract": runtime_spec.to_dict(),
+        "runtime_contract_digest": runtime_spec.digest,
         "swarm_max_cost_usd": None,
         "units": {
             u["id"]: {
@@ -192,6 +212,8 @@ def plan_inline_swarm(
         "agent": agent,
         "abort_path": str(_abort_path(repo_root, sid)),
         "manifest_path": str(_manifest_path(repo_root, sid)),
+        "runtime_contract": runtime_spec.to_dict(),
+        "runtime_contract_digest": runtime_spec.digest,
         "state_dir": str(_swarm_dir(repo_root, sid)),
         "units": units,
     }

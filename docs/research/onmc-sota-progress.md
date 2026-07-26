@@ -90,6 +90,14 @@ run/task.
 `plan_mission()` composer remains pure, but the user-facing mission workflow is
 now visibly a view over the canonical harness contract instead of a separate
 planner with ignored runtime flags.
+
+**Swarm manifests now expose a fan-out/fan-in runtime contract (2026-07-26).**
+Inline and process swarms now stamp `manifest.json` with a canonical `RunSpec`
+and digest. Each unit is a side-effecting runtime node with idempotency, budget,
+timeout, retry, capabilities, and receipt-backed completion condition; the final
+`fan-in` node depends on every unit and records aggregate ledger completion. This
+makes swarm planning inspectable as a canonical runtime graph instead of only a
+bespoke manifest format.
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |

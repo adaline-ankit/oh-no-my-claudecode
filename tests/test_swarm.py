@@ -524,8 +524,15 @@ class TestRunSwarm:
 
         manifest = json.loads(mpath.read_text(encoding="utf-8"))
         assert manifest["swarm_id"] == result.swarm_id
+        assert manifest["mode"] == "process"
         assert "units" in manifest
         assert len(manifest["units"]) == 3
+        from oh_no_my_claudecode.runtime import RunSpec
+
+        spec = RunSpec.from_dict(manifest["runtime_contract"])
+        assert manifest["runtime_contract_digest"] == spec.digest
+        assert spec.run_id == f"swarm-{result.swarm_id}"
+        assert [node.node_id for node in spec.topological_order()][-1] == "fan-in"
 
     def test_request_abort_writes_sentinel(self, tmp_path: Path) -> None:
         """request_abort(swarm_id) must write ABORT file."""
@@ -1013,6 +1020,13 @@ class TestInlineSwarm:
         manifest = json.loads(mpath.read_text())
         assert manifest["mode"] == "inline"
         assert all(u["status"] == "pending" for u in manifest["units"].values())
+        from oh_no_my_claudecode.runtime import RunSpec
+
+        spec = RunSpec.from_dict(manifest["runtime_contract"])
+        assert manifest["runtime_contract_digest"] == spec.digest
+        assert spec.run_id == "swarm-deadbeefdeadbeef"
+        assert [node.node_id for node in spec.topological_order()][-1] == "fan-in"
+        assert plan["runtime_contract_digest"] == spec.digest
 
     def test_record_verified_unit_is_done(self, tmp_path: Path) -> None:
         from oh_no_my_claudecode.swarm.inline import plan_inline_swarm, record_inline_unit
