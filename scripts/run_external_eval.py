@@ -1489,6 +1489,7 @@ def main() -> int:
     report = {
         "experiment_id": manifest.experiment.experiment_id.value,
         "task_set_revision": manifest.experiment.task_set_revision,
+        "task_set_sha256": manifest.task_set_sha256,
         "audit_status": manifest.audit_status.value,
         "leakage_notes": manifest.leakage_notes,
         "environment": manifest.experiment.environment.to_dict(),

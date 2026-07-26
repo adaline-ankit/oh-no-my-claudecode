@@ -12,8 +12,9 @@ things the kernel deliberately leaves out:
   explicit :class:`~.contracts.BenchmarkAuditStatus`.
 
 - **A claim gate.** A portfolio may only back an *external* claim when its audit
-  status is ``VALID`` **and** it runs more than one trial (honest uncertainty).
-  Otherwise results are labelled ``internal`` — the runner refuses to overstate.
+  status is ``VALID``, its task definitions match a frozen SHA-256 binding, and
+  it runs more than one trial (honest uncertainty). Otherwise results are
+  labelled ``internal`` — the runner refuses to overstate.
 
 - **An agent seam.** :class:`AgentAdapter` is the protocol a real Claude/Codex
   CLI adapter implements. :class:`FixtureAgentAdapter` is a deterministic,
@@ -47,6 +48,9 @@ from .contracts import (
     MetricLabel,
     RunId,
     TrialResult,
+)
+from .contracts import (
+    task_set_sha256 as compute_task_set_sha256,
 )
 from .kernel import ExperimentReport, ExperimentRunner
 
@@ -208,6 +212,7 @@ class PortfolioManifest:
     tasks: tuple[TaskSpec, ...]
     audit_status: BenchmarkAuditStatus = BenchmarkAuditStatus.SUSPECT
     leakage_notes: str = ""
+    task_set_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not self.tasks:
@@ -215,6 +220,11 @@ class PortfolioManifest:
         ids = [t.task_id for t in self.tasks]
         if len(set(ids)) != len(ids):
             raise ValueError("task_id values must be unique within a portfolio")
+        if self.task_set_sha256 is not None:
+            if not re.fullmatch(r"[0-9a-f]{64}", self.task_set_sha256):
+                raise ValueError("task_set_sha256 must be 64 lowercase hex characters")
+            if self.task_set_sha256 != self.computed_task_set_sha256:
+                raise ValueError("task_set_sha256 does not bind the canonical task payload")
 
     @property
     def task_ids(self) -> tuple[str, ...]:
@@ -227,13 +237,20 @@ class PortfolioManifest:
         raise KeyError(task_id)
 
     @property
+    def computed_task_set_sha256(self) -> str:
+        return compute_task_set_sha256([task.to_dict() for task in self.tasks])
+
+    @property
     def is_claim_ready(self) -> bool:
-        """A portfolio may back an *external* claim only when its audit is VALID.
+        """External claims require a valid audit and content-bound task revision.
 
         This is the hard gate from the invariant; the runner additionally
         requires >1 trial before it will actually stamp a result ``external``.
         """
-        return self.audit_status is BenchmarkAuditStatus.VALID
+        return (
+            self.audit_status is BenchmarkAuditStatus.VALID
+            and self.task_set_sha256 is not None
+        )
 
     def claim_level(self) -> ClaimLevel:
         """``EXTERNAL`` iff audit is VALID *and* the design has >1 trial."""
@@ -246,6 +263,7 @@ class PortfolioManifest:
             "schema_version": SCHEMA_VERSION,
             "experiment": self.experiment.to_dict(),
             "tasks": [t.to_dict() for t in self.tasks],
+            "task_set_sha256": self.task_set_sha256,
             "audit_status": self.audit_status.value,
             "leakage_notes": self.leakage_notes,
         }
@@ -264,6 +282,7 @@ class PortfolioManifest:
             tasks=tasks,
             audit_status=BenchmarkAuditStatus(_get_str(data, "audit_status")),
             leakage_notes=_get_str(data, "leakage_notes", default=""),
+            task_set_sha256=_get_optional_str(data, "task_set_sha256"),
         )
 
 
@@ -510,6 +529,15 @@ def _get_str(data: Mapping[str, object], key: str, *, default: str | None = None
     value = data[key]
     if not isinstance(value, str):
         raise ValueError(f"field {key!r} must be a string, got {type(value).__name__}")
+    return value
+
+
+def _get_optional_str(data: Mapping[str, object], key: str) -> str | None:
+    value = data.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"field {key!r} must be a string or null")
     return value
 
 

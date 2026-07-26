@@ -68,6 +68,7 @@ def calibrate_report_file(
         "report_path": str(report_path),
         "experiment_id": raw.get("experiment_id"),
         "task_set_revision": raw.get("task_set_revision"),
+        "task_set_sha256": raw.get("task_set_sha256"),
         "report_coverage": external_report_coverage_manifest(raw).to_dict(),
         "verifier_calibration": calibrate_default_verifier().to_dict(),
     }
@@ -166,6 +167,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
         *([f"- manifest: `{payload['manifest_path']}`"] if "manifest_path" in payload else []),
         f"- experiment: `{payload.get('experiment_id')}`",
         f"- task_set_revision: `{payload.get('task_set_revision')}`",
+        f"- task_set_sha256: `{payload.get('task_set_sha256')}`",
         f"- external_claim_decision: `{claim['decision']}`",
         f"- external_quality_claim_ready: `{str(claim['quality_claim_ready']).lower()}`",
         f"- external_cost_claim_ready: `{str(claim['cost_claim_ready']).lower()}`",
@@ -179,6 +181,22 @@ def _render_markdown(payload: dict[str, object]) -> str:
         f"- discriminative_tasks: `{_nested(calibration, 'discriminative_tasks')}`",
         f"- saturated_tasks: `{_nested(calibration, 'saturated_tasks')}`",
         f"- incomplete_cell_count: `{_nested(calibration, 'incomplete_cell_count')}`",
+        *(
+            [
+                f"- manifest_task_set_sha256: `{calibration['manifest_task_set_sha256']}`",
+                (
+                    "- computed_manifest_task_set_sha256: "
+                    f"`{calibration['computed_manifest_task_set_sha256']}`"
+                ),
+                f"- expected_cells: `{calibration['expected_cells']}`",
+                f"- reported_cells: `{calibration['reported_cells']}`",
+                f"- missing_cells: `{calibration['missing_cells']}`",
+                f"- duplicate_cells: `{calibration['duplicate_cells']}`",
+                f"- unexpected_cells: `{calibration['unexpected_cells']}`",
+            ]
+            if gate is not None
+            else []
+        ),
         "",
         "## Benchmark Plan",
         "",
