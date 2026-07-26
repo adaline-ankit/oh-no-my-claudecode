@@ -960,6 +960,7 @@ class HarnessController:
             status=status.value,
             completed=status is HarnessStatus.COMPLETED,
             stages=stages,
+            runtime_contract=plan.to_run_spec().to_dict(),
             policy=policy,
             proof=assessment,
         )

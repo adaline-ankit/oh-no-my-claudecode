@@ -2,14 +2,16 @@
 
 Where ``loop.receipt`` records the mechanical loop and ``proof_graph.receipt``
 records the proof graph, this receipt binds the two together with the run's
-policy verdict and the six typed stage records. Its single most important field
-is :attr:`HarnessRunReceipt.verified`, computed by :func:`compute_verified` — the
-one place that decides whether a run may honestly claim success.
+policy verdict, the canonical runtime contract, and the six typed stage records.
+Its single most important field is :attr:`HarnessRunReceipt.verified`, computed
+by :func:`compute_verified` — the one place that decides whether a run may
+honestly claim success.
 
 Invariant: ``verified`` is ``True`` only when the run completed, all canonical
-harness stages succeeded, the proof is complete and not false-green, the policy
-allowed the change, and no human approval is outstanding. A failed proof or
-partial stage set can never report verified.
+harness stages succeeded, the runtime contract is complete, the proof is complete
+and not false-green, the policy allowed the change, and no human approval is
+outstanding. A failed proof or partial stage/contract set can never report
+verified.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from oh_no_my_claudecode.proof_graph import ProofAssessment
+from oh_no_my_claudecode.runtime.contracts import RunSpec, RuntimeContractError
 
 from .run_policy import RunPolicyDecision
 from .stages import StageName, StageRecord, StageStatus
@@ -33,6 +36,8 @@ def compute_verified(
     proof: ProofAssessment,
     policy: RunPolicyDecision,
     stages: tuple[StageRecord, ...] = (),
+    runtime_contract: dict[str, object] | None = None,
+    runtime_contract_digest: str | None = None,
 ) -> bool:
     """The sole authority on whether a run is verified.
 
@@ -45,6 +50,7 @@ def compute_verified(
         and policy.allowed
         and not policy.approvals_required
         and stages_complete(stages)
+        and runtime_contract_complete(runtime_contract, runtime_contract_digest)
     )
 
 
@@ -54,6 +60,20 @@ def stages_complete(stages: tuple[StageRecord, ...]) -> bool:
     return names == tuple(StageName) and all(
         stage.status is StageStatus.SUCCEEDED for stage in stages
     )
+
+
+def runtime_contract_complete(
+    runtime_contract: dict[str, object] | None,
+    runtime_contract_digest: str | None,
+) -> bool:
+    """Return whether the receipt carries a valid canonical runtime spec."""
+    if runtime_contract is None or runtime_contract_digest is None:
+        return False
+    try:
+        spec = RunSpec.from_dict(runtime_contract)
+    except RuntimeContractError:
+        return False
+    return spec.digest == runtime_contract_digest
 
 
 def _canonical_json(value: object) -> str:
@@ -73,6 +93,8 @@ class HarnessRunReceipt:
     task: str
     status: str
     verified: bool
+    runtime_contract: dict[str, object]
+    runtime_contract_digest: str
     stages: tuple[dict[str, object], ...]
     policy: dict[str, object]
     proof: dict[str, object]
@@ -87,14 +109,20 @@ class HarnessRunReceipt:
         status: str,
         completed: bool,
         stages: tuple[StageRecord, ...],
+        runtime_contract: dict[str, object],
         policy: RunPolicyDecision,
         proof: ProofAssessment,
     ) -> HarnessRunReceipt:
+        runtime_spec = RunSpec.from_dict(runtime_contract)
+        runtime_payload = runtime_spec.to_dict()
+        runtime_digest = runtime_spec.digest
         verified = compute_verified(
             completed=completed,
             proof=proof,
             policy=policy,
             stages=stages,
+            runtime_contract=runtime_payload,
+            runtime_contract_digest=runtime_digest,
         )
         proof_payload: dict[str, object] = {
             "complete": proof.complete,
@@ -109,6 +137,8 @@ class HarnessRunReceipt:
             "task": task,
             "status": status,
             "verified": verified,
+            "runtime_contract": runtime_payload,
+            "runtime_contract_digest": runtime_digest,
             "stages": list(stage_payload),
             "policy": policy_payload,
             "proof": proof_payload,
@@ -119,6 +149,8 @@ class HarnessRunReceipt:
             task=task,
             status=status,
             verified=verified,
+            runtime_contract=runtime_payload,
+            runtime_contract_digest=runtime_digest,
             stages=stage_payload,
             policy=policy_payload,
             proof=proof_payload,
@@ -132,6 +164,8 @@ class HarnessRunReceipt:
             "task": self.task,
             "status": self.status,
             "verified": self.verified,
+            "runtime_contract": self.runtime_contract,
+            "runtime_contract_digest": self.runtime_contract_digest,
             "stages": list(self.stages),
             "policy": self.policy,
             "proof": self.proof,
@@ -161,6 +195,8 @@ def verify_harness_receipt(serialized: str) -> bool:
         "task",
         "status",
         "verified",
+        "runtime_contract",
+        "runtime_contract_digest",
         "stages",
         "policy",
         "proof",
@@ -202,6 +238,12 @@ def load_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | No
         or receipt.run_id != run_id
         or not receipt.verified
         or not _serialized_stages_complete(receipt.stages)
+        or not _serialized_runtime_contract_complete(
+            receipt.runtime_contract,
+            receipt.runtime_contract_digest,
+            run_id=receipt.run_id,
+            task=receipt.task,
+        )
     ):
         return None
     return receipt
@@ -214,6 +256,8 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         task = raw["task"]
         status = raw["status"]
         verified = raw["verified"]
+        runtime_contract = raw["runtime_contract"]
+        runtime_contract_digest = raw["runtime_contract_digest"]
         stages = raw["stages"]
         policy = raw["policy"]
         proof = raw["proof"]
@@ -226,6 +270,8 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         and isinstance(task, str)
         and isinstance(status, str)
         and isinstance(verified, bool)
+        and isinstance(runtime_contract, dict)
+        and isinstance(runtime_contract_digest, str)
         and isinstance(stages, list)
         and isinstance(policy, dict)
         and isinstance(proof, dict)
@@ -243,6 +289,8 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         task=task,
         status=status,
         verified=verified,
+        runtime_contract=runtime_contract,
+        runtime_contract_digest=runtime_contract_digest,
         stages=tuple(stage_payload),
         policy=policy,
         proof=proof,
@@ -258,11 +306,30 @@ def _serialized_stages_complete(stages: tuple[dict[str, object], ...]) -> bool:
     )
 
 
+def _serialized_runtime_contract_complete(
+    runtime_contract: dict[str, object],
+    runtime_contract_digest: str,
+    *,
+    run_id: str,
+    task: str,
+) -> bool:
+    try:
+        spec = RunSpec.from_dict(runtime_contract)
+    except RuntimeContractError:
+        return False
+    return (
+        spec.digest == runtime_contract_digest
+        and spec.run_id == run_id
+        and spec.task == task
+    )
+
+
 __all__ = [
     "HarnessRunReceipt",
     "compute_verified",
     "harness_receipt_path",
     "load_harness_receipt",
+    "runtime_contract_complete",
     "stages_complete",
     "verify_harness_receipt",
 ]

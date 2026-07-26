@@ -41,6 +41,7 @@ from oh_no_my_claudecode.harness_run import (
     evaluate_run_policy,
     injection_findings,
     load_run_policy,
+    runtime_contract_complete,
     secret_findings,
     verify_harness_receipt,
 )
@@ -68,6 +69,7 @@ from oh_no_my_claudecode.proof_graph import (
     VerifierResult,
     evaluate_proof,
 )
+from oh_no_my_claudecode.runtime import Budget, CapabilitySet, NodeSpec, RetryPolicy, RunSpec
 from oh_no_my_claudecode.tool_broker import Decision, DecisionEffect
 
 # A well-known AWS documentation example key, assembled at runtime so no secret
@@ -124,6 +126,33 @@ def _successful_stages() -> tuple[StageRecord, ...]:
         )
         for name in StageName
     )
+
+
+def _runtime_contract(*, run_id: str = "run-1", task: str = "t") -> dict[str, object]:
+    spec = RunSpec(
+        run_id=run_id,
+        task=task,
+        nodes=(
+            NodeSpec(
+                node_id="execute",
+                kind="execute",
+                objective="make the requested change",
+                completion_condition="verifier command succeeds with evidence",
+                dependencies=(),
+                side_effecting=True,
+                approval_required=False,
+                idempotency_key=f"{run_id}:node:execute",
+                timeout_seconds=120.0,
+                budget=Budget(timeout_seconds=120.0, max_tokens=1000),
+                retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=1.0),
+                capabilities=CapabilitySet(
+                    commands=(("pytest",),),
+                    filesystem_write=True,
+                ),
+            ),
+        ),
+    )
+    return spec.to_dict()
 
 
 def _reader(change_set: ChangeSet) -> ChangesReader:
@@ -355,11 +384,50 @@ def test_compute_verified_requires_every_gate() -> None:
     allow = RunPolicyDecision(allowed=True, approvals_required=False, violations=())
     deny = RunPolicyDecision(allowed=False, approvals_required=False, violations=())
     stages = _successful_stages()
-    assert compute_verified(completed=True, proof=good_proof, policy=allow, stages=stages)
+    contract = _runtime_contract()
+    digest = RunSpec.from_dict(contract).digest
+    assert runtime_contract_complete(contract, digest)
+    assert compute_verified(
+        completed=True,
+        proof=good_proof,
+        policy=allow,
+        stages=stages,
+        runtime_contract=contract,
+        runtime_contract_digest=digest,
+    )
     assert not compute_verified(completed=True, proof=good_proof, policy=allow)
-    assert not compute_verified(completed=False, proof=good_proof, policy=allow, stages=stages)
-    assert not compute_verified(completed=True, proof=bad_proof, policy=allow, stages=stages)
-    assert not compute_verified(completed=True, proof=good_proof, policy=deny, stages=stages)
+    assert not compute_verified(
+        completed=True,
+        proof=good_proof,
+        policy=allow,
+        stages=stages,
+        runtime_contract=contract,
+        runtime_contract_digest="0" * 64,
+    )
+    assert not compute_verified(
+        completed=False,
+        proof=good_proof,
+        policy=allow,
+        stages=stages,
+        runtime_contract=contract,
+        runtime_contract_digest=digest,
+    )
+    assert not compute_verified(
+        completed=True,
+        proof=bad_proof,
+        policy=allow,
+        stages=stages,
+        runtime_contract=contract,
+        runtime_contract_digest=digest,
+    )
+    assert not compute_verified(
+        completed=True,
+        proof=good_proof,
+        policy=deny,
+        stages=stages,
+        runtime_contract=contract,
+        runtime_contract_digest=digest,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -500,6 +568,7 @@ def test_receipt_build_is_deterministic() -> None:
         status="completed",
         completed=True,
         stages=_successful_stages(),
+        runtime_contract=_runtime_contract(run_id="run-1", task="t"),
         policy=policy,
         proof=proof,
     )
@@ -509,8 +578,10 @@ def test_receipt_build_is_deterministic() -> None:
         status="completed",
         completed=True,
         stages=_successful_stages(),
+        runtime_contract=_runtime_contract(run_id="run-1", task="t"),
         policy=policy,
         proof=proof,
     )
     assert first.receipt_hash == second.receipt_hash
     assert first.verified is True
+    assert first.runtime_contract_digest == RunSpec.from_dict(first.runtime_contract).digest

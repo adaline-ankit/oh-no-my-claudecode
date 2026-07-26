@@ -30,6 +30,7 @@ from oh_no_my_claudecode.harness_run.receipt import HarnessRunReceipt
 from oh_no_my_claudecode.harness_run.run_policy import RunPolicyDecision
 from oh_no_my_claudecode.harness_run.stages import StageName, StageRecord, StageStatus
 from oh_no_my_claudecode.proof_graph import ProofAssessment
+from oh_no_my_claudecode.runtime import Budget, CapabilitySet, NodeSpec, RetryPolicy, RunSpec
 from oh_no_my_claudecode.trace.envelope import (
     ContextCandidate,
     EnvelopeEvent,
@@ -64,6 +65,29 @@ def _verified_harness_receipt() -> HarnessRunReceipt:
     """Build a genuine, verifying harness receipt to embed (reuse, not reinvent)."""
     proof = ProofAssessment(complete=True, false_green=False, reasons=())
     policy = RunPolicyDecision(allowed=True, approvals_required=False, violations=())
+    runtime_contract = RunSpec(
+        run_id="run-xyz",
+        task="do the thing",
+        nodes=(
+            NodeSpec(
+                node_id="execute",
+                kind="execute",
+                objective="make the requested change",
+                completion_condition="verifier command succeeds with evidence",
+                dependencies=(),
+                side_effecting=True,
+                approval_required=False,
+                idempotency_key="run-xyz:node:execute",
+                timeout_seconds=120.0,
+                budget=Budget(timeout_seconds=120.0, max_tokens=1000),
+                retry_policy=RetryPolicy(max_attempts=2, backoff_seconds=1.0),
+                capabilities=CapabilitySet(
+                    commands=(("pytest",),),
+                    filesystem_write=True,
+                ),
+            ),
+        ),
+    ).to_dict()
     stages = tuple(
         StageRecord(
             name=name,
@@ -78,6 +102,7 @@ def _verified_harness_receipt() -> HarnessRunReceipt:
         status="completed",
         completed=True,
         stages=stages,
+        runtime_contract=runtime_contract,
         policy=policy,
         proof=proof,
     )

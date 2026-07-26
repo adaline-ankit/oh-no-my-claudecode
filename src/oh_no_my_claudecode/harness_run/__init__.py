@@ -25,6 +25,7 @@ from .receipt import (
     compute_verified,
     harness_receipt_path,
     load_harness_receipt,
+    runtime_contract_complete,
     verify_harness_receipt,
 )
 from .run_policy import (
@@ -88,6 +89,7 @@ __all__ = [
     "load_run_policy",
     "prepare_stage",
     "proof_stage",
+    "runtime_contract_complete",
     "secret_findings",
     "verify_harness_receipt",
     "verify_stage",

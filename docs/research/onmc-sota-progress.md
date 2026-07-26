@@ -75,6 +75,14 @@ Missing or tampered receipts fail closed without re-running the agent.
 harness receipt can no longer report `verified=true` from proof/policy booleans
 alone. The canonical receipt builder now requires all six harness stages to be
 present and successful before it emits a verified receipt.
+
+**Receipt verification now binds the runtime contract (2026-07-26).** A verified
+harness receipt now embeds the canonical `RunSpec` and its digest, so the receipt
+hash covers the exact graph nodes, side-effect declarations, idempotency keys,
+timeouts, budgets, retry policies, capabilities, and falsifiable completion
+conditions used for the run. Resuming a completed run rejects receipts whose
+runtime contract is missing, malformed, digest-mismatched, or for a different
+run/task.
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |
