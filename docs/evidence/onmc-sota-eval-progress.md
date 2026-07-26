@@ -50,6 +50,9 @@ This is evidence for a stronger harness foundation:
 - OTel GenAI span export now preserves measured `input_tokens` and `output_tokens` when trace events
   provide them, and explicitly marks legacy total-token-only fallback splits as estimated instead of
   presenting them as measured usage.
+- OTel GenAI span export now preserves measured event duration when trace events provide `end_ts`,
+  `duration_seconds`, or `duration_ms`, and explicitly marks the legacy instant-event 1ms span
+  fallback as estimated.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -295,6 +298,59 @@ Result:
 
 ```text
 60 passed
+```
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+```text
+python -m pytest -q tests/test_trace.py
+```
+
+Result:
+
+```text
+49 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/trace tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 6 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by the OTel duration slice.
+
+```text
+python -m pytest -q tests/test_trace.py tests/test_runtime_contracts.py
+```
+
+Result:
+
+```text
+63 passed
 ```
 
 ```text

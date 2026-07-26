@@ -604,6 +604,55 @@ class TestOtelSpans:
             == "legacy_total_tokens_only"
         )
 
+    def test_otel_span_preserves_measured_end_timestamp(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.TOOL_CALL,
+                ts=100.0,
+                payload={"tool": "Bash", "duration_ms": 250},
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_duration")
+
+        assert spans[0]["startTimeUnixNano"] == 100_000_000_000
+        assert spans[0]["endTimeUnixNano"] == 100_250_000_000
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+
+    def test_otel_span_preserves_measured_end_ts(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.TOOL_CALL,
+                ts=100.0,
+                payload={"tool": "Bash", "end_ts": 101.5},
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_end_ts")
+
+        assert spans[0]["startTimeUnixNano"] == 100_000_000_000
+        assert spans[0]["endTimeUnixNano"] == 101_500_000_000
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+
+    def test_otel_span_marks_default_duration_as_estimated(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [TraceEvent(kind=TraceEventKind.TOOL_CALL, ts=100.0, payload={})]
+        spans = to_otel_spans(events, session_id="tr_default_duration")
+
+        assert spans[0]["startTimeUnixNano"] == 100_000_000_000
+        assert spans[0]["endTimeUnixNano"] == 100_001_000_000
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["onmc.duration.estimated"]["boolValue"] is True
+        assert (
+            attr_map["onmc.duration.estimate_reason"]["stringValue"]
+            == "instant_event_default_1ms"
+        )
+
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 

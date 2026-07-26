@@ -17,6 +17,7 @@ Key attributes used
 - ``onmc.target``            — file path / query for read/search events
 - ``onmc.session_id``        — parent session identifier
 - ``onmc.usage.estimated``   — true only when legacy total-token events require estimation
+- ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
 """
 
 from __future__ import annotations
@@ -64,10 +65,6 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
     operation = _OPERATION_MAP.get(kind, "chat")
     is_error = kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED)
 
-    # Span duration: single-event spans have 1ms synthetic duration.
-    start_ns = _ns(event.ts)
-    end_ns = start_ns + 1_000_000  # 1ms
-
     attributes: list[dict[str, Any]] = [
         {"key": "gen_ai.system", "value": {"stringValue": _GEN_AI_SYSTEM}},
         {"key": "gen_ai.operation.name", "value": {"stringValue": operation}},
@@ -76,6 +73,8 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
     ]
 
     payload = event.payload
+    start_ns, end_ns, duration_attributes = _span_times(event)
+    attributes.extend(duration_attributes)
     if "tool" in payload:
         attributes.append(
             {"key": "onmc.tool", "value": {"stringValue": str(payload["tool"])}}
@@ -98,6 +97,42 @@ def _span_from_event(event: TraceEvent, *, session_id: str) -> dict[str, Any]:
         "status": _STATUS_ERROR if is_error else _STATUS_OK,
         "attributes": attributes,
     }
+
+
+def _span_times(event: TraceEvent) -> tuple[int, int, list[dict[str, Any]]]:
+    payload = event.payload
+    start_ns = _ns(event.ts)
+    end_ts = _optional_float(payload, "end_ts")
+    if end_ts is not None and end_ts >= event.ts:
+        return (
+            start_ns,
+            _ns(end_ts),
+            [{"key": "onmc.duration.estimated", "value": {"boolValue": False}}],
+        )
+
+    duration_seconds = _optional_float(payload, "duration_seconds")
+    if duration_seconds is None:
+        duration_ms = _optional_float(payload, "duration_ms")
+        if duration_ms is not None:
+            duration_seconds = duration_ms / 1000.0
+    if duration_seconds is not None and duration_seconds >= 0:
+        return (
+            start_ns,
+            start_ns + _ns(duration_seconds),
+            [{"key": "onmc.duration.estimated", "value": {"boolValue": False}}],
+        )
+
+    return (
+        start_ns,
+        start_ns + 1_000_000,
+        [
+            {"key": "onmc.duration.estimated", "value": {"boolValue": True}},
+            {
+                "key": "onmc.duration.estimate_reason",
+                "value": {"stringValue": "instant_event_default_1ms"},
+            },
+        ],
+    )
 
 
 def _token_usage_attributes(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -145,6 +180,21 @@ def _optional_int(payload: dict[str, Any], key: str) -> int | None:
         return None
     try:
         parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return parsed
+
+
+def _optional_float(payload: dict[str, Any], key: str) -> float | None:
+    if key not in payload or payload[key] is None:
+        return None
+    value = payload[key]
+    if isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
     if parsed < 0:
