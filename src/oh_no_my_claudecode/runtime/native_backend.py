@@ -9,6 +9,8 @@ from pathlib import Path
 
 from oh_no_my_claudecode.durable_runtime import (
     InvalidTransitionError,
+    Lease,
+    LeaseExpiredError,
     NodeState,
     RetryClass,
     RunNotFoundError,
@@ -240,6 +242,7 @@ class NativeExecutionBackend:
         try:
             snapshot = self.store.load(run_id)
             node_state = snapshot.nodes[result.node_id].state
+            self._release_active_lease(run_id, result.node_id, idempotency_suffix="replay")
             if snapshot.state is not RunState.RUNNING:
                 snapshot = self.store.resume(run_id, idempotency_key="runtime:resume")
             if node_state is NodeState.PENDING:
@@ -391,27 +394,98 @@ class NativeExecutionBackend:
         handler: NodeHandler,
     ) -> NodeResult:
         """Run one node, recording retry attempts before any terminal result."""
-        while True:
-            try:
-                result = handler(node)
-                self._validate_node_result(node, result)
-            except RuntimeContractError:
-                raise
-            except Exception as exc:
-                if self._record_retry_if_allowed(run_id, node, exc):
+        lease = self._acquire_node_lease(run_id, node)
+        try:
+            while True:
+                try:
+                    result = handler(node)
+                    self._validate_node_result(node, result)
+                except RuntimeContractError:
+                    raise
+                except Exception as exc:
+                    if self._record_retry_if_allowed(run_id, node, exc):
+                        continue
+                    return NodeResult(
+                        node_id=node.node_id,
+                        status=NodeResultStatus.FAILED,
+                        idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+                        error=str(exc),
+                    )
+                if result.status is not NodeResultStatus.FAILED:
+                    return result
+                reason = result.error or "failed"
+                if self._record_retry_if_allowed(run_id, node, reason):
                     continue
-                return NodeResult(
-                    node_id=node.node_id,
-                    status=NodeResultStatus.FAILED,
-                    idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
-                    error=str(exc),
-                )
-            if result.status is not NodeResultStatus.FAILED:
                 return result
-            reason = result.error or "failed"
-            if self._record_retry_if_allowed(run_id, node, reason):
-                continue
-            return result
+        finally:
+            self._release_lease(
+                run_id,
+                node.node_id,
+                token=lease.token,
+                idempotency_key=f"runtime:{node.node_id}:lease-release:{lease.token}",
+            )
+
+    def _acquire_node_lease(self, run_id: str, node: NodeSpec) -> Lease:
+        snapshot = self.store.load(run_id)
+        active = snapshot.nodes[node.node_id].lease
+        if active is not None:
+            return active
+        sequence = 1 + sum(
+            1
+            for event in self.store.events(run_id)
+            if event.event_type == "lease_acquired"
+            and event.payload.get("node_id") == node.node_id
+        )
+        return self.store.acquire_lease(
+            run_id,
+            node.node_id,
+            owner=self.backend_name,
+            ttl_seconds=self._lease_ttl(node),
+            idempotency_key=f"runtime:{node.node_id}:lease:{sequence}",
+        )
+
+    def _lease_ttl(self, node: NodeSpec) -> float:
+        if node.timeout_seconds is not None:
+            return node.timeout_seconds
+        if node.budget is not None:
+            return node.budget.timeout_seconds
+        return 300.0
+
+    def _release_active_lease(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        idempotency_suffix: str,
+    ) -> None:
+        snapshot = self.store.load(run_id)
+        lease = snapshot.nodes[node_id].lease
+        if lease is None:
+            return
+        self._release_lease(
+            run_id,
+            node_id,
+            token=lease.token,
+            idempotency_key=f"runtime:{node_id}:lease-release:{idempotency_suffix}",
+        )
+
+    def _release_lease(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        token: str,
+        idempotency_key: str,
+    ) -> None:
+        try:
+            self.store.release_lease(
+                run_id,
+                node_id,
+                token=token,
+                idempotency_key=idempotency_key,
+            )
+        except LeaseExpiredError:
+            return
 
     def _record_retry_if_allowed(
         self,

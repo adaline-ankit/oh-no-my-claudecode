@@ -44,6 +44,9 @@ This is evidence for a stronger harness foundation:
   interrupts before side effects and resumes after durable approval without duplicate execution.
 - The native runtime now treats durable cancellation as terminal, refuses to restart cancelled runs,
   and propagates node-level skips to pending downstream graph nodes.
+- Side-effecting native runtime nodes now acquire durable node leases while handlers run, release
+  leases after execution, recover persisted results that still have active leases, and reacquire a
+  fresh deterministic lease if a process crashes after lease release but before result persistence.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -193,6 +196,59 @@ Result:
 
 ```text
 72 passed
+```
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_runtime_fanout.py
+```
+
+Result:
+
+```text
+17 passed
+```
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py
+```
+
+Result:
+
+```text
+73 collected tests passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/runtime tests/test_runtime_contracts.py tests/test_runtime_fanout.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py
+```
+
+Result:
+
+```text
+Success: no issues found in 6 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by the lease slice.
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
 ```
 
 ```text

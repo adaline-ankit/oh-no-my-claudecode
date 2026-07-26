@@ -184,6 +184,11 @@ def test_native_backend_replays_completed_idempotency_without_side_effect(tmp_pa
 
     def handler(node: NodeSpec) -> NodeResult:
         calls.append(node.node_id)
+        if node.side_effecting:
+            snapshot = backend.store.load(spec.run_id)
+            lease = snapshot.nodes[node.node_id].lease
+            assert lease is not None
+            assert lease.owner == "native"
         return NodeResult(
             node_id=node.node_id,
             status=NodeResultStatus.SUCCEEDED,
@@ -203,6 +208,7 @@ def test_native_backend_replays_completed_idempotency_without_side_effect(tmp_pa
         item.to_dict() for item in first.results
     ]
     assert len(backend.store.events("run-1")) == event_count_after_first_run
+    assert backend.store.load("run-1").nodes["execute"].lease is None
 
 
 def test_native_backend_recovers_result_written_before_crash_without_side_effect(
@@ -227,6 +233,13 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
         idempotency_key="runtime:execute:start",
     )
     backend._write_spec_manifest(spec)
+    backend.store.acquire_lease(
+        spec.run_id,
+        "execute",
+        owner="native",
+        ttl_seconds=30,
+        idempotency_key="runtime:execute:lease:1",
+    )
     result = NodeResult(
         node_id="execute",
         status=NodeResultStatus.SUCCEEDED,
@@ -246,6 +259,65 @@ def test_native_backend_recovers_result_written_before_crash_without_side_effect
     snapshot = backend.store.load(spec.run_id)
     assert snapshot.state.value == "completed"
     assert snapshot.nodes["execute"].state.value == "succeeded"
+    assert snapshot.nodes["execute"].lease is None
+
+
+def test_native_backend_reacquires_released_lease_after_crash_before_result_write(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-crash-after-release",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    backend.store.create_run(
+        spec.run_id,
+        node_ids=("execute",),
+        repo=tmp_path,
+        idempotency_key="runtime:create",
+    )
+    backend.store.start(spec.run_id, idempotency_key="runtime:start")
+    backend.store.start_node(
+        spec.run_id,
+        "execute",
+        idempotency_key="runtime:execute:start",
+    )
+    backend._write_spec_manifest(spec)
+    lease = backend.store.acquire_lease(
+        spec.run_id,
+        "execute",
+        owner="native",
+        ttl_seconds=30,
+        idempotency_key="runtime:execute:lease:1",
+    )
+    backend.store.release_lease(
+        spec.run_id,
+        "execute",
+        token=lease.token,
+        idempotency_key=f"runtime:execute:lease-release:{lease.token}",
+    )
+    calls: list[str] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(node.node_id)
+        active = backend.store.load(spec.run_id).nodes[node.node_id].lease
+        assert active is not None
+        assert active.token != lease.token
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SUCCEEDED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node),
+        )
+
+    recovered = backend.execute(spec, {"execute": handler}, resume=True)
+
+    assert recovered.status is RunResultStatus.COMPLETED
+    assert calls == ["execute"]
+    snapshot = backend.store.load(spec.run_id)
+    assert snapshot.nodes["execute"].state.value == "succeeded"
+    assert snapshot.nodes["execute"].lease is None
 
 
 def test_native_backend_rejects_successful_side_effect_without_completion_evidence(
