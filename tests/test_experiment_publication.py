@@ -37,6 +37,25 @@ def _ready_product_surface() -> dict[str, object]:
     }
 
 
+def _ready_product_smoke() -> dict[str, object]:
+    return {
+        "ready": True,
+        "canonical_entrypoint": "run",
+        "mode": "in-process-typer-cli",
+        "package_version": "0.111.0",
+        "init_verified": True,
+        "commands_surface_ready": True,
+        "plan_only_verified": True,
+        "run_status": "planned",
+        "run_stop_reason": "plan-only",
+        "model_calls": 0,
+        "network_used": False,
+        "agent_execution_attempted": False,
+        "receipt_written": False,
+        "blockers": [],
+    }
+
+
 def test_current_manifest_is_valid_but_not_publication_ready() -> None:
     validation = validate_benchmark_manifest(_load(V4_MANIFEST))
 
@@ -76,6 +95,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
         manifest,
         proposed_claim="ONMC is SOTA, better, and cheaper than plain coding agents.",
         product_surface=_ready_product_surface(),
+        product_smoke=_ready_product_smoke(),
     )
     markdown = render_publication_markdown(bundle)
 
@@ -86,6 +106,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert bundle["cost_coverage"]["complete"] is False
     assert bundle["leakage_audit"]["complete"] is False
     assert bundle["product_surface"]["ready"] is True
+    assert bundle["product_smoke"]["ready"] is True
     assert "NOT PUBLICATION-READY" in markdown
     assert "Paired Delta" in markdown
     assert "95% CI" in markdown
@@ -93,6 +114,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert "INCOMPLETE" in markdown
     assert "Leakage Audit" in markdown
     assert "Product Surface" in markdown
+    assert "Product Smoke" in markdown
     assert "SOTA" not in bundle["claim_language_gate"]["suggested_safe_claim"]
 
 
@@ -110,6 +132,24 @@ def test_publication_report_fails_closed_without_product_surface_audit() -> None
     ]
 
 
+def test_publication_report_fails_closed_without_product_smoke() -> None:
+    report = _load(SATURATED_REPORT)
+    manifest = _load(V4_MANIFEST)
+
+    bundle = build_publication_bundle(
+        report,
+        manifest,
+        product_surface=_ready_product_surface(),
+    )
+
+    assert bundle["publication_ready"] is False
+    assert bundle["product_smoke"]["ready"] is False
+    assert bundle["product_smoke"]["evaluated"] is False
+    assert bundle["product_smoke"]["blockers"] == [
+        "live product smoke was not provided"
+    ]
+
+
 def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
     report = _load(SATURATED_REPORT)
     manifest = _load(V4_MANIFEST)
@@ -117,6 +157,7 @@ def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
         report,
         manifest,
         product_surface=_ready_product_surface(),
+        product_smoke=_ready_product_smoke(),
     )
 
     plan = build_publication_work_plan(bundle)
@@ -140,6 +181,7 @@ def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
     ]
     assert plan["deficits"]["missing_cost_cells"] == 11
     assert plan["deficits"]["product_surface_ready"] is True
+    assert plan["deficits"]["product_smoke_ready"] is True
     assert plan["spend_gate"]["paid_full_matrix_allowed"] is False
 
 

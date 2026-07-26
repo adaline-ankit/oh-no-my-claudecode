@@ -58,6 +58,16 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - hidden advanced commands: `137`
 - unexpected visible commands: `0`
 
+## Product Smoke
+
+- status: `READY`
+- canonical entrypoint: `run`
+- mode: `in-process-typer-cli`
+- init verified: `true`
+- plan-only verified: `true`
+- model calls: `0`
+- agent execution attempted: `false`
+
 ## Publication Blockers
 
 - at least 50 discriminative tasks are required; found 28

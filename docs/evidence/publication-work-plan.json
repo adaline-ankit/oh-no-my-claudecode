@@ -49,6 +49,8 @@
     ],
     "missing_cost_cells": 11,
     "missing_raw_artifact_entries": 96,
+    "product_smoke_blockers": [],
+    "product_smoke_ready": true,
     "product_surface_hidden_primary": [],
     "product_surface_missing_primary": [],
     "product_surface_ready": true,
@@ -62,6 +64,7 @@
     "Freeze one manifest revision with the five required arms and three seeds.",
     "Add or replace tasks until at least 50 external tasks include at least 10 calibration-discriminative tasks.",
     "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
+    "Run `scripts/run_product_smoke.py` and include its JSON in the publication bundle so product claims are tied to a working canonical entrypoint.",
     "Run a one-seed calibration slice, then regenerate the publication bundle and this work plan.",
     "Only request approval for the full paid matrix after cost telemetry and raw artifact paths are complete on the calibration slice."
   ],

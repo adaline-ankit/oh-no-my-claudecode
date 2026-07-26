@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--artifact-root", type=Path, default=None)
     parser.add_argument("--claim", default=_DEFAULT_CLAIM)
+    parser.add_argument("--product-smoke", type=Path, default=None)
     parser.add_argument("--json-out", type=Path, default=None)
     parser.add_argument("--markdown-out", type=Path, default=None)
     parser.add_argument("--artifact-index-out", type=Path, default=None)
@@ -41,12 +42,18 @@ def main(argv: list[str] | None = None) -> int:
 
     report = _load_object(args.report, "report")
     manifest = _load_object(args.manifest, "manifest")
+    product_smoke = (
+        _load_object(args.product_smoke, "product smoke")
+        if args.product_smoke is not None
+        else None
+    )
     bundle = build_publication_bundle(
         report,
         manifest,
         proposed_claim=args.claim,
         artifact_root=args.report.parent if args.artifact_root is None else args.artifact_root,
         product_surface=_live_product_surface(),
+        product_smoke=product_smoke,
     )
     rendered_json = json.dumps(bundle, indent=2, sort_keys=True) + "\n"
     rendered_markdown = render_publication_markdown(bundle)
@@ -99,8 +106,9 @@ def _live_product_surface() -> dict[str, object]:
 
     visible: list[str] = []
     for raw_info in (*app.registered_commands, *app.registered_groups):
-        callback = raw_info.callback
-        name = _command_name(raw_info.name, callback)
+        callback = getattr(raw_info, "callback", None)
+        raw_name = getattr(raw_info, "name", None)
+        name = _command_name(raw_name, callback)
         if name is not None and not getattr(raw_info, "hidden", False):
             visible.append(name)
     return audit_command_surface(

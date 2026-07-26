@@ -199,6 +199,7 @@ def build_publication_bundle(
     ),
     artifact_root: Path | None = None,
     product_surface: Mapping[str, object] | None = None,
+    product_smoke: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a deterministic report bundle without weakening any evidence gate."""
 
@@ -237,6 +238,7 @@ def build_publication_bundle(
         artifact_root=Path(".") if artifact_root is None else artifact_root,
     )
     product_surface_gate = _product_surface_gate(product_surface)
+    product_smoke_gate = _product_smoke_gate(product_smoke)
     publication_ready = (
         validation.publication_ready
         and claim_readiness.quality_claim_ready
@@ -244,6 +246,7 @@ def build_publication_bundle(
         and leakage_audit["complete"] is True
         and artifacts["complete"] is True
         and product_surface_gate["ready"] is True
+        and product_smoke_gate["ready"] is True
     )
 
     return {
@@ -268,6 +271,7 @@ def build_publication_bundle(
         "failure_taxonomy": _json_value(report.get("failure_taxonomy", {})),
         "raw_artifact_index": artifacts,
         "product_surface": product_surface_gate,
+        "product_smoke": product_smoke_gate,
     }
 
 
@@ -288,6 +292,7 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     artifacts = _optional_mapping(bundle.get("raw_artifact_index"))
     claim = _optional_mapping(bundle.get("claim_readiness"))
     product_surface = _optional_mapping(bundle.get("product_surface"))
+    product_smoke = _optional_mapping(bundle.get("product_smoke"))
 
     task_count = _int_or_zero(validation.get("task_count"))
     min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
@@ -326,6 +331,8 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "product_surface_hidden_primary": list(
             _string_list(product_surface.get("hidden_primary"))
         ),
+        "product_smoke_ready": product_smoke.get("ready") is True,
+        "product_smoke_blockers": list(_string_list(product_smoke.get("blockers"))),
         "coverage_fields_to_fill": [
             str(field.get("name"))
             for value in _optional_list(report_coverage.get("fields"))
@@ -348,6 +355,8 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "calibration-discriminative tasks.",
         "Run a zero-cost structural validation and Harbor/Docker smoke before any "
         "model spend.",
+        "Run `scripts/run_product_smoke.py` and include its JSON in the publication "
+        "bundle so product claims are tied to a working canonical entrypoint.",
         "Run a one-seed calibration slice, then regenerate the publication bundle "
         "and this work plan.",
         "Only request approval for the full paid matrix after cost telemetry and "
@@ -477,6 +486,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     readiness = _optional_mapping(bundle.get("claim_readiness"))
     report_coverage = _optional_mapping(bundle.get("report_coverage"))
     product_surface = _optional_mapping(bundle.get("product_surface"))
+    product_smoke = _optional_mapping(bundle.get("product_smoke"))
 
     lines = [
         "# ONMC External Benchmark Evidence Report",
@@ -565,6 +575,20 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
             f"- unexpected visible commands: "
             f"`{len(_optional_list(product_surface.get('unexpected_visible')))}`",
             "",
+            "## Product Smoke",
+            "",
+            f"- status: `{'READY' if product_smoke.get('ready') is True else 'INCOMPLETE'}`",
+            f"- canonical entrypoint: "
+            f"`{product_smoke.get('canonical_entrypoint', 'unknown')}`",
+            f"- mode: `{product_smoke.get('mode', 'unknown')}`",
+            f"- init verified: "
+            f"`{str(product_smoke.get('init_verified', False)).lower()}`",
+            f"- plan-only verified: "
+            f"`{str(product_smoke.get('plan_only_verified', False)).lower()}`",
+            f"- model calls: `{product_smoke.get('model_calls', 'unknown')}`",
+            f"- agent execution attempted: "
+            f"`{str(product_smoke.get('agent_execution_attempted', True)).lower()}`",
+            "",
             "## Publication Blockers",
             "",
         ]
@@ -574,6 +598,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     ]
     blockers.extend(str(item) for item in _optional_list(readiness.get("reasons")))
     blockers.extend(str(item) for item in _optional_list(product_surface.get("blockers")))
+    blockers.extend(str(item) for item in _optional_list(product_smoke.get("blockers")))
     fields = _optional_list(report_coverage.get("fields"))
     blockers.extend(
         f"report coverage missing {item.get('name')}: {item.get('reason')}"
@@ -669,6 +694,85 @@ def _product_surface_gate(surface: Mapping[str, object] | None) -> dict[str, obj
         "missing_primary": list(missing_primary),
         "hidden_primary": list(hidden_primary),
         "unexpected_visible": list(unexpected_visible),
+        "blockers": blockers,
+    }
+
+
+def _product_smoke_gate(smoke: Mapping[str, object] | None) -> dict[str, object]:
+    """Fail-closed gate for the zero-cost canonical product smoke artifact."""
+
+    if smoke is None:
+        return {
+            "schema_version": "onmc-product-smoke-gate/v1",
+            "ready": False,
+            "evaluated": False,
+            "canonical_entrypoint": "unknown",
+            "mode": "unknown",
+            "package_version": "unknown",
+            "init_verified": False,
+            "commands_surface_ready": False,
+            "plan_only_verified": False,
+            "run_status": "unknown",
+            "run_stop_reason": "unknown",
+            "model_calls": "unknown",
+            "network_used": "unknown",
+            "agent_execution_attempted": "unknown",
+            "receipt_written": "unknown",
+            "blockers": ["live product smoke was not provided"],
+        }
+
+    blockers: list[str] = []
+    canonical = smoke.get("canonical_entrypoint")
+    init_verified = smoke.get("init_verified") is True
+    commands_ready = smoke.get("commands_surface_ready") is True
+    plan_only_verified = smoke.get("plan_only_verified") is True
+    model_calls = _int_or_zero(smoke.get("model_calls"))
+    network_used = smoke.get("network_used")
+    agent_attempted = smoke.get("agent_execution_attempted")
+    receipt_written = smoke.get("receipt_written")
+    run_status = smoke.get("run_status")
+    run_stop_reason = smoke.get("run_stop_reason")
+
+    if smoke.get("ready") is not True:
+        blockers.append("live product smoke is not ready")
+    if canonical != "run":
+        blockers.append("canonical product entrypoint must be `run`")
+    if not init_verified:
+        blockers.append("fresh repository initialization was not verified")
+    if not commands_ready:
+        blockers.append("command surface was not verified during product smoke")
+    if not plan_only_verified:
+        blockers.append("canonical plan-only runtime was not verified")
+    if run_status != "planned":
+        blockers.append("canonical runtime smoke must finish with status `planned`")
+    if run_stop_reason != "plan-only":
+        blockers.append("canonical runtime smoke must stop because of `plan-only`")
+    if model_calls != 0:
+        blockers.append("product smoke must not make model calls")
+    if network_used is not False:
+        blockers.append("product smoke must not use the network")
+    if agent_attempted is not False:
+        blockers.append("product smoke must not attempt agent execution")
+    if receipt_written is not False:
+        blockers.append("plan-only product smoke must not write a completion receipt")
+
+    return {
+        "schema_version": "onmc-product-smoke-gate/v1",
+        "ready": not blockers,
+        "evaluated": True,
+        "canonical_entrypoint": canonical,
+        "mode": smoke.get("mode", "unknown"),
+        "package_version": smoke.get("package_version", "unknown"),
+        "duration_ms": smoke.get("duration_ms"),
+        "init_verified": init_verified,
+        "commands_surface_ready": commands_ready,
+        "plan_only_verified": plan_only_verified,
+        "run_status": run_status,
+        "run_stop_reason": run_stop_reason,
+        "model_calls": model_calls,
+        "network_used": network_used,
+        "agent_execution_attempted": agent_attempted,
+        "receipt_written": receipt_written,
         "blockers": blockers,
     }
 

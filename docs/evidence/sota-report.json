@@ -717,6 +717,25 @@
     "task_kind_coverage_ready": false,
     "verifier_count": 28
   },
+  "product_smoke": {
+    "agent_execution_attempted": false,
+    "blockers": [],
+    "canonical_entrypoint": "run",
+    "commands_surface_ready": true,
+    "duration_ms": 552,
+    "evaluated": true,
+    "init_verified": true,
+    "mode": "in-process-typer-cli",
+    "model_calls": 0,
+    "network_used": false,
+    "package_version": "0.111.0",
+    "plan_only_verified": true,
+    "ready": true,
+    "receipt_written": false,
+    "run_status": "planned",
+    "run_stop_reason": "plan-only",
+    "schema_version": "onmc-product-smoke-gate/v1"
+  },
   "product_surface": {
     "blockers": [],
     "canonical_entrypoint": "run",
