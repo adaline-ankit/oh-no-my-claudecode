@@ -107,6 +107,16 @@ class NativeExecutionBackend:
                         results.append(result)
                         if result.status is NodeResultStatus.SUCCEEDED:
                             continue
+                        if result.status is NodeResultStatus.SKIPPED:
+                            self._cancel_pending_nodes(
+                                spec,
+                                reason=result.error or f"{node.node_id} skipped",
+                            )
+                            self.store.cancel(
+                                spec.run_id,
+                                reason=result.error or f"{node.node_id} skipped",
+                                idempotency_key="runtime:cancel",
+                            )
                         return self._terminal_result_from_node_result(spec, results, result)
                     if any(
                         current.nodes[dependency].state is not NodeState.SUCCEEDED
@@ -167,14 +177,14 @@ class NativeExecutionBackend:
                             reason=result.error or "skipped",
                             idempotency_key=f"runtime:{node.node_id}:skip",
                         )
+                        self._cancel_pending_nodes(
+                            spec,
+                            reason=result.error or f"{node.node_id} skipped",
+                        )
                         self.store.cancel(
                             spec.run_id,
                             reason=result.error or f"{node.node_id} skipped",
                             idempotency_key="runtime:cancel",
-                        )
-                        self._cancel_pending_nodes(
-                            spec,
-                            reason=result.error or f"{node.node_id} skipped",
                         )
                         return self._terminal_result_from_node_result(spec, results, result)
                     else:
@@ -285,7 +295,6 @@ class NativeExecutionBackend:
                     reason=reason,
                     idempotency_key=f"runtime:{result.node_id}:skip",
                 )
-                self.store.cancel(run_id, reason=reason, idempotency_key="runtime:cancel")
             else:
                 reason = result.error or "failed"
                 self.store.fail_node(
@@ -398,6 +407,16 @@ class NativeExecutionBackend:
                 node.node_id,
                 reason=reason,
                 idempotency_key=f"runtime:{node.node_id}:cancel-pending",
+            )
+            now = time.time()
+            self._record_runtime_node_event(
+                spec.run_id,
+                node,
+                started_at=now,
+                ended_at=now,
+                result=None,
+                error=reason,
+                status="cancelled",
             )
             snapshot = self.store.load(spec.run_id)
 

@@ -546,6 +546,8 @@ def test_native_backend_returns_cancelled_run_without_invoking_handlers(
 def test_native_backend_cancels_downstream_pending_nodes_on_skip(
     tmp_path: Path,
 ) -> None:
+    session_id = start_session(tmp_path, label="cancel trace")
+    assert session_id is not None
     spec = RunSpec(
         run_id="run-skip-cancel",
         task="Build feature",
@@ -571,6 +573,19 @@ def test_native_backend_cancels_downstream_pending_nodes_on_skip(
     assert snapshot.state.value == "cancelled"
     assert snapshot.nodes["gate"].state.value == "cancelled"
     assert snapshot.nodes["execute"].state.value == "cancelled"
+    _, events = load_session_events(
+        tmp_path,
+        session_id,
+        include_notify_window=False,
+    )
+    runtime_events = [event for event in events if event.kind == TraceEventKind.RUNTIME_NODE]
+    assert len(runtime_events) == 2
+    by_node = {event.payload["node_id"]: event.payload for event in runtime_events}
+    assert by_node["gate"]["status"] == "skipped"
+    assert by_node["gate"]["error"] == "operator cancelled"
+    assert by_node["execute"]["status"] == "cancelled"
+    assert by_node["execute"]["error"] == "operator cancelled"
+    assert by_node["execute"]["dependencies"] == ["gate"]
 
 
 def test_native_backend_exhausts_retry_policy_before_failed_result(
