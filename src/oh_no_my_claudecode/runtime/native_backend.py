@@ -9,10 +9,12 @@ from pathlib import Path
 from oh_no_my_claudecode.durable_runtime import (
     InvalidTransitionError,
     NodeState,
+    RetryClass,
     RunNotFoundError,
     RunSnapshot,
     RunState,
     RuntimeStore,
+    classify_retry,
 )
 from oh_no_my_claudecode.runtime.backend import NodeHandler
 from oh_no_my_claudecode.runtime.contracts import (
@@ -109,8 +111,7 @@ class NativeExecutionBackend:
                         node.node_id,
                         idempotency_key=f"runtime:{node.node_id}:start",
                     )
-                result = handlers[node.node_id](node)
-                self._validate_node_result(node, result)
+                result = self._run_node_with_retries(spec.run_id, node, handlers[node.node_id])
                 self._write_result(spec.run_id, result)
                 results.append(result)
                 if result.status is NodeResultStatus.SUCCEEDED:
@@ -269,6 +270,62 @@ class NativeExecutionBackend:
 
     def _result_path(self, run_id: str, node_id: str) -> Path:
         return self.store.root / "runs" / run_id / "node-results" / f"{node_id}.json"
+
+    def _run_node_with_retries(
+        self,
+        run_id: str,
+        node: NodeSpec,
+        handler: NodeHandler,
+    ) -> NodeResult:
+        """Run one node, recording retry attempts before any terminal result."""
+        while True:
+            try:
+                result = handler(node)
+                self._validate_node_result(node, result)
+            except RuntimeContractError:
+                raise
+            except Exception as exc:
+                if self._record_retry_if_allowed(run_id, node, exc):
+                    continue
+                return NodeResult(
+                    node_id=node.node_id,
+                    status=NodeResultStatus.FAILED,
+                    idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+                    error=str(exc),
+                )
+            if result.status is not NodeResultStatus.FAILED:
+                return result
+            reason = result.error or "failed"
+            if self._record_retry_if_allowed(run_id, node, reason):
+                continue
+            return result
+
+    def _record_retry_if_allowed(
+        self,
+        run_id: str,
+        node: NodeSpec,
+        error: BaseException | str,
+    ) -> bool:
+        policy = node.retry_policy
+        if policy is None:
+            return False
+        classification = classify_retry(error)
+        if classification is RetryClass.PERMANENT:
+            return False
+        snapshot = self.store.load(run_id)
+        retries_used = snapshot.nodes[node.node_id].attempts
+        if retries_used + 1 >= policy.max_attempts:
+            return False
+        self.store.record_retry(
+            run_id,
+            node.node_id,
+            classification=classification,
+            reason=str(error),
+            base_delay_seconds=policy.backoff_seconds,
+            max_delay_seconds=policy.backoff_seconds,
+            idempotency_key=f"runtime:{node.node_id}:retry:{retries_used + 1}",
+        )
+        return True
 
     def _validate_node_result(self, node: NodeSpec, result: NodeResult) -> None:
         node_id = node.node_id

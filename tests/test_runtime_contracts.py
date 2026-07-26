@@ -266,6 +266,71 @@ def test_native_backend_rejects_successful_side_effect_without_completion_eviden
     assert "completion evidence" in result.error
 
 
+def test_native_backend_retries_transient_exception_before_terminal_result(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-retry-exception",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    calls: list[int] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(len(calls) + 1)
+        if len(calls) == 1:
+            raise TimeoutError("temporarily unavailable")
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SUCCEEDED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node),
+        )
+
+    result = backend.execute(spec, {"execute": handler})
+
+    assert result.status is RunResultStatus.COMPLETED
+    assert calls == [1, 2]
+    retry_history = backend.store.load(spec.run_id).nodes["execute"].retry_history
+    assert len(retry_history) == 1
+    assert retry_history[0].attempt == 1
+    assert retry_history[0].retryable is True
+    assert retry_history[0].reason == "temporarily unavailable"
+
+
+def test_native_backend_exhausts_retry_policy_before_failed_result(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-retry-failed-result",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    calls: list[int] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(len(calls) + 1)
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.FAILED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            error="temporarily unavailable",
+        )
+
+    result = backend.execute(spec, {"execute": handler})
+
+    assert result.status is RunResultStatus.FAILED
+    assert result.error == "temporarily unavailable"
+    assert calls == [1, 2]
+    retry_history = backend.store.load(spec.run_id).nodes["execute"].retry_history
+    assert len(retry_history) == 1
+    assert retry_history[0].attempt == 1
+    assert retry_history[0].retryable is True
+    assert len(result.results) == 1
+
+
 def test_native_backend_rejects_resume_with_mismatched_run_spec(tmp_path: Path) -> None:
     original = RunSpec(
         run_id="run-locked",

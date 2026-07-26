@@ -36,6 +36,8 @@ This is evidence for a stronger harness foundation:
   side-effecting results require digest-backed completion evidence before the backend accepts them.
 - Side-effecting runtime nodes now carry an explicit `retry_policy` in the canonical `RunSpec`,
   preserving the harness DAG retry contract across backend implementations.
+- The native runtime now executes bounded retry policy for retryable handler exceptions and failed
+  node results, records durable retry metadata, and writes only the terminal node result.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -148,6 +150,16 @@ Result:
 ```
 
 ```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py
+```
+
+Result:
+
+```text
+65 passed
+```
+
+```text
 ruff check src/oh_no_my_claudecode/experiment src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/harness_run/models.py scripts/run_external_eval.py scripts/calibrate_external_report.py tests/test_experiment_calibration.py tests/test_experiment_power.py tests/test_runtime_contracts.py
 ```
 
@@ -189,6 +201,7 @@ This is a harness-correctness benchmark, not a model-quality benchmark.
 | RunSpec digest lock | Pass | Resuming with a changed task/graph contract is rejected before handlers run. |
 | Completion evidence lock | Pass | Successful side-effecting nodes cannot complete without digest-backed completion evidence. |
 | Retry policy contract | Pass | Harness DAG retry policy is serialized into side-effecting runtime nodes. |
+| Native retry execution | Pass | Retryable exceptions and failed results are retried within policy and recorded in durable history. |
 | Existing harness compatibility | Pass | Current `HarnessController` tests still pass. |
 | Durable store invariants | Pass | Existing event-sourced runtime behavior still passes. |
 | Eval infrastructure smoke | Pass | Experiment contract/kernel/portfolio tests still pass. |
