@@ -1,0 +1,72 @@
+{
+  "agent_execution_attempted": false,
+  "blockers": [],
+  "canonical_contract": "RunSpec",
+  "duration_ms": 220,
+  "evaluated": true,
+  "model_calls": 0,
+  "network_used": false,
+  "ready": true,
+  "schema_version": "onmc-runtime-delegation-audit/v1",
+  "views": {
+    "mission": {
+      "blockers": [],
+      "delegates_to": "mission.run_mission -> HarnessController.run(plan_only=True)",
+      "digest_validated": true,
+      "node_count": 9,
+      "node_kinds": [
+        "claim",
+        "execute",
+        "learn",
+        "plan",
+        "prove",
+        "repair",
+        "retrieve",
+        "understand",
+        "verify"
+      ],
+      "ready": true,
+      "run_id": "run-a1fef799c7099253",
+      "runtime_contract_digest": "cf296c619792543d4da1627434f95578805c9de42c2ca119707b4a4322e05ac4",
+      "runtime_contract_present": true,
+      "side_effect_nodes_complete": true
+    },
+    "swarm": {
+      "blockers": [],
+      "delegates_to": "swarm.plan_inline_swarm -> swarm.runtime_contract.build_swarm_run_spec",
+      "digest_validated": true,
+      "node_count": 3,
+      "node_kinds": [
+        "swarm-fan-in",
+        "swarm-unit"
+      ],
+      "ready": true,
+      "run_id": "swarm-runtime-audit",
+      "runtime_contract_digest": "5f0cbe752c7df3824f816c199b137182f931c2affcfaed08c63425078a662bc7",
+      "runtime_contract_present": true,
+      "side_effect_nodes_complete": true
+    },
+    "wrap": {
+      "blockers": [],
+      "delegates_to": "wrap.arm_mission -> HarnessController.run(plan_only=True)",
+      "digest_validated": true,
+      "node_count": 9,
+      "node_kinds": [
+        "claim",
+        "execute",
+        "learn",
+        "plan",
+        "prove",
+        "repair",
+        "retrieve",
+        "understand",
+        "verify"
+      ],
+      "ready": true,
+      "run_id": "run-cae3e8f843b42abc",
+      "runtime_contract_digest": "57b4f97d85d04dd4c18260c2c0fcbcf7339f1111566e523c5918e1c811eaf01c",
+      "runtime_contract_present": true,
+      "side_effect_nodes_complete": true
+    }
+  }
+}

@@ -56,6 +56,8 @@
     "product_surface_ready": true,
     "product_surface_unexpected_visible": [],
     "repositories_to_add": 0,
+    "runtime_delegation_blockers": [],
+    "runtime_delegation_ready": true,
     "seeds_to_register": 3,
     "tasks_to_add": 22
   },
@@ -65,6 +67,7 @@
     "Add or replace tasks until at least 50 external tasks include at least 10 calibration-discriminative tasks.",
     "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
     "Run `scripts/run_product_smoke.py` and include its JSON in the publication bundle so product claims are tied to a working canonical entrypoint.",
+    "Run `scripts/run_runtime_delegation_audit.py` and include its JSON in the publication bundle so mission, wrap, and swarm claims are backed by canonical runtime contracts.",
     "Run a one-seed calibration slice, then regenerate the publication bundle and this work plan.",
     "Only request approval for the full paid matrix after cost telemetry and raw artifact paths are complete on the calibration slice."
   ],

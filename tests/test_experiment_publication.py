@@ -56,6 +56,34 @@ def _ready_product_smoke() -> dict[str, object]:
     }
 
 
+def _ready_runtime_delegation() -> dict[str, object]:
+    view = {
+        "ready": True,
+        "delegates_to": "audit",
+        "runtime_contract_present": True,
+        "runtime_contract_digest": "abc123",
+        "digest_validated": True,
+        "run_id": "run-audit",
+        "node_count": 1,
+        "node_kinds": ["agent-task"],
+        "side_effect_nodes_complete": True,
+        "blockers": [],
+    }
+    return {
+        "ready": True,
+        "canonical_contract": "RunSpec",
+        "model_calls": 0,
+        "network_used": False,
+        "agent_execution_attempted": False,
+        "views": {
+            "mission": dict(view),
+            "swarm": dict(view, node_kinds=["swarm-unit", "swarm-fan-in"]),
+            "wrap": dict(view),
+        },
+        "blockers": [],
+    }
+
+
 def test_current_manifest_is_valid_but_not_publication_ready() -> None:
     validation = validate_benchmark_manifest(_load(V4_MANIFEST))
 
@@ -96,6 +124,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
         proposed_claim="ONMC is SOTA, better, and cheaper than plain coding agents.",
         product_surface=_ready_product_surface(),
         product_smoke=_ready_product_smoke(),
+        runtime_delegation=_ready_runtime_delegation(),
     )
     markdown = render_publication_markdown(bundle)
 
@@ -107,6 +136,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert bundle["leakage_audit"]["complete"] is False
     assert bundle["product_surface"]["ready"] is True
     assert bundle["product_smoke"]["ready"] is True
+    assert bundle["runtime_delegation"]["ready"] is True
     assert "NOT PUBLICATION-READY" in markdown
     assert "Paired Delta" in markdown
     assert "95% CI" in markdown
@@ -115,6 +145,7 @@ def test_publication_report_exposes_paired_ci_cost_and_leakage_gaps() -> None:
     assert "Leakage Audit" in markdown
     assert "Product Surface" in markdown
     assert "Product Smoke" in markdown
+    assert "Runtime Delegation" in markdown
     assert "SOTA" not in bundle["claim_language_gate"]["suggested_safe_claim"]
 
 
@@ -150,6 +181,25 @@ def test_publication_report_fails_closed_without_product_smoke() -> None:
     ]
 
 
+def test_publication_report_fails_closed_without_runtime_delegation() -> None:
+    report = _load(SATURATED_REPORT)
+    manifest = _load(V4_MANIFEST)
+
+    bundle = build_publication_bundle(
+        report,
+        manifest,
+        product_surface=_ready_product_surface(),
+        product_smoke=_ready_product_smoke(),
+    )
+
+    assert bundle["publication_ready"] is False
+    assert bundle["runtime_delegation"]["ready"] is False
+    assert bundle["runtime_delegation"]["evaluated"] is False
+    assert bundle["runtime_delegation"]["blockers"] == [
+        "runtime delegation audit was not provided"
+    ]
+
+
 def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
     report = _load(SATURATED_REPORT)
     manifest = _load(V4_MANIFEST)
@@ -158,6 +208,7 @@ def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
         manifest,
         product_surface=_ready_product_surface(),
         product_smoke=_ready_product_smoke(),
+        runtime_delegation=_ready_runtime_delegation(),
     )
 
     plan = build_publication_work_plan(bundle)
@@ -182,6 +233,7 @@ def test_publication_work_plan_turns_blockers_into_next_matrix() -> None:
     assert plan["deficits"]["missing_cost_cells"] == 11
     assert plan["deficits"]["product_surface_ready"] is True
     assert plan["deficits"]["product_smoke_ready"] is True
+    assert plan["deficits"]["runtime_delegation_ready"] is True
     assert plan["spend_gate"]["paid_full_matrix_allowed"] is False
 
 

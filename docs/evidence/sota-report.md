@@ -68,6 +68,14 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - model calls: `0`
 - agent execution attempted: `false`
 
+## Runtime Delegation
+
+- status: `READY`
+- canonical contract: `RunSpec`
+- views ready: `3/3`
+- model calls: `0`
+- agent execution attempted: `false`
+
 ## Publication Blockers
 
 - at least 50 discriminative tasks are required; found 28

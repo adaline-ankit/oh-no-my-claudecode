@@ -200,6 +200,7 @@ def build_publication_bundle(
     artifact_root: Path | None = None,
     product_surface: Mapping[str, object] | None = None,
     product_smoke: Mapping[str, object] | None = None,
+    runtime_delegation: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a deterministic report bundle without weakening any evidence gate."""
 
@@ -239,6 +240,7 @@ def build_publication_bundle(
     )
     product_surface_gate = _product_surface_gate(product_surface)
     product_smoke_gate = _product_smoke_gate(product_smoke)
+    runtime_delegation_gate = _runtime_delegation_gate(runtime_delegation)
     publication_ready = (
         validation.publication_ready
         and claim_readiness.quality_claim_ready
@@ -247,6 +249,7 @@ def build_publication_bundle(
         and artifacts["complete"] is True
         and product_surface_gate["ready"] is True
         and product_smoke_gate["ready"] is True
+        and runtime_delegation_gate["ready"] is True
     )
 
     return {
@@ -272,6 +275,7 @@ def build_publication_bundle(
         "raw_artifact_index": artifacts,
         "product_surface": product_surface_gate,
         "product_smoke": product_smoke_gate,
+        "runtime_delegation": runtime_delegation_gate,
     }
 
 
@@ -293,6 +297,7 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     claim = _optional_mapping(bundle.get("claim_readiness"))
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
+    runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
 
     task_count = _int_or_zero(validation.get("task_count"))
     min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
@@ -333,6 +338,10 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         ),
         "product_smoke_ready": product_smoke.get("ready") is True,
         "product_smoke_blockers": list(_string_list(product_smoke.get("blockers"))),
+        "runtime_delegation_ready": runtime_delegation.get("ready") is True,
+        "runtime_delegation_blockers": list(
+            _string_list(runtime_delegation.get("blockers"))
+        ),
         "coverage_fields_to_fill": [
             str(field.get("name"))
             for value in _optional_list(report_coverage.get("fields"))
@@ -357,6 +366,9 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "model spend.",
         "Run `scripts/run_product_smoke.py` and include its JSON in the publication "
         "bundle so product claims are tied to a working canonical entrypoint.",
+        "Run `scripts/run_runtime_delegation_audit.py` and include its JSON in the "
+        "publication bundle so mission, wrap, and swarm claims are backed by "
+        "canonical runtime contracts.",
         "Run a one-seed calibration slice, then regenerate the publication bundle "
         "and this work plan.",
         "Only request approval for the full paid matrix after cost telemetry and "
@@ -487,6 +499,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     report_coverage = _optional_mapping(bundle.get("report_coverage"))
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
+    runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
 
     lines = [
         "# ONMC External Benchmark Evidence Report",
@@ -589,6 +602,17 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
             f"- agent execution attempted: "
             f"`{str(product_smoke.get('agent_execution_attempted', True)).lower()}`",
             "",
+            "## Runtime Delegation",
+            "",
+            f"- status: "
+            f"`{'READY' if runtime_delegation.get('ready') is True else 'INCOMPLETE'}`",
+            f"- canonical contract: "
+            f"`{runtime_delegation.get('canonical_contract', 'unknown')}`",
+            f"- views ready: `{_runtime_delegation_ready_count(runtime_delegation)}/3`",
+            f"- model calls: `{runtime_delegation.get('model_calls', 'unknown')}`",
+            f"- agent execution attempted: "
+            f"`{str(runtime_delegation.get('agent_execution_attempted', True)).lower()}`",
+            "",
             "## Publication Blockers",
             "",
         ]
@@ -599,6 +623,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     blockers.extend(str(item) for item in _optional_list(readiness.get("reasons")))
     blockers.extend(str(item) for item in _optional_list(product_surface.get("blockers")))
     blockers.extend(str(item) for item in _optional_list(product_smoke.get("blockers")))
+    blockers.extend(str(item) for item in _optional_list(runtime_delegation.get("blockers")))
     fields = _optional_list(report_coverage.get("fields"))
     blockers.extend(
         f"report coverage missing {item.get('name')}: {item.get('reason')}"
@@ -775,6 +800,109 @@ def _product_smoke_gate(smoke: Mapping[str, object] | None) -> dict[str, object]
         "receipt_written": receipt_written,
         "blockers": blockers,
     }
+
+
+def _runtime_delegation_gate(audit: Mapping[str, object] | None) -> dict[str, object]:
+    """Fail-closed gate for canonical runtime delegation across product views."""
+
+    required_views = ("mission", "swarm", "wrap")
+    if audit is None:
+        return {
+            "schema_version": "onmc-runtime-delegation-gate/v1",
+            "ready": False,
+            "evaluated": False,
+            "canonical_contract": "unknown",
+            "model_calls": "unknown",
+            "network_used": "unknown",
+            "agent_execution_attempted": "unknown",
+            "views": {name: _missing_runtime_view(name) for name in required_views},
+            "blockers": ["runtime delegation audit was not provided"],
+        }
+
+    blockers: list[str] = []
+    if audit.get("ready") is not True:
+        blockers.append("runtime delegation audit is not ready")
+    if audit.get("canonical_contract") != "RunSpec":
+        blockers.append("runtime delegation must use canonical `RunSpec` contracts")
+    if _int_or_zero(audit.get("model_calls")) != 0:
+        blockers.append("runtime delegation audit must not make model calls")
+    if audit.get("network_used") is not False:
+        blockers.append("runtime delegation audit must not use the network")
+    if audit.get("agent_execution_attempted") is not False:
+        blockers.append("runtime delegation audit must not attempt agent execution")
+
+    views = _optional_mapping(audit.get("views"))
+    gated_views: dict[str, object] = {}
+    for name in required_views:
+        view = _runtime_view_gate(name, _optional_mapping(views.get(name)))
+        gated_views[name] = view
+        blockers.extend(str(item) for item in _optional_list(view.get("blockers")))
+
+    blockers.extend(str(item) for item in _optional_list(audit.get("blockers")))
+    blockers = list(dict.fromkeys(blockers))
+    return {
+        "schema_version": "onmc-runtime-delegation-gate/v1",
+        "ready": not blockers,
+        "evaluated": True,
+        "canonical_contract": audit.get("canonical_contract", "unknown"),
+        "model_calls": _int_or_zero(audit.get("model_calls")),
+        "network_used": audit.get("network_used"),
+        "agent_execution_attempted": audit.get("agent_execution_attempted"),
+        "views": gated_views,
+        "blockers": blockers,
+    }
+
+
+def _runtime_view_gate(name: str, view: Mapping[str, object]) -> dict[str, object]:
+    blockers: list[str] = []
+    if view.get("ready") is not True:
+        blockers.append(f"{name} runtime view is not ready")
+    if view.get("runtime_contract_present") is not True:
+        blockers.append(f"{name} did not expose a runtime contract")
+    if view.get("digest_validated") is not True:
+        blockers.append(f"{name} runtime contract digest was not validated")
+    if view.get("side_effect_nodes_complete") is not True:
+        blockers.append(f"{name} side-effect nodes are missing runtime controls")
+    if _int_or_zero(view.get("node_count")) <= 0:
+        blockers.append(f"{name} runtime contract has no nodes")
+    blockers.extend(str(item) for item in _optional_list(view.get("blockers")))
+    blockers = list(dict.fromkeys(blockers))
+    return {
+        "ready": not blockers,
+        "delegates_to": view.get("delegates_to", "unknown"),
+        "runtime_contract_present": view.get("runtime_contract_present") is True,
+        "runtime_contract_digest": view.get("runtime_contract_digest", ""),
+        "digest_validated": view.get("digest_validated") is True,
+        "run_id": view.get("run_id", ""),
+        "node_count": _int_or_zero(view.get("node_count")),
+        "node_kinds": list(_string_list(view.get("node_kinds"))),
+        "side_effect_nodes_complete": view.get("side_effect_nodes_complete") is True,
+        "blockers": blockers,
+    }
+
+
+def _missing_runtime_view(name: str) -> dict[str, object]:
+    return {
+        "ready": False,
+        "delegates_to": "unknown",
+        "runtime_contract_present": False,
+        "runtime_contract_digest": "",
+        "digest_validated": False,
+        "run_id": "",
+        "node_count": 0,
+        "node_kinds": [],
+        "side_effect_nodes_complete": False,
+        "blockers": [f"{name} runtime view was not provided"],
+    }
+
+
+def _runtime_delegation_ready_count(audit: Mapping[str, object]) -> int:
+    views = _optional_mapping(audit.get("views"))
+    return sum(
+        1
+        for name in ("mission", "swarm", "wrap")
+        if _optional_mapping(views.get(name)).get("ready") is True
+    )
 
 
 def _leakage_audit(
