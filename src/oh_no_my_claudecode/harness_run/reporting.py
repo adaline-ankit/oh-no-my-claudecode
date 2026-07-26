@@ -83,6 +83,7 @@ def report_coverage_manifest(
         )
     )
     has_cost = bool(loop_result and loop_result.total_cost_usd is not None)
+    has_latency = bool(loop_result and loop_result.wall_seconds is not None)
     fields = (
         ReportCoverageField(
             "raw_trajectories",
@@ -128,9 +129,11 @@ def report_coverage_manifest(
         ),
         ReportCoverageField(
             "latency",
-            False,
-            "not available",
-            "harness stages currently record outcomes, not measured wall-clock spans",
+            has_latency,
+            "receipt.wall_seconds",
+            "loop wall-clock duration was measured"
+            if has_latency
+            else "loop wall-clock duration was not measured",
         ),
         ReportCoverageField(
             "token_use",

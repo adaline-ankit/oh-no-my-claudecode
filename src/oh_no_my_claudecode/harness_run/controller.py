@@ -1120,6 +1120,7 @@ class HarnessController:
             payload["iterations"] = len(loop_result.iterations)
             payload["tokens_used"] = loop_result.total_tokens
             payload["cost_usd"] = loop_result.total_cost_usd
+            payload["wall_seconds"] = loop_result.wall_seconds
             payload["trajectory"] = list(trajectory_payload(loop_result))
         payload["report_coverage"] = receipt.report_coverage
         try:

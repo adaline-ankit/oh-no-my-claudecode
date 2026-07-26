@@ -62,6 +62,7 @@ def _loop(*, converged: bool = True) -> LoopResult:
         ],
         converged=converged,
         stop_reason="converged" if converged else "max-iterations",
+        wall_seconds=1.25,
     )
 
 
@@ -215,6 +216,7 @@ def test_executed_run_persists_a_receipt_explain_can_read(tmp_path: Path) -> Non
     # ...carries the full harness receipt rather than a lossy summary...
     assert payload["harness"]["run_id"] == result.plan.run_id
     assert payload["trajectory"][0]["prediction"] == "the change satisfies the task"
+    assert isinstance(payload["wall_seconds"], float)
     assert payload["report_coverage"] == payload["harness"]["report_coverage"]
     coverage = payload["report_coverage"]
     assert coverage["claim_ready"] is False
@@ -224,6 +226,10 @@ def test_executed_run_persists_a_receipt_explain_can_read(tmp_path: Path) -> Non
     )
     assert any(
         item["name"] == "paired_deltas" and item["covered"] is False
+        for item in coverage["fields"]
+    )
+    assert any(
+        item["name"] == "latency" and item["covered"] is True
         for item in coverage["fields"]
     )
     # ...and is directly consumable by the explain analyser.

@@ -785,6 +785,7 @@ def run_loop(
             recorded_memory_ids=recorded_memory_ids,
             total_tokens=total_tokens,
             total_cost_usd=total_cost_usd if total_cost_usd > 0 else None,
+            wall_seconds=max(0.0, _clock() - wall_start),
         )
 
     # Build the iteration range.  When resuming, the range starts AFTER the
