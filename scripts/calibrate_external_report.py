@@ -34,6 +34,9 @@ from oh_no_my_claudecode.experiment.power import (  # noqa: E402
 from oh_no_my_claudecode.experiment.reporting import (  # noqa: E402
     external_report_coverage_manifest,
 )
+from oh_no_my_claudecode.experiment.verifier_calibration import (  # noqa: E402
+    calibrate_default_verifier,
+)
 
 _DEFAULT_EXTERNAL_CLAIM = (
     "ONMC improves coding-agent quality and lowers cost versus plain Claude Code, "
@@ -66,6 +69,7 @@ def calibrate_report_file(
         "experiment_id": raw.get("experiment_id"),
         "task_set_revision": raw.get("task_set_revision"),
         "report_coverage": external_report_coverage_manifest(raw).to_dict(),
+        "verifier_calibration": calibrate_default_verifier().to_dict(),
     }
     if manifest_path is not None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -107,6 +111,7 @@ def calibrate_report_file(
             coverage_gate=_mapping(payload["coverage_gate"]),
             calibration_gate=_mapping(payload["manifest_gate"]),
             report_coverage_gate=_mapping(payload["report_coverage"]),
+            verifier_calibration_gate=_mapping(payload["verifier_calibration"]),
         ).to_dict()
     else:
         payload["benchmark_plan"] = plan_external_report(
@@ -127,6 +132,7 @@ def calibrate_report_file(
             benchmark_plan=_mapping(payload["benchmark_plan"]),
             calibration_gate=_mapping(payload["calibration"]),
             report_coverage_gate=_mapping(payload["report_coverage"]),
+            verifier_calibration_gate=_mapping(payload["verifier_calibration"]),
         ).to_dict()
     payload["claim_language_gate"] = gate_claim_language(
         _DEFAULT_EXTERNAL_CLAIM,
@@ -152,6 +158,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
     language_gate = _mapping(payload["claim_language_gate"])
     language_reasons = language_gate.get("reasons", [])
     report_coverage = _mapping(payload["report_coverage"])
+    verifier_calibration = _mapping(payload["verifier_calibration"])
     lines = [
         "# ONMC External Report Calibration",
         "",
@@ -165,6 +172,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
         f"- blocked_gates: `{claim['blocked_gates']}`",
         f"- claim_language_decision: `{language_gate['decision']}`",
         f"- report_coverage_claim_ready: `{str(report_coverage['claim_ready']).lower()}`",
+        f"- verifier_calibration_claim_ready: `{str(verifier_calibration['claim_ready']).lower()}`",
         f"- decision: `{_decision(calibration)}`",
         f"- quality_claim_ready: `{str(calibration['quality_claim_ready']).lower()}`",
         f"- cost_claim_ready: `{str(calibration['cost_claim_ready']).lower()}`",
@@ -203,6 +211,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
             if metadata_audit is not None
             else []
         ),
+        *_verifier_calibration_markdown(verifier_calibration),
         "",
         "## External Claim Readiness",
         "",
@@ -411,6 +420,32 @@ def _report_coverage_markdown(coverage: dict[str, Any]) -> list[str]:
             f"({item['reason']})"
             for item in fields
         ],
+    ]
+
+
+def _verifier_calibration_markdown(calibration: dict[str, Any]) -> list[str]:
+    reasons = calibration.get("reasons", [])
+    return [
+        "",
+        "## Verifier Calibration",
+        "",
+        f"- claim_ready: `{str(calibration['claim_ready']).lower()}`",
+        f"- sensitivity: `{calibration['sensitivity']}`",
+        f"- specificity: `{calibration['specificity']}`",
+        f"- false_green_cases: `{calibration['false_green_cases']}`",
+        f"- legitimate_cases: `{calibration['legitimate_cases']}`",
+        f"- caught_false_green: `{calibration['caught_false_green']}`",
+        f"- missed_false_green: `{calibration['missed_false_green']}`",
+        f"- cleared_legitimate: `{calibration['cleared_legitimate']}`",
+        f"- false_positive_legitimate: `{calibration['false_positive_legitimate']}`",
+        "",
+        "### Verifier Calibration Reasons",
+        "",
+        *(
+            [f"- {reason}" for reason in reasons]
+            if isinstance(reasons, list) and reasons
+            else ["- none"]
+        ),
     ]
 
 

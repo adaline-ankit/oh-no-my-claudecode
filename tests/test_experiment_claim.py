@@ -27,6 +27,7 @@ def test_claim_readiness_combines_failed_benchmark_gates() -> None:
             "cost_claim_ready": False,
             "reasons": ["24 task(s) saturated across conditions"],
         },
+        verifier_calibration_gate={"claim_ready": False, "reasons": ["specificity too low"]},
     )
 
     assert report.decision is ClaimReadinessDecision.NOT_READY
@@ -36,10 +37,12 @@ def test_claim_readiness_combines_failed_benchmark_gates() -> None:
         "benchmark_plan",
         "portfolio_coverage",
         "calibration",
+        "verifier_calibration",
     )
     assert "only 28 task(s); requires 50" in report.reasons
     assert "task kind 'refactor' has 1 task(s); requires 3" in report.reasons
     assert "24 task(s) saturated across conditions" in report.reasons
+    assert "specificity too low" in report.reasons
     assert any("Add at least 22" in action for action in report.next_actions)
     assert any("Rebalance the portfolio" in action for action in report.next_actions)
 
@@ -53,6 +56,7 @@ def test_claim_readiness_passes_only_when_all_gates_pass() -> None:
             "cost_claim_ready": True,
             "reasons": [],
         },
+        verifier_calibration_gate={"claim_ready": True, "reasons": []},
     )
 
     assert report.decision is ClaimReadinessDecision.READY
@@ -71,6 +75,7 @@ def test_report_without_manifest_cannot_support_external_claim() -> None:
             "cost_claim_ready": True,
             "reasons": [],
         },
+        verifier_calibration_gate={"claim_ready": True, "reasons": []},
     )
 
     assert report.decision is ClaimReadinessDecision.NOT_READY
@@ -88,6 +93,7 @@ def test_claim_readiness_blocks_supplied_incomplete_report_coverage() -> None:
             "cost_claim_ready": True,
             "reasons": [],
         },
+        verifier_calibration_gate={"claim_ready": True, "reasons": []},
         report_coverage_gate={
             "claim_ready": False,
             "fields": [
@@ -114,6 +120,46 @@ def test_claim_readiness_blocks_supplied_incomplete_report_coverage() -> None:
     assert any("R13 fields" in action for action in report.next_actions)
 
 
+def test_claim_readiness_blocks_missing_verifier_calibration_gate() -> None:
+    report = build_claim_readiness(
+        benchmark_plan={"claim_ready": True, "reasons": []},
+        coverage_gate={"claim_ready": True, "reasons": []},
+        calibration_gate={
+            "quality_claim_ready": True,
+            "cost_claim_ready": True,
+            "reasons": [],
+        },
+    )
+
+    assert report.decision is ClaimReadinessDecision.NOT_READY
+    assert report.quality_claim_ready is False
+    assert report.verifier_calibration_ready is False
+    assert report.blocked_gates == ("verifier_calibration",)
+    assert "verifier calibration gate missing" in report.reasons
+
+
+def test_claim_readiness_blocks_failed_verifier_calibration_gate() -> None:
+    report = build_claim_readiness(
+        benchmark_plan={"claim_ready": True, "reasons": []},
+        coverage_gate={"claim_ready": True, "reasons": []},
+        calibration_gate={
+            "quality_claim_ready": True,
+            "cost_claim_ready": True,
+            "reasons": [],
+        },
+        verifier_calibration_gate={
+            "claim_ready": False,
+            "reasons": ["verifier specificity 0.667 below target 0.980"],
+        },
+    )
+
+    assert report.decision is ClaimReadinessDecision.NOT_READY
+    assert report.quality_claim_ready is False
+    assert report.verifier_calibration_ready is False
+    assert report.blocked_gates == ("verifier_calibration",)
+    assert any("specificity" in reason for reason in report.reasons)
+
+
 def test_claim_language_refuses_better_sota_when_gates_are_missing() -> None:
     readiness = build_claim_readiness(
         benchmark_plan={"claim_ready": False, "reasons": ["only 18 cells"]},
@@ -123,6 +169,7 @@ def test_claim_language_refuses_better_sota_when_gates_are_missing() -> None:
             "cost_claim_ready": False,
             "reasons": ["saturated benchmark"],
         },
+        verifier_calibration_gate={"claim_ready": False, "reasons": ["specificity too low"]},
     )
 
     gate = gate_claim_language(
@@ -149,6 +196,7 @@ def test_claim_language_allows_strong_claim_only_after_readiness_and_coverage() 
             "cost_claim_ready": True,
             "reasons": [],
         },
+        verifier_calibration_gate={"claim_ready": True, "reasons": []},
     )
 
     gate = gate_claim_language(
@@ -171,6 +219,7 @@ def test_claim_language_allows_plain_evidence_description_without_ready_benchmar
             "cost_claim_ready": False,
             "reasons": [],
         },
+        verifier_calibration_gate={"claim_ready": False, "reasons": ["specificity too low"]},
     )
 
     gate = gate_claim_language("ONMC records a tamper-evident local receipt.", readiness)

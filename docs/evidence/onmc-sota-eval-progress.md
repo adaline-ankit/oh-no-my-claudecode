@@ -128,6 +128,9 @@ This is evidence for a stronger harness foundation:
 - Docker-sandboxed agent execution now performs a no-secret setup preflight before sending the task
   prompt, failing fast when the selected image does not contain the requested `claude`, `codex`, or
   `opencode` CLI.
+- External claim readiness now includes an independent verifier-calibration gate. The offline
+  false-green ablation is converted into sensitivity/specificity/corpus-size evidence, and quality
+  claims are blocked when verifier calibration is missing or below threshold.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -315,6 +318,63 @@ Success: no issues found in 21 source files
 Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
 `crewai`, `fastembed`, `langchain_community`, and `langchain_text_splitters`; these were not
 introduced by this sandbox-agent slice.
+
+## Verifier Calibration Claim Gate Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_experiment_claim.py tests/test_verifier_calibration.py tests/test_experiment_reporting.py tests/test_experiment_calibration.py
+```
+
+Result:
+
+```text
+26 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/claim.py src/oh_no_my_claudecode/experiment/verifier_calibration.py scripts/calibrate_external_report.py tests/test_experiment_claim.py tests/test_verifier_calibration.py tests/test_experiment_calibration.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment scripts/calibrate_external_report.py
+```
+
+Result:
+
+```text
+Success: no issues found in 13 source files
+```
+
+Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+`crewai`, `fastembed`, `langchain_community`, and `langchain_text_splitters`; these were not
+introduced by this verifier-calibration slice.
+
+Live saved-report calibration against `external_v3_stage1_2026-07-25.json` and
+`portfolio_external_v4.json` now includes this additional blocker:
+
+```text
+verifier_calibration_claim_ready: false
+sensitivity: 1.0
+specificity: 0.6666666666666666
+false_green_cases: 13
+legitimate_cases: 3
+caught_false_green: 13
+missed_false_green: 0
+cleared_legitimate: 2
+false_positive_legitimate: 1
+```
+
+This is not yet a U6 pass. It proves the calibration gate exists and blocks overclaiming. To pass
+U6, ONMC still needs a larger external false-green and legitimate-control corpus and a verifier
+configuration that reaches the target specificity without losing sensitivity.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:

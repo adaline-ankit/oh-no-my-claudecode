@@ -783,11 +783,16 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
         "portfolio_coverage",
         "calibration",
         "report_coverage",
+        "verifier_calibration",
     ]
     assert payload["claim_readiness"]["report_coverage_ready"] is False
+    assert payload["claim_readiness"]["verifier_calibration_ready"] is False
     assert payload["calibration"]["decision"] == "needs-discrimination"
     assert payload["calibration"]["saturated_tasks"] == 24
     assert payload["report_coverage"]["claim_ready"] is False
+    assert payload["verifier_calibration"]["claim_ready"] is False
+    assert payload["verifier_calibration"]["caught_false_green"] == 13
+    assert payload["verifier_calibration"]["false_positive_legitimate"] == 1
     assert any(
         item["name"] == "raw_trajectories" and item["covered"] is False
         for item in payload["report_coverage"]["fields"]
@@ -824,7 +829,9 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     assert "external_claim_decision: `not-ready`" in markdown
     assert "claim_language_decision: `refuse`" in markdown
     assert "report_coverage_claim_ready: `false`" in markdown
+    assert "verifier_calibration_claim_ready: `false`" in markdown
     assert "## Report Coverage" in markdown
+    assert "## Verifier Calibration" in markdown
     assert "raw_trajectories: missing" in markdown
     assert "## Claim Language Gate" in markdown
     assert "suggested_safe_claim: ONMC records harness evidence" in markdown
@@ -874,8 +881,10 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
         "portfolio_coverage",
         "calibration",
         "report_coverage",
+        "verifier_calibration",
     ]
     assert payload["claim_readiness"]["report_coverage_ready"] is False
+    assert payload["claim_readiness"]["verifier_calibration_ready"] is False
     assert any(
         "Add at least 22 benchmark task" in action
         for action in payload["claim_readiness"]["next_actions"]

@@ -41,6 +41,7 @@ class ClaimReadinessReport:
     benchmark_plan_ready: bool
     portfolio_coverage_ready: bool
     report_coverage_ready: bool
+    verifier_calibration_ready: bool
     calibration_ready: bool
     cost_calibration_ready: bool
     blocked_gates: tuple[str, ...]
@@ -55,6 +56,7 @@ class ClaimReadinessReport:
             "benchmark_plan_ready": self.benchmark_plan_ready,
             "portfolio_coverage_ready": self.portfolio_coverage_ready,
             "report_coverage_ready": self.report_coverage_ready,
+            "verifier_calibration_ready": self.verifier_calibration_ready,
             "calibration_ready": self.calibration_ready,
             "cost_calibration_ready": self.cost_calibration_ready,
             "blocked_gates": list(self.blocked_gates),
@@ -89,6 +91,7 @@ def build_claim_readiness(
     calibration_gate: Mapping[str, object],
     coverage_gate: Mapping[str, object] | None = None,
     report_coverage_gate: Mapping[str, object] | None = None,
+    verifier_calibration_gate: Mapping[str, object] | None = None,
 ) -> ClaimReadinessReport:
     """Combine separate benchmark gates into one externally-citable verdict."""
     benchmark_ready = _bool(benchmark_plan.get("claim_ready"), "benchmark_plan.claim_ready")
@@ -113,8 +116,20 @@ def build_claim_readiness(
         calibration_gate.get("cost_claim_ready"),
         "calibration_gate.cost_claim_ready",
     )
+    verifier_ready = (
+        False
+        if verifier_calibration_gate is None
+        else _bool(
+            verifier_calibration_gate.get("claim_ready"),
+            "verifier_calibration_gate.claim_ready",
+        )
+    )
     quality_claim_ready = (
-        benchmark_ready and coverage_ready and calibration_ready and report_coverage_ready
+        benchmark_ready
+        and coverage_ready
+        and calibration_ready
+        and report_coverage_ready
+        and verifier_ready
     )
     cost_claim_ready = quality_claim_ready and cost_ready
 
@@ -150,6 +165,20 @@ def build_claim_readiness(
             "Capture complete report evidence for missing R13 fields before publishing "
             "external claims."
         )
+    if verifier_calibration_gate is None:
+        blocked.append("verifier_calibration")
+        reasons.append("verifier calibration gate missing")
+        next_actions.append(
+            "Run the independent verifier calibration corpus and attach sensitivity, "
+            "specificity, and corpus-size evidence."
+        )
+    elif not verifier_ready:
+        blocked.append("verifier_calibration")
+        _extend_reasons(reasons, verifier_calibration_gate.get("reasons"))
+        next_actions.append(
+            "Expand or fix the verifier corpus until sensitivity, specificity, and "
+            "control coverage reach the publication gate."
+        )
     if calibration_ready and not cost_ready:
         blocked.append("cost_calibration")
         _extend_reasons(reasons, calibration_gate.get("reasons"))
@@ -167,6 +196,7 @@ def build_claim_readiness(
         benchmark_plan_ready=benchmark_ready,
         portfolio_coverage_ready=coverage_ready,
         report_coverage_ready=report_coverage_ready,
+        verifier_calibration_ready=verifier_ready,
         calibration_ready=calibration_ready,
         cost_calibration_ready=cost_ready,
         blocked_gates=tuple(dict.fromkeys(blocked)),
