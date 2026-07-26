@@ -7,6 +7,13 @@ All notable changes to this project are documented here.
 
 
 
+
+## [0.112.0] — 2026-07-26
+
+### Added
+
+- gate publication on product smoke
+
 ## [0.111.0] — 2026-07-26
 
 ### Added
