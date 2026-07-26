@@ -781,8 +781,59 @@ class TestOtelSpans:
 
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
         assert spans[0]["status"]["code"] == 2
+        assert spans[0]["status"]["message"] == "tests failed"
         assert attr_map["onmc.runtime.node.status"]["stringValue"] == "failed"
         assert attr_map["onmc.runtime.node.error"]["stringValue"] == "tests failed"
+
+    @pytest.mark.parametrize("status", ["cancelled", "skipped"])
+    def test_otel_span_marks_terminal_runtime_node_cancellation_as_error(
+        self,
+        status: str,
+    ) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={
+                    "node_id": "execute",
+                    "status": status,
+                    "error": "operator cancelled",
+                },
+            )
+        ]
+        spans = to_otel_spans(events, session_id=f"tr_runtime_{status}")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert spans[0]["status"]["code"] == 2
+        assert spans[0]["status"]["message"] == "operator cancelled"
+        assert attr_map["onmc.runtime.node.status"]["stringValue"] == status
+
+    def test_otel_span_keeps_runtime_approval_interrupt_non_error(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={
+                    "node_id": "deploy",
+                    "status": "interrupted",
+                    "error": "approval required before deploy",
+                },
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_runtime_interrupted")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert spans[0]["status"]["code"] == 1
+        assert "message" not in spans[0]["status"]
+        assert attr_map["onmc.runtime.node.status"]["stringValue"] == "interrupted"
+        assert (
+            attr_map["onmc.runtime.node.error"]["stringValue"]
+            == "approval required before deploy"
+        )
 
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans

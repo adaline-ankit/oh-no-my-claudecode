@@ -58,6 +58,7 @@ _OPERATION_MAP: dict[str, str] = {
 
 _STATUS_ERROR = {"code": 2}  # OTEL StatusCode.ERROR
 _STATUS_OK = {"code": 1}  # OTEL StatusCode.OK
+_ERROR_RUNTIME_STATUSES = frozenset({"cancelled", "failed", "skipped"})
 
 
 def _ns(ts_seconds: float) -> int:
@@ -74,7 +75,7 @@ def _span_from_event(
     """Build an OTLP JSON span dict from a single ``TraceEvent``."""
     kind = event.kind
     operation = _OPERATION_MAP.get(kind, "chat")
-    is_error = _event_is_error(event)
+    span_status = _span_status(event)
 
     attributes: list[dict[str, Any]] = [
         {"key": "gen_ai.system", "value": {"stringValue": _GEN_AI_SYSTEM}},
@@ -108,7 +109,7 @@ def _span_from_event(
         "kind": 1,  # INTERNAL
         "startTimeUnixNano": start_ns,
         "endTimeUnixNano": end_ns,
-        "status": _STATUS_ERROR if is_error else _STATUS_OK,
+        "status": span_status,
         "attributes": attributes,
     }
 
@@ -140,8 +141,18 @@ def _event_is_error(event: TraceEvent) -> bool:
     if event.kind in (TraceEventKind.TOOL_FAILURE, TraceEventKind.DANGER_BLOCKED):
         return True
     if event.kind == TraceEventKind.RUNTIME_NODE:
-        return str(event.payload.get("status", "")).lower() == "failed"
+        return str(event.payload.get("status", "")).lower() in _ERROR_RUNTIME_STATUSES
     return False
+
+
+def _span_status(event: TraceEvent) -> dict[str, Any]:
+    if not _event_is_error(event):
+        return _STATUS_OK
+    status: dict[str, Any] = dict(_STATUS_ERROR)
+    message = event.payload.get("error") or event.payload.get("title")
+    if message:
+        status["message"] = str(message)
+    return status
 
 
 def _runtime_node_attributes(event: TraceEvent) -> list[dict[str, Any]]:
