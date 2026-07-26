@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 from http.client import HTTPConnection
+from importlib.resources import files
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -56,7 +57,25 @@ def test_dashboard_payload_contains_real_repo_state(
     assert payload["tasks"][0]["attempt_count"] == 1
     assert any(item["path"] == "src/cache.py" for item in payload["codegraph"]["files"])
     assert payload["health"]["readiness"] in {"ready", "needs_attention"}
+    assert payload["runtime"]["summary"] == {
+        "runs": 0,
+        "active": 0,
+        "verified": 0,
+        "corrupt": 0,
+    }
     assert "# ONMC Agent Readiness Report" in payload["report"]
+
+
+def test_mission_control_assets_use_canonical_runtime_read_model() -> None:
+    static = files("oh_no_my_claudecode.ui").joinpath("static")
+    html = static.joinpath("index.html").read_text(encoding="utf-8")
+    js = static.joinpath("app.js").read_text(encoding="utf-8")
+
+    assert "Canonical onmc run state" in html
+    assert "Preview Run" in html
+    assert "state.data.runtime" in js
+    assert "proof_state" in js
+    assert 'action: "run"' in js
 
 
 def test_dashboard_payload_includes_loops_section_exception_safe(

@@ -182,9 +182,9 @@
               <div class="panel-heading"><h3 id="agents-orch-title">Orchestrate</h3><span>action buttons are best-effort</span></div>
               <div id="agents-actions" class="agents-actions">
                 <div class="agents-action-row">
-                  <label class="sr-only" for="agents-mission-input">Mission goal</label>
-                  <input id="agents-mission-input" class="agents-text-input" type="text" placeholder="Mission goal…" autocomplete="off">
-                  <button id="agents-mission-btn" class="button" type="button">Start Mission</button>
+                  <label class="sr-only" for="agents-mission-input">Run task</label>
+                  <input id="agents-mission-input" class="agents-text-input" type="text" placeholder="Task for onmc run…" autocomplete="off">
+                  <button id="agents-mission-btn" class="button" type="button">Preview Run</button>
                 </div>
                 <div class="agents-action-row">
                   <label class="sr-only" for="agents-land-input">PR URL to land</label>
@@ -308,7 +308,7 @@
 
           <section id="view-mission" class="view" data-view-panel="mission" aria-labelledby="mission-title" hidden>
             <div class="section-heading">
-              <div><span class="eyebrow">Autonomous loop</span><h2 id="mission-title">Mission Control</h2></div>
+              <div><span class="eyebrow">Canonical onmc run state</span><h2 id="mission-title">Mission Control</h2></div>
               <span id="mission-run-count" class="mission-run-count"></span>
             </div>
 

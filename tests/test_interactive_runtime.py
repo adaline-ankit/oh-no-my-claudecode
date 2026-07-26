@@ -7,6 +7,8 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from oh_no_my_claudecode.harness_run.controller import HarnessController
+from oh_no_my_claudecode.harness_run.models import RunRequest
 from oh_no_my_claudecode.hooks.installer import (
     DECISION_INTERCEPT_COMMAND,
     RUNTIME_STOP_COMMAND,
@@ -47,6 +49,10 @@ def test_actionable_prompt_arms_strict_mission(tmp_path: Path) -> None:
     assert mission.runtime_contract_digest == spec.digest
     assert spec.task == "Fix the failing authentication test"
     assert spec.metadata["source"] == "harness_run.ExecutionPlan"
+    direct = HarnessController(tmp_path).run(
+        RunRequest(task=mission.goal, plan_only=True, verifier=mission.verifier)
+    )
+    assert spec.to_dict() == direct.plan.to_run_spec().to_dict()
     assert load_mission(tmp_path, "session-1") == mission
 
 

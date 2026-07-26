@@ -33,6 +33,7 @@ from oh_no_my_claudecode.harness_run.controller import (
 from oh_no_my_claudecode.loop.adapters import CodexCliAdapter
 from oh_no_my_claudecode.loop.engine import _default_verify_runner
 from oh_no_my_claudecode.loop.models import IterationContract, LoopResult, VerifyOutcome
+from oh_no_my_claudecode.missioncontrol import build_runtime_dashboard
 from oh_no_my_claudecode.retrieval import HybridRetriever
 from oh_no_my_claudecode.sandbox import (
     DockerSandboxPlan,
@@ -150,6 +151,33 @@ def test_execute_persists_run_and_node_transitions(tmp_path: Path) -> None:
     assert all(node.state is NodeState.SUCCEEDED for node in snapshot.nodes.values())
     assert result.resume_run_id == result.plan.run_id
     assert Path(result.plan.state_path, "events.jsonl").exists()
+
+
+def test_mission_control_proof_state_requires_matching_valid_receipt(tmp_path: Path) -> None:
+    controller = _controller(tmp_path, FakeLoop(_loop_result(converged=True)))
+    result = controller.run(RunRequest(task="Implement cache fix", execute=True))
+
+    visible = build_runtime_dashboard(tmp_path)
+    run = next(item for item in visible.runs if item.run_id == result.plan.run_id)
+    assert run.state == "completed"
+    assert run.proof_state == "verified"
+    assert run.verified is True
+    assert run.receipt_hash == result.receipt.receipt_hash  # type: ignore[union-attr]
+    assert run.event_count > 0
+    assert all(node.state == "succeeded" for node in run.nodes)
+
+    receipt_path = (
+        tmp_path / ".agent-memory" / "receipts" / f"run-{result.plan.run_id}.json"
+    )
+    wrapper = json.loads(receipt_path.read_text(encoding="utf-8"))
+    wrapper["harness"]["receipt_hash"] = "0" * 64
+    receipt_path.write_text(json.dumps(wrapper), encoding="utf-8")
+
+    tampered = build_runtime_dashboard(tmp_path)
+    run = next(item for item in tampered.runs if item.run_id == result.plan.run_id)
+    assert run.proof_state == "unproven"
+    assert run.verified is False
+    assert run.receipt_hash is None
 
 
 def test_policy_denial_prevents_loop_execution(tmp_path: Path) -> None:

@@ -227,6 +227,25 @@ def load_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | No
     when the nested receipt is present, matches its hash, is for the requested
     run, and is marked verified.
     """
+    receipt = read_harness_receipt(repo_root, run_id)
+    if (
+        receipt is None
+        or not receipt.verified
+        or not _serialized_stages_complete(receipt.stages)
+    ):
+        return None
+    return receipt
+
+
+def read_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | None:
+    """Read an integrity-valid harness receipt, including failed receipts.
+
+    Mission Control needs to distinguish a verifier-backed rejection from a run
+    that has no proof artifact at all.  This reader validates the receipt hash,
+    run identity, and canonical runtime contract but deliberately does not
+    require ``verified=True``.  Call :func:`load_harness_receipt` when only a
+    successful proof may be trusted.
+    """
     path = harness_receipt_path(repo_root, run_id)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -244,8 +263,6 @@ def load_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | No
     if (
         receipt is None
         or receipt.run_id != run_id
-        or not receipt.verified
-        or not _serialized_stages_complete(receipt.stages)
         or not _serialized_runtime_contract_complete(
             receipt.runtime_contract,
             receipt.runtime_contract_digest,
@@ -357,6 +374,7 @@ __all__ = [
     "compute_verified",
     "harness_receipt_path",
     "load_harness_receipt",
+    "read_harness_receipt",
     "runtime_contract_complete",
     "stages_complete",
     "verify_harness_receipt",
