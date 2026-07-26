@@ -1,6 +1,6 @@
 # ONMC SOTA Final DR
 
-Status: active fan-out.
+Status: active fan-out, final decision record for consolidation.
 
 ## Decision
 
@@ -12,14 +12,70 @@ evidence strong enough to reject overclaims.
 ## Current Baseline
 
 - `v0.113.0` tag created from main.
+- `v0.113.0` release workflow passed end-to-end, including PyPI publish and
+  PyPI install verification.
+- Latest main has two post-release evidence commits:
+  - `docs: record onmc sota fanout decision`
+  - `docs(evidence): add sota readiness audit`
 - Publication evidence now includes runtime delegation audit.
 - Runtime delegation audit is ready:
   - `mission`: 9-node `RunSpec`, digest validated.
   - `wrap`: 9-node `RunSpec`, digest validated.
   - `swarm`: 3-node fan-out/fan-in `RunSpec`, digest validated.
+- SOTA readiness audit exists and is intentionally not publication-ready:
+  - proven requirements: 2
+  - partial requirements: 15
+  - blocked requirements: 2
+  - missing requirements: 0
+  - ready requirements: 2/19
 - Publication readiness remains false by design until external benchmark matrix
   passes task count, arm count, seeds, cost telemetry, raw artifacts, and leakage
   audit gates.
+
+## Live PR State
+
+Current fan-out PRs:
+
+1. [#413](https://github.com/adaline-ankit/oh-no-my-claudecode/pull/413)
+   `test(runtime): cover LangGraph DAG and cancellation parity`
+   - lane: LangGraph/DAG backend
+   - status: CI running on Python 3.11, 3.12, and 3.13
+   - local smoke: `tests/test_langgraph_backend.py` passed with 12 passed,
+     1 skipped
+   - action: merge after CI green
+2. [#414](https://github.com/adaline-ankit/oh-no-my-claudecode/pull/414)
+   `feat(experiment): gate publication on routing evidence`
+   - lane: trajectory router
+   - status: CI running
+   - action: review after checks complete
+3. [#415](https://github.com/adaline-ankit/oh-no-my-claudecode/pull/415)
+   `feat(experiment): bind verifier evidence to publication`
+   - lane: verifier/evidence
+   - status: merge conflict
+   - action: update from main, resolve conflict, rerun focused tests, then
+     merge before router if green
+
+Current main checks for `docs(evidence): add sota readiness audit`:
+
+- CodeQL: green
+- Scorecard: green
+- Pages: green
+- CI: still running
+
+## Active Sessions
+
+Nine independent sessions are allowed to continue in separate worktrees. They
+must open or update their own PRs only; they must not release.
+
+- RAG/context engine: `019f9f82-383e-7811-855c-537de978ffff`
+- Trajectory router: `019f9f82-3acd-70d2-9d37-c84d0e5f50f1`
+- LangGraph/DAG backend: `019f9f82-35d4-7902-8139-77d1dcf33aee`
+- Sandbox/isolation: `019f9f84-e2c4-7e50-b6db-37a555218b5f`
+- Verifier/evidence: `019f9f84-e54e-7230-8d7d-c1de1e43bebf`
+- Telemetry/Mission Control: `019f9f84-e899-7803-9fd9-3261e840d91b`
+- Harbor/repro benchmark: `019f9f85-4bc5-7753-8d62-71704386230b`
+- One-command UX: `019f9f82-3e02-7d11-8af9-b1d9c40fa2d3`
+- Swarm graph/runtime fanout: `019f9f84-e075-7f42-8679-288b00b3991e`
 
 ## Parallel Lanes
 
