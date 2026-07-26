@@ -104,6 +104,9 @@ This is evidence for a stronger harness foundation:
   SHA, and the actual code SHA under test.
 - `scripts/run_external_eval.py` now writes the portfolio leakage notes into saved reports, and the
   calibration markdown renders a human-readable "Report Metadata Audit" section.
+- Saved external reports now carry the complete experiment environment manifest (`code_sha`,
+  `config_hash`, `model`, `provider`, and `image`), and manifest-gated calibration blocks external
+  claims when that report environment is missing or differs from the frozen manifest.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -166,7 +169,7 @@ python -m pytest -q tests/test_experiment_calibration.py tests/test_experiment_c
 Result:
 
 ```text
-70 passed
+71 passed
 ```
 
 ```text
@@ -192,11 +195,11 @@ Success: no issues found in 12 source files
 Mypy also reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`, and
 `crewai`; these were not introduced by this metadata-audit slice.
 
-The current saved v3 report against the v4 manifest remains external-claim blocked. The new
-metadata audit adds two explicit blockers:
+The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
+audit now adds these explicit blockers:
 
 ```text
-report missing leakage/reproducibility fields: report.leakage_notes
+report missing leakage/reproducibility fields: report.leakage_notes, report.environment
 report metadata mismatch: report.code_sha
 ```
 

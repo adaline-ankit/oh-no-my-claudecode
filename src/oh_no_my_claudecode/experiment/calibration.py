@@ -147,6 +147,8 @@ class ReportMetadataAudit:
     expected_code_sha: str | None
     report_code_sha: str | None
     code_sha_under_test: str | None
+    environment_manifest_present: bool
+    environment_manifest_matches: bool
     leakage_notes_present: bool
     report_leakage_notes_present: bool
     missing_fields: tuple[str, ...]
@@ -161,6 +163,8 @@ class ReportMetadataAudit:
             "expected_code_sha": self.expected_code_sha,
             "report_code_sha": self.report_code_sha,
             "code_sha_under_test": self.code_sha_under_test,
+            "environment_manifest_present": self.environment_manifest_present,
+            "environment_manifest_matches": self.environment_manifest_matches,
             "leakage_notes_present": self.leakage_notes_present,
             "report_leakage_notes_present": self.report_leakage_notes_present,
             "missing_fields": list(self.missing_fields),
@@ -314,6 +318,7 @@ def _audit_report_metadata(
     )
     leakage_notes = _optional_string(manifest.get("leakage_notes"), "manifest.leakage_notes")
     report_leakage_notes = _optional_string(report.get("leakage_notes"), "report.leakage_notes")
+    report_environment = report.get("environment")
 
     missing: list[str] = []
     mismatched: list[str] = []
@@ -334,6 +339,16 @@ def _audit_report_metadata(
         missing.append("report.leakage_notes")
     elif leakage_notes is not None and report_leakage_notes != leakage_notes:
         mismatched.append("report.leakage_notes")
+    environment_manifest_present = isinstance(report_environment, Mapping)
+    environment_manifest_matches = False
+    if not environment_manifest_present:
+        missing.append("report.environment")
+    else:
+        expected_environment = _environment_dict(environment)
+        actual_environment = _environment_dict(_mapping(report_environment, "report.environment"))
+        environment_manifest_matches = actual_environment == expected_environment
+        if not environment_manifest_matches:
+            mismatched.append("report.environment")
 
     if missing:
         reasons.append("report missing leakage/reproducibility fields: " + ", ".join(missing))
@@ -346,12 +361,19 @@ def _audit_report_metadata(
         expected_code_sha=expected_code_sha,
         report_code_sha=report_code_sha,
         code_sha_under_test=code_sha_under_test,
+        environment_manifest_present=environment_manifest_present,
+        environment_manifest_matches=environment_manifest_matches,
         leakage_notes_present=leakage_notes is not None,
         report_leakage_notes_present=report_leakage_notes is not None,
         missing_fields=tuple(missing),
         mismatched_fields=tuple(mismatched),
         reasons=tuple(reasons),
     )
+
+
+def _environment_dict(value: Mapping[str, object]) -> dict[str, str]:
+    required = ("code_sha", "config_hash", "model", "provider", "image")
+    return {key: _string(value.get(key), f"environment.{key}") for key in required}
 
 
 def calibrate_records(

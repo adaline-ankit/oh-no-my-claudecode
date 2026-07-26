@@ -314,6 +314,10 @@ def _metadata_audit_markdown(audit: dict[str, Any]) -> list[str]:
         f"- expected_code_sha: `{audit['expected_code_sha']}`",
         f"- report_code_sha: `{audit['report_code_sha']}`",
         f"- code_sha_under_test: `{audit['code_sha_under_test']}`",
+        f"- environment_manifest_present: "
+        f"`{str(audit['environment_manifest_present']).lower()}`",
+        f"- environment_manifest_matches: "
+        f"`{str(audit['environment_manifest_matches']).lower()}`",
         f"- leakage_notes_present: `{str(audit['leakage_notes_present']).lower()}`",
         f"- report_leakage_notes_present: "
         f"`{str(audit['report_leakage_notes_present']).lower()}`",
