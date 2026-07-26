@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -35,6 +34,17 @@ from oh_no_my_claudecode.durable_runtime.models import (
     RunSnapshot,
     RunState,
 )
+
+_fcntl: Any
+_msvcrt: Any
+
+try:
+    import fcntl as _fcntl
+except ModuleNotFoundError:  # pragma: no cover - exercised by Windows CI smoke.
+    _fcntl = None
+    import msvcrt as _msvcrt
+else:  # pragma: no cover - platform import branch.
+    _msvcrt = None
 
 _SCHEMA_VERSION = 1
 _ZERO_HASH = "0" * 64
@@ -97,6 +107,22 @@ def _canonical(value: Any) -> bytes:
 
 def _hash(value: Any) -> str:
     return hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _lock_file(lock: Any) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock.fileno(), _fcntl.LOCK_EX)
+        return
+    lock.seek(0)
+    _msvcrt.locking(lock.fileno(), _msvcrt.LK_LOCK, 1)
+
+
+def _unlock_file(lock: Any) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock.fileno(), _fcntl.LOCK_UN)
+        return
+    lock.seek(0)
+    _msvcrt.locking(lock.fileno(), _msvcrt.LK_UNLCK, 1)
 
 
 def _event_body(event: dict[str, Any]) -> dict[str, Any]:
@@ -861,11 +887,11 @@ class RuntimeStore:
             raise RunNotFoundError(f"run {run_id!r} does not exist")
         lock_path = run_dir / ".lock"
         with lock_path.open("a+b") as lock:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            _lock_file(lock)
             try:
                 yield
             finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                _unlock_file(lock)
 
     def _now(self) -> datetime:
         now = self._clock()

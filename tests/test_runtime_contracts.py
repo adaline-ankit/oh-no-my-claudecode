@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import pytest
-from tests.test_harness_run import AllowPolicy, FakeLoop, _loop_result
 
 from oh_no_my_claudecode.durable_runtime import RuntimeStore
 from oh_no_my_claudecode.harness_run import ControllerDependencies, HarnessController, RunRequest
@@ -24,6 +23,7 @@ from oh_no_my_claudecode.runtime import (
 )
 from oh_no_my_claudecode.trace.models import TraceEventKind
 from oh_no_my_claudecode.trace.recorder import load_session_events, start_session
+from test_harness_run import AllowPolicy, FakeLoop, _loop_result
 
 
 def _node(
