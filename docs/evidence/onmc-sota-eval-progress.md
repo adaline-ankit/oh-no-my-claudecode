@@ -1295,8 +1295,16 @@ Interpretation:
 - The current v4 manifest is also not portfolio-balanced enough for a strong external claim:
   refactor and long-running each have only one task, and feature tasks are 67.9% of the portfolio
   against a 60% dominance ceiling.
-- The unified claim gate blocks an external ONMC quality/cost claim on three gates:
-  `benchmark_plan`, `portfolio_coverage`, and `calibration`.
+- The unified claim gate blocks an external ONMC quality/cost claim on benchmark planning,
+  portfolio coverage, calibration, and report-coverage gates.
+- The unified claim gate now also blocks external claims on incomplete R13 report coverage:
+  raw trajectories, verifier artifacts, token/cost telemetry, failure taxonomy, leakage audit,
+  and environment manifest must be present before ONMC can publish external improvement language.
+- Harness run contracts now persist explored, used, and excluded context IDs, so context selection
+  is auditable at the run-spec/node level rather than only summarized as counts.
+- U5 sandbox work has started with provider-neutral contracts and Docker/Harbor planners. The new
+  sandbox surface declares mounts, network policy, timeout, resources, image digest, and scoped
+  secret exposure without running Docker during preflight.
 - This is useful progress because the repo now has a programmatic gate that catches this failure
   mode instead of relying on manual judgment.
 
@@ -1351,3 +1359,73 @@ Result:
 ```text
 All checks passed
 ```
+
+## Claim And Sandbox Contract Slices
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_experiment_claim.py tests/test_experiment_calibration.py tests/test_experiment_reporting.py
+```
+
+Result:
+
+```text
+23 passed
+```
+
+```text
+python scripts/calibrate_external_report.py datasets/experiment/reports/external_v3_stage1_2026-07-25.json --markdown
+```
+
+Result summary:
+
+```text
+blocked_gates: benchmark_plan, portfolio_coverage, calibration, report_coverage
+claim_language_decision: refuse
+report_coverage_claim_ready: false
+```
+
+```text
+python -m pytest tests/test_harness_run.py tests/test_runtime_contracts.py
+```
+
+Result:
+
+```text
+43 passed
+```
+
+```text
+python -m pytest tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+5 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/sandbox tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/sandbox
+```
+
+Result:
+
+```text
+Success: no issues found in 4 source files
+```
+
+These are contract-level checks, not proof of true runtime isolation yet. U5 remains incomplete until
+`onmc run` can execute autonomous work through a real sandbox provider and demonstrate filesystem,
+network, process, timeout, cleanup, and secret boundaries in an integration smoke.
