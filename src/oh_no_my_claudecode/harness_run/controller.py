@@ -61,6 +61,7 @@ from oh_no_my_claudecode.sandbox import (
     DockerSandboxPlan,
     NetworkPolicy,
     SandboxExecutionResult,
+    SandboxPlanError,
     ScopedSecret,
     default_repo_sandbox,
     docker_run_plan,
@@ -723,6 +724,16 @@ class HarnessController:
                 stop_reason="policy-denied",
                 proof_reasons=("declared agent or verifier capability was denied",),
             )
+        if request.sandbox:
+            try:
+                plan.sandbox_manifest.validate_for_execution()
+            except SandboxPlanError as exc:
+                return HarnessResult(
+                    HarnessStatus.BLOCKED,
+                    plan,
+                    stop_reason="sandbox-plan-invalid",
+                    proof_reasons=(str(exc),),
+                )
         return self._execute(plan, request)
 
     def plan(self, request: RunRequest) -> ExecutionPlan:

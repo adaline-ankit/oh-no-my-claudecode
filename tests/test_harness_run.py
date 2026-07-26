@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -329,8 +330,80 @@ def test_render_text_exposes_planned_sandbox_boundary(tmp_path: Path) -> None:
     text = result.render_text()
 
     assert "Sandbox: requested=true, provider=docker, enforced=false" in text
+    assert result.plan.sandbox_manifest.validated is True
     assert result.plan.sandbox_manifest.verifier_plan is not None
     assert result.plan.sandbox_manifest.verifier_plan["secret_env"] == []
+    capabilities = result.plan.sandbox_manifest.capability_manifest
+    assert capabilities["agent"]["filesystem"][0]["access"] == "read-write"
+    assert capabilities["agent"]["network"] == "allow"
+    assert capabilities["agent"]["secret_env"] == [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+    ]
+    assert capabilities["verifier"]["filesystem"][0]["access"] == "read-only"
+    assert capabilities["verifier"]["network"] == "deny"
+    assert capabilities["verifier"]["secret_env"] == []
+    assert str(tmp_path) not in repr(result.plan.sandbox_manifest.to_dict())
+
+
+def test_sandbox_execution_fails_before_agent_when_manifest_is_unvalidated(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+    original = harness_controller_module.harness_sandbox_manifest
+
+    def invalid_manifest(**kwargs: object) -> object:
+        return replace(original(**kwargs), validated=False)
+
+    monkeypatch.setattr(
+        harness_controller_module,
+        "harness_sandbox_manifest",
+        invalid_manifest,
+    )
+
+    result = controller.run(
+        RunRequest(
+            task="Refuse unvalidated autonomous execution",
+            execute=True,
+            sandbox=True,
+        )
+    )
+
+    assert result.status is HarnessStatus.BLOCKED
+    assert result.stop_reason == "sandbox-plan-invalid"
+    assert "not validated" in result.proof_reasons[0]
+    assert loop.calls == 0
+
+
+def test_harbor_remains_config_only_for_local_execution(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    controller = _controller(tmp_path, loop)
+
+    planned = controller.run(
+        RunRequest(
+            task="Plan Harbor sandbox",
+            plan_only=True,
+            sandbox=True,
+            sandbox_provider="harbor",
+        )
+    )
+    executed = controller.run(
+        RunRequest(
+            task="Do not execute Harbor locally",
+            execute=True,
+            sandbox=True,
+            sandbox_provider="harbor",
+        )
+    )
+
+    assert planned.status is HarnessStatus.PLANNED
+    assert planned.plan.sandbox_manifest.validated is True
+    assert executed.status is HarnessStatus.BLOCKED
+    assert executed.stop_reason == "sandbox-plan-invalid"
+    assert "configuration-only" in executed.proof_reasons[0]
+    assert loop.calls == 0
 
 
 def test_sandbox_verifier_runner_executes_command_without_agent_secret(tmp_path: Path) -> None:

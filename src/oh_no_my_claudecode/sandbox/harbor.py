@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from .contracts import SandboxPlanError, SandboxRole, SandboxSpec
+from .contracts import (
+    SandboxPlanError,
+    SandboxRole,
+    SandboxSpec,
+    sandbox_role_capability_manifest,
+)
 
 
 def harbor_task_payload(
@@ -17,6 +22,7 @@ def harbor_task_payload(
 
     if not command:
         raise SandboxPlanError("harbor command must not be empty")
+    capabilities = sandbox_role_capability_manifest(spec, role=role)
     return {
         "provider": "harbor",
         "role": role,
@@ -31,8 +37,9 @@ def harbor_task_payload(
             "cpus": spec.cpus,
             "memory_mb": spec.memory_mb,
         },
-        "mounts": [mount.to_dict() for mount in spec.mounts],
+        "mounts": [mount.capability_dict() for mount in spec.mounts],
         "secret_env": list(spec.secret_env_for(role)),
+        "capabilities": capabilities.to_dict(),
     }
 
 

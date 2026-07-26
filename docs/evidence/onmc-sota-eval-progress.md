@@ -2137,3 +2137,68 @@ Result:
 ```text
 docs/cli-reference.md regenerated with --sandbox, --sandbox-provider, and --sandbox-image.
 ```
+
+## U5 Capability Enforcement And Repository-Copy Smoke
+
+Commands run on 2026-07-26:
+
+```text
+.venv/bin/pytest -q tests/test_sandbox_contracts.py tests/test_harness_run.py
+```
+
+Result:
+
+```text
+45 passed
+```
+
+```text
+.venv/bin/pytest -q tests/integration/test_docker_sandbox.py -rs
+```
+
+Result:
+
+```text
+1 passed
+```
+
+The live Docker smoke staged a repository snapshot, changed the source after staging, and then
+executed `python:3.12-slim` with the copy mounted read-only at `/workspace`. The container observed
+the staged value, could not see a sibling host secret, and emitted neither the source path nor the
+staging path. Docker and Harbor run-plan serialization also replace daemon-only bind sources with
+portable mount declarations.
+
+```text
+.venv/bin/ruff check src/oh_no_my_claudecode/sandbox \
+  src/oh_no_my_claudecode/harness_run/sandboxing.py \
+  src/oh_no_my_claudecode/harness_run/controller.py \
+  tests/test_sandbox_contracts.py tests/test_harness_run.py \
+  tests/integration/test_docker_sandbox.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+.venv/bin/mypy src/oh_no_my_claudecode/sandbox src/oh_no_my_claudecode/harness_run
+```
+
+Result:
+
+```text
+Success: no issues found in 21 source files
+```
+
+The compatibility run across sandbox, harness, runtime-contract, and policy-proof tests produced
+91 passes and one unrelated existing failure:
+`test_receipt_build_is_deterministic` omits the now-required `report_coverage` argument. This U5
+slice does not modify receipt construction or that test.
+
+This slice makes agent and verifier filesystem, network, and secret capabilities explicit in every
+requested sandbox plan. Verifier plans fail closed when writable, network-enabled, or secret-bearing;
+Docker execution refuses an unvalidated manifest before the agent loop; and Harbor remains a
+configuration-only provider for local execution. The manifest keeps `enforced=false` until provider
+execution is observed, so plan-time validation is not misreported as runtime proof.
