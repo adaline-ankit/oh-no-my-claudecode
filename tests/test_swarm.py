@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pytest
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
@@ -38,6 +39,7 @@ from oh_no_my_claudecode.loop.models import (
     LoopSpec,
     VerifyOutcome,
 )
+from oh_no_my_claudecode.runtime import RunSpec, RuntimeContractError
 from oh_no_my_claudecode.storage import SQLiteStorage
 from oh_no_my_claudecode.swarm.models import SwarmConfig, SwarmUnit
 from oh_no_my_claudecode.swarm.orchestrator import (
@@ -45,6 +47,10 @@ from oh_no_my_claudecode.swarm.orchestrator import (
     request_abort,
     run_swarm,
     swarm_state,
+)
+from oh_no_my_claudecode.swarm.runtime_contract import (
+    SwarmContractUnit,
+    build_swarm_run_spec,
 )
 
 # ---------------------------------------------------------------------------
@@ -115,6 +121,46 @@ def _fake_verify(passes: bool = True, output: str = "ok") -> Callable[..., Verif
         return VerifyOutcome(passed=passes, output=output)
 
     return _runner
+
+
+def test_swarm_contract_compiles_dependencies_and_rejects_unordered_claim_overlap() -> None:
+    spec = build_swarm_run_spec(
+        swarm_id="contract-dependencies",
+        units=(
+            SwarmContractUnit(unit_id="plan", goal="plan"),
+            SwarmContractUnit(
+                unit_id="implement",
+                goal="implement",
+                dependencies=("plan",),
+            ),
+        ),
+        agent="codex",
+        mode="process",
+        concurrency=2,
+    )
+
+    assert spec.nodes[1].dependencies == ("plan",)
+    assert spec.nodes[-1].dependencies == ("plan", "implement")
+
+    with pytest.raises(RuntimeContractError, match="overlapping file claims"):
+        build_swarm_run_spec(
+            swarm_id="claim-conflict",
+            units=(
+                SwarmContractUnit(
+                    unit_id="a",
+                    goal="a",
+                    allowed_paths=("src/shared.py",),
+                ),
+                SwarmContractUnit(
+                    unit_id="b",
+                    goal="b",
+                    allowed_paths=("src/shared.py",),
+                ),
+            ),
+            agent="codex",
+            mode="process",
+            concurrency=2,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +579,211 @@ class TestRunSwarm:
         assert manifest["runtime_contract_digest"] == spec.digest
         assert spec.run_id == f"swarm-{result.swarm_id}"
         assert [node.node_id for node in spec.topological_order()][-1] == "fan-in"
+
+    def test_dependencies_control_execution_and_emit_deterministic_fan_in(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage = _storage(tmp_path)
+        units = [
+            SwarmUnit(id="plan", goal="plan", verify_command="true"),
+            SwarmUnit(
+                id="implement-a",
+                goal="implement a",
+                verify_command="true",
+                dependencies=["plan"],
+            ),
+            SwarmUnit(
+                id="implement-b",
+                goal="implement b",
+                verify_command="true",
+                dependencies=["plan"],
+            ),
+            SwarmUnit(
+                id="verify",
+                goal="verify",
+                verify_command="true",
+                dependencies=["implement-a", "implement-b"],
+            ),
+        ]
+        calls: list[str] = []
+        call_lock = threading.Lock()
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del repo_root
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                with call_lock:
+                    calls.append(unit.id)
+                return AgentRunResult(
+                    output="done",
+                    prediction="ok",
+                    files_touched=[f"{unit.id}.txt"],
+                    tokens=1,
+                    cost_usd=0.0,
+                )
+
+            return _agent
+
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
+            return _fake_verify(passes=True)
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            _make_config(concurrency=2, isolate=False),
+            runner_factory=_af,
+            verify_factory=_vf,
+            now=_FIXED_NOW,
+            swarm_id="dependency-order",
+        )
+
+        assert result.stop_reason == "completed"
+        assert calls.index("plan") < calls.index("implement-a")
+        assert calls.index("plan") < calls.index("implement-b")
+        assert calls.index("verify") > calls.index("implement-a")
+        assert calls.index("verify") > calls.index("implement-b")
+        assert [item.unit_id for item in result.unit_results] == [
+            "plan",
+            "implement-a",
+            "implement-b",
+            "verify",
+        ]
+
+        manifest = swarm_state(tmp_path, result.swarm_id)
+        spec = RunSpec.from_dict(manifest["runtime_contract"])
+        assert spec.nodes[1].dependencies == ("plan",)
+        assert spec.nodes[2].dependencies == ("plan",)
+        assert spec.nodes[3].dependencies == ("implement-a", "implement-b")
+        fan_in = manifest["fan_in"]
+        assert fan_in["unit_order"] == [
+            "plan",
+            "implement-a",
+            "implement-b",
+            "verify",
+        ]
+        assert fan_in["evidence"]["digest"].startswith("sha256:")
+        assert Path(fan_in["evidence"]["uri"]).exists()
+        assert manifest["runtime_result"]["status"] == "completed"
+
+    def test_failed_worker_cancels_dependents_but_preserves_sibling_receipt(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage = _storage(tmp_path)
+        units = [
+            SwarmUnit(id="failed", goal="fail", verify_command="true"),
+            SwarmUnit(id="sibling", goal="succeed", verify_command="true"),
+            SwarmUnit(
+                id="dependent",
+                goal="must not start",
+                verify_command="true",
+                dependencies=["failed"],
+            ),
+        ]
+        started: list[str] = []
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del repo_root
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                del prompt, escalation_level
+                started.append(unit.id)
+                return AgentRunResult(
+                    output="failed" if unit.id == "failed" else "done",
+                    prediction="",
+                    files_touched=[f"{unit.id}.txt"],
+                    tokens=1,
+                    error="simulated failure" if unit.id == "failed" else None,
+                )
+
+            return _agent
+
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del repo_root
+            return _fake_verify(passes=unit.id != "failed")
+
+        result = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            _make_config(concurrency=2, isolate=False, max_iterations=1),
+            runner_factory=_af,
+            verify_factory=_vf,
+            now=_FIXED_NOW,
+            swarm_id="failure-propagation",
+        )
+
+        assert result.stop_reason == "failed"
+        assert set(started) == {"failed", "sibling"}
+        assert "dependent" not in started
+        assert [item.status for item in result.unit_results] == [
+            "failed",
+            "done",
+            "aborted",
+        ]
+        sibling = result.unit_results[1]
+        assert sibling.receipt_path is not None
+        assert sibling.receipt_path.exists()
+        manifest = swarm_state(tmp_path, result.swarm_id)
+        assert manifest["units"]["sibling"]["receipt_path"] == str(sibling.receipt_path)
+        assert manifest["units"]["dependent"]["status"] == "aborted"
+        assert "fan_in" not in manifest
+        assert manifest["runtime_result"]["status"] == "failed"
+
+    def test_swarm_replay_is_idempotent(self, tmp_path: Path) -> None:
+        storage = _storage(tmp_path)
+        units = [SwarmUnit(id="only", goal="one side effect", verify_command="true")]
+        calls = 0
+
+        def _af(unit: SwarmUnit, repo_root: Path) -> Callable[..., AgentRunResult]:
+            del unit, repo_root
+
+            def _agent(prompt: str, *, escalation_level: int) -> AgentRunResult:
+                nonlocal calls
+                del prompt, escalation_level
+                calls += 1
+                return AgentRunResult(
+                    output="done",
+                    prediction="ok",
+                    files_touched=["only.txt"],
+                    tokens=1,
+                )
+
+            return _agent
+
+        def _vf(unit: SwarmUnit, repo_root: Path) -> Callable[..., VerifyOutcome]:
+            del unit, repo_root
+            return _fake_verify(passes=True)
+
+        kwargs = {
+            "runner_factory": _af,
+            "verify_factory": _vf,
+            "now": _FIXED_NOW,
+            "swarm_id": "stable-idempotency",
+        }
+        first = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            _make_config(concurrency=1, isolate=False),
+            **kwargs,
+        )
+        second = run_swarm(
+            storage,
+            tmp_path,
+            units,
+            _make_config(concurrency=1, isolate=False),
+            **kwargs,
+        )
+
+        assert calls == 1
+        assert second.stop_reason == "completed"
+        assert second.unit_results[0].receipt_path == first.unit_results[0].receipt_path
+        assert swarm_state(tmp_path, second.swarm_id)["runtime_result"]["status"] == "completed"
 
     def test_request_abort_writes_sentinel(self, tmp_path: Path) -> None:
         """request_abort(swarm_id) must write ABORT file."""

@@ -26,6 +26,7 @@ unit completes.  This gives external tooling a live view into swarm progress.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import secrets
 import shlex
@@ -33,17 +34,30 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from oh_no_my_claudecode.durable_runtime import RuntimeStore
 from oh_no_my_claudecode.loop.models import (
     AgentRunner,
     ChangeProbe,
     LoopResult,
     VerifyOutcome,
     VerifyRunner,
+)
+from oh_no_my_claudecode.runtime import (
+    EvidenceRef,
+    NativeExecutionBackend,
+    NodeHandler,
+    NodeResult,
+    NodeResultStatus,
+    NodeSpec,
+    RunResult,
+    RunResultStatus,
+    RunSpec,
+    RuntimeContractError,
 )
 from oh_no_my_claudecode.swarm.models import (
     SwarmConfig,
@@ -108,8 +122,8 @@ def _write_manifest(
     units: list[SwarmUnit],
     config: SwarmConfig,
     started_at: str,
-) -> None:
-    """Write initial manifest.json listing all units as 'pending'."""
+) -> RunSpec:
+    """Write or validate the idempotent initial swarm manifest."""
     runtime_spec = build_swarm_run_spec(
         swarm_id=swarm_id,
         units=tuple(
@@ -119,6 +133,7 @@ def _write_manifest(
                 verify_command=unit.verify_command,
                 allowed_paths=tuple(unit.allowed_paths),
                 protected_paths=tuple(unit.protected_paths),
+                dependencies=tuple(unit.dependencies),
             )
             for unit in units
         ),
@@ -129,6 +144,20 @@ def _write_manifest(
         max_tokens=config.budget_tokens,
         timeout_seconds=float(config.agent_timeout_seconds),
     )
+    manifest_path = _manifest_path(repo_root, swarm_id)
+    if manifest_path.exists():
+        try:
+            existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeContractError("existing swarm manifest is unreadable") from exc
+        if not isinstance(existing, dict):
+            raise RuntimeContractError("existing swarm manifest must be an object")
+        if existing.get("runtime_contract_digest") != runtime_spec.digest:
+            raise RuntimeContractError(
+                f"swarm {swarm_id!r} already exists with a different runtime contract"
+            )
+        return runtime_spec
+
     manifest: dict[str, Any] = {
         "swarm_id": swarm_id,
         "mode": "process",
@@ -149,15 +178,17 @@ def _write_manifest(
                 "error": None,
                 "worktree_path": None,
                 "branch": None,
+                "dependencies": list(u.dependencies),
                 "verify_output": None,
             }
             for u in units
         },
     }
-    _manifest_path(repo_root, swarm_id).write_text(
+    manifest_path.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
+    return runtime_spec
 
 
 def _update_manifest(
@@ -192,19 +223,164 @@ def _update_manifest(
         )
 
 
-def _mark_manifest_done(repo_root: Path, swarm_id: str, stop_reason: str) -> None:
+def _mark_manifest_done(
+    repo_root: Path,
+    swarm_id: str,
+    stop_reason: str,
+    *,
+    runtime_result: RunResult,
+) -> None:
     """Write final stop_reason and ended_at to manifest."""
     mpath = _manifest_path(repo_root, swarm_id)
     try:
         manifest: dict[str, Any] = json.loads(mpath.read_text(encoding="utf-8"))
         manifest["stop_reason"] = stop_reason
         manifest["ended_at"] = datetime.now(UTC).isoformat()
+        manifest["runtime_result"] = runtime_result.to_dict()
         mpath.write_text(
             json.dumps(manifest, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
     except (OSError, json.JSONDecodeError):
         pass
+
+
+def _receipt_evidence(
+    swarm_id: str,
+    result: SwarmUnitResult,
+) -> tuple[EvidenceRef, ...]:
+    path = result.receipt_path
+    if path is None or not path.is_file():
+        return ()
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    return (
+        EvidenceRef(
+            evidence_id=f"{swarm_id}:{result.unit_id}:receipt",
+            kind="completion" if result.status == "done" else "receipt",
+            uri=str(path),
+            digest=f"sha256:{digest}",
+        ),
+    )
+
+
+def _unit_result_output(result: SwarmUnitResult) -> dict[str, object]:
+    loop_result = result.loop_result
+    return {
+        "branch": result.branch,
+        "cost_usd": result.cost_usd,
+        "error": result.error,
+        "receipt_path": str(result.receipt_path) if result.receipt_path else None,
+        "total_tokens": loop_result.total_tokens if loop_result is not None else 0,
+        "unit_status": result.status,
+        "verify_output": result.verify_output,
+        "worktree_path": str(result.worktree_path) if result.worktree_path else None,
+    }
+
+
+def _unit_result_from_node_result(result: NodeResult) -> SwarmUnitResult:
+    output = result.output
+    raw_receipt = output.get("receipt_path")
+    raw_worktree = output.get("worktree_path")
+    raw_cost = output.get("cost_usd", 0.0)
+    raw_status = output.get("unit_status")
+    return SwarmUnitResult(
+        unit_id=result.node_id,
+        status=raw_status if isinstance(raw_status, str) else "failed",
+        loop_result=None,
+        receipt_path=Path(raw_receipt) if isinstance(raw_receipt, str) else None,
+        cost_usd=float(raw_cost) if isinstance(raw_cost, int | float) else 0.0,
+        error=output.get("error") if isinstance(output.get("error"), str) else result.error,
+        worktree_path=Path(raw_worktree) if isinstance(raw_worktree, str) else None,
+        branch=output.get("branch") if isinstance(output.get("branch"), str) else None,
+        verify_output=(
+            output.get("verify_output")
+            if isinstance(output.get("verify_output"), str)
+            else None
+        ),
+    )
+
+
+def _build_fan_in_result(
+    repo_root: Path,
+    swarm_id: str,
+    spec: RunSpec,
+    node: NodeSpec,
+    runtime_root: Path,
+    manifest_lock: threading.Lock,
+) -> NodeResult:
+    """Join receipt-backed dependency outputs in canonical source order."""
+    receipts: list[dict[str, object]] = []
+    for unit_id in node.dependencies:
+        result_path = (
+            runtime_root / "runs" / spec.run_id / "node-results" / f"{unit_id}.json"
+        )
+        if not result_path.is_file():
+            raise RuntimeContractError(f"fan-in is missing persisted result for {unit_id!r}")
+        unit_result = NodeResult.from_dict(json.loads(result_path.read_text(encoding="utf-8")))
+        completion = next(
+            (
+                evidence
+                for evidence in unit_result.evidence
+                if evidence.kind == "completion" and evidence.digest
+            ),
+            None,
+        )
+        if completion is None:
+            raise RuntimeContractError(
+                f"fan-in dependency {unit_id!r} lacks completion evidence"
+            )
+        receipts.append(
+            {
+                "evidence_id": completion.evidence_id,
+                "receipt_digest": completion.digest,
+                "receipt_uri": completion.uri,
+                "unit_id": unit_id,
+            }
+        )
+
+    payload = {
+        "runtime_contract_digest": spec.digest,
+        "schema_version": "1",
+        "swarm_id": swarm_id,
+        "unit_order": list(node.dependencies),
+        "unit_receipts": receipts,
+    }
+    artifact_path = _swarm_dir(repo_root, swarm_id) / "fan-in.json"
+    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    artifact_path.write_bytes(encoded)
+    evidence = EvidenceRef(
+        evidence_id=f"{swarm_id}:fan-in",
+        kind="completion",
+        uri=str(artifact_path),
+        digest=f"sha256:{hashlib.sha256(encoded).hexdigest()}",
+    )
+
+    manifest_path = _manifest_path(repo_root, swarm_id)
+    with manifest_lock:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise RuntimeContractError("swarm manifest must be an object")
+        manifest["fan_in"] = {
+            "evidence": evidence.to_dict(),
+            "unit_order": list(node.dependencies),
+            "unit_receipts": receipts,
+        }
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    return NodeResult(
+        node_id=node.node_id,
+        status=NodeResultStatus.SUCCEEDED,
+        idempotency_key=node.idempotency_key or f"{swarm_id}:fan-in",
+        output={
+            "artifact_path": str(artifact_path),
+            "unit_order": list(node.dependencies),
+            "unit_receipts": receipts,
+        },
+        evidence=(evidence,),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +531,7 @@ def run_swarm(
     change_probe_factory: ChangeProbeFactory | None = None,
     executor: ThreadPoolExecutor | None = None,
     now: datetime | None = None,
+    swarm_id: str | None = None,
 ) -> SwarmResult:
     """Run a bounded pool of accountable loop workers across isolated worktrees.
 
@@ -407,7 +584,7 @@ def run_swarm(
     from oh_no_my_claudecode.loop.engine import run_loop
     from oh_no_my_claudecode.loop.models import LoopConfig, LoopSpec
 
-    swarm_id = secrets.token_hex(8)
+    swarm_id = swarm_id or secrets.token_hex(8)
     started_at_dt = now if now is not None else datetime.now(UTC)
     started_at = started_at_dt.isoformat()
 
@@ -415,7 +592,7 @@ def run_swarm(
     global_abort_path = _global_abort_path(repo_root)
 
     # Write initial manifest.
-    _write_manifest(repo_root, swarm_id, units, config, started_at)
+    runtime_spec = _write_manifest(repo_root, swarm_id, units, config, started_at)
 
     # Build real runner factories when not injected.
     if config.agent not in {"claude", "codex", "opencode"}:
@@ -448,7 +625,7 @@ def run_swarm(
     swarm_total_tokens: list[int] = [0]
     _cost_cap_reached: list[bool] = [False]
 
-    unit_results: list[SwarmUnitResult] = []
+    live_unit_results: dict[str, SwarmUnitResult] = {}
     results_lock = threading.Lock()
 
     def _run_one(unit: SwarmUnit) -> SwarmUnitResult:
@@ -612,35 +789,88 @@ def run_swarm(
         _update_manifest(repo_root, swarm_id, ur, manifest_lock)
         return ur
 
-    # Run with the (injectable) executor.
-    _own_executor = executor is None
-    _pool: ThreadPoolExecutor = (
-        executor if executor is not None else ThreadPoolExecutor(max_workers=config.concurrency)
-    )
-
-    futures: list[Future[SwarmUnitResult]] = []
-    try:
-        for unit in units:
-            futures.append(_pool.submit(_run_one, unit))
-        # Drain all futures.
-        for fut in futures:
-            try:
-                ur = fut.result()
-            except Exception as exc:  # noqa: BLE001
-                # Defensive: _run_one should catch internally; this is a safety net.
-                ur = SwarmUnitResult(
-                    unit_id="unknown",
+    def _unit_handler(unit: SwarmUnit) -> NodeHandler:
+        def _handler(node: NodeSpec) -> NodeResult:
+            unit_result = _run_one(unit)
+            evidence = _receipt_evidence(swarm_id, unit_result)
+            if unit_result.status == "done" and not evidence:
+                unit_result = SwarmUnitResult(
+                    unit_id=unit_result.unit_id,
                     status="failed",
-                    loop_result=None,
-                    receipt_path=None,
-                    cost_usd=0.0,
-                    error=str(exc),
+                    loop_result=unit_result.loop_result,
+                    receipt_path=unit_result.receipt_path,
+                    cost_usd=unit_result.cost_usd,
+                    error="verified worker did not produce a digest-backed receipt",
+                    worktree_path=unit_result.worktree_path,
+                    branch=unit_result.branch,
+                    verify_output=unit_result.verify_output,
                 )
+                _update_manifest(repo_root, swarm_id, unit_result, manifest_lock)
             with results_lock:
-                unit_results.append(ur)
-    finally:
-        if _own_executor:
-            _pool.shutdown(wait=True)
+                live_unit_results[unit.id] = unit_result
+            status = {
+                "done": NodeResultStatus.SUCCEEDED,
+                "aborted": NodeResultStatus.SKIPPED,
+            }.get(unit_result.status, NodeResultStatus.FAILED)
+            return NodeResult(
+                node_id=node.node_id,
+                status=status,
+                idempotency_key=node.idempotency_key or f"{swarm_id}:unit:{unit.id}",
+                output=_unit_result_output(unit_result),
+                evidence=_receipt_evidence(swarm_id, unit_result),
+                error=(
+                    None
+                    if status is NodeResultStatus.SUCCEEDED
+                    else unit_result.error or f"swarm unit {unit.id} {unit_result.status}"
+                ),
+            )
+
+        return _handler
+
+    runtime_root = _swarm_dir(repo_root, swarm_id) / "runtime"
+    backend = NativeExecutionBackend(
+        RuntimeStore(runtime_root),
+        repo_root=repo_root,
+        max_workers=config.concurrency,
+        executor=executor,
+    )
+    def _fan_in_handler(node: NodeSpec) -> NodeResult:
+        return _build_fan_in_result(
+            repo_root,
+            swarm_id,
+            runtime_spec,
+            node,
+            runtime_root,
+            manifest_lock,
+        )
+
+    handlers: dict[str, NodeHandler] = {
+        unit.id: _unit_handler(unit) for unit in units
+    }
+    handlers["fan-in"] = _fan_in_handler
+    runtime_result = backend.execute(runtime_spec, handlers)
+
+    persisted = {
+        node_result.node_id: node_result
+        for node_result in runtime_result.results
+        if node_result.node_id != "fan-in"
+    }
+    unit_results: list[SwarmUnitResult] = []
+    for unit in units:
+        unit_result = live_unit_results.get(unit.id)
+        if unit_result is None and unit.id in persisted:
+            unit_result = _unit_result_from_node_result(persisted[unit.id])
+        if unit_result is None:
+            unit_result = SwarmUnitResult(
+                unit_id=unit.id,
+                status="aborted",
+                loop_result=None,
+                receipt_path=None,
+                cost_usd=0.0,
+                error="not executed because a dependency failed or the parent run stopped",
+            )
+            _update_manifest(repo_root, swarm_id, unit_result, manifest_lock)
+        unit_results.append(unit_result)
 
     done_count = sum(1 for r in unit_results if r.status == "done")
     failed_count = sum(1 for r in unit_results if r.status == "failed")
@@ -650,20 +880,31 @@ def run_swarm(
     abort_requested = _is_abort_requested(abort_path, global_abort_path)
     if _cost_cap_reached[0]:
         stop_reason = "cost-cap"
-    elif abort_requested:
+    elif abort_requested or runtime_result.status is RunResultStatus.CANCELLED:
         stop_reason = "aborted"
-    elif failed_count:
+    elif runtime_result.status is RunResultStatus.FAILED or failed_count:
         stop_reason = "failed"
     else:
         stop_reason = "completed"
 
-    _mark_manifest_done(repo_root, swarm_id, stop_reason)
+    _mark_manifest_done(
+        repo_root,
+        swarm_id,
+        stop_reason,
+        runtime_result=runtime_result,
+    )
+
+    total_tokens = sum(
+        int(node_result.output.get("total_tokens", 0))
+        for node_result in persisted.values()
+        if isinstance(node_result.output.get("total_tokens", 0), int)
+    )
 
     return SwarmResult(
         swarm_id=swarm_id,
         unit_results=unit_results,
-        total_cost_usd=swarm_total_cost[0],
-        total_tokens=swarm_total_tokens[0],
+        total_cost_usd=sum(result.cost_usd for result in unit_results),
+        total_tokens=total_tokens,
         stop_reason=stop_reason,
         units_done=done_count,
         units_failed=failed_count,
