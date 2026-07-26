@@ -214,6 +214,18 @@ def test_executed_run_persists_a_receipt_explain_can_read(tmp_path: Path) -> Non
     assert payload["receipt_hash"] == result.receipt.receipt_hash
     # ...carries the full harness receipt rather than a lossy summary...
     assert payload["harness"]["run_id"] == result.plan.run_id
+    assert payload["trajectory"][0]["prediction"] == "the change satisfies the task"
+    assert payload["report_coverage"] == payload["harness"]["report_coverage"]
+    coverage = payload["report_coverage"]
+    assert coverage["claim_ready"] is False
+    assert any(
+        item["name"] == "raw_trajectories" and item["covered"] is True
+        for item in coverage["fields"]
+    )
+    assert any(
+        item["name"] == "paired_deltas" and item["covered"] is False
+        for item in coverage["fields"]
+    )
     # ...and is directly consumable by the explain analyser.
     verdict = explain_receipt(payload)
     assert verdict.verdict in {"VERIFIED", "NOT VERIFIED"}

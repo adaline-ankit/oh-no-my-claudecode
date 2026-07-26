@@ -32,6 +32,12 @@ from .receipt import (
     runtime_contract_complete,
     verify_harness_receipt,
 )
+from .reporting import (
+    ReportCoverageField,
+    ReportCoverageManifest,
+    report_coverage_manifest,
+    trajectory_payload,
+)
 from .run_policy import (
     PolicyViolation,
     RunPolicy,
@@ -76,6 +82,8 @@ __all__ = [
     "PolicyDecisionRecord",
     "PolicyViolation",
     "ProofRequirement",
+    "ReportCoverageField",
+    "ReportCoverageManifest",
     "RunPolicy",
     "RunPolicyDecision",
     "RunRequest",
@@ -101,8 +109,10 @@ __all__ = [
     "load_run_policy",
     "prepare_stage",
     "proof_stage",
+    "report_coverage_manifest",
     "runtime_contract_complete",
     "secret_findings",
     "verify_harness_receipt",
     "verify_stage",
+    "trajectory_payload",
 ]

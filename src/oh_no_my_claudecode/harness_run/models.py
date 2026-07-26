@@ -389,6 +389,15 @@ class HarnessResult:
                 + (f", {self.denied_effect_count} denied" if self.denied_effect_count else "")
                 + ")"
             )
+            if self.receipt is not None:
+                coverage = self.receipt.report_coverage
+                covered_count = _int_value(coverage.get("covered_count"))
+                missing_count = _int_value(coverage.get("missing_count"))
+                lines.append(
+                    "Report coverage: "
+                    f"{covered_count}/{covered_count + missing_count} "
+                    f"covered, claim_ready={str(coverage.get('claim_ready', False)).lower()}"
+                )
         if self.worktree_path is not None:
             lines.append(f"Worktree: {self.worktree_path}")
         return "\n".join(lines)
@@ -397,6 +406,10 @@ class HarnessResult:
 def state_path_for(root: Path, run_id: str) -> str:
     """Return the durable event directory exposed in plans."""
     return str(root / "runs" / run_id)
+
+
+def _int_value(value: object) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
 
 def _node_has_side_effects(kind: NodeKind) -> bool:

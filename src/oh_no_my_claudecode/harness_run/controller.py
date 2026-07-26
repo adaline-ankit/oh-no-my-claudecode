@@ -89,6 +89,7 @@ from .models import (
     state_path_for,
 )
 from .receipt import HarnessRunReceipt, load_harness_receipt
+from .reporting import report_coverage_manifest, trajectory_payload
 from .run_policy import (
     RunPolicy,
     RunPolicyDecision,
@@ -977,6 +978,12 @@ class HarnessController:
         loop_result: LoopResult | None = None,
     ) -> HarnessResult:
         """Assemble the receipt (the sole ``verified`` authority) and result."""
+        report_coverage = report_coverage_manifest(
+            loop_result=loop_result,
+            stages=stages,
+            policy=policy,
+            proof=assessment,
+        )
         receipt = HarnessRunReceipt.build(
             run_id=plan.run_id,
             task=plan.dag.task,
@@ -986,6 +993,7 @@ class HarnessController:
             runtime_contract=plan.to_run_spec().to_dict(),
             policy=policy,
             proof=assessment,
+            report_coverage=report_coverage.to_dict(),
         )
         self._persist_receipt(plan, receipt, stop_reason=stop_reason, loop_result=loop_result)
         return HarnessResult(
@@ -1112,6 +1120,8 @@ class HarnessController:
             payload["iterations"] = len(loop_result.iterations)
             payload["tokens_used"] = loop_result.total_tokens
             payload["cost_usd"] = loop_result.total_cost_usd
+            payload["trajectory"] = list(trajectory_payload(loop_result))
+        payload["report_coverage"] = receipt.report_coverage
         try:
             receipts_dir = self.repo_root / ".agent-memory" / "receipts"
             receipts_dir.mkdir(parents=True, exist_ok=True)

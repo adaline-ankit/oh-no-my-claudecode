@@ -98,6 +98,7 @@ class HarnessRunReceipt:
     stages: tuple[dict[str, object], ...]
     policy: dict[str, object]
     proof: dict[str, object]
+    report_coverage: dict[str, object]
     receipt_hash: str
 
     @classmethod
@@ -112,6 +113,7 @@ class HarnessRunReceipt:
         runtime_contract: dict[str, object],
         policy: RunPolicyDecision,
         proof: ProofAssessment,
+        report_coverage: dict[str, object],
     ) -> HarnessRunReceipt:
         runtime_spec = RunSpec.from_dict(runtime_contract)
         runtime_payload = runtime_spec.to_dict()
@@ -142,6 +144,7 @@ class HarnessRunReceipt:
             "stages": list(stage_payload),
             "policy": policy_payload,
             "proof": proof_payload,
+            "report_coverage": report_coverage,
         }
         return cls(
             schema_version=_SCHEMA_VERSION,
@@ -154,6 +157,7 @@ class HarnessRunReceipt:
             stages=stage_payload,
             policy=policy_payload,
             proof=proof_payload,
+            report_coverage=report_coverage,
             receipt_hash=_digest(body),
         )
 
@@ -169,6 +173,7 @@ class HarnessRunReceipt:
             "stages": list(self.stages),
             "policy": self.policy,
             "proof": self.proof,
+            "report_coverage": self.report_coverage,
         }
 
     def to_dict(self) -> dict[str, object]:
@@ -200,8 +205,11 @@ def verify_harness_receipt(serialized: str) -> bool:
         "stages",
         "policy",
         "proof",
+        "report_coverage",
     }
-    if set(raw) != expected_keys:
+    legacy_keys = expected_keys - {"report_coverage"}
+    raw_keys = set(raw)
+    if raw_keys != expected_keys and raw_keys != legacy_keys:
         return False
     return _digest(raw) == claimed
 
@@ -261,6 +269,7 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         stages = raw["stages"]
         policy = raw["policy"]
         proof = raw["proof"]
+        report_coverage = raw.get("report_coverage", _legacy_report_coverage())
         receipt_hash = raw["receipt_hash"]
     except KeyError:
         return None
@@ -275,6 +284,7 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         and isinstance(stages, list)
         and isinstance(policy, dict)
         and isinstance(proof, dict)
+        and isinstance(report_coverage, dict)
         and isinstance(receipt_hash, str)
     ):
         return None
@@ -294,8 +304,26 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
         stages=tuple(stage_payload),
         policy=policy,
         proof=proof,
+        report_coverage=report_coverage,
         receipt_hash=receipt_hash,
     )
+
+
+def _legacy_report_coverage() -> dict[str, object]:
+    return {
+        "schema_version": "1",
+        "covered_count": 0,
+        "missing_count": 1,
+        "claim_ready": False,
+        "fields": [
+            {
+                "name": "report_coverage",
+                "covered": False,
+                "source": "legacy receipt",
+                "reason": "receipt predates report coverage manifests",
+            }
+        ],
+    }
 
 
 def _serialized_stages_complete(stages: tuple[dict[str, object], ...]) -> bool:
