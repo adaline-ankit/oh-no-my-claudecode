@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -30,6 +31,8 @@ from oh_no_my_claudecode.runtime.contracts import (
     RuntimeContractError,
 )
 from oh_no_my_claudecode.runtime.fanout import dependency_layers
+from oh_no_my_claudecode.trace.models import TraceEvent, TraceEventKind
+from oh_no_my_claudecode.trace.recorder import record_trace_event
 
 
 class NativeExecutionBackend:
@@ -394,8 +397,14 @@ class NativeExecutionBackend:
         handler: NodeHandler,
     ) -> NodeResult:
         """Run one node, recording retry attempts before any terminal result."""
-        lease = self._acquire_node_lease(run_id, node)
+        started_at = time.time()
+        ended_at = started_at
+        lease: Lease | None = None
+        final_result: NodeResult | None = None
+        failure: str | None = None
+        release_failure: str | None = None
         try:
+            lease = self._acquire_node_lease(run_id, node)
             while True:
                 try:
                     result = handler(node)
@@ -405,25 +414,92 @@ class NativeExecutionBackend:
                 except Exception as exc:
                     if self._record_retry_if_allowed(run_id, node, exc):
                         continue
-                    return NodeResult(
+                    final_result = NodeResult(
                         node_id=node.node_id,
                         status=NodeResultStatus.FAILED,
                         idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
                         error=str(exc),
                     )
+                    return final_result
                 if result.status is not NodeResultStatus.FAILED:
+                    final_result = result
                     return result
                 reason = result.error or "failed"
                 if self._record_retry_if_allowed(run_id, node, reason):
                     continue
+                final_result = result
                 return result
+        except Exception as exc:
+            failure = str(exc)
+            raise
         finally:
-            self._release_lease(
-                run_id,
-                node.node_id,
-                token=lease.token,
-                idempotency_key=f"runtime:{node.node_id}:lease-release:{lease.token}",
-            )
+            try:
+                if lease is not None:
+                    self._release_lease(
+                        run_id,
+                        node.node_id,
+                        token=lease.token,
+                        idempotency_key=f"runtime:{node.node_id}:lease-release:{lease.token}",
+                    )
+            except Exception as exc:
+                release_failure = str(exc)
+                raise
+            finally:
+                ended_at = time.time()
+                self._record_runtime_node_event(
+                    run_id,
+                    node,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    result=final_result,
+                    error=release_failure or failure,
+                )
+
+    def _record_runtime_node_event(
+        self,
+        run_id: str,
+        node: NodeSpec,
+        *,
+        started_at: float,
+        ended_at: float,
+        result: NodeResult | None,
+        error: str | None,
+    ) -> None:
+        if self.repo_root is None:
+            return
+        retry_attempts = 0
+        try:
+            retry_attempts = self.store.load(run_id).nodes[node.node_id].attempts
+        except Exception:  # noqa: BLE001
+            retry_attempts = 0
+        status = (
+            result.status.value
+            if result is not None
+            else NodeResultStatus.FAILED.value
+        )
+        record_trace_event(
+            self.repo_root,
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=started_at,
+                payload={
+                    "backend": self.backend_name,
+                    "run_id": run_id,
+                    "node_id": node.node_id,
+                    "node_kind": node.kind,
+                    "status": status,
+                    "error": error or (result.error if result is not None else None),
+                    "side_effecting": node.side_effecting,
+                    "approval_required": node.approval_required,
+                    "dependencies": list(node.dependencies),
+                    "capabilities": node.capabilities.to_dict(),
+                    "retry_attempts": retry_attempts,
+                    "end_ts": ended_at,
+                    "duration_seconds": max(0.0, ended_at - started_at),
+                    "title": f"runtime node {node.node_id} {status}",
+                },
+            ),
+        )
 
     def _acquire_node_lease(self, run_id: str, node: NodeSpec) -> Lease:
         snapshot = self.store.load(run_id)

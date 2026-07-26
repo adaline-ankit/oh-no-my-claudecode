@@ -53,6 +53,9 @@ This is evidence for a stronger harness foundation:
 - OTel GenAI span export now preserves measured event duration when trace events provide `end_ts`,
   `duration_seconds`, or `duration_ms`, and explicitly marks the legacy instant-event 1ms span
   fallback as estimated.
+- Native runtime execution now emits best-effort `runtime_node` trace events for each executed
+  node when an ONMC trace session is active, including measured duration, run/node identity,
+  node status, retry attempts, side-effect flags, approval requirement, and declared capabilities.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -351,6 +354,59 @@ Result:
 
 ```text
 63 passed
+```
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+65 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/runtime src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 11 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by the runtime trace slice.
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py tests/test_trace.py
+```
+
+Result:
+
+```text
+124 collected tests passed
 ```
 
 ```text

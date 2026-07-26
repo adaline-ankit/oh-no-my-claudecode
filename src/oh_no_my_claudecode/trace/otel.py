@@ -37,6 +37,7 @@ _GEN_AI_SYSTEM = "onmc"
 _OPERATION_MAP: dict[str, str] = {
     TraceEventKind.TOOL_CALL: "execute_tool",
     TraceEventKind.TOOL_FAILURE: "execute_tool",
+    TraceEventKind.RUNTIME_NODE: "execute_agent",
     TraceEventKind.FILE_READ: "retrieve",
     TraceEventKind.SEARCH_QUERY: "retrieve",
     TraceEventKind.TOKENS: "chat",

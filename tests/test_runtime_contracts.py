@@ -21,6 +21,8 @@ from oh_no_my_claudecode.runtime import (
     RunSpec,
     RuntimeContractError,
 )
+from oh_no_my_claudecode.trace.models import TraceEventKind
+from oh_no_my_claudecode.trace.recorder import load_session_events, start_session
 
 
 def _node(
@@ -209,6 +211,52 @@ def test_native_backend_replays_completed_idempotency_without_side_effect(tmp_pa
     ]
     assert len(backend.store.events("run-1")) == event_count_after_first_run
     assert backend.store.load("run-1").nodes["execute"].lease is None
+
+
+def test_native_backend_records_runtime_node_trace_event(tmp_path: Path) -> None:
+    session_id = start_session(tmp_path, label="runtime trace")
+    assert session_id is not None
+    spec = RunSpec(
+        run_id="run-trace",
+        task="Build feature",
+        nodes=(_node("execute", side_effecting=True),),
+    )
+    backend = NativeExecutionBackend(RuntimeStore(tmp_path / "runtime"), repo_root=tmp_path)
+    calls: list[str] = []
+
+    def handler(node: NodeSpec) -> NodeResult:
+        calls.append(node.node_id)
+        if len(calls) == 1:
+            raise TimeoutError("temporarily unavailable")
+        return NodeResult(
+            node_id=node.node_id,
+            status=NodeResultStatus.SUCCEEDED,
+            idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+            evidence=_completion_evidence(node),
+        )
+
+    result = backend.execute(spec, {"execute": handler})
+
+    assert result.status is RunResultStatus.COMPLETED
+    session, events = load_session_events(
+        tmp_path,
+        session_id,
+        include_notify_window=False,
+    )
+    assert session is not None
+    runtime_events = [event for event in events if event.kind == TraceEventKind.RUNTIME_NODE]
+    assert len(runtime_events) == 1
+    payload = runtime_events[0].payload
+    assert payload["backend"] == "native"
+    assert payload["run_id"] == "run-trace"
+    assert payload["node_id"] == "execute"
+    assert payload["node_kind"] == "test"
+    assert payload["status"] == "succeeded"
+    assert payload["side_effecting"] is True
+    assert payload["retry_attempts"] == 1
+    assert payload["duration_seconds"] >= 0
+    assert payload["end_ts"] >= runtime_events[0].ts
+    assert payload["capabilities"]["filesystem_write"] is True
 
 
 def test_native_backend_recovers_result_written_before_crash_without_side_effect(

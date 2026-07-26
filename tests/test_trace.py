@@ -653,6 +653,23 @@ class TestOtelSpans:
             == "instant_event_default_1ms"
         )
 
+    def test_otel_span_maps_runtime_node_to_agent_execution(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={"node_id": "execute", "duration_ms": 25},
+            )
+        ]
+        spans = to_otel_spans(events, session_id="tr_runtime_node")
+
+        attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
+        assert attr_map["gen_ai.operation.name"]["stringValue"] == "execute_agent"
+        assert attr_map["onmc.event_kind"]["stringValue"] == "runtime_node"
+        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 
