@@ -134,6 +134,9 @@ def test_export_portfolio_to_harbor_writes_task_directory(tmp_path: Path) -> Non
     assert test_script.exists()
     assert test_script.stat().st_mode & 0o111
     assert "Fix cache invalidation" in (task_dir / "instruction.md").read_text(encoding="utf-8")
+    dockerfile = (task_dir / "environment" / "Dockerfile").read_text(encoding="utf-8")
+    assert "git clone https://github.com/example/demo.git /workspace" in dockerfile
+    assert "git checkout abcdef1234567890" in dockerfile
     assert "tests/test_cache.py" in test_script.read_text(encoding="utf-8")
     metadata = json.loads((task_dir / "onmc-task.json").read_text(encoding="utf-8"))
     assert metadata["task_id"] == "cache-bugfix"
@@ -153,11 +156,18 @@ def test_plan_harbor_smoke_enforces_cell_budget(tmp_path: Path) -> None:
     assert plan.budget_ready is True
     assert plan.total_cells == 4
     assert len(plan.commands) == 4
-    assert plan.commands[0][:4] == ("harbor", "run", "-p", str(tmp_path / "onmc/cache-bugfix"))
+    assert plan.commands[0][:6] == (
+        "harbor",
+        "run",
+        "--job-name",
+        "onmc-smoke-onmc-cache-bugfix-bare-agent",
+        "-p",
+        str(tmp_path / "onmc/cache-bugfix"),
+    )
+    assert plan.commands[1][3] == "onmc-smoke-onmc-cache-bugfix-onmc-current"
     assert "--env" in plan.commands[0]
     assert "docker" in plan.commands[0]
-    assert "--metadata" in plan.commands[0]
-    assert "onmc_condition=bare-agent" in plan.commands[0]
+    assert "--metadata" not in plan.commands[0]
 
     with pytest.raises(ValueError, match="exceeding max_cells"):
         plan_harbor_smoke(

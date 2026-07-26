@@ -34,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--smoke-trials", type=int, default=1)
     parser.add_argument("--max-cells", type=int, default=4)
-    parser.add_argument("--agent", default="oracle", help="Harbor smoke agent.")
+    parser.add_argument("--agent", default="nop", help="Harbor smoke agent.")
     parser.add_argument("--model", default="local", help="Harbor smoke model label.")
     args = parser.parse_args(argv)
 

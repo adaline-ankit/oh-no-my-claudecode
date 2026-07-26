@@ -130,7 +130,7 @@ def export_portfolio_to_harbor(
         (task_dir / "tests").mkdir(parents=True, exist_ok=True)
         (task_dir / "instruction.md").write_text(_instruction(task), encoding="utf-8")
         (task_dir / "task.toml").write_text(_task_toml(task, task_name), encoding="utf-8")
-        (task_dir / "environment" / "Dockerfile").write_text(_dockerfile(), encoding="utf-8")
+        (task_dir / "environment" / "Dockerfile").write_text(_dockerfile(task), encoding="utf-8")
         test_script = task_dir / "tests" / "test.sh"
         test_script.write_text(_test_script(task), encoding="utf-8")
         test_script.chmod(0o755)
@@ -157,7 +157,7 @@ def plan_harbor_smoke(
     conditions: Sequence[Condition] = (Condition.BARE_AGENT, Condition.ONMC_CURRENT),
     trials: int = 1,
     max_cells: int = 4,
-    agent: str = "oracle",
+    agent: str = "nop",
     model: str = "local",
 ) -> HarborSmokePlan:
     """Build a no-cloud Harbor Docker smoke plan and enforce a hard cell budget."""
@@ -186,6 +186,8 @@ def plan_harbor_smoke(
                 (
                     "harbor",
                     "run",
+                    "--job-name",
+                    _smoke_job_name(task_name, condition),
                     "-p",
                     str(task_path),
                     "-a",
@@ -194,8 +196,6 @@ def plan_harbor_smoke(
                     model,
                     "--env",
                     "docker",
-                    "--metadata",
-                    f"onmc_condition={condition}",
                 )
             )
     return HarborSmokePlan(
@@ -267,6 +267,11 @@ def _harbor_task_name(task: TaskSpec) -> str:
     return f"onmc/{task.task_id}"
 
 
+def _smoke_job_name(task_name: str, condition: str) -> str:
+    raw = f"onmc-smoke-{task_name}-{condition}"
+    return "".join(char if char.isalnum() or char in "-_." else "-" for char in raw)
+
+
 def _instruction(task: TaskSpec) -> str:
     return (
         f"{task.prompt}\n\n"
@@ -300,12 +305,19 @@ def _task_toml(task: TaskSpec, task_name: str) -> str:
     )
 
 
-def _dockerfile() -> str:
+def _dockerfile(task: TaskSpec) -> str:
+    repo_url = _docker_shell_string(task.repo.url)
+    pinned_sha = _docker_shell_string(task.repo.pinned_sha)
     return "\n".join(
         (
             "FROM python:3.12-slim",
+            "RUN apt-get update \\",
+            "    && apt-get install -y --no-install-recommends git \\",
+            "    && rm -rf /var/lib/apt/lists/*",
             "RUN python -m pip install --no-cache-dir pytest",
             "WORKDIR /workspace",
+            f"RUN git clone {repo_url} /workspace \\",
+            f"    && git checkout {pinned_sha}",
             "",
         )
     )
@@ -379,3 +391,7 @@ def _toml_string(value: str) -> str:
 
 def _toml_multiline_string(value: str) -> str:
     return '"""' + value.replace('"""', '\\"\\"\\"') + '"""'
+
+
+def _docker_shell_string(value: str) -> str:
+    return shlex.quote(value)

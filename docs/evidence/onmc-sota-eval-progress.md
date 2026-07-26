@@ -138,6 +138,15 @@ This is evidence for a stronger harness foundation:
 - ONMC can now export a bounded Harbor smoke bundle from a portfolio manifest and emit the exact
   local Docker `harbor run` cells before execution. The smoke plan refuses cell counts over its hard
   ceiling, so unscheduled or surprise benchmark cells cannot be launched silently.
+- Harbor smoke commands now match Harbor 0.20's real CLI surface: condition identity is carried in
+  deterministic `--job-name` values instead of an unsupported metadata flag.
+- Exported Harbor task images now materialize the pinned repository checkout into `/workspace`
+  before verification, so generated task directories execute under Harbor Docker instead of only
+  describing ONMC metadata.
+- A real four-cell local Harbor Docker smoke passed with `nop`/`local` on two frozen ONMC portfolio
+  tasks across `bare-agent` and `onmc-current`. This proves export, Docker environment, and verifier
+  path execute end-to-end with zero model-token spend. It does not prove ONMC beats a coding agent
+  yet because `nop` runs against pristine pinned repos.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -519,8 +528,79 @@ total_cells: 4
 budget_ready: true
 ```
 
-This is still not the real Harbor runtime smoke. `harbor` was not installed in the local environment,
-so no Harbor job was launched and no Harbor runtime output was imported.
+## Harbor Runtime Smoke Slice
+
+Commands run on 2026-07-26:
+
+```text
+harbor --version
+```
+
+Result:
+
+```text
+0.20.0
+```
+
+```text
+python -m pytest tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+7 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/harbor_adapter.py tests/test_harbor_adapter.py scripts/export_harbor_tasks.py scripts/import_harbor_results.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+Live export-plan command run against the v4 manifest after Harbor CLI contract fixes:
+
+```text
+python scripts/export_harbor_tasks.py datasets/experiment/portfolio_external_v4.json --out /private/tmp/onmc-harbor-smoke --limit-tasks 2 --smoke-plan --max-cells 4
+```
+
+Observed result:
+
+```text
+task_count: 2
+task_names: onmc/six-bugfix-integer-types, onmc/tenacity-bugfix-find-ordinal
+conditions: bare-agent, onmc-current
+total_cells: 4
+budget_ready: true
+agent: nop
+model: local
+```
+
+Real Harbor Docker smoke commands run:
+
+```text
+harbor run --job-name onmc-smoke-onmc-six-bugfix-integer-types-bare-agent -p /private/tmp/onmc-harbor-smoke/onmc/six-bugfix-integer-types -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-jobs
+harbor run --job-name onmc-smoke-onmc-six-bugfix-integer-types-onmc-current -p /private/tmp/onmc-harbor-smoke/onmc/six-bugfix-integer-types -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-jobs
+harbor run --job-name onmc-smoke-onmc-tenacity-bugfix-find-ordinal-bare-agent -p /private/tmp/onmc-harbor-smoke/onmc/tenacity-bugfix-find-ordinal -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-jobs
+harbor run --job-name onmc-smoke-onmc-tenacity-bugfix-find-ordinal-onmc-current -p /private/tmp/onmc-harbor-smoke/onmc/tenacity-bugfix-find-ordinal -a nop -m local --env docker -n 1 -y --jobs-dir /private/tmp/onmc-harbor-jobs
+```
+
+Observed result:
+
+```text
+4/4 Harbor Docker smoke cells passed.
+Each cell: 1 trial, 0 exceptions, passed=1.000, reward=1.000.
+Observed runtimes: 23s, 10s, 10s, 12s.
+Token/cost fields in Harbor result were null because `nop`/`local` performs no model call.
+```
+
+This closes the first real Harbor runtime smoke. U7 is still incomplete until ONMC imports Harbor's
+native `result.json` layout directly and runs a discriminative agent benchmark where seeded
+regressions make `nop` fail and agent conditions compete on identical tasks.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:
