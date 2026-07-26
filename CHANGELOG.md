@@ -4,6 +4,40 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+
+## [0.109.0] — 2026-07-26
+
+### Added
+
+- **Canonical runtime contracts** for ONMC runs, including typed nodes, explicit budgets, dependencies, retry policy, capability declarations, completion evidence, environment snapshots, and receipt binding.
+- **Verifier-backed `onmc run` / mission execution** so completion is gated by observed evidence, protected-test integrity, proof assessment, policy checks, and complete stage records.
+- **Dependency-aware process swarms** that compile swarm plans into the canonical runtime, run ready units deterministically, and produce auditable fan-in receipts.
+- **Measured context and retrieval policy** with BM25 lexical floor, dense and rerank candidates, explored/selected context reporting, provenance, token cost, and held-out promotion gates.
+- **External evaluation and publication scaffold** with benchmark revision hashes, raw trajectory/artifact requirements, calibration reports, claim-readiness gates, and reproducibility docs.
+- **Verifier calibration corpus** covering false-green, vacuous-pass, protected-suite, mutation, reachability, and external challenge cases.
+- **Role and sandbox capability boundaries** for autonomous work, including Docker-backed sandbox smoke coverage and redaction of sensitive capability data.
+- **Adapter parity fixtures** for Claude Code, Codex, and OpenCode, including explicit capability labels and offline fixture provenance.
+- **Optional LangGraph backend** behind ONMC's own execution contract, keeping ONMC receipts and idempotency rules canonical.
+- **Real OpenTelemetry export path** for runtime nodes, policy decisions, verifier results, proof summaries, measured timing, and measured provider usage when available.
+- **Shadow trajectory routing** that records routing advice from observed task progress without silently changing production model choice.
+
+### Changed
+
+- Collapsed primary help around the canonical runtime surface while keeping the advanced command catalog available.
+- Routed Mission Control and interactive mission views through the same runtime event stream and receipts instead of parallel status formats.
+- Hardened runtime crash recovery with durable leases, cancellation state, approval interrupts, and idempotent replay behavior.
+- Expanded Harbor integration material for smoke batches, seeded tasks, result import, and bounded benchmark exports.
+- Made external claims fail closed when report coverage, verifier calibration, telemetry, environment manifests, or leakage metadata are missing.
+- Documented the current evidence boundary: this release improves the ONMC harness architecture, but public "SOTA", "better than Claude Code", or "cheaper" claims still require publication-grade external benchmarks.
+
+### Fixed
+
+- Fixed CI collection and Windows CLI smoke failures introduced during the integrated runtime merge.
+- Ensured runtime state is excluded from change-proof checks.
+- Made retrieval fallback typed and visible instead of silent.
+- Prevented federated or unreviewed memory from becoming active without promotion.
+- Preserved retry checkpoints for provider outages and classified those outages as infrastructure failures rather than agent failures.
+
 ### Added
 
 - **`ONMC_LEARNING` kill switch** — one env var disables all active learned behavior: no learned candidate activates and promotion is suppressed. Default ON; `0` / `false` / `no` / `off` (case-insensitive) turn it OFF, matching the `ONMC_FIREWALL` idiom. Now documented for users in `docs/environment-variables.md`, alongside `ONMC_AUTOCAPTURE`, `ONMC_FIREWALL`, `ONMC_EMBEDDINGS`, `ONMC_RECALL_MIN_SCORE`, and `ONMC_RECALL_MAX_CHARS`. The switch governs the eval-gated learning machinery, which is `implemented` (code plus green tests); routing production memory write paths through the promotion gate is still in progress, so it does not disable ordinary repo-memory ingest or recall.
