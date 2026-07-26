@@ -49,6 +49,7 @@ from .run_policy import (
     load_run_policy,
     secret_findings,
 )
+from .sandboxing import HarnessSandboxManifest, SandboxProviderName, harness_sandbox_manifest
 from .stages import (
     StageName,
     StageRecord,
@@ -74,6 +75,7 @@ __all__ = [
     "HarnessController",
     "HarnessResult",
     "HarnessRunReceipt",
+    "HarnessSandboxManifest",
     "HarnessStatus",
     "IsolationProfile",
     "LoopExecutor",
@@ -87,6 +89,7 @@ __all__ = [
     "RunPolicy",
     "RunPolicyDecision",
     "RunRequest",
+    "SandboxProviderName",
     "StageName",
     "StageRecord",
     "StageStatus",
@@ -102,6 +105,7 @@ __all__ = [
     "environment_snapshot",
     "evaluate_completion_gate",
     "harness_receipt_path",
+    "harness_sandbox_manifest",
     "injection_findings",
     "isolation_profile",
     "learn_candidate_stage",

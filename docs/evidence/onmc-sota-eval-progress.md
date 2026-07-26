@@ -1305,6 +1305,10 @@ Interpretation:
 - U5 sandbox work has started with provider-neutral contracts and Docker/Harbor planners. The new
   sandbox surface declares mounts, network policy, timeout, resources, image digest, and scoped
   secret exposure without running Docker during preflight.
+- `onmc run` plans can now carry a sandbox manifest when `--sandbox` is requested. The manifest
+  includes Docker or Harbor provider payloads for agent and verifier roles, keeps provider secret
+  values out of the plan, and marks the sandbox as `enforced=false` until runner execution is wired
+  through the provider.
 - This is useful progress because the repo now has a programmatic gate that catches this failure
   mode instead of relying on manual judgment.
 
@@ -1429,3 +1433,47 @@ Success: no issues found in 4 source files
 These are contract-level checks, not proof of true runtime isolation yet. U5 remains incomplete until
 `onmc run` can execute autonomous work through a real sandbox provider and demonstrate filesystem,
 network, process, timeout, cleanup, and secret boundaries in an integration smoke.
+
+## Sandbox Manifest Wiring Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harness_run.py tests/test_runtime_contracts.py tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+50 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/harness_run src/oh_no_my_claudecode/sandbox tests/test_harness_run.py tests/test_runtime_contracts.py tests/test_sandbox_contracts.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/harness_run src/oh_no_my_claudecode/sandbox
+```
+
+Result:
+
+```text
+Success: no issues found in 21 source files
+```
+
+```text
+python scripts/generate-cli-reference.py
+```
+
+Result:
+
+```text
+docs/cli-reference.md regenerated with --sandbox, --sandbox-provider, and --sandbox-image.
+```

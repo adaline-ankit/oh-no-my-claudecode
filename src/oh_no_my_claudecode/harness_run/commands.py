@@ -60,6 +60,21 @@ def register(app: typer.Typer) -> None:
             bool,
             typer.Option("--isolate", help="Run agent changes in the loop engine's worktree."),
         ] = False,
+        sandbox: Annotated[
+            bool,
+            typer.Option(
+                "--sandbox/--no-sandbox",
+                help="Attach a Docker/Harbor sandbox contract to the run plan.",
+            ),
+        ] = False,
+        sandbox_provider: Annotated[
+            str,
+            typer.Option("--sandbox-provider", help="Sandbox planner: docker or harbor."),
+        ] = "docker",
+        sandbox_image: Annotated[
+            str,
+            typer.Option("--sandbox-image", help="Sandbox image for provider planning."),
+        ] = "python:3.12-slim",
         risk: Annotated[
             str,
             typer.Option("--risk", help="Execution risk: low, medium, high, or critical."),
@@ -117,6 +132,9 @@ def register(app: typer.Typer) -> None:
                 max_iterations=max_iterations,
                 max_cost_usd=max_cost_usd,
                 isolation=isolate,
+                sandbox=sandbox,
+                sandbox_provider=sandbox_provider,  # type: ignore[arg-type]
+                sandbox_image=sandbox_image,
                 risk=resolved_risk,
                 context_budget=resolved_budget,
                 budget_mode=resolved_mode,

@@ -690,7 +690,7 @@ Usage: onmc audit [OPTIONS] [PATH]
    viewer, and other SAST integrations.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      [PATH]  Repo root to scan.  Defaults to the current directory.   │
+│   [path]      PATH  Repo root to scan.  Defaults to the current directory.   │
 │                     The directory does not need to be an initialised ONMC    │
 │                     repo — audit is purely static.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1025,8 +1025,8 @@ Usage: onmc blackboard show [OPTIONS] [SWARM_ID]
  prints an honest empty-state message rather than an error.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm id to show. Omit to use the most recently  │
-│                             modified swarm.                                  │
+│   [swarm_id]      TEXT  Swarm id to show. Omit to use the most recently      │
+│                         modified swarm.                                      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --kind        TEXT  Filter to one kind: one of finding, claim, warning,      │
@@ -1437,8 +1437,8 @@ Usage: onmc claim acquire [OPTIONS] OWNER PATHS...
  Acquire file/path leases for an owner.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    owner      TEXT      Agent or process claiming the paths. [required]    │
-│ *    paths      PATHS...  One or more file paths to claim. [required]        │
+│ *    owner         TEXT  Agent or process claiming the paths. [required]     │
+│ *    paths...      TEXT  One or more file paths to claim. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --ttl-seconds        INTEGER RANGE [x>=1]  Lease duration in seconds.        │
@@ -1457,7 +1457,7 @@ Usage: onmc claim check [OPTIONS] PATHS...
  Check whether paths are free to claim.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      PATHS...  One or more file paths to check. [required]        │
+│ *    paths...      TEXT  One or more file paths to check. [required]         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --owner        TEXT  Allow claims already held by this owner.                │
@@ -1953,9 +1953,9 @@ Usage: onmc compare [OPTIONS] SWARM_ID_A [SWARM_ID_B]
  instead of crashing.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    swarm_id_a      TEXT          First swarm id to compare. [required]     │
-│      swarm_id_b      [SWARM_ID_B]  Second swarm id to compare. Omit to use   │
-│                                    the most recent OTHER swarm.              │
+│ *    swarm_id_a        TEXT  First swarm id to compare. [required]           │
+│      [swarm_id_b]      TEXT  Second swarm id to compare. Omit to use the     │
+│                              most recent OTHER swarm.                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured comparison as JSON.                      │
@@ -2287,7 +2287,7 @@ Usage: onmc crews export [OPTIONS] PLAN
      onmc crews export plan.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    plan      PATH  Path to an onmc mission-plan JSON file                  │
+│ *    PLAN      PATH  Path to an onmc mission-plan JSON file                  │
 │                      (MissionPlan.to_dict() shape) or a swarm manifest.      │
 │                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -2320,7 +2320,7 @@ Usage: onmc crews run [OPTIONS] SPEC
      onmc crews run crew.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    spec      PATH  Path to a crew specification JSON file (output of 'onmc │
+│ *    SPEC      PATH  Path to a crew specification JSON file (output of 'onmc │
 │                      crews export').                                         │
 │                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -2364,9 +2364,9 @@ Usage: onmc crossrepo recall [OPTIONS] QUERY [PATHS]...
  carries the same signal per hit as ``unpromoted`` / ``provenance``.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    query      TEXT        Search query for federated memory recall.        │
-│                             [required]                                       │
-│      paths      [PATHS]...  Additional repo paths to search (positional).    │
+│ *    query           TEXT  Search query for federated memory recall.         │
+│                            [required]                                        │
+│      [paths]...      TEXT  Additional repo paths to search (positional).     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --repo  -r      TEXT  Repo path to search (repeatable).                      │
@@ -2387,9 +2387,9 @@ Usage: onmc crossrepo scan [OPTIONS] PATHS...
  offline: same repos always yield the same map.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      PATHS...  Sibling repo paths to scan for the cross-repo      │
-│                           impact map.                                        │
-│                           [required]                                         │
+│ *    paths...      TEXT  Sibling repo paths to scan for the cross-repo       │
+│                          impact map.                                         │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the impact map as JSON.                                 │
@@ -2884,9 +2884,9 @@ Usage: onmc explain [OPTIONS] [RECEIPT_REF]
      onmc explain --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   receipt_ref      [RECEIPT_REF]  Path to a receipt file, its filename, or a │
-│                                   short hash (substring of the filename      │
-│                                   stem). Omit to use the newest receipt.     │
+│   [receipt_ref]      TEXT  Path to a receipt file, its filename, or a short  │
+│                            hash (substring of the filename stem). Omit to    │
+│                            use the newest receipt.                           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit a machine-readable JSON envelope                        │
@@ -3160,7 +3160,7 @@ Usage: onmc gh-aw init [OPTIONS] [PATH]
  --force is passed.  Use --dry-run to preview without writing anything.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      [PATH]  Target repo root. Defaults to the current directory (or  │
+│   [path]      PATH  Target repo root. Defaults to the current directory (or  │
 │                     nearest git root). The four workflows are written to     │
 │                     PATH/.github/workflows/onmc-*.yml.                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -3650,16 +3650,14 @@ Usage: onmc import [OPTIONS] SOURCE [PATH]
  onmc import hermes --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    source      TEXT    Source to import from. Use 'omc' for                │
-│                          oh-my-claudecode skills, 'hermes' for Nous          │
-│                          hermes-agent context files, or a path to a .md file │
-│                          / directory.                                        │
-│                          [required]                                          │
-│      path        [PATH]  Optional path override. For 'omc': path to          │
-│                          .omc/skills dir. For 'hermes': path to MEMORY.md /  │
-│                          USER.md / containing directory. For generic         │
-│                          markdown: the .md file or directory (use as         │
-│                          'source' instead).                                  │
+│ *    source      TEXT  Source to import from. Use 'omc' for oh-my-claudecode │
+│                        skills, 'hermes' for Nous hermes-agent context files, │
+│                        or a path to a .md file / directory.                  │
+│                        [required]                                            │
+│      [path]      PATH  Optional path override. For 'omc': path to            │
+│                        .omc/skills dir. For 'hermes': path to MEMORY.md /    │
+│                        USER.md / containing directory. For generic markdown: │
+│                        the .md file or directory (use as 'source' instead).  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --dry-run              Parse and report without writing anything.            │
@@ -4360,10 +4358,9 @@ Usage: onmc mcp check [OPTIONS] [CALLS_FILE]
      cat calls.jsonl | onmc mcp check - --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   calls_file      [CALLS_FILE]  Path to a JSONL file of recorded tool calls. │
-│                                 Each line: {"server": "...", "tool": "...",  │
-│                                 "args": {...}}.  Omit or pass '-' to read    │
-│                                 from stdin.                                  │
+│   [calls_file]      PATH  Path to a JSONL file of recorded tool calls.  Each │
+│                           line: {"server": "...", "tool": "...", "args":     │
+│                           {...}}.  Omit or pass '-' to read from stdin.      │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                      Emit classifications as JSON to stdout.          │
@@ -4406,7 +4403,7 @@ Usage: onmc mcp policy init [OPTIONS] [PATH]
  Re-running is safe — the file is not overwritten unless --force is passed.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   path      [PATH]  Repo root.  Defaults to current directory.               │
+│   [path]      PATH  Repo root.  Defaults to current directory.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --force          Overwrite an existing policy file.                          │
@@ -5136,8 +5133,8 @@ Usage: onmc mission-bridge allow [OPTIONS] [IDENTITY]
  different channel is a different principal.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   identity      [IDENTITY]  Channel-scoped identity, e.g. slack:U123 or      │
-│                             telegram:456.                                    │
+│   [identity]      TEXT  Channel-scoped identity, e.g. slack:U123 or          │
+│                         telegram:456.                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --remove              Remove the identity instead of adding it.              │
@@ -5218,8 +5215,7 @@ Usage: onmc missioncontrol [OPTIONS] [SWARM_ID]
  Never mutates swarm state.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm id to inspect. Omit with --all to list     │
-│                             swarms.                                          │
+│   [swarm_id]      TEXT  Swarm id to inspect. Omit with --all to list swarms. │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           List all swarms under .onmc/swarm and exit.                  │
@@ -5759,8 +5755,8 @@ Usage: onmc postmortem [OPTIONS] [SWARM_ID]
  missing/partial data instead of crashing.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm id to recap. Omit to use the most recent   │
-│                             swarm.                                           │
+│   [swarm_id]      TEXT  Swarm id to recap. Omit to use the most recent       │
+│                         swarm.                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the structured postmortem as JSON.                      │
@@ -6020,9 +6016,9 @@ Usage: onmc pull [OPTIONS] [SOURCE]
  config.yaml.  One failing source never aborts the rest.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   source      [SOURCE]  Local path to another repo (or its .agent-memory/    │
-│                         dir), or a remote git URL (https://, git@, ssh://).  │
-│                         Omit when using --all.                               │
+│   [source]      TEXT  Local path to another repo (or its .agent-memory/      │
+│                       dir), or a remote git URL (https://, git@, ssh://).    │
+│                       Omit when using --all.                                 │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all                  Pull from every source listed in federation.sources   │
@@ -6063,8 +6059,8 @@ Usage: onmc pulse [OPTIONS] [SWARM_ID]
  when there are no active swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Only pulse this swarm. Omit to pulse every       │
-│                             active swarm.                                    │
+│   [swarm_id]      TEXT  Only pulse this swarm. Omit to pulse every active    │
+│                         swarm.                                               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                      Emit the pulse as machine-readable JSON.         │
@@ -6197,7 +6193,7 @@ Usage: onmc race [OPTIONS] [GOAL]
  fully offline (no LLM call).
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   goal      [GOAL]  Goal to cluster receipts on (keyword overlap).           │
+│   [goal]      TEXT  Goal to cluster receipts on (keyword overlap).           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Race every model over the whole receipt corpus.              │
@@ -6223,8 +6219,8 @@ Usage: onmc recall [OPTIONS] [QUERY]
    cat error.log | onmc recall
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   query      [QUERY]  Error text or stacktrace to search for. Omit to read   │
-│                       from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).  │
+│   [query]      TEXT  Error text or stacktrace to search for. Omit to read    │
+│                      from stdin (pipe-friendly: `cmd 2>&1 | onmc recall`).   │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --limit        INTEGER RANGE [x>=1]  Maximum number of incident matches to   │
@@ -6718,40 +6714,73 @@ Usage: onmc run [OPTIONS] TASK
 │ *    task      TEXT  Task for the execution harness. [required]              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --plan-only                                   Emit the deterministic plan    │
-│                                               without invoking an agent or   │
-│                                               verifier.                      │
-│ --execute                                     Explicitly allow the harness   │
-│                                               to invoke an agent and mutate  │
-│                                               the worktree.                  │
-│ --agent                 TEXT                  Agent CLI: claude, codex, or   │
-│                                               opencode.                      │
-│                                               [default: claude]              │
-│ --model                 TEXT                  Model selector passed to the   │
-│                                               chosen agent adapter.          │
-│                                               [default: default]             │
-│ --verifier              TEXT                  Verifier command run by the    │
-│                                               existing loop engine.          │
-│                                               [default: pytest]              │
-│ --max-iterations        INTEGER RANGE [x>=1]  Maximum loop iterations.       │
-│                                               [default: 10]                  │
-│ --max-cost-usd          FLOAT RANGE [x>=0.0]  Optional agent cost ceiling in │
-│                                               USD.                           │
-│ --isolate                                     Run agent changes in the loop  │
-│                                               engine's worktree.             │
-│ --risk                  TEXT                  Execution risk: low, medium,   │
-│                                               high, or critical.             │
-│                                               [default: medium]              │
-│ --budget-mode           TEXT                  Context budget preset: tiny,   │
-│                                               standard, or deep.             │
-│                                               [default: standard]            │
-│ --context-budget        INTEGER RANGE [x>=1]  Override the budget mode's     │
-│                                               context-token ceiling.         │
-│ --resume                TEXT                  Resume or inspect the durable  │
-│                                               state for a run ID.            │
-│ --json                                        Emit the plan and result as    │
-│                                               canonical JSON.                │
-│ --help                                        Show this message and exit.    │
+│ --plan-only                                               Emit the           │
+│                                                           deterministic plan │
+│                                                           without invoking   │
+│                                                           an agent or        │
+│                                                           verifier.          │
+│ --execute                                                 Explicitly allow   │
+│                                                           the harness to     │
+│                                                           invoke an agent    │
+│                                                           and mutate the     │
+│                                                           worktree.          │
+│ --agent                               TEXT                Agent CLI: claude, │
+│                                                           codex, or          │
+│                                                           opencode.          │
+│                                                           [default: claude]  │
+│ --model                               TEXT                Model selector     │
+│                                                           passed to the      │
+│                                                           chosen agent       │
+│                                                           adapter.           │
+│                                                           [default: default] │
+│ --verifier                            TEXT                Verifier command   │
+│                                                           run by the         │
+│                                                           existing loop      │
+│                                                           engine.            │
+│                                                           [default: pytest]  │
+│ --max-iterations                      INTEGER RANGE       Maximum loop       │
+│                                       [x>=1]              iterations.        │
+│                                                           [default: 10]      │
+│ --max-cost-usd                        FLOAT RANGE         Optional agent     │
+│                                       [x>=0.0]            cost ceiling in    │
+│                                                           USD.               │
+│ --isolate                                                 Run agent changes  │
+│                                                           in the loop        │
+│                                                           engine's worktree. │
+│ --sandbox             --no-sandbox                        Attach a           │
+│                                                           Docker/Harbor      │
+│                                                           sandbox contract   │
+│                                                           to the run plan.   │
+│                                                           [default:          │
+│                                                           no-sandbox]        │
+│ --sandbox-provider                    TEXT                Sandbox planner:   │
+│                                                           docker or harbor.  │
+│                                                           [default: docker]  │
+│ --sandbox-image                       TEXT                Sandbox image for  │
+│                                                           provider planning. │
+│                                                           [default:          │
+│                                                           python:3.12-slim]  │
+│ --risk                                TEXT                Execution risk:    │
+│                                                           low, medium, high, │
+│                                                           or critical.       │
+│                                                           [default: medium]  │
+│ --budget-mode                         TEXT                Context budget     │
+│                                                           preset: tiny,      │
+│                                                           standard, or deep. │
+│                                                           [default:          │
+│                                                           standard]          │
+│ --context-budget                      INTEGER RANGE       Override the       │
+│                                       [x>=1]              budget mode's      │
+│                                                           context-token      │
+│                                                           ceiling.           │
+│ --resume                              TEXT                Resume or inspect  │
+│                                                           the durable state  │
+│                                                           for a run ID.      │
+│ --json                                                    Emit the plan and  │
+│                                                           result as          │
+│                                                           canonical JSON.    │
+│ --help                                                    Show this message  │
+│                                                           and exit.          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -7111,8 +7140,7 @@ Usage: onmc skill promote [OPTIONS] [PLAYBOOK_ID]
  onmc skill promote --auto --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   playbook_id      [PLAYBOOK_ID]  Playbook ID (or prefix) to promote to a    │
-│                                   skill.                                     │
+│   [playbook_id]      TEXT  Playbook ID (or prefix) to promote to a skill.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --auto              Auto-detect recurring patterns and promote all.          │
@@ -7645,7 +7673,7 @@ Usage: onmc swarm abort [OPTIONS] [SWARM_ID]
  onmc swarm abort --all
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm ID to abort.  Omit when using --all.       │
+│   [swarm_id]      TEXT  Swarm ID to abort.  Omit when using --all.           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --all           Abort ALL running swarms by writing a global ABORT file.     │
@@ -7900,7 +7928,7 @@ Usage: onmc swarm status [OPTIONS] [SWARM_ID]
  Show status of a swarm or all swarms.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm ID to inspect.  Omit to list all swarms.   │
+│   [swarm_id]      TEXT  Swarm ID to inspect.  Omit to list all swarms.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit status as JSON.                                         │
@@ -7964,8 +7992,8 @@ Usage: onmc swarmreplay [OPTIONS] [SWARM_ID]
    onmc swarmreplay abc123 --step 3  # just step 3's detail
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   swarm_id      [SWARM_ID]  Swarm id to replay. Omit to use the most         │
-│                             recently active swarm.                           │
+│   [swarm_id]      TEXT  Swarm id to replay. Omit to use the most recently    │
+│                         active swarm.                                        │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json                 Emit the full ordered step list as JSON.              │
@@ -8144,7 +8172,7 @@ Usage: onmc teams export [OPTIONS] PLAN
      onmc mission --json | onmc teams export -
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    plan      TEXT  Path to an onmc mission/swarm plan JSON file, or ``-``  │
+│ *    PLAN      TEXT  Path to an onmc mission/swarm plan JSON file, or ``-``  │
 │                      to read from stdin.                                     │
 │                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -8175,9 +8203,9 @@ Usage: onmc teams run [OPTIONS] SPEC
      onmc teams run team.json --json
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    spec_path      SPEC  Path to an AutoGen team spec JSON file (from       │
-│                           ``onmc teams export``).                            │
-│                           [required]                                         │
+│ *    SPEC      PATH  Path to an AutoGen team spec JSON file (from ``onmc     │
+│                      teams export``).                                        │
+│                      [required]                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit a JSON receipt envelope instead of a human-readable     │
@@ -8239,8 +8267,8 @@ Usage: onmc trace report [OPTIONS] [SESSION_ID]
  Use --otel <file> to dump OpenTelemetry GenAI-convention span JSON.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│   session_id      [SESSION_ID]  Session ID to report on.  Defaults to the    │
-│                                 current active session.                      │
+│   [session_id]      TEXT  Session ID to report on.  Defaults to the current  │
+│                           active session.                                    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json              Print machine-readable JSON to stdout.                   │
@@ -8320,9 +8348,9 @@ Usage: onmc twin plan [OPTIONS] PATHS...
  empty, run `onmc codegraph` first.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      PATHS...  Repo-relative (or absolute) files you intend to    │
-│                           edit.                                              │
-│                           [required]                                         │
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the rehearsal plan as JSON.                             │
@@ -8343,9 +8371,9 @@ Usage: onmc twin rehearse [OPTIONS] PATHS...
  empty, run `onmc codegraph` first.
 
 ╭─ Arguments ──────────────────────────────────────────────────────────────────╮
-│ *    paths      PATHS...  Repo-relative (or absolute) files you intend to    │
-│                           edit.                                              │
-│                           [required]                                         │
+│ *    paths...      TEXT  Repo-relative (or absolute) files you intend to     │
+│                          edit.                                               │
+│                          [required]                                          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the rehearsal plan as JSON.                             │

@@ -33,8 +33,12 @@ class ExecutionCapabilityManifest:
     max_cost_usd: float | None
     token_telemetry: str
     cost_telemetry: str
+    sandbox_requested: bool
+    sandbox_provider: str
+    sandbox_enforced: bool
     adapter_limitations: tuple[str, ...]
     isolation_limitations: tuple[str, ...]
+    sandbox_limitations: tuple[str, ...]
     schema_version: str = _SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -57,8 +61,12 @@ class ExecutionCapabilityManifest:
             "max_cost_usd": self.max_cost_usd,
             "token_telemetry": self.token_telemetry,
             "cost_telemetry": self.cost_telemetry,
+            "sandbox_requested": self.sandbox_requested,
+            "sandbox_provider": self.sandbox_provider,
+            "sandbox_enforced": self.sandbox_enforced,
             "adapter_limitations": list(self.adapter_limitations),
             "isolation_limitations": list(self.isolation_limitations),
+            "sandbox_limitations": list(self.sandbox_limitations),
         }
 
 
@@ -71,6 +79,10 @@ def execution_capability_manifest(
     token_budget: int,
     max_cost_usd: float | None,
     isolation: IsolationProfile,
+    sandbox_requested: bool = False,
+    sandbox_provider: str = "none",
+    sandbox_enforced: bool = False,
+    sandbox_limitations: tuple[str, ...] = (),
     filesystem_write: bool = True,
     timeout_seconds_per_node: float = 120.0,
 ) -> ExecutionCapabilityManifest:
@@ -101,8 +113,12 @@ def execution_capability_manifest(
         max_cost_usd=max_cost_usd,
         token_telemetry=str(adapter["tokens"]),
         cost_telemetry=str(adapter["cost"]),
+        sandbox_requested=sandbox_requested,
+        sandbox_provider=sandbox_provider,
+        sandbox_enforced=sandbox_enforced,
         adapter_limitations=adapter_limitations,
         isolation_limitations=isolation.limitations,
+        sandbox_limitations=sandbox_limitations,
     )
 
 

@@ -819,6 +819,42 @@ def test_runtime_contract_exposes_pre_execution_capability_manifest(
     )
 
 
+def test_runtime_contract_exposes_planned_sandbox_manifest(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=HarnessController(tmp_path).dependencies.context_engine,
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+    )
+    request = RunRequest(
+        task="Run in Harbor sandbox",
+        plan_only=True,
+        agent="codex",
+        verifier="pytest tests/smoke",
+        sandbox=True,
+        sandbox_provider="harbor",
+        sandbox_image="python:3.12-slim",
+    )
+    plan = HarnessController(tmp_path, dependencies=dependencies).run(request).plan
+
+    spec = plan.to_run_spec()
+    sandbox = spec.metadata["sandbox_manifest"]
+    manifest = spec.metadata["capability_manifest"]
+
+    assert sandbox == plan.sandbox_manifest.to_dict()
+    assert sandbox["requested"] is True
+    assert sandbox["provider"] == "harbor"
+    assert sandbox["enforced"] is False
+    assert sandbox["agent_plan"]["secret_env"] == ["OPENAI_API_KEY"]
+    assert sandbox["verifier_plan"]["secret_env"] == []
+    assert sandbox["verifier_plan"]["command"] == ["pytest", "tests/smoke"]
+    assert manifest["sandbox_requested"] is True
+    assert manifest["sandbox_provider"] == "harbor"
+    assert manifest["sandbox_enforced"] is False
+    assert all(node.metadata["sandbox_manifest"] == sandbox for node in spec.nodes)
+
+
 def test_runtime_contract_exposes_environment_snapshot(tmp_path: Path) -> None:
     loop = FakeLoop(_loop_result(converged=True))
     dependencies = ControllerDependencies(

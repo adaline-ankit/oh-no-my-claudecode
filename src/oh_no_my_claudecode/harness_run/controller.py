@@ -97,6 +97,7 @@ from .run_policy import (
     evaluate_run_policy,
     load_run_policy,
 )
+from .sandboxing import harness_sandbox_manifest
 from .stages import (
     StageRecord,
     context_stage,
@@ -561,6 +562,14 @@ class HarnessController:
             )
         run_id = request.resume_run_id or derived_run_id
         isolation = isolation_profile(requested=request.isolation)
+        sandbox_manifest = harness_sandbox_manifest(
+            requested=request.sandbox,
+            provider=request.sandbox_provider,
+            image=request.sandbox_image,
+            repo_root=self.repo_root,
+            agent=request.agent,
+            verifier_argv=verifier_argv,
+        )
         capability_manifest = execution_capability_manifest(
             agent=request.agent,
             model=request.model,
@@ -569,6 +578,10 @@ class HarnessController:
             token_budget=request.context_budget,
             max_cost_usd=request.max_cost_usd,
             isolation=isolation,
+            sandbox_requested=sandbox_manifest.requested,
+            sandbox_provider=sandbox_manifest.provider,
+            sandbox_enforced=sandbox_manifest.enforced,
+            sandbox_limitations=sandbox_manifest.limitations,
         )
         environment = environment_snapshot(self.repo_root)
         return ExecutionPlan(
@@ -579,6 +592,7 @@ class HarnessController:
             proof_requirements=proof_requirements,
             policy_decisions=decisions,
             isolation_profile=isolation,
+            sandbox_manifest=sandbox_manifest,
             capability_manifest=capability_manifest,
             environment_snapshot=environment,
             state_path=state_path_for(self.dependencies.runtime_store.root, run_id),
@@ -1238,6 +1252,9 @@ def _run_id(
         "max_iterations": request.max_iterations,
         "max_cost_usd": request.max_cost_usd,
         "isolation": request.isolation,
+        "sandbox": request.sandbox,
+        "sandbox_provider": request.sandbox_provider,
+        "sandbox_image": request.sandbox_image,
         "proof_requirements": [item.to_dict() for item in proof_requirements],
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)

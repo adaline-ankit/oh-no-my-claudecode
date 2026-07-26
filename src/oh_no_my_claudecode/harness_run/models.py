@@ -28,6 +28,7 @@ from .environment import EnvironmentSnapshot
 from .isolation import IsolationProfile
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
+from .sandboxing import HarnessSandboxManifest, SandboxProviderName
 from .stages import StageRecord
 
 AgentName = Literal["claude", "codex", "opencode"]
@@ -56,6 +57,9 @@ class RunRequest:
     max_iterations: int = 10
     max_cost_usd: float | None = None
     isolation: bool = False
+    sandbox: bool = False
+    sandbox_provider: SandboxProviderName = "docker"
+    sandbox_image: str = "python:3.12-slim"
     risk: RiskLevel = RiskLevel.MEDIUM
     context_budget: int = 4_000
     budget_mode: BudgetMode = BudgetMode.STANDARD
@@ -82,6 +86,10 @@ class RunRequest:
             raise ValueError("risk must be a RiskLevel")
         if not isinstance(self.budget_mode, BudgetMode):
             raise ValueError("budget_mode must be a BudgetMode")
+        if self.sandbox_provider not in {"docker", "harbor"}:
+            raise ValueError("sandbox_provider must be docker or harbor")
+        if not self.sandbox_image.strip():
+            raise ValueError("sandbox_image must not be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +141,7 @@ class ExecutionPlan:
     proof_requirements: tuple[ProofRequirement, ...]
     policy_decisions: tuple[PolicyDecisionRecord, ...]
     isolation_profile: IsolationProfile
+    sandbox_manifest: HarnessSandboxManifest
     capability_manifest: ExecutionCapabilityManifest
     environment_snapshot: EnvironmentSnapshot
     state_path: str
@@ -144,6 +153,7 @@ class ExecutionPlan:
         agent = self.dag.nodes[0].policy.agent if self.dag.nodes else "claude"
         adapter_capability = adapter_capability_payload(agent)
         isolation = self.isolation_profile.to_dict()
+        sandbox_manifest = self.sandbox_manifest.to_dict()
         context_selection = self.context_selection.to_dict()
         capability_manifest = self.capability_manifest.to_dict()
         environment = self.environment_snapshot.to_dict()
@@ -177,6 +187,7 @@ class ExecutionPlan:
                     "model": node.policy.model,
                     "adapter_capability": adapter_capability_payload(node.policy.agent),
                     "isolation_profile": isolation,
+                    "sandbox_manifest": sandbox_manifest,
                     "context_selection": context_selection,
                     "capability_manifest": capability_manifest,
                     "environment_snapshot": environment,
@@ -196,6 +207,7 @@ class ExecutionPlan:
                 "state_path": self.state_path,
                 "adapter_capability": adapter_capability,
                 "isolation_profile": isolation,
+                "sandbox_manifest": sandbox_manifest,
                 "context_selection": context_selection,
                 "capability_manifest": capability_manifest,
                 "environment_snapshot": environment,
@@ -212,6 +224,7 @@ class ExecutionPlan:
             "proof_requirements": [item.to_dict() for item in self.proof_requirements],
             "policy_decisions": [item.to_dict() for item in self.policy_decisions],
             "isolation_profile": self.isolation_profile.to_dict(),
+            "sandbox_manifest": self.sandbox_manifest.to_dict(),
             "capability_manifest": self.capability_manifest.to_dict(),
             "environment_snapshot": self.environment_snapshot.to_dict(),
             "state_path": self.state_path,
@@ -312,6 +325,7 @@ class HarnessResult:
         agent = self.plan.dag.nodes[0].policy.agent if self.plan.dag.nodes else "claude"
         adapter_capability = adapter_capability_payload(agent)
         isolation = self.plan.isolation_profile
+        sandbox = self.plan.sandbox_manifest
         lines = [
             f"ONMC run {self.plan.run_id}: {self.status.value}",
             f"Task: {self.plan.dag.task}",
@@ -346,6 +360,11 @@ class HarnessResult:
                 f"Isolation: {isolation.mode} "
                 f"(filesystem={isolation.filesystem}; network={isolation.network}; "
                 f"secrets={isolation.secrets})"
+            ),
+            (
+                "Sandbox: "
+                f"requested={str(sandbox.requested).lower()}, "
+                f"provider={sandbox.provider}, enforced={str(sandbox.enforced).lower()}"
             ),
             (
                 "Capabilities: "
