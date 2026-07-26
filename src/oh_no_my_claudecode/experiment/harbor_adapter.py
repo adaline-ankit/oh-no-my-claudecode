@@ -10,6 +10,7 @@ import json
 import shlex
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 from oh_no_my_claudecode.experiment.atif import AtifArtifact, atif_artifact_from_mapping
@@ -29,6 +30,7 @@ __all__ = [
     "export_portfolio_to_harbor",
     "harbor_task_payload",
     "import_harbor_results",
+    "import_harbor_native_trial",
     "import_harbor_trial",
     "plan_harbor_smoke",
 ]
@@ -263,6 +265,53 @@ def import_harbor_trial(
     )
 
 
+def import_harbor_native_trial(
+    data: Mapping[str, object],
+    *,
+    experiment_id: str,
+    condition: Condition,
+    task_id: str | None,
+    trial: int,
+    trajectory: Mapping[str, object],
+    verifier: Mapping[str, object],
+) -> HarborTrialImport:
+    """Import one Harbor per-trial ``result.json`` with explicit proof artifacts.
+
+    Harbor's native result file contains reward, timing, and agent usage, but it
+    does not always contain an ATIF trajectory or standalone verifier artifact.
+    ONMC therefore requires callers to provide content-addressed proof pointers
+    before converting a native Harbor result into a claimable ``TrialResult``.
+    """
+
+    verifier_result = _mapping(data.get("verifier_result"), "harbor.verifier_result")
+    rewards = _mapping(verifier_result.get("rewards"), "harbor.verifier_result.rewards")
+    agent_result = _mapping(data.get("agent_result", {}), "harbor.agent_result")
+    atif = atif_artifact_from_mapping(trajectory)
+    verifier_ref = _artifact_ref(verifier, "harbor.verifier")
+    resolved_task_id = task_id or _native_task_id(data)
+    return HarborTrialImport(
+        trial=TrialResult(
+            run_id=RunId(
+                experiment_id=experiment_id,
+                condition=condition,
+                task_id=resolved_task_id,
+                trial=trial,
+            ),
+            passed=_reward_passed(rewards),
+            metric_label=MetricLabel.MEASURED,
+            cost_usd=_optional_number(agent_result.get("cost_usd"), "harbor.agent_result.cost_usd"),
+            latency_ms=_native_latency_ms(data),
+            turns=0,
+            tool_calls=0,
+            context_tokens=_native_context_tokens(agent_result),
+            interventions=0,
+            artifacts=(atif.ref, verifier_ref),
+        ),
+        trajectory=atif,
+        verifier=verifier_ref,
+    )
+
+
 def _harbor_task_name(task: TaskSpec) -> str:
     return f"onmc/{task.task_id}"
 
@@ -383,6 +432,47 @@ def _number(value: object, name: str) -> float:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{name} must be a non-negative number")
     return float(value)
+
+
+def _optional_number(value: object, name: str) -> float:
+    if value is None:
+        return 0.0
+    return _number(value, name)
+
+
+def _native_latency_ms(data: Mapping[str, object]) -> float:
+    started = _parse_harbor_timestamp(_string(data.get("started_at"), "harbor.started_at"))
+    finished = _parse_harbor_timestamp(_string(data.get("finished_at"), "harbor.finished_at"))
+    delta_ms = (finished - started).total_seconds() * 1000
+    if delta_ms < 0:
+        raise ValueError("harbor.finished_at must not be before harbor.started_at")
+    return delta_ms
+
+
+def _native_context_tokens(agent_result: Mapping[str, object]) -> int:
+    total = 0
+    for key in ("n_input_tokens", "n_cache_tokens", "n_output_tokens"):
+        value = agent_result.get(key)
+        if value is None:
+            continue
+        total += _integer(value, f"harbor.agent_result.{key}")
+    return total
+
+
+def _native_task_id(data: Mapping[str, object]) -> str:
+    raw_task_name = data.get("task_name")
+    if isinstance(raw_task_name, str) and raw_task_name.strip():
+        return raw_task_name.rsplit("/", 1)[-1]
+    trial_name = _string(data.get("trial_name"), "harbor.trial_name")
+    return trial_name.split("__", 1)[0]
+
+
+def _parse_harbor_timestamp(value: str) -> datetime:
+    normalized = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
 
 
 def _toml_string(value: str) -> str:

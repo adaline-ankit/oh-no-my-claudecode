@@ -19,6 +19,7 @@ from oh_no_my_claudecode.experiment.contracts import (
 from oh_no_my_claudecode.experiment.harbor_adapter import (
     export_portfolio_to_harbor,
     harbor_task_payload,
+    import_harbor_native_trial,
     import_harbor_results,
     import_harbor_trial,
     plan_harbor_smoke,
@@ -101,6 +102,28 @@ def _harbor_trial() -> dict[str, object]:
             "interventions": 0,
         },
     }
+
+
+def _native_harbor_trial() -> dict[str, object]:
+    return {
+        "task_name": "onmc/cache-bugfix",
+        "trial_name": "cache-bugfix__abc123",
+        "agent_result": {
+            "n_input_tokens": 11,
+            "n_cache_tokens": None,
+            "n_output_tokens": 7,
+            "cost_usd": 0.02,
+        },
+        "verifier_result": {"rewards": {"reward": 1.0, "passed": 1.0}},
+        "started_at": "2026-07-26T17:14:00.000000Z",
+        "finished_at": "2026-07-26T17:14:10.500000Z",
+    }
+
+
+def _artifact_payload(data: bytes, media_type: str = "application/json") -> dict[str, object]:
+    from oh_no_my_claudecode.experiment.contracts import ArtifactRef
+
+    return ArtifactRef.of(data, media_type).to_dict()
 
 
 def _load_script(path: Path, module_name: str) -> ModuleType:
@@ -203,6 +226,39 @@ def test_import_harbor_results_normalizes_trials() -> None:
     assert imported[0].trial.to_dict()["condition"] == "onmc-current"
 
 
+def test_import_harbor_native_trial_requires_explicit_proof_artifacts() -> None:
+    imported = import_harbor_native_trial(
+        _native_harbor_trial(),
+        experiment_id="harbor-smoke",
+        condition=Condition.ONMC_CURRENT,
+        task_id=None,
+        trial=0,
+        trajectory={
+            "schema": "atif",
+            "path": "traces/cache-bugfix.atif.json",
+            **_artifact_payload(b'{"events":[]}'),
+        },
+        verifier=_artifact_payload(b'{"verifier_result":{"passed":1.0}}'),
+    )
+
+    assert imported.trial.run_id.slug == "harbor-smoke.onmc-current.cache-bugfix.t0"
+    assert imported.trial.passed is True
+    assert imported.trial.cost_usd == 0.02
+    assert imported.trial.context_tokens == 18
+    assert imported.trial.latency_ms == 10500.0
+
+    with pytest.raises(ValueError, match="atif.path"):
+        import_harbor_native_trial(
+            _native_harbor_trial(),
+            experiment_id="harbor-smoke",
+            condition=Condition.ONMC_CURRENT,
+            task_id="cache-bugfix",
+            trial=0,
+            trajectory={},
+            verifier=_artifact_payload(b"{}"),
+        )
+
+
 def test_import_harbor_results_script_writes_normalized_json(tmp_path: Path) -> None:
     script = _load_script(IMPORT_SCRIPT_PATH, "_import_harbor_results_under_test")
     bundle = tmp_path / "harbor-results.json"
@@ -219,10 +275,52 @@ def test_import_harbor_results_script_writes_normalized_json(tmp_path: Path) -> 
     payload = json.loads(out.read_text(encoding="utf-8"))
     assert payload == json.loads(stdout.getvalue())
     assert payload["schema_version"] == "onmc-harbor-import/v1"
+    assert payload["source_format"] == "onmc-bundle"
     assert payload["trial_count"] == 1
     assert payload["trials"][0]["trial"]["run_id"] == (
         "harbor-smoke.onmc-current.cache-bugfix.t1"
     )
+
+
+def test_import_harbor_results_script_imports_native_trial_json(tmp_path: Path) -> None:
+    script = _load_script(IMPORT_SCRIPT_PATH, "_import_harbor_native_under_test")
+    native = tmp_path / "result.json"
+    trajectory = tmp_path / "trajectory.atif.json"
+    verifier = tmp_path / "verifier.json"
+    out = tmp_path / "onmc-import.json"
+    native.write_text(json.dumps(_native_harbor_trial()), encoding="utf-8")
+    trajectory.write_text('{"schema":"atif","events":[]}', encoding="utf-8")
+    verifier.write_text('{"verifier_result":{"passed":1.0}}', encoding="utf-8")
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = script.main(
+            [
+                str(native),
+                "--native-trial",
+                "--experiment-id",
+                "harbor-smoke",
+                "--condition",
+                "onmc-current",
+                "--trial",
+                "0",
+                "--trajectory-file",
+                str(trajectory),
+                "--verifier-file",
+                str(verifier),
+                "--out",
+                str(out),
+            ]
+        )
+
+    assert exit_code == 0
+    payload = json.loads(stdout.getvalue())
+    assert payload == json.loads(out.read_text(encoding="utf-8"))
+    assert payload["source_format"] == "harbor-native-trial"
+    assert payload["trials"][0]["trial"]["run_id"] == (
+        "harbor-smoke.onmc-current.cache-bugfix.t0"
+    )
+    assert payload["trials"][0]["trial"]["context_tokens"] == 18
 
 
 def test_export_harbor_tasks_script_writes_bundle_and_smoke_plan(tmp_path: Path) -> None:

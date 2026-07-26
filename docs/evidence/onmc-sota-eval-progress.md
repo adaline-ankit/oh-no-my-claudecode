@@ -147,6 +147,10 @@ This is evidence for a stronger harness foundation:
   tasks across `bare-agent` and `onmc-current`. This proves export, Docker environment, and verifier
   path execute end-to-end with zero model-token spend. It does not prove ONMC beats a coding agent
   yet because `nop` runs against pristine pinned repos.
+- ONMC can now import a native Harbor per-trial `result.json` into a canonical `TrialResult` when
+  the caller supplies explicit content-addressed trajectory and verifier artifacts. Missing
+  trajectory/verifier evidence still fails closed, so aggregate Harbor pass counts cannot become
+  ONMC proof receipts by themselves.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -598,9 +602,68 @@ Observed runtimes: 23s, 10s, 10s, 12s.
 Token/cost fields in Harbor result were null because `nop`/`local` performs no model call.
 ```
 
-This closes the first real Harbor runtime smoke. U7 is still incomplete until ONMC imports Harbor's
-native `result.json` layout directly and runs a discriminative agent benchmark where seeded
-regressions make `nop` fail and agent conditions compete on identical tasks.
+This closes the first real Harbor runtime smoke. U7 still needs native result import and a
+discriminative agent benchmark where seeded regressions make `nop` fail and agent conditions
+compete on identical tasks.
+
+## Harbor Native Result Import Slice
+
+Commands run on 2026-07-26:
+
+```text
+python -m pytest tests/test_harbor_adapter.py tests/test_experiment_contracts.py tests/test_experiment_kernel.py
+```
+
+Result:
+
+```text
+39 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/experiment/atif.py src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/import_harbor_results.py scripts/export_harbor_tasks.py tests/test_harbor_adapter.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/experiment/atif.py src/oh_no_my_claudecode/experiment/harbor_adapter.py scripts/import_harbor_results.py scripts/export_harbor_tasks.py
+```
+
+Result:
+
+```text
+Success: no issues found in 4 source files
+```
+
+Live native import command run against one actual Harbor per-trial `result.json` from the smoke:
+
+```text
+python scripts/import_harbor_results.py /private/tmp/onmc-harbor-jobs/onmc-smoke-onmc-six-bugfix-integer-types-onmc-current/six-bugfix-integer-types__Syrt8u5/result.json --native-trial --experiment-id harbor-smoke --condition onmc-current --trial 0 --trajectory-file /private/tmp/onmc-harbor-import-proof/trajectory.atif.json --verifier-file /private/tmp/onmc-harbor-import-proof/verifier.json --out /private/tmp/onmc-harbor-import-proof/onmc-import.json
+```
+
+Observed normalized result:
+
+```text
+source_format: harbor-native-trial
+trial_count: 1
+run_id: harbor-smoke.onmc-current.six-bugfix-integer-types.t0
+passed: true
+latency_ms: 9986.416
+context_tokens: 0
+cost_usd: 0.0
+artifact_count: 2
+```
+
+This closes the native Harbor result import path for per-trial outputs. The import remains
+claim-safe: it requires explicit trajectory and verifier artifacts, and this smoke trajectory is an
+empty `nop` trajectory artifact, not evidence of coding-agent reasoning. U7 still needs a
+discriminative benchmark where seeded regressions make `nop` fail and coding-agent conditions are
+compared on identical tasks.
 
 The current saved v3 report against the v4 manifest remains external-claim blocked. The metadata
 audit now adds these explicit blockers:
