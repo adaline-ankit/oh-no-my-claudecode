@@ -14,6 +14,26 @@ from oh_no_my_claudecode.context_engine import (
     StaticCandidateProvider,
     StaticGraphProvider,
 )
+from oh_no_my_claudecode.embeddings.core import EmbeddingVector
+from oh_no_my_claudecode.retrieval import HybridRetriever
+from oh_no_my_claudecode.retrieval.query_plan import QueryIntent, build_query_plan
+
+
+class _ConceptEmbedder:
+    """Tiny deterministic semantic backend for policy tests."""
+
+    @property
+    def embedder_id(self) -> str:
+        return "test/concept-v1"
+
+    @property
+    def dim(self) -> int:
+        return 2
+
+    def embed(self, text: str) -> EmbeddingVector:
+        if "capability boundary" in text or text.strip() == "authorization architecture":
+            return [1.0, 0.0]
+        return [0.0, 1.0]
 
 
 def test_evidence_rejects_duplicate_metadata_keys() -> None:
@@ -217,3 +237,107 @@ def test_identical_candidate_ids_coalesce_but_conflicting_ids_are_rejected() -> 
         assert str(error) == "conflicting candidates share id: same-id"
     else:
         raise AssertionError("conflicting candidate ids must be rejected")
+
+
+def test_query_plan_preserves_bm25_for_exact_symbol_queries() -> None:
+    plan = build_query_plan(
+        "HybridRetriever.retrieve",
+        requested_mode="hybrid",
+        k=10,
+        token_budget=1_000,
+        dense_available=True,
+        reranker_available=True,
+    )
+
+    assert plan.intent is QueryIntent.SYMBOL
+    assert plan.baseline_stage == "bm25"
+    assert plan.candidate_stages == ()
+    assert dict(plan.suppressed_stages) == {
+        "dense": "lexical_dominant_query",
+        "rrf": "lexical_dominant_query",
+        "rerank": "lexical_dominant_query",
+    }
+
+
+def test_measured_retrieval_keeps_exact_error_queries_on_lexical_floor() -> None:
+    retriever = HybridRetriever(
+        doc_ids=["exact", "semantic"],
+        texts=[
+            "HybridRetriever retrieve raises Unknown mode ValueError",
+            "generic retrieval architecture and ranking",
+        ],
+        embedder=_ConceptEmbedder(),
+    )
+
+    decision = retriever.retrieve_measured(
+        "HybridRetriever.retrieve ValueError",
+        k=2,
+        requested_mode="hybrid",
+        candidate_promoted=True,
+        token_budget=100,
+    )
+
+    assert decision.query_plan.intent is QueryIntent.ERROR
+    assert decision.selected_stage == "bm25"
+    assert [hit.doc_id for hit in decision.hits] == ["exact"]
+    assert decision.fallback_reason == "lexical_dominant_query"
+    assert [item.stage for item in decision.provenance] == ["bm25"]
+
+
+def test_conceptual_dense_candidate_requires_promotion_and_confidence() -> None:
+    retriever = HybridRetriever(
+        doc_ids=["lexical", "semantic"],
+        texts=[
+            "authorization architecture overview",
+            "capability boundary checks policy decisions",
+        ],
+        embedder=_ConceptEmbedder(),
+    )
+
+    shadow = retriever.retrieve_measured(
+        "authorization architecture",
+        k=2,
+        requested_mode="dense",
+        candidate_promoted=False,
+        min_candidate_confidence=0.8,
+        token_budget=100,
+    )
+    promoted = retriever.retrieve_measured(
+        "authorization architecture",
+        k=2,
+        requested_mode="dense",
+        candidate_promoted=True,
+        min_candidate_confidence=0.8,
+        token_budget=100,
+    )
+
+    assert shadow.selected_stage == "bm25"
+    assert shadow.fallback_reason == "candidate_not_promoted"
+    assert promoted.selected_stage == "dense"
+    assert promoted.confidence >= 0.8
+    assert promoted.hits[0].doc_id == "semantic"
+    assert [item.stage for item in promoted.provenance] == ["bm25", "dense"]
+
+
+def test_measured_retrieval_hard_budget_abstains_without_overpacking() -> None:
+    retriever = HybridRetriever(
+        doc_ids=["large"],
+        texts=["context budget target"],
+        evidence_texts=["word " * 20],
+        embedder=_ConceptEmbedder(),
+    )
+
+    decision = retriever.retrieve_measured(
+        "context budget target",
+        k=1,
+        requested_mode="bm25",
+        token_budget=5,
+    )
+
+    assert decision.hits == ()
+    assert decision.used_tokens == 0
+    assert decision.abstained is True
+    assert decision.fallback_reason == "token_budget_exhausted"
+    payload = decision.to_dict()
+    assert payload["token_budget"] == 5
+    assert payload["query_plan"]["baseline_stage"] == "bm25"

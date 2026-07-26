@@ -56,6 +56,7 @@ from oh_no_my_claudecode.proof_graph import (
     evaluate_proof,
 )
 from oh_no_my_claudecode.proof_graph.receipt import ProofReceipt
+from oh_no_my_claudecode.retrieval import RetrievalDecision
 from oh_no_my_claudecode.sandbox import (
     DockerSandboxPlan,
     NetworkPolicy,
@@ -231,6 +232,8 @@ class ControllerDependencies:
     injected callback. Surfaced on the context stage — a silently degraded
     retriever must never be measured as a working one.
     """
+    retrieval_decisions: list[RetrievalDecision] = field(default_factory=list)
+    """Per-query measured retrieval decisions emitted by the candidate provider."""
 
 
 def _render_context(packet: EvidencePacket) -> str:
@@ -641,6 +644,7 @@ def default_dependencies(
     resolved = profile or resolve_budget_profile(BudgetMode.STANDARD)
     runtime_root = repo_root / ".onmc" / "harness-runtime"
     retrieval_fallbacks: list[str] = []
+    retrieval_decisions: list[RetrievalDecision] = []
     return ControllerDependencies(
         context_engine=ContextEngine(
             PlannerConfig(
@@ -653,8 +657,10 @@ def default_dependencies(
                 HybridRepositoryCandidateProvider(
                     repo_root,
                     top_k=resolved.top_k,
+                    token_budget=resolved.token_budget,
                     retrieval_mode=resolved.retrieval_mode,
                     on_fallback=retrieval_fallbacks.append,
+                    on_decision=retrieval_decisions.append,
                 ),
             ),
         ),
@@ -672,6 +678,7 @@ def default_dependencies(
         ),
         changes_reader=_git_changes,
         retrieval_fallbacks=retrieval_fallbacks,
+        retrieval_decisions=retrieval_decisions,
     )
 
 
@@ -734,6 +741,11 @@ class HarnessController:
                 verifier=request.verifier,
             ),
         )
+        # These callback-backed lists are per-plan evidence.  A controller may
+        # compile more than one request, so stale decisions/failures from an
+        # earlier repository query must never be attached to the next plan.
+        self.dependencies.retrieval_fallbacks.clear()
+        self.dependencies.retrieval_decisions.clear()
         packet = self.dependencies.context_engine.plan(
             dag.task,
             mode=RetrievalMode.LOCAL,
@@ -742,6 +754,11 @@ class HarnessController:
         context_selection = context_selection_manifest(
             packet,
             retrieval_fallbacks=tuple(self.dependencies.retrieval_fallbacks),
+            retrieval_decision=(
+                self.dependencies.retrieval_decisions[-1]
+                if self.dependencies.retrieval_decisions
+                else None
+            ),
         )
         proof_graph = _proof_graph(dag.task, verifier_argv)
         proof_requirements = tuple(
@@ -863,7 +880,13 @@ class HarnessController:
 
             prepare_rec = prepare_stage(plan.dag, plan.run_id, plan.dag.risk)
             context_rec = context_stage(
-                plan.context_packet, tuple(self.dependencies.retrieval_fallbacks)
+                plan.context_packet,
+                tuple(self.dependencies.retrieval_fallbacks),
+                (
+                    self.dependencies.retrieval_decisions[-1]
+                    if self.dependencies.retrieval_decisions
+                    else None
+                ),
             )
 
             execute_state = snapshot.nodes[NodeKind.EXECUTE.value].state

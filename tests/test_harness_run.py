@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 import oh_no_my_claudecode.harness_run.controller as harness_controller_module
 from oh_no_my_claudecode.cli import app
 from oh_no_my_claudecode.config import default_config, write_config
-from oh_no_my_claudecode.context_engine import ContextEngine
+from oh_no_my_claudecode.context_engine import ContextEngine, RetrievalMode
 from oh_no_my_claudecode.durable_runtime import NodeState, RunState, RuntimeStore
 from oh_no_my_claudecode.harness_run import (
     ChangeSet,
@@ -531,6 +531,10 @@ def test_default_dependencies_retrieve_relevant_repo_context(tmp_path: Path) -> 
     assert selection.used_tokens == plan.context_packet.used_tokens
     assert selection.token_budget == 500
     assert selection.abstained is False
+    assert selection.query_intent == "conceptual"
+    assert selection.retrieval_stage == "bm25"
+    assert selection.lexical_floor is True
+    assert selection.candidate_promoted is False
 
 
 def test_execution_passes_planned_context_to_loop(tmp_path: Path) -> None:
@@ -740,17 +744,17 @@ def test_hybrid_provider_invokes_retrieval_and_returns_ranked_candidates(
         "def greet(): return 'hello'\n", encoding="utf-8"
     )
 
-    # Track HybridRetriever.retrieve calls via monkeypatch.
+    # Track the measured policy entry point via monkeypatch.
     retrieve_calls: list[tuple[str, int]] = []
-    _original_retrieve = HybridRetriever.retrieve
+    _original_retrieve = HybridRetriever.retrieve_measured
 
     def _spy_retrieve(
-        self: HybridRetriever, query: str, k: int, *, mode: str = "hybrid"
-    ) -> list:
+        self: HybridRetriever, query: str, k: int, **kwargs: object
+    ) -> object:
         retrieve_calls.append((query, k))
-        return _original_retrieve(self, query, k, mode=mode)
+        return _original_retrieve(self, query, k, **kwargs)  # type: ignore[arg-type]
 
-    monkeypatch.setattr(HybridRetriever, "retrieve", _spy_retrieve)
+    monkeypatch.setattr(HybridRetriever, "retrieve_measured", _spy_retrieve)
 
     provider = HybridRepositoryCandidateProvider(tmp_path, top_k=10)
     from oh_no_my_claudecode.context_engine import RetrievalMode
@@ -771,9 +775,9 @@ def test_hybrid_provider_invokes_retrieval_and_returns_ranked_candidates(
         assert cand.content
         assert cand.source
         assert cand.token_count >= 1
-        assert cand.provenance == (cand.id,)
+        assert cand.provenance == (cand.id, "retrieval:bm25", "query-plan:1")
         assert 0.0 <= cand.structural_score <= 1.0
-        assert cand.semantic_score is not None and 0.0 <= cand.semantic_score <= 1.0
+        assert cand.semantic_score is None
         # retrieval_rank metadata must be present.
         meta = dict(cand.metadata)
         assert "retrieval_rank" in meta
@@ -801,6 +805,58 @@ def test_hybrid_provider_token_budget_limits_candidates(tmp_path: Path) -> None:
     # Must not exceed budget: each hit's evidence has ≤ 5 whitespace tokens
     # OR only one hit was collected before the budget was hit.
     assert len(candidates) <= 2  # at most 2 files in this tiny corpus
+
+
+def test_hybrid_provider_reports_measured_query_decision_and_provenance(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "policy.py").write_text(
+        "# authorization architecture\n"
+        "def enforce_capability_boundary():\n"
+        "    return 'allow'\n",
+        encoding="utf-8",
+    )
+
+    decisions: list[object] = []
+    provider = HybridRepositoryCandidateProvider(
+        tmp_path,
+        retrieval_mode="dense",
+        candidate_promoted=False,
+        on_decision=decisions.append,
+    )
+    candidates = provider.candidates(
+        "authorization architecture",
+        RetrievalMode.LOCAL,
+    )
+
+    assert len(decisions) == 1
+    decision = decisions[0]
+    assert decision.selected_stage == "bm25"
+    assert decision.fallback_reason == "candidate_not_promoted"
+    assert candidates
+    metadata = dict(candidates[0].metadata)
+    assert metadata["query_intent"] == "conceptual"
+    assert metadata["retrieval_stage"] == "bm25"
+    assert metadata["lexical_floor"] == "true"
+    assert candidates[0].provenance[1:] == (
+        "retrieval:bm25",
+        "query-plan:1",
+    )
+
+
+def test_controller_does_not_reuse_a_stale_retrieval_decision(tmp_path: Path) -> None:
+    source = tmp_path / "cache.py"
+    source.write_text("def invalidate_cache(): return True\n", encoding="utf-8")
+    controller = HarnessController(tmp_path)
+
+    first = controller.plan(RunRequest(task="Fix cache invalidation", plan_only=True))
+    source.unlink()
+    second = controller.plan(RunRequest(task="Unrelated missing symbol", plan_only=True))
+
+    assert first.context_selection.query_intent == "conceptual"
+    assert second.context_selection.query_intent == "unknown"
+    assert second.context_selection.retrieval_stage == "unspecified"
 
 
 def test_hybrid_provider_noop_on_empty_corpus(tmp_path: Path) -> None:
@@ -870,10 +926,9 @@ def test_harness_run_context_from_hybrid_retrieval_end_to_end(tmp_path: Path) ->
     assert "never-read" not in rendered
     assert "binary.py" not in rendered
     assert plan.context_packet.used_tokens <= 500
-    # Confirm semantic_score is populated (from hybrid retrieval).
+    # BM25 evidence is never mislabeled as a semantic score.
     evidence = plan.context_packet.evidence[0]
-    assert evidence.signals.semantic is not None
-    assert 0.0 <= evidence.signals.semantic <= 1.0
+    assert evidence.signals.semantic is None
 
 
 def test_duplicate_index_records_do_not_collide_candidate_ids(

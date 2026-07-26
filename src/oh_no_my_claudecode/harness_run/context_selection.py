@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from oh_no_my_claudecode.context_engine import EvidencePacket
+from oh_no_my_claudecode.retrieval import RetrievalDecision
 
 _SCHEMA_VERSION = "1"
 
@@ -37,6 +38,12 @@ class ContextSelectionManifest:
     excluded_context_ids: tuple[str, ...]
     used_provenance: tuple[str, ...]
     exclusion_reasons: tuple[tuple[str, int], ...]
+    query_intent: str
+    retrieval_stage: str
+    lexical_floor: bool
+    candidate_promoted: bool
+    retrieval_fallback_reason: str
+    retrieval_provenance: tuple[tuple[str, str], ...]
     schema_version: str = _SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
@@ -62,6 +69,15 @@ class ContextSelectionManifest:
                 {"reason": reason, "count": count}
                 for reason, count in self.exclusion_reasons
             ],
+            "query_intent": self.query_intent,
+            "retrieval_stage": self.retrieval_stage,
+            "lexical_floor": self.lexical_floor,
+            "candidate_promoted": self.candidate_promoted,
+            "retrieval_fallback_reason": self.retrieval_fallback_reason,
+            "retrieval_provenance": [
+                {"stage": stage, "backend": backend}
+                for stage, backend in self.retrieval_provenance
+            ],
         }
 
 
@@ -69,7 +85,8 @@ def context_selection_manifest(
     packet: EvidencePacket,
     *,
     retrieval_fallbacks: tuple[str, ...] = (),
-    policy: str = "context_engine.hybrid",
+    retrieval_decision: RetrievalDecision | None = None,
+    policy: str = "context_engine.measured-v2",
 ) -> ContextSelectionManifest:
     """Build the context-selection manifest bound into a harness run.
 
@@ -95,6 +112,28 @@ def context_selection_manifest(
     used_context_ids = tuple(item.candidate_id for item in packet.evidence)
     excluded_context_ids = tuple(item.candidate_id for item in packet.exclusions)
     mode = packet.mode.value if hasattr(packet.mode, "value") else str(packet.mode)
+    query_intent = (
+        retrieval_decision.query_plan.intent.value if retrieval_decision is not None else "unknown"
+    )
+    retrieval_stage = (
+        retrieval_decision.selected_stage if retrieval_decision is not None else "unspecified"
+    )
+    lexical_floor = (
+        retrieval_decision.query_plan.lexical_floor
+        if retrieval_decision is not None
+        else False
+    )
+    candidate_promoted = (
+        retrieval_decision.candidate_promoted if retrieval_decision is not None else False
+    )
+    retrieval_fallback_reason = (
+        retrieval_decision.fallback_reason if retrieval_decision is not None else ""
+    )
+    retrieval_provenance = (
+        tuple((item.stage, item.backend) for item in retrieval_decision.provenance)
+        if retrieval_decision is not None
+        else ()
+    )
     return ContextSelectionManifest(
         policy=policy,
         mode=mode,
@@ -113,6 +152,12 @@ def context_selection_manifest(
         excluded_context_ids=excluded_context_ids,
         used_provenance=tuple(dict.fromkeys(used_provenance)),
         exclusion_reasons=tuple(sorted(exclusion_counts.items())),
+        query_intent=query_intent,
+        retrieval_stage=retrieval_stage,
+        lexical_floor=lexical_floor,
+        candidate_promoted=candidate_promoted,
+        retrieval_fallback_reason=retrieval_fallback_reason,
+        retrieval_provenance=retrieval_provenance,
     )
 
 

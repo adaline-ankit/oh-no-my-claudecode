@@ -30,8 +30,21 @@ All components are offline, deterministic, and require no LLM calls.
 from __future__ import annotations
 
 from oh_no_my_claudecode.retrieval.bm25 import BM25Corpus, tokenize
-from oh_no_my_claudecode.retrieval.core import HybridRetriever, RetrievalHit, retrieve
+from oh_no_my_claudecode.retrieval.core import (
+    HybridRetriever,
+    RetrievalDecision,
+    RetrievalHit,
+    RetrievalProvenance,
+    retrieve,
+)
 from oh_no_my_claudecode.retrieval.dense import DenseRetriever
+from oh_no_my_claudecode.retrieval.query_plan import (
+    QueryIntent,
+    QueryPlan,
+    build_query_plan,
+    classify_query_intent,
+)
+from oh_no_my_claudecode.retrieval.rerank import Reranker
 from oh_no_my_claudecode.retrieval.rrf import reciprocal_rank_fusion
 
 
@@ -75,7 +88,14 @@ __all__ = [
     "BM25Corpus",
     "DenseRetriever",
     "HybridRetriever",
+    "QueryIntent",
+    "QueryPlan",
+    "Reranker",
+    "RetrievalDecision",
     "RetrievalHit",
+    "RetrievalProvenance",
+    "build_query_plan",
+    "classify_query_intent",
     "fastembed_info",
     "reciprocal_rank_fusion",
     "retrieve",
