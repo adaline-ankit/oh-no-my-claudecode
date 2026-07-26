@@ -1,5 +1,11 @@
 """Canonical ONMC runtime contracts and execution backends."""
 
+from oh_no_my_claudecode.runtime.adapter_capabilities import (
+    AdapterCapability,
+    adapter_capability,
+    adapter_capability_payload,
+    all_adapter_capabilities,
+)
 from oh_no_my_claudecode.runtime.backend import ExecutionBackend, NodeHandler
 from oh_no_my_claudecode.runtime.contracts import (
     Budget,
@@ -32,5 +38,9 @@ __all__ = [
     "RunResultStatus",
     "RunSpec",
     "RuntimeContractError",
+    "AdapterCapability",
+    "adapter_capability",
+    "adapter_capability_payload",
+    "all_adapter_capabilities",
     "dependency_layers",
 ]

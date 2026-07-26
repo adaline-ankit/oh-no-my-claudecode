@@ -10,6 +10,7 @@ from typing import Any, Literal
 from oh_no_my_claudecode.context_engine import EvidencePacket
 from oh_no_my_claudecode.harness import NodeKind, RiskLevel, TaskDAG
 from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode
+from oh_no_my_claudecode.runtime.adapter_capabilities import adapter_capability_payload
 from oh_no_my_claudecode.runtime.contracts import (
     Budget,
     CapabilitySet,
@@ -132,6 +133,8 @@ class ExecutionPlan:
     def to_run_spec(self) -> RunSpec:
         """Compile the public plan into ONMC's canonical runtime graph."""
         evidence = tuple(_evidence_refs(self.context_packet))
+        agent = self.dag.nodes[0].policy.agent if self.dag.nodes else "claude"
+        adapter_capability = adapter_capability_payload(agent)
         nodes = tuple(
             NodeSpec(
                 node_id=node.node_id,
@@ -160,6 +163,7 @@ class ExecutionPlan:
                 metadata={
                     "agent": node.policy.agent,
                     "model": node.policy.model,
+                    "adapter_capability": adapter_capability_payload(node.policy.agent),
                     "risk": self.dag.risk.value,
                     "verifier": node.policy.verifier,
                 },
@@ -174,6 +178,7 @@ class ExecutionPlan:
             metadata={
                 "source": "harness_run.ExecutionPlan",
                 "state_path": self.state_path,
+                "adapter_capability": adapter_capability,
             },
         )
 

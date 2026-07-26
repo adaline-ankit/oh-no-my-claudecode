@@ -20,6 +20,7 @@ from oh_no_my_claudecode.runtime import (
     RunResultStatus,
     RunSpec,
     RuntimeContractError,
+    adapter_capability_payload,
 )
 from oh_no_my_claudecode.trace.models import TraceEventKind
 from oh_no_my_claudecode.trace.recorder import load_session_events, start_session
@@ -708,6 +709,34 @@ def test_harness_plan_compiles_to_canonical_run_spec(tmp_path: Path) -> None:
     assert execute.retry_policy == RetryPolicy(max_attempts=3, backoff_seconds=1.0)
     assert ("pytest", "tests/billing") in verify.capabilities.commands
     assert spec.metadata["source"] == "harness_run.ExecutionPlan"
+
+
+def test_runtime_contract_exposes_honest_adapter_capabilities(tmp_path: Path) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=HarnessController(tmp_path).dependencies.context_engine,
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+    )
+    plan = HarnessController(tmp_path, dependencies=dependencies).run(
+        RunRequest(
+            task="Refactor auth flow",
+            plan_only=True,
+            agent="codex",
+            model="gpt-test",
+        )
+    ).plan
+
+    spec = plan.to_run_spec()
+    capability = spec.metadata["adapter_capability"]
+
+    assert capability == adapter_capability_payload("codex")
+    assert capability["agent"] == "codex"
+    assert capability["cost"] == "not_reported"
+    assert capability["tokens"] == "best_effort_human_stdout_parse"
+    assert "Cost is never reported" in " ".join(capability["limitations"])
+    assert all(node.metadata["adapter_capability"] == capability for node in spec.nodes)
 
 
 def _completion_evidence(node: NodeSpec) -> tuple[EvidenceRef, ...]:

@@ -106,6 +106,16 @@ durable mission state, and surfaces the digest in the injected context. The Stop
 guard still uses the local non-vacuous-change + verifier gate, but its stored
 mission is now tied to the same runtime contract family as `onmc run`,
 `mission`, and `swarm`.
+
+**Adapter capability limitations are now part of runtime contracts
+(2026-07-26).** `RunSpec` metadata and every node now include a machine-readable
+adapter profile for the selected agent. Claude, Codex, and OpenCode plans state
+their invocation mode, ambient-auth boundary, model override support,
+files-touched mechanism, structured-output surface, isolation boundary, and
+whether token/cost telemetry is reported, best-effort, or unavailable. This
+moves R17 forward by making provider limitations receipt-bound instead of hidden
+in adapter prose.
+
 | Enforced capability path (M4-E) | **merged #385** + **wired into `onmc run` #387** | — | 21 tests + 5 wiring tests | enforced-by-default (currently advisory default); container isolation profile | implemented |
 | Injection/attack challenge suite (M4-Sec) | **merged #385** | reuses `learning.sanitize` | indirect injection, traversal, destructive cmd, secret exfil, malicious-repo, policy-bypass — each denied → no side effect | AgentDojo/InjecAgent full corpus | implemented |
 | Independent verifier (M4-F) | **merged #384** — `verifier/` reachability + mutation + contract-review | builds on `proof_graph` false-green | 31 tests + false-green challenge set | real coverage/mutant-runner adapter; browser/visual | implemented |
