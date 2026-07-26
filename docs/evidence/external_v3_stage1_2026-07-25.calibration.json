@@ -1,0 +1,290 @@
+{
+  "calibration": {
+    "cost_claim_ready": false,
+    "decision": "needs-discrimination",
+    "discriminative_tasks": 0,
+    "incomplete_cell_count": 0,
+    "incomplete_cost_conditions": [
+      "bare-agent"
+    ],
+    "min_discriminative_tasks": 10,
+    "min_pass_delta": 0.05,
+    "quality_claim_ready": false,
+    "reasons": [
+      "only 0 discriminative task(s); requires 10",
+      "24 task(s) saturated across conditions",
+      "cost telemetry incomplete for: bare-agent"
+    ],
+    "saturated_tasks": 24,
+    "tasks": [
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-bugfix-asdict-recurse",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-impl-asdict",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-impl-assoc",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-impl-has",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-impl-serialisation-pair",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "attrs-multisite-filter-ignored",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "itsdangerous-impl-base64-encode",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "itsdangerous-impl-base64-pair",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "itsdangerous-impl-int-bytes-pair",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "itsdangerous-impl-want-bytes",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "jmespath-impl-by-pair",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "jmespath-impl-merge",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "jmespath-impl-sort-by",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "jmespath-impl-starts-with",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "jmespath-impl-to-number",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "six-bugfix-integer-types",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "six-impl-with-metaclass",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "six-multisite-type-aliases",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "slugify-impl-slugify",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "slugify-impl-smart-truncate",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "tenacity-bugfix-find-ordinal",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "tenacity-impl-ordinal-pair",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "tenacity-impl-to-seconds",
+        "usable_cells": 2
+      },
+      {
+        "discriminative": false,
+        "max_delta": 0.0,
+        "pass_rates": {
+          "bare-agent": 1.0,
+          "onmc-current": 1.0
+        },
+        "saturated": true,
+        "task_id": "tenacity-multisite-ordinal-suffixes",
+        "usable_cells": 2
+      }
+    ],
+    "total_tasks": 24
+  },
+  "experiment_id": "external-v3",
+  "report_path": "datasets/experiment/reports/external_v3_stage1_2026-07-25.json",
+  "task_set_revision": "external-v3-2026-07-25"
+}

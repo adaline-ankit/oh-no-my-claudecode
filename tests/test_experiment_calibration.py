@@ -1,0 +1,288 @@
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+from contextlib import redirect_stdout
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+from oh_no_my_claudecode.experiment.calibration import (
+    CalibrationDecision,
+    calibrate_external_report,
+    calibrate_portfolio_report,
+    calibrate_records,
+)
+from oh_no_my_claudecode.experiment.contracts import Condition
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SATURATED_REPORT = REPO_ROOT / "datasets" / "experiment" / "reports" / (
+    "external_v3_stage1_2026-07-25.json"
+)
+V4_MANIFEST = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.json"
+SCRIPT_PATH = REPO_ROOT / "scripts" / "calibrate_external_report.py"
+
+
+def _record(
+    task_id: str,
+    condition: str,
+    passed: bool,
+    *,
+    cost_usd: float | None = 0.1,
+    infra_error: str | None = None,
+) -> dict[str, object]:
+    return {
+        "task_id": task_id,
+        "condition": condition,
+        "passed": passed,
+        "cost_usd": cost_usd,
+        "infra_error": infra_error,
+    }
+
+
+def test_saturated_report_is_not_claim_ready() -> None:
+    raw = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
+
+    report = calibrate_external_report(raw)
+
+    assert report.decision is CalibrationDecision.NEEDS_DISCRIMINATION
+    assert report.quality_claim_ready is False
+    assert report.cost_claim_ready is False
+    assert report.discriminative_tasks == 0
+    assert report.saturated_tasks == 24
+    assert any("discriminative" in reason for reason in report.reasons)
+
+
+def test_discriminative_tasks_pass_quality_and_cost_gate() -> None:
+    records: list[dict[str, object]] = []
+    for index in range(10):
+        task_id = f"task-{index}"
+        records.append(_record(task_id, Condition.BARE_AGENT.value, False))
+        records.append(_record(task_id, Condition.ONMC_CURRENT.value, True))
+
+    report = calibrate_records(
+        records,
+        conditions=(Condition.BARE_AGENT, Condition.ONMC_CURRENT),
+    )
+
+    assert report.decision is CalibrationDecision.READY
+    assert report.quality_claim_ready is True
+    assert report.cost_claim_ready is True
+    assert report.discriminative_tasks == 10
+    assert report.saturated_tasks == 0
+    assert report.reasons == ()
+
+
+def test_incomplete_cost_blocks_cost_claim_but_not_quality_claim() -> None:
+    records: list[dict[str, object]] = []
+    for index in range(10):
+        task_id = f"task-{index}"
+        records.append(_record(task_id, Condition.BARE_AGENT.value, False, cost_usd=None))
+        records.append(_record(task_id, Condition.ONMC_CURRENT.value, True))
+
+    report = calibrate_records(
+        records,
+        conditions=(Condition.BARE_AGENT, Condition.ONMC_CURRENT),
+    )
+
+    assert report.decision is CalibrationDecision.READY
+    assert report.quality_claim_ready is True
+    assert report.cost_claim_ready is False
+    assert report.incomplete_cost_conditions == (Condition.BARE_AGENT.value,)
+    assert any("cost telemetry incomplete" in reason for reason in report.reasons)
+
+
+def test_infra_failures_make_report_incomplete() -> None:
+    records = [
+        _record("task-a", Condition.BARE_AGENT.value, False, infra_error="clone failed"),
+        _record("task-a", Condition.ONMC_CURRENT.value, True),
+    ]
+
+    report = calibrate_records(
+        records,
+        conditions=(Condition.BARE_AGENT, Condition.ONMC_CURRENT),
+        min_discriminative_tasks=1,
+    )
+
+    assert report.decision is CalibrationDecision.INCOMPLETE
+    assert report.quality_claim_ready is False
+    assert report.incomplete_cell_count == 1
+    assert any("incomplete" in reason for reason in report.reasons)
+
+
+def test_invalid_records_are_rejected() -> None:
+    with pytest.raises(ValueError, match="record.passed"):
+        calibrate_records(
+            [
+                {
+                    "task_id": "task-a",
+                    "condition": Condition.BARE_AGENT.value,
+                    "passed": "yes",
+                }
+            ],
+            conditions=(Condition.BARE_AGENT, Condition.ONMC_CURRENT),
+        )
+
+    with pytest.raises(ValueError, match="two distinct"):
+        calibrate_records(
+            [_record("task-a", Condition.BARE_AGENT.value, True)],
+            conditions=(Condition.BARE_AGENT,),
+        )
+
+
+def test_manifest_gate_rejects_stale_report_for_current_v4_manifest() -> None:
+    manifest = json.loads(V4_MANIFEST.read_text(encoding="utf-8"))
+    report = json.loads(SATURATED_REPORT.read_text(encoding="utf-8"))
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.quality_claim_ready is False
+    assert gated.cost_claim_ready is False
+    assert gated.manifest_tasks == 28
+    assert gated.reported_tasks == 24
+    assert len(gated.missing_tasks) == 4
+    assert gated.manifest_task_set_revision == "external-v4-2026-07-25"
+    assert gated.report_task_set_revision == "external-v3-2026-07-25"
+    assert any("task_set_revision mismatch" in reason for reason in gated.reasons)
+    assert any("missing from report" in reason for reason in gated.reasons)
+
+
+def test_manifest_gate_accepts_complete_discriminative_report() -> None:
+    task_ids = [f"task-{index}" for index in range(10)]
+    manifest = {
+        "audit_status": "valid",
+        "experiment": {
+            "task_set_revision": "rev-good",
+            "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+            "trials": 2,
+        },
+        "tasks": [{"task_id": task_id} for task_id in task_ids],
+    }
+    records: list[dict[str, object]] = []
+    for task_id in task_ids:
+        for trial in range(2):
+            records.append(
+                {
+                    **_record(task_id, Condition.BARE_AGENT.value, False),
+                    "trial": trial + 1,
+                }
+            )
+            records.append(
+                {
+                    **_record(task_id, Condition.ONMC_CURRENT.value, True),
+                    "trial": trial + 1,
+                }
+            )
+    report = {
+        "task_set_revision": "rev-good",
+        "conditions": [Condition.BARE_AGENT.value, Condition.ONMC_CURRENT.value],
+        "trials_per_cell": 2,
+        "records": records,
+    }
+
+    gated = calibrate_portfolio_report(manifest, report)
+
+    assert gated.quality_claim_ready is True
+    assert gated.cost_claim_ready is True
+    assert gated.missing_tasks == ()
+    assert gated.unexpected_tasks == ()
+    assert gated.reasons == ()
+
+
+def _load_script() -> ModuleType:
+    module_name = "_calibrate_external_report_under_test"
+    spec = importlib.util.spec_from_file_location(module_name, SCRIPT_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
+    script = _load_script()
+    out = tmp_path / "calibration.json"
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = script.main([str(SATURATED_REPORT), "--out", str(out)])
+
+    assert exit_code == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["benchmark_plan"]["task_count"] == 24
+    assert payload["benchmark_plan"]["sample_size_ready"] is False
+    assert payload["claim_readiness"]["decision"] == "not-ready"
+    assert payload["claim_readiness"]["blocked_gates"] == [
+        "benchmark_plan",
+        "portfolio_coverage",
+        "calibration",
+    ]
+    assert payload["calibration"]["decision"] == "needs-discrimination"
+    assert payload["calibration"]["saturated_tasks"] == 24
+    printed = json.loads(stdout.getvalue())
+    assert printed == payload
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = script.main([str(SATURATED_REPORT), "--markdown"])
+
+    assert exit_code == 0
+    markdown = stdout.getvalue()
+    assert "decision: `needs-discrimination`" in markdown
+    assert "saturated_tasks: `24`" in markdown
+    assert "claim_ready: `false`" in markdown
+    assert "external_claim_decision: `not-ready`" in markdown
+
+
+def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
+    script = _load_script()
+    out = tmp_path / "manifest-gate.json"
+    stdout = io.StringIO()
+
+    with redirect_stdout(stdout):
+        exit_code = script.main(
+            [
+                str(SATURATED_REPORT),
+                "--manifest",
+                str(V4_MANIFEST),
+                "--out",
+                str(out),
+            ]
+        )
+
+    assert exit_code == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["benchmark_plan"]["task_count"] == 28
+    assert payload["benchmark_plan"]["total_cells"] == 168
+    assert payload["coverage_gate"]["repo_count"] == 6
+    assert payload["coverage_gate"]["claim_ready"] is False
+    assert payload["coverage_gate"]["task_kind_counts"]["feature"] == 19
+    assert payload["portfolio_gap_plan"]["minimum_total_additions"] == 22
+    assert payload["portfolio_gap_plan"]["suggested_minimum_additions_by_kind"] == {
+        "long-running": 2,
+        "refactor": 2,
+    }
+    assert payload["portfolio_gap_plan"]["unallocated_non_dominant_additions"] == 18
+    assert payload["portfolio_expansion_draft"]["slot_count"] == 22
+    assert payload["portfolio_expansion_draft"]["slots_by_kind"] == {
+        "bugfix": 4,
+        "long-running": 9,
+        "refactor": 9,
+    }
+    assert payload["claim_readiness"]["decision"] == "not-ready"
+    assert payload["claim_readiness"]["blocked_gates"] == [
+        "benchmark_plan",
+        "portfolio_coverage",
+        "calibration",
+    ]
+    assert any(
+        "Add at least 22 benchmark task" in action
+        for action in payload["claim_readiness"]["next_actions"]
+    )
+    gate = payload["manifest_gate"]
+    assert gate["quality_claim_ready"] is False
+    assert gate["manifest_tasks"] == 28
+    assert gate["reported_tasks"] == 24
+    assert len(gate["missing_tasks"]) == 4
+    assert json.loads(stdout.getvalue()) == payload

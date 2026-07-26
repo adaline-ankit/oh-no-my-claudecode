@@ -41,6 +41,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from oh_no_my_claudecode.experiment.calibration import calibrate_records  # noqa: E402
 from oh_no_my_claudecode.experiment.contracts import (  # noqa: E402
     Condition,
     MetricLabel,
@@ -1247,6 +1248,10 @@ def main() -> int:
         ),
         "records": [r.to_dict() for r in records],
     }
+    report["calibration"] = calibrate_records(
+        [r.to_dict() for r in records],
+        conditions=[c.value for c in conditions],
+    ).to_dict()
     Path(args.out).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     headline = {"summary": report["summary"], "paired": report["paired"]}
     print(json.dumps(headline, indent=2, sort_keys=True))

@@ -1,0 +1,625 @@
+{
+  "benchmark_plan": {
+    "assumed_task_delta_sd": 0.35,
+    "budget_ceiling_usd": 300.0,
+    "budget_ready": true,
+    "claim_ready": false,
+    "condition_count": 2,
+    "estimated_cost_usd": 126.0,
+    "estimated_required_cost_usd": 225.0,
+    "min_effect": 0.15,
+    "min_tasks_floor": 50,
+    "min_tasks_required": 50,
+    "min_total_cells_required": 300,
+    "per_cell_cost_usd": 0.75,
+    "reasons": [
+      "only 28 task(s); requires 50 for a 0.150 paired pass-rate delta planning target"
+    ],
+    "sample_size_ready": false,
+    "task_count": 28,
+    "total_cells": 168,
+    "trials_per_cell": 3
+  },
+  "claim_readiness": {
+    "benchmark_plan_ready": false,
+    "blocked_gates": [
+      "benchmark_plan",
+      "portfolio_coverage",
+      "calibration"
+    ],
+    "calibration_ready": false,
+    "cost_calibration_ready": false,
+    "cost_claim_ready": false,
+    "decision": "not-ready",
+    "next_actions": [
+      "Add at least 22 benchmark task(s) to reach the 50-task planning target.",
+      "Rebalance the portfolio so required task kinds, repo spread, metadata, and dominance thresholds pass.",
+      "Run a fresh, complete, discriminative benchmark report against the current manifest."
+    ],
+    "portfolio_coverage_ready": false,
+    "quality_claim_ready": false,
+    "reasons": [
+      "only 28 task(s); requires 50 for a 0.150 paired pass-rate delta planning target",
+      "task kind 'refactor' has 1 task(s); requires 3",
+      "task kind 'long-running' has 1 task(s); requires 3",
+      "task kind 'feature' is 67.9% of portfolio; maximum is 60.0%",
+      "only 0 discriminative task(s); requires 10",
+      "24 task(s) saturated across conditions",
+      "cost telemetry incomplete for: bare-agent",
+      "task_set_revision mismatch: manifest=external-v4-2026-07-25, report=external-v3-2026-07-25",
+      "trial count mismatch: manifest=3, report=1",
+      "4 manifest task(s) missing from report"
+    ]
+  },
+  "coverage_gate": {
+    "balance_ready": false,
+    "claim_ready": false,
+    "expected_outcome_count": 28,
+    "max_kind_fraction": 0.6,
+    "max_repo_fraction": 0.4,
+    "metadata_ready": true,
+    "min_repos": 5,
+    "min_task_kinds": 4,
+    "reasons": [
+      "task kind 'refactor' has 1 task(s); requires 3",
+      "task kind 'long-running' has 1 task(s); requires 3",
+      "task kind 'feature' is 67.9% of portfolio; maximum is 60.0%"
+    ],
+    "repo_count": 6,
+    "repo_counts": {
+      "attrs": 7,
+      "itsdangerous": 6,
+      "jmespath.py": 6,
+      "python-slugify": 2,
+      "six": 3,
+      "tenacity": 4
+    },
+    "repo_coverage_ready": true,
+    "required_kind_minimums": {
+      "bugfix": 5,
+      "feature": 5,
+      "long-running": 3,
+      "refactor": 3
+    },
+    "task_count": 28,
+    "task_kind_count": 4,
+    "task_kind_counts": {
+      "bugfix": 7,
+      "feature": 19,
+      "long-running": 1,
+      "refactor": 1
+    },
+    "task_kind_coverage_ready": false,
+    "verifier_count": 28
+  },
+  "experiment_id": "external-v3",
+  "manifest_gate": {
+    "audit_status": "valid",
+    "calibration": {
+      "cost_claim_ready": false,
+      "decision": "needs-discrimination",
+      "discriminative_tasks": 0,
+      "incomplete_cell_count": 0,
+      "incomplete_cost_conditions": [
+        "bare-agent"
+      ],
+      "min_discriminative_tasks": 10,
+      "min_pass_delta": 0.05,
+      "quality_claim_ready": false,
+      "reasons": [
+        "only 0 discriminative task(s); requires 10",
+        "24 task(s) saturated across conditions",
+        "cost telemetry incomplete for: bare-agent"
+      ],
+      "saturated_tasks": 24,
+      "tasks": [
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-bugfix-asdict-recurse",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-asdict",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-assoc",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-has",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-impl-serialisation-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "attrs-multisite-filter-ignored",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-base64-encode",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-base64-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-int-bytes-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "itsdangerous-impl-want-bytes",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-by-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-merge",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-sort-by",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-starts-with",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "jmespath-impl-to-number",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-bugfix-integer-types",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-impl-with-metaclass",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "six-multisite-type-aliases",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "slugify-impl-slugify",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "slugify-impl-smart-truncate",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-bugfix-find-ordinal",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-impl-ordinal-pair",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-impl-to-seconds",
+          "usable_cells": 2
+        },
+        {
+          "discriminative": false,
+          "max_delta": 0.0,
+          "pass_rates": {
+            "bare-agent": 1.0,
+            "onmc-current": 1.0
+          },
+          "saturated": true,
+          "task_id": "tenacity-multisite-ordinal-suffixes",
+          "usable_cells": 2
+        }
+      ],
+      "total_tasks": 24
+    },
+    "cost_claim_ready": false,
+    "expected_conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "expected_trials": 3,
+    "manifest_task_set_revision": "external-v4-2026-07-25",
+    "manifest_tasks": 28,
+    "missing_tasks": [
+      "attrs-longrunning-four-modules",
+      "itsdangerous-crossfile-want-bytes",
+      "itsdangerous-misleading-base64-padding",
+      "jmespath-refactor-dedup-key-func"
+    ],
+    "quality_claim_ready": false,
+    "reasons": [
+      "only 0 discriminative task(s); requires 10",
+      "24 task(s) saturated across conditions",
+      "cost telemetry incomplete for: bare-agent",
+      "task_set_revision mismatch: manifest=external-v4-2026-07-25, report=external-v3-2026-07-25",
+      "trial count mismatch: manifest=3, report=1",
+      "4 manifest task(s) missing from report"
+    ],
+    "report_task_set_revision": "external-v3-2026-07-25",
+    "reported_conditions": [
+      "bare-agent",
+      "onmc-current"
+    ],
+    "reported_tasks": 24,
+    "reported_trials": 1,
+    "unexpected_tasks": []
+  },
+  "manifest_path": "datasets/experiment/portfolio_external_v4.json",
+  "portfolio_expansion_draft": {
+    "base_task_count": 28,
+    "dominant_kind": "feature",
+    "max_additional_dominant_kind_at_target": 11,
+    "notes": [
+      "Draft slots are not benchmark tasks. Each slot must become a real manifest task with a mutation table entry and passing corpus-integrity tests.",
+      "Prefer assigning unallocated tasks to non-dominant task kinds until the fresh report proves those classes are discriminative.",
+      "At the 50-task target, no more than 11 additional 'feature' task(s) should be added."
+    ],
+    "slot_count": 22,
+    "slots": [
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-bugfix-01",
+        "suggested_repo": "python-slugify",
+        "task_kind": "bugfix"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-bugfix-02",
+        "suggested_repo": "python-slugify",
+        "task_kind": "bugfix"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-bugfix-03",
+        "suggested_repo": "six",
+        "task_kind": "bugfix"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-bugfix-04",
+        "suggested_repo": "python-slugify",
+        "task_kind": "bugfix"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "kind-minimum",
+        "slot_id": "planned-v5-long-running-01",
+        "suggested_repo": "six",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "kind-minimum",
+        "slot_id": "planned-v5-long-running-02",
+        "suggested_repo": "tenacity",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-03",
+        "suggested_repo": "python-slugify",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-04",
+        "suggested_repo": "six",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-05",
+        "suggested_repo": "tenacity",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-06",
+        "suggested_repo": "itsdangerous",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-07",
+        "suggested_repo": "jmespath.py",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-08",
+        "suggested_repo": "python-slugify",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-long-running-09",
+        "suggested_repo": "six",
+        "task_kind": "long-running"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "kind-minimum",
+        "slot_id": "planned-v5-refactor-01",
+        "suggested_repo": "tenacity",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "kind-minimum",
+        "slot_id": "planned-v5-refactor-02",
+        "suggested_repo": "attrs",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-03",
+        "suggested_repo": "itsdangerous",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-04",
+        "suggested_repo": "jmespath.py",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-05",
+        "suggested_repo": "python-slugify",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-06",
+        "suggested_repo": "six",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-07",
+        "suggested_repo": "tenacity",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-08",
+        "suggested_repo": "attrs",
+        "task_kind": "refactor"
+      },
+      {
+        "rationale": "Fill with a real upstream mutation and verifier; do not promote to a live manifest task until pristine/failing/fixed validity gates pass.",
+        "required_by": "sample-size-and-balance",
+        "slot_id": "planned-v5-refactor-09",
+        "suggested_repo": "itsdangerous",
+        "task_kind": "refactor"
+      }
+    ],
+    "slots_by_kind": {
+      "bugfix": 4,
+      "long-running": 9,
+      "refactor": 9
+    },
+    "slots_by_repo": {
+      "attrs": 2,
+      "itsdangerous": 3,
+      "jmespath.py": 2,
+      "python-slugify": 6,
+      "six": 5,
+      "tenacity": 4
+    },
+    "target_task_count": 50
+  },
+  "portfolio_gap_plan": {
+    "current_tasks": 28,
+    "dominance_only_additions_required": 4,
+    "dominant_kind": "feature",
+    "dominant_kind_count": 19,
+    "kind_deficits": {
+      "long-running": 2,
+      "refactor": 2
+    },
+    "max_additional_dominant_kind_at_target": 11,
+    "max_kind_fraction": 0.6,
+    "minimum_total_additions": 22,
+    "notes": [
+      "Prefer assigning unallocated tasks to non-dominant task kinds until the fresh report proves those classes are discriminative.",
+      "At the 50-task target, no more than 11 additional 'feature' task(s) should be added."
+    ],
+    "ready_if_applied": false,
+    "repo_deficit": 0,
+    "repo_diversity_additions_required": 0,
+    "suggested_minimum_additions_by_kind": {
+      "long-running": 2,
+      "refactor": 2
+    },
+    "target_tasks": 50,
+    "unallocated_non_dominant_additions": 18
+  },
+  "report_path": "datasets/experiment/reports/external_v3_stage1_2026-07-25.json",
+  "task_set_revision": "external-v3-2026-07-25"
+}

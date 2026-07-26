@@ -8,8 +8,15 @@ from pathlib import Path
 from typing import Any, Literal
 
 from oh_no_my_claudecode.context_engine import EvidencePacket
-from oh_no_my_claudecode.harness import RiskLevel, TaskDAG
+from oh_no_my_claudecode.harness import NodeKind, RiskLevel, TaskDAG
 from oh_no_my_claudecode.harness_run.budget_modes import BudgetMode
+from oh_no_my_claudecode.runtime.contracts import (
+    Budget,
+    CapabilitySet,
+    EvidenceRef,
+    NodeSpec,
+    RunSpec,
+)
 
 from .receipt import HarnessRunReceipt
 from .run_policy import RunPolicyDecision
@@ -118,6 +125,44 @@ class ExecutionPlan:
     policy_decisions: tuple[PolicyDecisionRecord, ...]
     state_path: str
     schema_version: str = "1"
+
+    def to_run_spec(self) -> RunSpec:
+        """Compile the public plan into ONMC's canonical runtime graph."""
+        evidence = tuple(_evidence_refs(self.context_packet))
+        nodes = tuple(
+            NodeSpec(
+                node_id=node.node_id,
+                kind=node.kind.value,
+                objective=node.objective,
+                dependencies=node.dependencies,
+                side_effecting=_node_has_side_effects(node.kind),
+                idempotency_key=f"{self.run_id}:node:{node.node_id}",
+                timeout_seconds=120.0,
+                budget=Budget(timeout_seconds=120.0, max_tokens=node.policy.context_budget),
+                capabilities=_capabilities_for(
+                    node.kind,
+                    node.policy.tools,
+                    self.proof_requirements,
+                ),
+                metadata={
+                    "agent": node.policy.agent,
+                    "model": node.policy.model,
+                    "risk": self.dag.risk.value,
+                    "verifier": node.policy.verifier,
+                },
+            )
+            for node in self.dag.nodes
+        )
+        return RunSpec(
+            run_id=self.run_id,
+            task=self.dag.task,
+            nodes=nodes,
+            evidence=evidence,
+            metadata={
+                "source": "harness_run.ExecutionPlan",
+                "state_path": self.state_path,
+            },
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -269,6 +314,38 @@ class HarnessResult:
 def state_path_for(root: Path, run_id: str) -> str:
     """Return the durable event directory exposed in plans."""
     return str(root / "runs" / run_id)
+
+
+def _node_has_side_effects(kind: NodeKind) -> bool:
+    return kind in {
+        NodeKind.CLAIM,
+        NodeKind.EXECUTE,
+        NodeKind.VERIFY,
+        NodeKind.REPAIR,
+        NodeKind.PROVE,
+        NodeKind.LEARN,
+    }
+
+
+def _capabilities_for(
+    kind: NodeKind,
+    tools: tuple[str, ...],
+    proof_requirements: tuple[ProofRequirement, ...],
+) -> CapabilitySet:
+    if kind in {NodeKind.UNDERSTAND, NodeKind.RETRIEVE, NodeKind.PLAN}:
+        return CapabilitySet(tools=tools)
+    commands = tuple(requirement.argv for requirement in proof_requirements)
+    if kind in {NodeKind.VERIFY, NodeKind.PROVE}:
+        return CapabilitySet(tools=tools, commands=commands)
+    return CapabilitySet(tools=tools, commands=commands, filesystem_write=True)
+
+
+def _evidence_refs(packet: EvidencePacket) -> tuple[EvidenceRef, ...]:
+    refs: list[EvidenceRef] = []
+    for item in packet.evidence:
+        uri = item.citations[0].render() if item.citations else item.candidate_id
+        refs.append(EvidenceRef(item.candidate_id, "repository-context", uri))
+    return tuple(refs)
 
 
 __all__ = [
