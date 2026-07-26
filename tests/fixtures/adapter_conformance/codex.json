@@ -1,0 +1,38 @@
+{
+  "schema_version": "1",
+  "provider": "codex",
+  "cli_version": "recorded-codex-0.84",
+  "prompt": "Apply the recorded fixture change.",
+  "model": "gpt-5.6-codex",
+  "stdout": "fixture complete\n\ntokens used: 1,234\n",
+  "stderr": "",
+  "returncode": 0,
+  "expected": {
+    "output": "fixture complete\n\ntokens used: 1,234",
+    "tokens": 1234,
+    "cost_usd": null,
+    "error": null
+  },
+  "operations": {
+    "start": {
+      "support": "supported",
+      "evidence": "one-shot codex exec process invocation"
+    },
+    "observe": {
+      "support": "supported",
+      "evidence": "recorded stdout and exit status"
+    },
+    "cancel": {
+      "support": "partial",
+      "evidence": "timeout terminates the process; no addressable run handle"
+    },
+    "resume": {
+      "support": "unsupported",
+      "evidence": "the adapter does not persist or accept a Codex thread id"
+    },
+    "cost": {
+      "support": "unsupported",
+      "evidence": "codex exec does not report machine-readable cost"
+    }
+  }
+}

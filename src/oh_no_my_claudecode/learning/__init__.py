@@ -36,6 +36,12 @@ from .activation import (
     is_learning_enabled,
     require_promoted,
 )
+from .candidate_registry import (
+    CandidateConflictError,
+    CandidateDisposition,
+    CandidateRecord,
+    CandidateRegistry,
+)
 from .gate import (
     AdvanceEvent,
     Explanation,
@@ -58,6 +64,13 @@ from .models import (
     Scope,
     ShadowEvaluation,
 )
+from .prediction import LearningComponent, PromotionPrediction
+from .promotion import (
+    GovernedPromotionDecision,
+    GovernedPromotionGate,
+    GovernedPromotionService,
+    PromotionManifest,
+)
 from .sanitize import Finding, scan
 
 __all__ = [
@@ -66,14 +79,24 @@ __all__ = [
     "ActivationRefusedError",
     "ActivationTarget",
     "AdvanceEvent",
+    "CandidateConflictError",
+    "CandidateDisposition",
     "CandidateKind",
+    "CandidateRecord",
+    "CandidateRegistry",
     "Explanation",
     "Finding",
     "IllegalTransitionError",
     "LearningCandidate",
+    "LearningComponent",
     "LearningError",
+    "GovernedPromotionDecision",
+    "GovernedPromotionGate",
+    "GovernedPromotionService",
     "PromotionDecision",
     "PromotionGate",
+    "PromotionManifest",
+    "PromotionPrediction",
     "PromotionRecord",
     "PromotionRejectedError",
     "Provenance",
