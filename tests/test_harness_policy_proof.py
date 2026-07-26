@@ -34,6 +34,8 @@ from oh_no_my_claudecode.harness_run import (
     RunPolicy,
     RunRequest,
     StageName,
+    StageRecord,
+    StageStatus,
     compute_verified,
     context_stage,
     evaluate_run_policy,
@@ -110,6 +112,17 @@ def _loop_result(*, converged: bool, iterations: bool = True) -> LoopResult:
         iterations=contracts,
         converged=converged,
         stop_reason="converged" if converged else "max-iterations",
+    )
+
+
+def _successful_stages() -> tuple[StageRecord, ...]:
+    return tuple(
+        StageRecord(
+            name=name,
+            status=StageStatus.SUCCEEDED,
+            summary=f"{name.value} ok",
+        )
+        for name in StageName
     )
 
 
@@ -341,10 +354,12 @@ def test_compute_verified_requires_every_gate() -> None:
     bad_proof = ProofAssessment(complete=False, false_green=True, reasons=("x",))
     allow = RunPolicyDecision(allowed=True, approvals_required=False, violations=())
     deny = RunPolicyDecision(allowed=False, approvals_required=False, violations=())
-    assert compute_verified(completed=True, proof=good_proof, policy=allow)
-    assert not compute_verified(completed=False, proof=good_proof, policy=allow)
-    assert not compute_verified(completed=True, proof=bad_proof, policy=allow)
-    assert not compute_verified(completed=True, proof=good_proof, policy=deny)
+    stages = _successful_stages()
+    assert compute_verified(completed=True, proof=good_proof, policy=allow, stages=stages)
+    assert not compute_verified(completed=True, proof=good_proof, policy=allow)
+    assert not compute_verified(completed=False, proof=good_proof, policy=allow, stages=stages)
+    assert not compute_verified(completed=True, proof=bad_proof, policy=allow, stages=stages)
+    assert not compute_verified(completed=True, proof=good_proof, policy=deny, stages=stages)
 
 
 # --------------------------------------------------------------------------- #
@@ -484,7 +499,7 @@ def test_receipt_build_is_deterministic() -> None:
         task="t",
         status="completed",
         completed=True,
-        stages=(),
+        stages=_successful_stages(),
         policy=policy,
         proof=proof,
     )
@@ -493,7 +508,7 @@ def test_receipt_build_is_deterministic() -> None:
         task="t",
         status="completed",
         completed=True,
-        stages=(),
+        stages=_successful_stages(),
         policy=policy,
         proof=proof,
     )

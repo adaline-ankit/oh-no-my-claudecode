@@ -6,9 +6,10 @@ policy verdict and the six typed stage records. Its single most important field
 is :attr:`HarnessRunReceipt.verified`, computed by :func:`compute_verified` — the
 one place that decides whether a run may honestly claim success.
 
-Invariant: ``verified`` is ``True`` only when the run completed, the proof is
-complete and not false-green, the policy allowed the change, and no human
-approval is outstanding. A failed proof can never report verified.
+Invariant: ``verified`` is ``True`` only when the run completed, all canonical
+harness stages succeeded, the proof is complete and not false-green, the policy
+allowed the change, and no human approval is outstanding. A failed proof or
+partial stage set can never report verified.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from pathlib import Path
 from oh_no_my_claudecode.proof_graph import ProofAssessment
 
 from .run_policy import RunPolicyDecision
-from .stages import StageRecord
+from .stages import StageName, StageRecord, StageStatus
 
 _SCHEMA_VERSION = "1"
 
@@ -31,6 +32,7 @@ def compute_verified(
     completed: bool,
     proof: ProofAssessment,
     policy: RunPolicyDecision,
+    stages: tuple[StageRecord, ...] = (),
 ) -> bool:
     """The sole authority on whether a run is verified.
 
@@ -42,6 +44,15 @@ def compute_verified(
         and not proof.false_green
         and policy.allowed
         and not policy.approvals_required
+        and stages_complete(stages)
+    )
+
+
+def stages_complete(stages: tuple[StageRecord, ...]) -> bool:
+    """Return whether a receipt carries the full successful harness stage set."""
+    names = tuple(stage.name for stage in stages)
+    return names == tuple(StageName) and all(
+        stage.status is StageStatus.SUCCEEDED for stage in stages
     )
 
 
@@ -79,7 +90,12 @@ class HarnessRunReceipt:
         policy: RunPolicyDecision,
         proof: ProofAssessment,
     ) -> HarnessRunReceipt:
-        verified = compute_verified(completed=completed, proof=proof, policy=policy)
+        verified = compute_verified(
+            completed=completed,
+            proof=proof,
+            policy=policy,
+            stages=stages,
+        )
         proof_payload: dict[str, object] = {
             "complete": proof.complete,
             "false_green": proof.false_green,
@@ -181,7 +197,12 @@ def load_harness_receipt(repo_root: Path, run_id: str) -> HarnessRunReceipt | No
     if not verify_harness_receipt(serialized):
         return None
     receipt = _coerce_harness_receipt(nested)
-    if receipt is None or receipt.run_id != run_id or not receipt.verified:
+    if (
+        receipt is None
+        or receipt.run_id != run_id
+        or not receipt.verified
+        or not _serialized_stages_complete(receipt.stages)
+    ):
         return None
     return receipt
 
@@ -229,10 +250,19 @@ def _coerce_harness_receipt(raw: dict[str, object]) -> HarnessRunReceipt | None:
     )
 
 
+def _serialized_stages_complete(stages: tuple[dict[str, object], ...]) -> bool:
+    names = tuple(stage.get("name") for stage in stages)
+    expected = tuple(stage.value for stage in StageName)
+    return names == expected and all(
+        stage.get("status") == StageStatus.SUCCEEDED.value for stage in stages
+    )
+
+
 __all__ = [
     "HarnessRunReceipt",
     "compute_verified",
     "harness_receipt_path",
     "load_harness_receipt",
+    "stages_complete",
     "verify_harness_receipt",
 ]

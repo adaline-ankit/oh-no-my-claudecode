@@ -64,13 +64,13 @@ def _verified_harness_receipt() -> HarnessRunReceipt:
     """Build a genuine, verifying harness receipt to embed (reuse, not reinvent)."""
     proof = ProofAssessment(complete=True, false_green=False, reasons=())
     policy = RunPolicyDecision(allowed=True, approvals_required=False, violations=())
-    stages = (
+    stages = tuple(
         StageRecord(
-            name=StageName.EXECUTE,
+            name=name,
             status=StageStatus.SUCCEEDED,
-            summary="applied patch",
-            facts=(("files", "1"),),
-        ),
+            summary=f"{name.value} ok",
+        )
+        for name in StageName
     )
     return HarnessRunReceipt.build(
         run_id="run-xyz",
