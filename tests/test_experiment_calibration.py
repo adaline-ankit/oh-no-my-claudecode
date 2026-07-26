@@ -785,6 +785,15 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     ]
     assert payload["calibration"]["decision"] == "needs-discrimination"
     assert payload["calibration"]["saturated_tasks"] == 24
+    assert payload["report_coverage"]["claim_ready"] is False
+    assert any(
+        item["name"] == "raw_trajectories" and item["covered"] is False
+        for item in payload["report_coverage"]["fields"]
+    )
+    assert any(
+        item["name"] == "paired_deltas" and item["covered"] is True
+        for item in payload["report_coverage"]["fields"]
+    )
     assert payload["claim_language_gate"]["decision"] == "refuse"
     assert payload["claim_language_gate"]["detected_claims"] == ["quality", "cost"]
     assert any(
@@ -808,6 +817,9 @@ def test_calibration_script_writes_json_and_markdown(tmp_path: Path) -> None:
     assert "claim_ready: `false`" in markdown
     assert "external_claim_decision: `not-ready`" in markdown
     assert "claim_language_decision: `refuse`" in markdown
+    assert "report_coverage_claim_ready: `false`" in markdown
+    assert "## Report Coverage" in markdown
+    assert "raw_trajectories: missing" in markdown
     assert "## Claim Language Gate" in markdown
     assert "suggested_safe_claim: ONMC records harness evidence" in markdown
 
@@ -848,6 +860,7 @@ def test_calibration_script_manifest_gate(tmp_path: Path) -> None:
         "refactor": 9,
     }
     assert payload["claim_readiness"]["decision"] == "not-ready"
+    assert payload["report_coverage"]["claim_ready"] is False
     assert payload["claim_language_gate"]["decision"] == "refuse"
     assert payload["claim_language_gate"]["detected_claims"] == ["quality", "cost"]
     assert payload["claim_readiness"]["blocked_gates"] == [

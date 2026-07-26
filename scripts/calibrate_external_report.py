@@ -31,6 +31,9 @@ from oh_no_my_claudecode.experiment.power import (  # noqa: E402
     plan_external_report,
     plan_portfolio_manifest,
 )
+from oh_no_my_claudecode.experiment.reporting import (  # noqa: E402
+    external_report_coverage_manifest,
+)
 
 _DEFAULT_EXTERNAL_CLAIM = (
     "ONMC improves coding-agent quality and lowers cost versus plain Claude Code, "
@@ -62,6 +65,7 @@ def calibrate_report_file(
         "report_path": str(report_path),
         "experiment_id": raw.get("experiment_id"),
         "task_set_revision": raw.get("task_set_revision"),
+        "report_coverage": external_report_coverage_manifest(raw).to_dict(),
     }
     if manifest_path is not None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -144,6 +148,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
     next_actions = claim.get("next_actions", [])
     language_gate = _mapping(payload["claim_language_gate"])
     language_reasons = language_gate.get("reasons", [])
+    report_coverage = _mapping(payload["report_coverage"])
     lines = [
         "# ONMC External Report Calibration",
         "",
@@ -156,6 +161,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
         f"- external_cost_claim_ready: `{str(claim['cost_claim_ready']).lower()}`",
         f"- blocked_gates: `{claim['blocked_gates']}`",
         f"- claim_language_decision: `{language_gate['decision']}`",
+        f"- report_coverage_claim_ready: `{str(report_coverage['claim_ready']).lower()}`",
         f"- decision: `{_decision(calibration)}`",
         f"- quality_claim_ready: `{str(calibration['quality_claim_ready']).lower()}`",
         f"- cost_claim_ready: `{str(calibration['cost_claim_ready']).lower()}`",
@@ -232,6 +238,7 @@ def _render_markdown(payload: dict[str, object]) -> str:
             if isinstance(language_reasons, list) and language_reasons
             else ["- none"]
         ),
+        *(_report_coverage_markdown(report_coverage)),
         "",
         "## Reasons",
         "",
@@ -369,6 +376,38 @@ def _metadata_audit_markdown(audit: dict[str, Any]) -> list[str]:
         f"`{str(audit['report_leakage_notes_present']).lower()}`",
         f"- missing_fields: `{audit['missing_fields']}`",
         f"- mismatched_fields: `{audit['mismatched_fields']}`",
+    ]
+
+
+def _report_coverage_markdown(coverage: dict[str, Any]) -> list[str]:
+    fields = [
+        item
+        for item in _list_value(coverage.get("fields"))
+        if isinstance(item, dict)
+    ]
+    missing = [
+        str(item.get("name"))
+        for item in fields
+        if item.get("covered") is False and item.get("name")
+    ]
+    return [
+        "",
+        "## Report Coverage",
+        "",
+        f"- claim_ready: `{str(coverage['claim_ready']).lower()}`",
+        f"- covered_count: `{coverage['covered_count']}`",
+        f"- missing_count: `{coverage['missing_count']}`",
+        f"- missing_fields: `{missing}`",
+        "",
+        "### Report Coverage Fields",
+        "",
+        *[
+            "- "
+            f"{item['name']}: "
+            f"{'covered' if item['covered'] else 'missing'} "
+            f"({item['reason']})"
+            for item in fields
+        ],
     ]
 
 

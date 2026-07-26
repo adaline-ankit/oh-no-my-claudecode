@@ -43,6 +43,11 @@ from .expansion import (
     build_portfolio_expansion_draft,
 )
 from .power import BenchmarkPowerPlan, plan_external_report, plan_portfolio_manifest
+from .reporting import (
+    ExternalReportCoverageField,
+    ExternalReportCoverageManifest,
+    external_report_coverage_manifest,
+)
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -66,6 +71,8 @@ __all__ = [
     "ClaimReadinessReport",
     "PortfolioCoverageGate",
     "PortfolioExpansionPlan",
+    "ExternalReportCoverageField",
+    "ExternalReportCoverageManifest",
     "DraftTaskSlot",
     "PortfolioExpansionDraft",
     "build_claim_readiness",
@@ -74,6 +81,7 @@ __all__ = [
     "calibrate_portfolio_report",
     "calibrate_records",
     "gate_portfolio_coverage",
+    "external_report_coverage_manifest",
     "plan_portfolio_expansion",
     "plan_external_report",
     "plan_portfolio_manifest",
