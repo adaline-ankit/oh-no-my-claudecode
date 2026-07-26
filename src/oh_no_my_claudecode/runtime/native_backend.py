@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from oh_no_my_claudecode.durable_runtime import (
@@ -26,6 +27,7 @@ from oh_no_my_claudecode.runtime.contracts import (
     RunSpec,
     RuntimeContractError,
 )
+from oh_no_my_claudecode.runtime.fanout import dependency_layers
 
 
 class NativeExecutionBackend:
@@ -33,9 +35,18 @@ class NativeExecutionBackend:
 
     backend_name = "native"
 
-    def __init__(self, store: RuntimeStore, *, repo_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        store: RuntimeStore,
+        *,
+        repo_root: Path | None = None,
+        max_workers: int = 1,
+    ) -> None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
         self.store = store
         self.repo_root = None if repo_root is None else Path(repo_root)
+        self.max_workers = max_workers
 
     def execute(
         self,
@@ -66,100 +77,73 @@ class NativeExecutionBackend:
 
         results: list[NodeResult] = []
         try:
-            for node in spec.topological_order():
+            for layer in dependency_layers(spec):
                 current = self.store.load(spec.run_id)
-                state = current.nodes[node.node_id].state
-                if state is NodeState.SUCCEEDED:
-                    result = self._load_result(spec.run_id, node.node_id)
-                    self._validate_node_result(node, result)
-                    results.append(result)
-                    continue
-                if self._has_result(spec.run_id, node.node_id):
-                    result = self._load_result(spec.run_id, node.node_id)
-                    self._validate_node_result(node, result)
-                    self._apply_persisted_result(spec.run_id, result)
+                ready_nodes: list[NodeSpec] = []
+                for node in layer:
+                    state = current.nodes[node.node_id].state
+                    if state is NodeState.SUCCEEDED:
+                        result = self._load_result(spec.run_id, node.node_id)
+                        self._validate_node_result(node, result)
+                        results.append(result)
+                        continue
+                    if self._has_result(spec.run_id, node.node_id):
+                        result = self._load_result(spec.run_id, node.node_id)
+                        self._validate_node_result(node, result)
+                        self._apply_persisted_result(spec.run_id, result)
+                        results.append(result)
+                        if result.status is NodeResultStatus.SUCCEEDED:
+                            continue
+                        return self._terminal_result_from_node_result(spec, results, result)
+                    if any(
+                        current.nodes[dependency].state is not NodeState.SUCCEEDED
+                        for dependency in node.dependencies
+                    ):
+                        raise RuntimeContractError(
+                            f"node {node.node_id!r} has unsatisfied dependencies"
+                        )
+                    if state is NodeState.PENDING:
+                        self.store.start_node(
+                            spec.run_id,
+                            node.node_id,
+                            idempotency_key=f"runtime:{node.node_id}:start",
+                        )
+                    ready_nodes.append(node)
+                for node, result in self._run_ready_nodes(spec.run_id, ready_nodes, handlers):
+                    self._write_result(spec.run_id, result)
                     results.append(result)
                     if result.status is NodeResultStatus.SUCCEEDED:
-                        continue
-                    if result.status is NodeResultStatus.SKIPPED:
-                        return RunResult(
-                            run_id=spec.run_id,
-                            status=RunResultStatus.CANCELLED,
-                            results=tuple(results),
-                            backend=self.backend_name,
-                            spec_digest=spec.digest,
-                            error=result.error,
+                        self.store.complete_node(
+                            spec.run_id,
+                            node.node_id,
+                            idempotency_key=f"runtime:{node.node_id}:complete",
                         )
-                    return RunResult(
-                        run_id=spec.run_id,
-                        status=RunResultStatus.FAILED,
-                        results=tuple(results),
-                        backend=self.backend_name,
-                        spec_digest=spec.digest,
-                        error=result.error,
-                    )
-                if any(
-                    current.nodes[dependency].state is not NodeState.SUCCEEDED
-                    for dependency in node.dependencies
-                ):
-                    raise RuntimeContractError(
-                        f"node {node.node_id!r} has unsatisfied dependencies"
-                    )
-                if state is NodeState.PENDING:
-                    self.store.start_node(
-                        spec.run_id,
-                        node.node_id,
-                        idempotency_key=f"runtime:{node.node_id}:start",
-                    )
-                result = self._run_node_with_retries(spec.run_id, node, handlers[node.node_id])
-                self._write_result(spec.run_id, result)
-                results.append(result)
-                if result.status is NodeResultStatus.SUCCEEDED:
-                    self.store.complete_node(
-                        spec.run_id,
-                        node.node_id,
-                        idempotency_key=f"runtime:{node.node_id}:complete",
-                    )
-                elif result.status is NodeResultStatus.SKIPPED:
-                    self.store.cancel_node(
-                        spec.run_id,
-                        node.node_id,
-                        reason=result.error or "skipped",
-                        idempotency_key=f"runtime:{node.node_id}:skip",
-                    )
-                    self.store.cancel(
-                        spec.run_id,
-                        reason=result.error or f"{node.node_id} skipped",
-                        idempotency_key="runtime:cancel",
-                    )
-                    return RunResult(
-                        run_id=spec.run_id,
-                        status=RunResultStatus.CANCELLED,
-                        results=tuple(results),
-                        backend=self.backend_name,
-                        spec_digest=spec.digest,
-                        error=result.error,
-                    )
-                else:
-                    self.store.fail_node(
-                        spec.run_id,
-                        node.node_id,
-                        reason=result.error or "failed",
-                        idempotency_key=f"runtime:{node.node_id}:fail",
-                    )
-                    self.store.fail(
-                        spec.run_id,
-                        reason=result.error or f"{node.node_id} failed",
-                        idempotency_key="runtime:fail",
-                    )
-                    return RunResult(
-                        run_id=spec.run_id,
-                        status=RunResultStatus.FAILED,
-                        results=tuple(results),
-                        backend=self.backend_name,
-                        spec_digest=spec.digest,
-                        error=result.error,
-                    )
+                    elif result.status is NodeResultStatus.SKIPPED:
+                        self.store.cancel_node(
+                            spec.run_id,
+                            node.node_id,
+                            reason=result.error or "skipped",
+                            idempotency_key=f"runtime:{node.node_id}:skip",
+                        )
+                        self.store.cancel(
+                            spec.run_id,
+                            reason=result.error or f"{node.node_id} skipped",
+                            idempotency_key="runtime:cancel",
+                        )
+                        return self._terminal_result_from_node_result(spec, results, result)
+                    else:
+                        self.store.fail_node(
+                            spec.run_id,
+                            node.node_id,
+                            reason=result.error or "failed",
+                            idempotency_key=f"runtime:{node.node_id}:fail",
+                        )
+                        self.store.fail(
+                            spec.run_id,
+                            reason=result.error or f"{node.node_id} failed",
+                            idempotency_key="runtime:fail",
+                        )
+                        return self._terminal_result_from_node_result(spec, results, result)
             self.store.complete(spec.run_id, idempotency_key="runtime:complete")
             return RunResult(
                 run_id=spec.run_id,
@@ -207,12 +191,11 @@ class NativeExecutionBackend:
             return
         if snapshot.state is not RunState.RUNNING:
             return
-        running = next(
-            (node for node in snapshot.nodes.values() if node.state is NodeState.RUNNING),
-            None,
+        running_nodes = tuple(
+            node for node in snapshot.nodes.values() if node.state is NodeState.RUNNING
         )
         try:
-            if running is not None:
+            for running in running_nodes:
                 self.store.fail_node(
                     run_id,
                     running.node_id,
@@ -270,6 +253,54 @@ class NativeExecutionBackend:
 
     def _result_path(self, run_id: str, node_id: str) -> Path:
         return self.store.root / "runs" / run_id / "node-results" / f"{node_id}.json"
+
+    def _run_ready_nodes(
+        self,
+        run_id: str,
+        nodes: list[NodeSpec],
+        handlers: Mapping[str, NodeHandler],
+    ) -> list[tuple[NodeSpec, NodeResult]]:
+        if not nodes:
+            return []
+        if self.max_workers == 1 or len(nodes) == 1:
+            results: list[tuple[NodeSpec, NodeResult]] = []
+            for node in nodes:
+                result = self._run_node_with_retries(run_id, node, handlers[node.node_id])
+                results.append((node, result))
+                if result.status is not NodeResultStatus.SUCCEEDED:
+                    break
+            return results
+        with ThreadPoolExecutor(max_workers=min(self.max_workers, len(nodes))) as executor:
+            futures = [
+                executor.submit(
+                    self._run_node_with_retries,
+                    run_id,
+                    node,
+                    handlers[node.node_id],
+                )
+                for node in nodes
+            ]
+            return [(node, future.result()) for node, future in zip(nodes, futures, strict=True)]
+
+    def _terminal_result_from_node_result(
+        self,
+        spec: RunSpec,
+        results: list[NodeResult],
+        result: NodeResult,
+    ) -> RunResult:
+        status = (
+            RunResultStatus.CANCELLED
+            if result.status is NodeResultStatus.SKIPPED
+            else RunResultStatus.FAILED
+        )
+        return RunResult(
+            run_id=spec.run_id,
+            status=status,
+            results=tuple(results),
+            backend=self.backend_name,
+            spec_digest=spec.digest,
+            error=result.error,
+        )
 
     def _run_node_with_retries(
         self,
