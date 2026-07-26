@@ -119,6 +119,7 @@ def test_plan_only_never_executes_agent_and_is_deterministic(tmp_path: Path) -> 
         "proof_requirements",
         "policy_decisions",
         "isolation_profile",
+        "capability_manifest",
         "state_path",
         "resume",
     }

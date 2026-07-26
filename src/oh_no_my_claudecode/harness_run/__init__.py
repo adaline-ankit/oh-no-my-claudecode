@@ -1,5 +1,6 @@
 """Public typed execution harness used by ``onmc run``."""
 
+from .capabilities import ExecutionCapabilityManifest, execution_capability_manifest
 from .completion import CompletionGateDecision, evaluate_completion_gate
 from .context_selection import ContextSelectionManifest, context_selection_manifest
 from .controller import (
@@ -60,6 +61,7 @@ __all__ = [
     "CompletionGateDecision",
     "ControllerDependencies",
     "ContextSelectionManifest",
+    "ExecutionCapabilityManifest",
     "ExecutionPlan",
     "HarnessController",
     "HarnessResult",
@@ -86,6 +88,7 @@ __all__ = [
     "default_dependencies",
     "evaluate_run_policy",
     "execute_stage",
+    "execution_capability_manifest",
     "evaluate_completion_gate",
     "harness_receipt_path",
     "injection_findings",

@@ -73,6 +73,7 @@ from oh_no_my_claudecode.tool_broker import (
 from oh_no_my_claudecode.utils.time import utc_now
 
 from .budget_modes import BudgetMode, BudgetProfile, resolve_budget_profile
+from .capabilities import execution_capability_manifest
 from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
 from .context_selection import context_selection_manifest
@@ -557,6 +558,16 @@ class HarnessController:
                 "resume run ID does not match this task and execution configuration"
             )
         run_id = request.resume_run_id or derived_run_id
+        isolation = isolation_profile(requested=request.isolation)
+        capability_manifest = execution_capability_manifest(
+            agent=request.agent,
+            model=request.model,
+            verifier_argv=verifier_argv,
+            max_iterations=request.max_iterations,
+            token_budget=request.context_budget,
+            max_cost_usd=request.max_cost_usd,
+            isolation=isolation,
+        )
         return ExecutionPlan(
             run_id=run_id,
             dag=dag,
@@ -564,7 +575,8 @@ class HarnessController:
             context_selection=context_selection,
             proof_requirements=proof_requirements,
             policy_decisions=decisions,
-            isolation_profile=isolation_profile(requested=request.isolation),
+            isolation_profile=isolation,
+            capability_manifest=capability_manifest,
             state_path=state_path_for(self.dependencies.runtime_store.root, run_id),
         )
 

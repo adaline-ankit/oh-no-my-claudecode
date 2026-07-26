@@ -22,6 +22,7 @@ from oh_no_my_claudecode.runtime.contracts import (
     RetryPolicy as RuntimeRetryPolicy,
 )
 
+from .capabilities import ExecutionCapabilityManifest
 from .context_selection import ContextSelectionManifest
 from .isolation import IsolationProfile
 from .receipt import HarnessRunReceipt
@@ -131,6 +132,7 @@ class ExecutionPlan:
     proof_requirements: tuple[ProofRequirement, ...]
     policy_decisions: tuple[PolicyDecisionRecord, ...]
     isolation_profile: IsolationProfile
+    capability_manifest: ExecutionCapabilityManifest
     state_path: str
     schema_version: str = "1"
 
@@ -141,6 +143,7 @@ class ExecutionPlan:
         adapter_capability = adapter_capability_payload(agent)
         isolation = self.isolation_profile.to_dict()
         context_selection = self.context_selection.to_dict()
+        capability_manifest = self.capability_manifest.to_dict()
         nodes = tuple(
             NodeSpec(
                 node_id=node.node_id,
@@ -172,6 +175,7 @@ class ExecutionPlan:
                     "adapter_capability": adapter_capability_payload(node.policy.agent),
                     "isolation_profile": isolation,
                     "context_selection": context_selection,
+                    "capability_manifest": capability_manifest,
                     "risk": self.dag.risk.value,
                     "verifier": node.policy.verifier,
                 },
@@ -189,6 +193,7 @@ class ExecutionPlan:
                 "adapter_capability": adapter_capability,
                 "isolation_profile": isolation,
                 "context_selection": context_selection,
+                "capability_manifest": capability_manifest,
             },
         )
 
@@ -202,6 +207,7 @@ class ExecutionPlan:
             "proof_requirements": [item.to_dict() for item in self.proof_requirements],
             "policy_decisions": [item.to_dict() for item in self.policy_decisions],
             "isolation_profile": self.isolation_profile.to_dict(),
+            "capability_manifest": self.capability_manifest.to_dict(),
             "state_path": self.state_path,
             "resume": {
                 "supported": True,
@@ -334,6 +340,17 @@ class HarnessResult:
                 f"Isolation: {isolation.mode} "
                 f"(filesystem={isolation.filesystem}; network={isolation.network}; "
                 f"secrets={isolation.secrets})"
+            ),
+            (
+                "Capabilities: "
+                f"fs_write={str(self.plan.capability_manifest.filesystem_write).lower()}, "
+                f"process_isolated="
+                f"{str(self.plan.capability_manifest.process_isolated).lower()}, "
+                f"egress_constrained="
+                f"{str(self.plan.capability_manifest.egress_constrained).lower()}, "
+                f"secrets_scoped="
+                f"{str(self.plan.capability_manifest.secrets_scoped).lower()}, "
+                f"max_cost={self.plan.capability_manifest.max_cost_usd}"
             ),
         ]
         if self.status is not HarnessStatus.PLANNED:

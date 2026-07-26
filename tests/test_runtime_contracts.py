@@ -774,6 +774,49 @@ def test_runtime_contract_exposes_declared_isolation_profile(tmp_path: Path) -> 
     assert all(node.metadata["isolation_profile"] == isolation for node in spec.nodes)
 
 
+def test_runtime_contract_exposes_pre_execution_capability_manifest(
+    tmp_path: Path,
+) -> None:
+    loop = FakeLoop(_loop_result(converged=True))
+    dependencies = ControllerDependencies(
+        context_engine=HarnessController(tmp_path).dependencies.context_engine,
+        runtime_store=RuntimeStore(tmp_path / ".onmc" / "harness-runtime"),
+        policy_decider=AllowPolicy(),
+        loop_executor=loop,
+    )
+    request = RunRequest(
+        task="Fix payments",
+        plan_only=True,
+        agent="codex",
+        model="gpt-test",
+        verifier="pytest tests/payments",
+        max_cost_usd=3.5,
+        context_budget=1234,
+        isolation=True,
+    )
+    plan = HarnessController(tmp_path, dependencies=dependencies).run(request).plan
+
+    spec = plan.to_run_spec()
+    manifest = spec.metadata["capability_manifest"]
+
+    assert manifest == plan.capability_manifest.to_dict()
+    assert manifest["agent"] == "codex"
+    assert manifest["model"] == "gpt-test"
+    assert manifest["verifier_argv"] == ["pytest", "tests/payments"]
+    assert manifest["filesystem_write"] is True
+    assert manifest["process_isolated"] is False
+    assert manifest["egress_constrained"] is False
+    assert manifest["secrets_scoped"] is False
+    assert manifest["token_budget"] == 1234
+    assert manifest["max_cost_usd"] == 3.5
+    assert manifest["cost_telemetry"] == "not_reported"
+    assert "not a container or microVM" in " ".join(manifest["isolation_limitations"])
+    assert all(
+        node.metadata["capability_manifest"] == manifest
+        for node in spec.nodes
+    )
+
+
 def _completion_evidence(node: NodeSpec) -> tuple[EvidenceRef, ...]:
     return (
         EvidenceRef(
