@@ -152,3 +152,91 @@ def test_native_backend_parallel_contract_error_fails_all_running_nodes(
         "failed",
         "failed",
     ]
+
+
+def test_parallel_failure_preserves_successful_sibling_evidence_and_cancels_dependents(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-parallel-partial-success",
+        task="Preserve completed sibling evidence",
+        nodes=(
+            _node("failed"),
+            _node("succeeded"),
+            _node("join", dependencies=("failed", "succeeded")),
+        ),
+    )
+    backend = NativeExecutionBackend(
+        RuntimeStore(tmp_path / "runtime"),
+        repo_root=tmp_path,
+        max_workers=2,
+    )
+
+    def handler(node: NodeSpec) -> NodeResult:
+        if node.node_id == "failed":
+            return NodeResult(
+                node_id=node.node_id,
+                status=NodeResultStatus.FAILED,
+                idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+                error="worker failed",
+            )
+        return _result(node)
+
+    result = backend.execute(
+        spec,
+        {"failed": handler, "succeeded": handler, "join": handler},
+    )
+
+    assert result.status is RunResultStatus.FAILED
+    assert [item.node_id for item in result.results] == ["failed", "succeeded"]
+    succeeded = result.results[1]
+    assert succeeded.evidence[0].kind == "completion"
+    assert succeeded.evidence[0].digest
+    snapshot = backend.store.load(spec.run_id)
+    assert [snapshot.nodes[node_id].state.value for node_id in ("failed", "succeeded", "join")] == [
+        "failed",
+        "succeeded",
+        "cancelled",
+    ]
+
+
+def test_parallel_cancellation_preserves_active_sibling_and_cancels_dependents(
+    tmp_path: Path,
+) -> None:
+    spec = RunSpec(
+        run_id="run-parallel-cancel",
+        task="Propagate cancellation",
+        nodes=(
+            _node("cancelled"),
+            _node("succeeded"),
+            _node("join", dependencies=("cancelled", "succeeded")),
+        ),
+    )
+    backend = NativeExecutionBackend(
+        RuntimeStore(tmp_path / "runtime"),
+        repo_root=tmp_path,
+        max_workers=2,
+    )
+
+    def handler(node: NodeSpec) -> NodeResult:
+        if node.node_id == "cancelled":
+            return NodeResult(
+                node_id=node.node_id,
+                status=NodeResultStatus.SKIPPED,
+                idempotency_key=node.idempotency_key or f"runtime:{node.node_id}",
+                error="parent cancelled",
+            )
+        return _result(node)
+
+    result = backend.execute(
+        spec,
+        {"cancelled": handler, "succeeded": handler, "join": handler},
+    )
+
+    assert result.status is RunResultStatus.CANCELLED
+    assert [item.node_id for item in result.results] == ["cancelled", "succeeded"]
+    snapshot = backend.store.load(spec.run_id)
+    assert [
+        snapshot.nodes[node_id].state.value
+        for node_id in ("cancelled", "succeeded", "join")
+    ] == ["cancelled", "succeeded", "cancelled"]

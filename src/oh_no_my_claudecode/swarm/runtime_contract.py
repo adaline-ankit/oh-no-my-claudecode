@@ -11,6 +11,7 @@ from oh_no_my_claudecode.runtime.contracts import (
     NodeSpec,
     RetryPolicy,
     RunSpec,
+    RuntimeContractError,
 )
 
 
@@ -23,6 +24,7 @@ class SwarmContractUnit:
     verify_command: str | None = None
     allowed_paths: tuple[str, ...] = ()
     protected_paths: tuple[str, ...] = ()
+    dependencies: tuple[str, ...] = ()
 
 
 def build_swarm_run_spec(
@@ -38,10 +40,9 @@ def build_swarm_run_spec(
 ) -> RunSpec:
     """Compile one swarm manifest into a canonical ONMC runtime graph.
 
-    The unit nodes are independent and therefore fan out in parallel. The final
-    ``fan-in`` node depends on every unit and represents the deterministic ledger
-    join: every unit must end in a receipt-backed status before the swarm itself
-    is accounted for.
+    Dependency-ready unit nodes fan out in source-stable layers. The final
+    ``fan-in`` node depends on every unit and represents the deterministic
+    receipt join.
     """
     unit_nodes = tuple(
         NodeSpec(
@@ -52,7 +53,7 @@ def build_swarm_run_spec(
                 f"{unit.unit_id} records a receipt-backed terminal status for: "
                 f"{unit.goal[:160]}"
             ),
-            dependencies=(),
+            dependencies=unit.dependencies,
             side_effecting=True,
             approval_required=False,
             idempotency_key=f"{swarm_id}:unit:{unit.unit_id}",
@@ -67,9 +68,11 @@ def build_swarm_run_spec(
             metadata={
                 "agent": agent,
                 "allowed_paths": list(unit.allowed_paths),
+                "execution_control": "external-ledger" if mode == "inline" else "onmc-runtime",
                 "mode": mode,
                 "protected_paths": list(unit.protected_paths),
                 "swarm_id": swarm_id,
+                "verify_command": unit.verify_command,
             },
         )
         for unit in units
@@ -97,7 +100,7 @@ def build_swarm_run_spec(
             "units": len(units),
         },
     )
-    return RunSpec(
+    spec = RunSpec(
         run_id=f"swarm-{swarm_id}",
         task=f"Execute {len(units)} swarm unit(s) with bounded fan-out and fan-in.",
         nodes=unit_nodes + (fan_in,),
@@ -108,6 +111,8 @@ def build_swarm_run_spec(
             "swarm_id": swarm_id,
         },
     )
+    _validate_file_claim_order(spec, units)
+    return spec
 
 
 def _unit_capabilities(agent: str, verify_command: str | None) -> CapabilitySet:
@@ -121,6 +126,44 @@ def _unit_capabilities(agent: str, verify_command: str | None) -> CapabilitySet:
         commands=commands,
         filesystem_write=True,
     )
+
+
+def _validate_file_claim_order(
+    spec: RunSpec,
+    units: tuple[SwarmContractUnit, ...],
+) -> None:
+    """Reject overlapping declared claims unless the graph serializes them."""
+    by_id = {node.node_id: node for node in spec.nodes}
+    for index, left in enumerate(units):
+        left_claims = set(left.allowed_paths)
+        if not left_claims:
+            continue
+        for right in units[index + 1 :]:
+            overlap = sorted(left_claims.intersection(right.allowed_paths))
+            if not overlap:
+                continue
+            if _depends_on(by_id, left.unit_id, right.unit_id) or _depends_on(
+                by_id, right.unit_id, left.unit_id
+            ):
+                continue
+            raise RuntimeContractError(
+                "overlapping file claims require an explicit dependency: "
+                f"{left.unit_id!r} and {right.unit_id!r} both claim {overlap}"
+            )
+
+
+def _depends_on(by_id: dict[str, NodeSpec], node_id: str, dependency_id: str) -> bool:
+    pending = list(by_id[node_id].dependencies)
+    seen: set[str] = set()
+    while pending:
+        current = pending.pop()
+        if current == dependency_id:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        pending.extend(by_id[current].dependencies)
+    return False
 
 
 __all__ = ["SwarmContractUnit", "build_swarm_run_spec"]
