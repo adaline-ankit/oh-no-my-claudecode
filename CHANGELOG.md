@@ -6,6 +6,17 @@ All notable changes to this project are documented here.
 
 
 
+
+## [0.111.0] — 2026-07-26
+
+### Added
+
+- Primary command-surface audit that keeps the public CLI focused on the
+  canonical runtime workflow while leaving advanced diagnostics callable.
+- Product-surface publication gate so evidence reports cannot become
+  publication-ready unless the shipped command surface matches the ONMC runtime
+  promise.
+
 ## [0.110.0] — 2026-07-26
 
 ### Added
