@@ -1929,6 +1929,37 @@ Concrete corpus expansion target:
 - At the 50-task target, add no more than 11 additional feature tasks.
 ```
 
+## U8 Real OTLP Telemetry Slice
+
+Implemented on 2026-07-26:
+
+- Removed the synthetic one-millisecond end time. Events without an observed end now export as
+  zero-length spans with an explicit incomplete-duration marker.
+- Removed the estimated 60/40 input/output token split. Provider-reported totals remain totals, and
+  incomplete usage/cost fields stay explicitly incomplete.
+- Added measured cache-read, cache-creation, reasoning-token, and provider-cost attributes.
+- Added logical span identity and explicit parent identity to the persisted trace event contract.
+  Native runtime runs and nodes now use those identities, and adapter model calls inherit the active
+  node parent.
+- Added real model-call timing and provider-reported usage capture for Claude, Codex, and OpenCode
+  adapters without recording prompts or outputs.
+- Added opt-in content capture with default suppression and credential/local-path redaction.
+- Added a dependency-free OTLP/HTTP JSON exporter with a standard resource/scope envelope,
+  bounded single-request behavior, partial-success accounting, and secret-header-safe results.
+- Added an optional Phoenix integration guide. Because Phoenix currently documents OTLP Protobuf at
+  its HTTP endpoint, the guide uses an OpenTelemetry Collector as a JSON-to-Protobuf bridge.
+
+Honest remaining evidence boundary:
+
+- The focused automated trace, telemetry, adapter, and native-runtime tests pass locally.
+- A disposable Phoenix container/collector hierarchy smoke has not yet been recorded in this
+  evidence file.
+- PostToolUse hook events still lack a measured start time because that hook observes completion
+  only; they export as incomplete zero-length events instead of invented spans.
+- Internal retrieval/verifier/policy operations are real child spans when callers use `trace_span`,
+  and canonical runtime nodes retain measured node spans. Not every legacy non-runtime command has
+  been migrated to the canonical span context.
+
 ## Runtime Reproducibility Slice
 
 Commands run on 2026-07-26:

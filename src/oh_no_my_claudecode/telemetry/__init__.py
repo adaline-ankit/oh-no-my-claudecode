@@ -12,9 +12,17 @@ from oh_no_my_claudecode.telemetry.bus import (
     emit,
     read_events,
 )
+from oh_no_my_claudecode.telemetry.exporter import (
+    ExportResponse,
+    ExportResult,
+    OtlpHttpExporter,
+)
 
 __all__ = [
     "Event",
+    "ExportResponse",
+    "ExportResult",
+    "OtlpHttpExporter",
     "active_agents",
     "emit",
     "read_events",

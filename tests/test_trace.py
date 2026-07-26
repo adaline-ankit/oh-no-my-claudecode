@@ -512,6 +512,11 @@ class TestTraceCliReport:
         assert otel_file.exists()
         spans = json.loads(otel_file.read_text(encoding="utf-8"))
         assert isinstance(spans, list)
+        assert len(spans) == 5
+        assert all(span["endTimeUnixNano"] == span["startTimeUnixNano"] for span in spans)
+        rendered = json.dumps(spans)
+        assert "instant_event_default_1ms" not in rendered
+        assert "legacy_total_tokens_only" not in rendered
 
     def test_report_uninitialized_repo_exits_nonzero(self, tmp_path: Path) -> None:
         """Uninitialized repo must exit non-zero gracefully."""
@@ -640,7 +645,7 @@ class TestOtelSpans:
         assert execute_span["parentSpanId"] == run_span["spanId"]
         assert execute_span["links"][0]["spanId"] == plan_span["spanId"]
 
-    def test_to_otel_spans_from_report(self) -> None:
+    def test_to_otel_spans_from_report_does_not_fabricate_events(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 
         report = compile_trace_report(
@@ -652,9 +657,7 @@ class TestOtelSpans:
             session=_session("tr_rpt01"),
         )
         spans = to_otel_spans(report)
-        assert isinstance(spans, list)
-        # At minimum the TOKENS span and MEMORY_HIT span should be emitted
-        assert len(spans) >= 1
+        assert spans == []
 
     def test_otel_span_gen_ai_attributes_present(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
@@ -664,7 +667,10 @@ class TestOtelSpans:
         span = spans[0]
         attr_map = {a["key"]: a["value"] for a in span["attributes"]}
         assert attr_map["gen_ai.system"]["stringValue"] == "onmc"
-        assert "gen_ai.usage.input_tokens" in attr_map or "gen_ai.usage.output_tokens" in attr_map
+        assert attr_map["onmc.usage.total_tokens"]["intValue"] == 800
+        assert attr_map["onmc.usage.complete"]["boolValue"] is False
+        assert "gen_ai.usage.input_tokens" not in attr_map
+        assert "gen_ai.usage.output_tokens" not in attr_map
 
     def test_otel_span_preserves_measured_token_usage(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
@@ -683,21 +689,22 @@ class TestOtelSpans:
         assert attr_map["gen_ai.usage.input_tokens"]["intValue"] == 321
         assert attr_map["gen_ai.usage.output_tokens"]["intValue"] == 123
         assert attr_map["onmc.usage.total_tokens"]["intValue"] == 444
-        assert attr_map["onmc.usage.estimated"]["boolValue"] is False
+        assert attr_map["onmc.usage.complete"]["boolValue"] is True
 
-    def test_otel_span_marks_legacy_total_token_split_as_estimated(self) -> None:
+    def test_otel_span_never_splits_legacy_total_token_usage(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 
         events = [_ev(TraceEventKind.TOKENS, total=500)]
         spans = to_otel_spans(events, session_id="tr_estimated")
 
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
-        assert attr_map["gen_ai.usage.input_tokens"]["intValue"] == 300
-        assert attr_map["gen_ai.usage.output_tokens"]["intValue"] == 200
-        assert attr_map["onmc.usage.estimated"]["boolValue"] is True
+        assert "gen_ai.usage.input_tokens" not in attr_map
+        assert "gen_ai.usage.output_tokens" not in attr_map
+        assert attr_map["onmc.usage.total_tokens"]["intValue"] == 500
+        assert attr_map["onmc.usage.complete"]["boolValue"] is False
         assert (
-            attr_map["onmc.usage.estimate_reason"]["stringValue"]
-            == "legacy_total_tokens_only"
+            attr_map["onmc.usage.incomplete_reason"]["stringValue"]
+            == "provider_reported_total_only"
         )
 
     def test_otel_span_preserves_measured_end_timestamp(self) -> None:
@@ -715,7 +722,7 @@ class TestOtelSpans:
         assert spans[0]["startTimeUnixNano"] == 100_000_000_000
         assert spans[0]["endTimeUnixNano"] == 100_250_000_000
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
-        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+        assert attr_map["onmc.duration.complete"]["boolValue"] is True
 
     def test_otel_span_preserves_measured_end_ts(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
@@ -732,21 +739,21 @@ class TestOtelSpans:
         assert spans[0]["startTimeUnixNano"] == 100_000_000_000
         assert spans[0]["endTimeUnixNano"] == 101_500_000_000
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
-        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+        assert attr_map["onmc.duration.complete"]["boolValue"] is True
 
-    def test_otel_span_marks_default_duration_as_estimated(self) -> None:
+    def test_otel_span_marks_missing_end_time_incomplete_without_fake_duration(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 
         events = [TraceEvent(kind=TraceEventKind.TOOL_CALL, ts=100.0, payload={})]
         spans = to_otel_spans(events, session_id="tr_default_duration")
 
         assert spans[0]["startTimeUnixNano"] == 100_000_000_000
-        assert spans[0]["endTimeUnixNano"] == 100_001_000_000
+        assert spans[0]["endTimeUnixNano"] == 100_000_000_000
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
-        assert attr_map["onmc.duration.estimated"]["boolValue"] is True
+        assert attr_map["onmc.duration.complete"]["boolValue"] is False
         assert (
-            attr_map["onmc.duration.estimate_reason"]["stringValue"]
-            == "instant_event_default_1ms"
+            attr_map["onmc.duration.incomplete_reason"]["stringValue"]
+            == "end_time_not_recorded"
         )
 
     def test_otel_span_maps_runtime_node_to_agent_execution(self) -> None:
@@ -786,7 +793,7 @@ class TestOtelSpans:
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
         assert attr_map["gen_ai.operation.name"]["stringValue"] == "execute_agent"
         assert attr_map["onmc.event_kind"]["stringValue"] == "runtime_node"
-        assert attr_map["onmc.duration.estimated"]["boolValue"] is False
+        assert attr_map["onmc.duration.complete"]["boolValue"] is True
         assert attr_map["onmc.runtime.backend"]["stringValue"] == "native"
         assert attr_map["onmc.runtime.run_id"]["stringValue"] == "run-1"
         assert attr_map["onmc.runtime.node_id"]["stringValue"] == "execute"
@@ -806,9 +813,7 @@ class TestOtelSpans:
             {"stringValue": "completion"},
             {"stringValue": "mutation"},
         ]
-        assert attr_map["onmc.runtime.capabilities.commands"]["arrayValue"]["values"] == [
-            {"stringValue": "pytest tests/unit"}
-        ]
+        assert "onmc.runtime.capabilities.commands" not in attr_map
 
     def test_otel_span_maps_runtime_run_to_agent_invocation(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
@@ -897,7 +902,8 @@ class TestOtelSpans:
 
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
         assert spans[0]["status"]["code"] == 2
-        assert spans[0]["status"]["message"] == "operator stopped run"
+        assert "message" not in spans[0]["status"]
+        assert "onmc.runtime.run.error" not in attr_map
         assert attr_map["onmc.runtime.run.status"]["stringValue"] == status
 
     def test_otel_span_marks_failed_runtime_node_as_error(self) -> None:
@@ -914,9 +920,9 @@ class TestOtelSpans:
 
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
         assert spans[0]["status"]["code"] == 2
-        assert spans[0]["status"]["message"] == "tests failed"
+        assert "message" not in spans[0]["status"]
         assert attr_map["onmc.runtime.node.status"]["stringValue"] == "failed"
-        assert attr_map["onmc.runtime.node.error"]["stringValue"] == "tests failed"
+        assert "onmc.runtime.node.error" not in attr_map
 
     @pytest.mark.parametrize("status", ["cancelled", "skipped"])
     def test_otel_span_marks_terminal_runtime_node_cancellation_as_error(
@@ -940,7 +946,7 @@ class TestOtelSpans:
 
         attr_map = {a["key"]: a["value"] for a in spans[0]["attributes"]}
         assert spans[0]["status"]["code"] == 2
-        assert spans[0]["status"]["message"] == "operator cancelled"
+        assert "message" not in spans[0]["status"]
         assert attr_map["onmc.runtime.node.status"]["stringValue"] == status
 
     def test_otel_span_keeps_runtime_approval_interrupt_non_error(self) -> None:
@@ -963,10 +969,7 @@ class TestOtelSpans:
         assert spans[0]["status"]["code"] == 1
         assert "message" not in spans[0]["status"]
         assert attr_map["onmc.runtime.node.status"]["stringValue"] == "interrupted"
-        assert (
-            attr_map["onmc.runtime.node.error"]["stringValue"]
-            == "approval required before deploy"
-        )
+        assert "onmc.runtime.node.error" not in attr_map
 
     def test_otel_span_error_status_for_failure(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans

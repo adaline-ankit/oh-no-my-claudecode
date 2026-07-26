@@ -33,7 +33,7 @@ from oh_no_my_claudecode.runtime.contracts import (
 )
 from oh_no_my_claudecode.runtime.fanout import dependency_layers
 from oh_no_my_claudecode.trace.models import TraceEvent, TraceEventKind
-from oh_no_my_claudecode.trace.recorder import record_trace_event
+from oh_no_my_claudecode.trace.recorder import record_trace_event, trace_parent
 
 
 def _snapshot_trace_payload(snapshot: RunSnapshot | None) -> dict[str, object]:
@@ -73,6 +73,14 @@ def _stable_digest(value: object) -> str:
         default=str,
     )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _runtime_run_span_id(run_id: str) -> str:
+    return f"runtime-run:{run_id}"
+
+
+def _runtime_node_span_id(run_id: str, node_id: str) -> str:
+    return f"runtime-node:{run_id}:{node_id}"
 
 
 class NativeExecutionBackend:
@@ -536,7 +544,8 @@ class NativeExecutionBackend:
             lease = self._acquire_node_lease(run_id, node)
             while True:
                 try:
-                    result = handler(node)
+                    with trace_parent(_runtime_node_span_id(run_id, node.node_id)):
+                        result = handler(node)
                     self._validate_node_result(node, result)
                 except RuntimeContractError:
                     raise
@@ -633,6 +642,7 @@ class NativeExecutionBackend:
                     "duration_seconds": max(0.0, ended_at - started_at),
                     "title": f"runtime run {spec.run_id} {status.value}",
                 },
+                span_id=_runtime_run_span_id(spec.run_id),
             ),
         )
     def _record_runtime_node_event(
@@ -688,6 +698,8 @@ class NativeExecutionBackend:
                     "duration_seconds": max(0.0, ended_at - started_at),
                     "title": f"runtime node {node.node_id} {status_value}",
                 },
+                span_id=_runtime_node_span_id(run_id, node.node_id),
+                parent_span_id=_runtime_run_span_id(run_id),
             ),
         )
 
