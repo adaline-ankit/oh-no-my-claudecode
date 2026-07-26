@@ -572,6 +572,42 @@ class TestOtelSpans:
         assert first[0]["traceId"] == first[1]["traceId"]
         assert first[0]["spanId"] != first[1]["spanId"]
 
+    def test_otel_runtime_node_dependency_links_reference_dependency_spans(self) -> None:
+        from oh_no_my_claudecode.trace.otel import to_otel_spans
+
+        events = [
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=100.0,
+                payload={"run_id": "run-1", "node_id": "plan", "status": "succeeded"},
+            ),
+            TraceEvent(
+                kind=TraceEventKind.RUNTIME_NODE,
+                ts=101.0,
+                payload={
+                    "run_id": "run-1",
+                    "node_id": "execute",
+                    "status": "succeeded",
+                    "dependencies": ["plan"],
+                },
+            ),
+        ]
+        spans = to_otel_spans(events, session_id="tr_links")
+
+        plan_span, execute_span = spans
+        assert execute_span["links"] == [
+            {
+                "traceId": plan_span["traceId"],
+                "spanId": plan_span["spanId"],
+                "attributes": [
+                    {
+                        "key": "onmc.runtime.dependency",
+                        "value": {"stringValue": "plan"},
+                    }
+                ],
+            }
+        ]
+
     def test_to_otel_spans_from_report(self) -> None:
         from oh_no_my_claudecode.trace.otel import to_otel_spans
 

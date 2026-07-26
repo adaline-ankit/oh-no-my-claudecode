@@ -20,6 +20,7 @@ Key attributes used
 - ``onmc.duration.estimated`` — true only when no measured end time/duration was recorded
 - ``onmc.runtime.*``         — runtime graph/node attributes for runtime_node events
 - ``traceId`` / ``spanId``   — deterministic OTLP correlation identifiers
+- ``links``                  — runtime_node dependency edges when dependency spans are present
 """
 
 from __future__ import annotations
@@ -452,7 +453,52 @@ def to_otel_spans(
         events = source
         sid = session_id
 
-    return [
+    spans = [
         _span_from_event(ev, session_id=sid, index=index)
         for index, ev in enumerate(events)
     ]
+    return _attach_runtime_dependency_links(events, spans)
+
+
+def _attach_runtime_dependency_links(
+    events: list[TraceEvent],
+    spans: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    runtime_spans: dict[tuple[str, str], dict[str, Any]] = {}
+    for event, span in zip(events, spans, strict=True):
+        if event.kind != TraceEventKind.RUNTIME_NODE:
+            continue
+        run_id = event.payload.get("run_id")
+        node_id = event.payload.get("node_id")
+        if run_id is None or node_id is None:
+            continue
+        runtime_spans[(str(run_id), str(node_id))] = span
+
+    for event, span in zip(events, spans, strict=True):
+        if event.kind != TraceEventKind.RUNTIME_NODE:
+            continue
+        run_id = event.payload.get("run_id")
+        dependencies = event.payload.get("dependencies")
+        if run_id is None or not isinstance(dependencies, list | tuple):
+            continue
+        links = []
+        for dependency in dependencies:
+            dependency_id = str(dependency)
+            dependency_span = runtime_spans.get((str(run_id), dependency_id))
+            if dependency_span is None:
+                continue
+            links.append(
+                {
+                    "traceId": dependency_span["traceId"],
+                    "spanId": dependency_span["spanId"],
+                    "attributes": [
+                        {
+                            "key": "onmc.runtime.dependency",
+                            "value": {"stringValue": dependency_id},
+                        }
+                    ],
+                }
+            )
+        if links:
+            span["links"] = links
+    return spans

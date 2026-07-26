@@ -63,6 +63,9 @@ This is evidence for a stronger harness foundation:
 - OTel span export now includes deterministic `traceId` and `spanId` fields so repeated exports
   preserve stable correlation identity and all events from the same ONMC trace session share a
   trace identifier while each event keeps a distinct span identifier.
+- OTel export now attaches runtime DAG dependency links between `runtime_node` spans when dependency
+  spans are present in the same run, preserving fan-out/fan-in graph structure for trace backends
+  that support span links.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -540,6 +543,69 @@ Result:
 
 ```text
 126 collected tests passed
+```
+
+```text
+git diff --check
+```
+
+Result:
+
+```text
+No whitespace errors
+```
+
+```text
+python -m pytest -q tests/test_trace.py
+```
+
+Result:
+
+```text
+53 passed
+```
+
+```text
+ruff check src/oh_no_my_claudecode/trace tests/test_trace.py
+```
+
+Result:
+
+```text
+All checks passed
+```
+
+```text
+python -m mypy src/oh_no_my_claudecode/trace
+```
+
+Result:
+
+```text
+Success: no issues found in 6 source files
+```
+
+Mypy again reported pre-existing unused optional-dependency override notes for `ag2`, `autogen`,
+and `crewai`; these were not introduced by the OTel dependency-link slice.
+
+```text
+python -m pytest -q tests/test_runtime_contracts.py tests/test_trace.py
+```
+
+Result:
+
+```text
+68 passed
+```
+
+```text
+python -m pytest -q tests/test_runtime_fanout.py tests/test_runtime_contracts.py tests/test_durable_runtime.py tests/test_harness_run.py tests/test_harness_policy_proof.py tests/test_trace.py
+```
+
+Result:
+
+```text
+127 collected tests passed
 ```
 
 ```text
