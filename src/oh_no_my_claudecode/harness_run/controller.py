@@ -486,6 +486,19 @@ def _sandbox_agent_command_runner_for(
                     stdout="",
                     stderr=f"[sandbox agent error: cwd outside sandbox mount: {cwd}]",
                 )
+            binary = _agent_binary(request.agent)
+            preflight = _sandbox_agent_preflight(repo_root, request, binary, executor=executor)
+            if not preflight.succeeded:
+                return CompletedProc(
+                    returncode=127,
+                    stdout="",
+                    stderr=(
+                        f"[sandbox agent error: image {request.sandbox_image!r} "
+                        f"does not provide required CLI {binary!r}; set --sandbox-image "
+                        "to an agent-capable image]\n"
+                        f"{preflight.stderr or preflight.stdout}".strip()
+                    ),
+                )
             spec = default_repo_sandbox(
                 repo_root,
                 image=request.sandbox_image,
@@ -513,6 +526,34 @@ def _sandbox_agent_command_runner_for(
         )
 
     return _run
+
+
+def _sandbox_agent_preflight(
+    repo_root: Path,
+    request: RunRequest,
+    binary: str,
+    *,
+    executor: Callable[[DockerSandboxPlan], SandboxExecutionResult],
+) -> SandboxExecutionResult:
+    spec = default_repo_sandbox(
+        repo_root,
+        image=request.sandbox_image,
+        writeable=False,
+        network=NetworkPolicy.DENY,
+        timeout_seconds=30,
+    )
+    plan = docker_run_plan(spec, ("sh", "-lc", f"command -v {shlex.quote(binary)}"), role="setup")
+    return executor(plan)
+
+
+def _agent_binary(agent: str) -> str:
+    if agent == "claude":
+        return "claude"
+    if agent == "codex":
+        return "codex"
+    if agent == "opencode":
+        return "opencode"
+    raise ValueError(f"unsupported agent: {agent}")
 
 
 def _local_command(command: list[str], cwd: str, timeout: int) -> CompletedProc:

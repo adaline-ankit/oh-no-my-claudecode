@@ -309,6 +309,16 @@ def test_sandbox_verifier_runner_executes_command_without_agent_secret(tmp_path:
 
     def executor(plan: DockerSandboxPlan) -> SandboxExecutionResult:
         seen.append(plan)
+        if plan.role == "setup":
+            return SandboxExecutionResult(
+                status=SandboxExecutionStatus.SUCCEEDED,
+                returncode=0,
+                stdout="/usr/local/bin/claude\n",
+                stderr="",
+                argv_sha256="preflight",
+                timeout_seconds=30,
+                reason="sandbox command succeeded",
+            )
         return SandboxExecutionResult(
             status=SandboxExecutionStatus.SUCCEEDED,
             returncode=0,
@@ -390,8 +400,11 @@ def test_sandbox_agent_runner_executes_cli_inside_writable_boundary(
 
     assert result.output == "changed code"
     assert result.tokens == 5
-    assert len(seen) == 1
-    plan = seen[0]
+    assert len(seen) == 2
+    assert seen[0].role == "setup"
+    assert seen[0].secret_env == ()
+    assert "command -v claude" in seen[0].argv
+    plan = seen[1]
     assert plan.role == "agent"
     assert plan.secret_env == ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN")
     assert "--network" in plan.argv
@@ -399,6 +412,41 @@ def test_sandbox_agent_runner_executes_cli_inside_writable_boundary(
     assert f"{tmp_path}:/workspace:rw" in plan.argv
     assert "onmc-agent:local" in plan.argv
     assert "claude" in plan.argv
+
+
+def test_sandbox_agent_runner_fails_before_prompt_when_image_lacks_cli(
+    tmp_path: Path,
+) -> None:
+    seen: list[DockerSandboxPlan] = []
+
+    def executor(plan: DockerSandboxPlan) -> SandboxExecutionResult:
+        seen.append(plan)
+        return SandboxExecutionResult(
+            status=SandboxExecutionStatus.FAILED,
+            returncode=127,
+            stdout="",
+            stderr="claude: not found",
+            argv_sha256="preflight",
+            timeout_seconds=30,
+            reason="sandbox command failed",
+        )
+
+    request = RunRequest(
+        task="agent in sandbox",
+        execute=True,
+        sandbox=True,
+        sandbox_provider="docker",
+        sandbox_image="python:3.12-slim",
+    )
+    runner = _sandbox_agent_runner_for(tmp_path, request, executor=executor)
+
+    result = runner("fix bug", escalation_level=0)
+
+    assert result.error is not None
+    assert "does not provide required CLI 'claude'" in result.error
+    assert len(seen) == 1
+    assert seen[0].role == "setup"
+    assert seen[0].secret_env == ()
 
 
 def test_cli_json_and_help_expose_safe_execution_contract(

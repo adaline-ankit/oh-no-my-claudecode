@@ -125,6 +125,9 @@ This is evidence for a stronger harness foundation:
   the Docker sandbox executor for the Docker provider. Agent commands run with a writable repository
   mount, network enabled, and role-scoped agent secrets; verifier commands run with a read-only
   repository mount, no network, and no secrets.
+- Docker-sandboxed agent execution now performs a no-secret setup preflight before sending the task
+  prompt, failing fast when the selected image does not contain the requested `claude`, `codex`, or
+  `opencode` CLI.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.
@@ -286,7 +289,7 @@ python -m pytest tests/test_harness_run.py tests/test_sandbox_contracts.py tests
 Result:
 
 ```text
-56 passed
+57 passed
 ```
 
 ```text
