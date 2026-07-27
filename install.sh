@@ -3,13 +3,13 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/adaline-ankit/oh-no-my-claudecode/main/install.sh | bash
-#   ONMC_NO_INTEGRATE=1 bash install.sh   # install only, skip quickstart/setup
+#   ONMC_NO_INTEGRATE=1 bash install.sh   # install only, skip setup
 #
 # Flags:
 #   --help    Print usage and exit
 #
 # Env overrides:
-#   ONMC_NO_INTEGRATE=1   Skip the post-install integration step (runs onmc quickstart --yes)
+#   ONMC_NO_INTEGRATE=1   Skip the post-install integration step (runs onmc setup --yes)
 #
 # Never requires elevated privileges. Fails loudly with a non-zero exit code on any error.
 
@@ -118,7 +118,7 @@ fi
 success "oh-no-my-claudecode installed successfully ($(onmc --version 2>/dev/null || echo 'onmc'))."
 
 # ---------------------------------------------------------------------------
-# Step 3: integrate with Claude Code (quickstart or setup wizard)
+# Step 3: configure ONMC through the canonical setup path
 # ---------------------------------------------------------------------------
 
 ONMC_NO_INTEGRATE="${ONMC_NO_INTEGRATE:-0}"
@@ -137,14 +137,8 @@ else
 
   info "Running integration in: ${INTEGRATE_DIR}"
 
-  # Try `onmc quickstart --yes` first (newer versions); fall back to `onmc setup --yes`.
-  # Both run with stdin redirected from /dev/null so a curl|bash pipe cannot feed
-  # the setup wizard (which would loop forever consuming the script text as answers).
-  if onmc quickstart --help >/dev/null 2>&1; then
-    SETUP_CMD="onmc quickstart --yes"
-  else
-    SETUP_CMD="onmc setup --yes"
-  fi
+  # Redirect stdin so a curl|bash pipe cannot feed the setup wizard.
+  SETUP_CMD="onmc setup --yes"
 
   # Intentional word-splitting for SETUP_CMD arguments.
   # shellcheck disable=SC2086
@@ -166,10 +160,10 @@ printf "%b  onmc is ready!%b\n" "${BOLD}${GREEN}" "${RESET}"
 printf "%b===========================================================%b\n" "${BOLD}${GREEN}" "${RESET}"
 printf "\n"
 printf "Day-1 commands to try:\n"
-printf "  %b/onmc%b                 -- toggle deep-wrap on/off from Claude Code\n" "${BOLD}" "${RESET}"
-printf "  %bonmc autopilot%b %b\"goal\"%b -- autonomous coding loop with memory\n" "${BOLD}" "${RESET}" "${CYAN}" "${RESET}"
-printf "  %bonmc brief%b            -- memory context brief for your next task\n" "${BOLD}" "${RESET}"
-printf "  %bonmc ui%b               -- visual memory dashboard\n" "${BOLD}" "${RESET}"
+printf "  %bonmc run%b %b\"your task\"%b -- preview the canonical runtime contract\n" "${BOLD}" "${RESET}" "${CYAN}" "${RESET}"
+printf "  %bonmc status%b           -- check repository and ONMC readiness\n" "${BOLD}" "${RESET}"
+printf "  %bonmc missioncontrol%b   -- inspect durable run and proof state\n" "${BOLD}" "${RESET}"
+printf "  %bonmc ui%b               -- visual Mission Control\n" "${BOLD}" "${RESET}"
 printf "\n"
 printf "Docs: https://github.com/adaline-ankit/oh-no-my-claudecode\n"
 printf "\n"

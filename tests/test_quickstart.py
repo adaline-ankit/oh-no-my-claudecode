@@ -5,7 +5,7 @@ Coverage (≥6 tests as required)
 1. plan_quickstart() lists steps init→plug→wrap in that order.
 2. run_quickstart() calls injected runners in declaration order.
 3. Idempotent skip: runners returning "skipped" propagate through result.
-4. QuickstartResult.day1_commands includes /onmc, autopilot, brief, and ui.
+4. QuickstartResult.day1_commands follows run, status, Mission Control, and UI.
 5. --json CLI flag emits a {"kind": "quickstart", "steps", "day1_commands"} envelope.
 6. A runner that raises is recorded as "error" and subsequent steps still run.
 7. QuickstartResult.success is True iff no step has status "error".
@@ -132,21 +132,21 @@ def test_run_quickstart_propagates_skipped_status(tmp_path: Path) -> None:
 
 
 def test_day1_commands_include_required_entries(tmp_path: Path) -> None:
-    """QuickstartResult.day1_commands must include /onmc, autopilot, brief, and ui."""
+    """Compatibility card must hand off to the canonical public workflow."""
     runners = _fake_runners({"init": "done", "plug": "done", "wrap": "done"})
     result = run_quickstart(tmp_path, runners=runners)
 
     cmds = result.day1_commands
     # Module-level constant also has the same entries.
-    assert "/onmc" in DAY1_COMMANDS
-    assert any("autopilot" in c for c in DAY1_COMMANDS)
-    assert any("brief" in c for c in DAY1_COMMANDS)
+    assert any("run" in c for c in DAY1_COMMANDS)
+    assert any("status" in c for c in DAY1_COMMANDS)
+    assert any("missioncontrol" in c for c in DAY1_COMMANDS)
     assert any("ui" in c for c in DAY1_COMMANDS)
 
     # The result carries the same list.
-    assert "/onmc" in cmds
-    assert any("autopilot" in c for c in cmds)
-    assert any("brief" in c for c in cmds)
+    assert any("run" in c for c in cmds)
+    assert any("status" in c for c in cmds)
+    assert any("missioncontrol" in c for c in cmds)
     assert any("ui" in c for c in cmds)
 
 
