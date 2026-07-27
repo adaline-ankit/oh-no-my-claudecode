@@ -80,6 +80,7 @@ class RoutingEvaluation:
 
     def to_dict(self) -> dict[str, object]:
         return {
+            "schema_version": "onmc-routing-evaluation/v1",
             "task_count": self.task_count,
             "cost_pair_count": self.cost_pair_count,
             "cost_coverage": self.cost_coverage,
@@ -98,6 +99,7 @@ class RoutingEvaluation:
             "observed_gate_met": self.observed_gate_met,
             "gate_reasons": list(self.gate_reasons),
             "enforcement_enabled": self.enforcement_enabled,
+            "advisory_only": True,
             "claim_ready": self.claim_ready,
         }
 
