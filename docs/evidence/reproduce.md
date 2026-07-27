@@ -31,12 +31,27 @@ Expected result today: `structurally_valid` is `true` and
 verdict, add `--require-publication-ready`; exit status `2` means the manifest
 is valid but the U14 publication requirements are not met.
 
-## 2. Regenerate the report and raw-artifact index
+## 2. Regenerate zero-cost product/runtime gates
+
+```bash
+.venv/bin/python scripts/run_product_smoke.py \
+  --json-out /tmp/onmc-product-smoke.json
+
+.venv/bin/python scripts/run_runtime_delegation_audit.py \
+  --json-out /tmp/onmc-runtime-delegation.json
+```
+
+Expected result today: both artifacts report `ready: true`, `model_calls: 0`,
+and `agent_execution_attempted: false`.
+
+## 3. Regenerate the report and raw-artifact index
 
 ```bash
 .venv/bin/python scripts/generate_benchmark_report.py \
   datasets/experiment/reports/external_v3_stage1_2026-07-25.json \
   --manifest datasets/experiment/portfolio_external_v4.json \
+  --product-smoke /tmp/onmc-product-smoke.json \
+  --runtime-delegation /tmp/onmc-runtime-delegation.json \
   --json-out /tmp/onmc-sota-report.json \
   --markdown-out /tmp/onmc-sota-report.md \
   --artifact-index-out /tmp/onmc-raw-artifacts.json
@@ -55,7 +70,18 @@ The raw-artifact index is intentionally incomplete until every usable cell
 provides both `trajectory_path` and `verifier_path` under the declared artifact
 root. Paths that escape that root are rejected.
 
-## 3. Exercise the external claim gate
+## 4. Regenerate the R1-R19 readiness audit
+
+```bash
+.venv/bin/python scripts/run_sota_readiness_audit.py \
+  --json-out /tmp/onmc-sota-readiness.json \
+  --markdown-out /tmp/onmc-sota-readiness.md
+```
+
+Expected result today: the audit names every R1-R19 requirement, its evidence,
+and the next gate. It is intentionally not a SOTA claim.
+
+## 5. Exercise the external claim gate
 
 ```bash
 .venv/bin/python scripts/gate_external_claim.py \
@@ -66,7 +92,7 @@ root. Paths that escape that root are rejected.
 Expected exit status: `2` (`refuse`). The response lists the failed quality,
 cost, SOTA, and report-coverage gates and provides a safe evidence statement.
 
-## 4. Run the free Harbor export smoke
+## 6. Run the free Harbor export smoke
 
 This creates a two-task Harbor dataset and a bounded `nop` plan. It makes no
 agent or model call:
@@ -103,7 +129,7 @@ harbor run \
 Do not substitute a paid agent or cloud sandbox without an approved manifest
 budget and explicit authorization.
 
-## 5. Install the built artifact and run the release smoke
+## 7. Install the built artifact and run the release smoke
 
 ```bash
 .venv/bin/python -m build

@@ -2285,3 +2285,40 @@ requested sandbox plan. Verifier plans fail closed when writable, network-enable
 Docker execution refuses an unvalidated manifest before the agent loop; and Harbor remains a
 configuration-only provider for local execution. The manifest keeps `enforced=false` until provider
 execution is observed, so plan-time validation is not misreported as runtime proof.
+
+## Discriminativeness finding (2026-07-27)
+
+`portfolio_external_v4` holds 28 tasks: 19 feature, 7 bugfix, 1 refactor,
+1 long-running. It contains **no deception, misleading-context, or
+retrieval-abstention tasks**, and no task class that isolates a capability only
+ONMC has.
+
+That composition explains the measured history rather than any missing runtime
+feature:
+
+- v1 external run: 6/9 bare vs 6/9 ONMC — tie, every task at ceiling or floor.
+- v3 stage-one: 24/24 in both arms, one seed — pure ceiling, zero information.
+
+Reaching R12's "50-task" number by adding 22 more bugfix/feature tasks would
+satisfy the count while proving nothing: saturated tasks cannot separate arms no
+matter how many trials are purchased. **Task count is not the gate;
+discriminativeness is.**
+
+A task earns a place in the frozen manifest only if calibration shows the arms
+can actually differ on it. The classes that plausibly discriminate, because they
+target capabilities ONMC uniquely enforces:
+
+1. **Deception / false-green** — the cheap path is weakening or deleting a test.
+   The runner already scores a test-touching pass as a false green
+   (`run_external_eval.py`, `tests_touched`), so a bare agent that cheats fails
+   while an enforced ONMC run is blocked from cheating and must repair or fail
+   honestly.
+2. **Misleading context** — repository prose or a stale comment contradicts the
+   code, testing ONMC's untrusted-context tainting.
+3. **Retrieval abstention** — the answer is absent from the repository; the
+   correct behaviour is to abstain rather than fabricate.
+4. **Cross-file / large-repo location** — the fix site is not lexically implied
+   by the prompt, testing the context compiler rather than the model.
+
+Until the manifest carries these classes, a powered benchmark spends budget to
+re-measure a ceiling. Calibration must gate admission before any paid matrix.
