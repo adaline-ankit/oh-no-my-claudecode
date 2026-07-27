@@ -6,26 +6,54 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**One coding runtime that remembers what your repo learned and proves when work is done.**
+**The coding harness that measures itself — and tells you when it loses.**
 
-ONMC runs Claude Code, Codex, or OpenCode against a goal, injects relevant repository memory on every
-iteration, warns about known dead-ends, executes your real verifier, enforces time/cost/token
-limits, and writes a tamper-evident run receipt.
+Every Claude Code wrapper claims it makes the agent better. Almost none publish a
+number. ONMC is built the other way round: it runs Claude Code, Codex, or
+OpenCode against a goal, then **refuses to call the work done** until an
+independent verifier says so — and ships the benchmark harness that can prove, or
+disprove, its own value on your repository.
 
-The default product is one command: `onmc run`. `mission` and Mission Control
-are planning and observation views over that same durable run, while advanced
-workflows remain available for operators. ONMC is local-first, cross-agent, and
-works without a hosted account.
+What it actually does on every run:
 
-## Benchmark evidence status
+- **Blocks false "done."** An independent verifier checks the repository state, not
+  the agent's prose. Deleted tests, weakened assertions, unreached changes, and
+  vacuous passes are rejected.
+- **Mediates side effects.** A reference monitor composes capability policy over
+  filesystem, command, network, and secret access. A denied effect leaves no trace.
+- **Survives interruption.** Hash-chained durable events, checkpoints, idempotent
+  side effects, and resume — a crash does not repeat completed work.
+- **Writes a receipt.** Tamper-evident, canonical, verifiable offline. `verified`
+  is computed from evidence, not asserted by a model.
+- **Gates what it learns.** No repository memory becomes active without held-out
+  evidence, provenance, scope, and a rollback path.
+- **Measures itself.** Experiment kernel with paired deltas and bootstrap
+  confidence intervals, plus Harbor integration for agent-neutral trials.
 
-ONMC does not currently claim state-of-the-art performance. The committed
-[external benchmark report](docs/evidence/sota-report.md) is explicitly not
-publication-ready: its paired quality delta is zero on a saturated one-seed
-report, cost coverage is incomplete, and raw trajectory, verifier, and leakage
-audit artifacts are missing. The [reproduction guide](docs/evidence/reproduce.md)
-regenerates that verdict locally, and the external claim gate rejects stronger
-language until every pre-registered evidence gate passes.
+One command is the product: `onmc run`. Local-first, cross-agent, no hosted
+account.
+
+## Evidence status — read this before believing anything
+
+**ONMC does not claim state-of-the-art performance, and does not claim to beat a
+bare agent.** Current honest status:
+
+| Claim | Status |
+|---|---|
+| Beats bare Claude Code on external tasks | **Not shown.** The one external run was a **tie** (6/9 vs 6/9) at ~26% higher latency. |
+| Retrieval: hybrid/embeddings beat BM25 on code | **Disproven on our data.** BM25 R@5 **0.950** / nDCG **0.857** vs hybrid 0.875 / 0.808. BM25 stays the default. |
+| Retrieval: hybrid helps on *memory* (prose) | **Measured +18% nDCG** — which is why memory, not code search, is where retrieval work continues. |
+| Never reports a false green | Held across every real-agent run so far, including runs where the fix was correct and ONMC still refused to claim verified. |
+| Publication-grade benchmark | **Blocked.** Task corpus saturates (a prior run scored 24/24 in *both* arms), cost coverage is incomplete, and raw artifacts are missing. |
+
+The [external benchmark report](docs/evidence/sota-report.md) is deliberately not
+publication-ready, the [reproduction guide](docs/evidence/reproduce.md)
+regenerates that verdict locally, and a claim gate in CI **rejects stronger
+language** until every pre-registered gate passes. If you catch this README
+overclaiming, that is a bug — please file it.
+
+Why say all that out loud? Because the measurement machinery is the point. A
+harness that cannot show its own null results cannot be trusted with yours.
 
 ## Install (one line)
 
@@ -507,6 +535,49 @@ python scripts/generate-cli-reference.py --check
 python -m build
 python -m twine check dist/*
 ```
+
+## Where we need help
+
+These are the highest-value open problems, ranked. Each is scoped, measurable, and
+has the surrounding machinery already built — you would be filling a specific gap,
+not designing from scratch.
+
+**1. Compaction survival (biggest unclaimed gap in the ecosystem)**
+When Claude Code compacts context, detail is destroyed — including which approaches
+already failed, so the agent retries them. The `PreCompact` hook exists and
+`hooks/pre_compact.py` is scaffolded. Build: harvest failed approaches, decisions,
+and open threads *before* compaction, then re-inject after it.
+*Measure:* repeat-failure rate post-compaction.
+
+**2. Ranked memory injection**
+`CLAUDE.md` is static text loaded whole, every session, relevant or not. Replace it
+with task-aware retrieval at `SessionStart`: hybrid BM25+dense, top-k, hard token
+budget, and **abstention** when confidence is low. Our data says hybrid earns +18%
+nDCG on prose — this is where it belongs.
+*Measure:* tokens saved and downstream pass rate, via `onmc retrieval-eval`.
+
+**3. Discriminative task corpus (unblocks every benchmark claim)**
+Our portfolio saturates — a prior run scored 24/24 in both arms, which carries zero
+information. Needed: tasks mined from real git history (`bug-fix commit` + `the test
+that proves it` = free, leak-resistant ground truth), plus the missing classes —
+deception/false-green, misleading context, retrieval abstention, cross-file
+location. Calibration must **reject** any task both arms always pass.
+
+**4. Live permission decisions for unattended runs**
+Today `hooks/pre_tool_use.py` is advisory-only and the reference monitor runs
+post-hoc. Wire the policy engine into a live `PreToolUse` decision so overnight runs
+work **without** `--dangerously-skip-permissions`: allow repo-scoped edits, deny
+destructive/network/secret, queue the rest for morning review.
+
+**5. Verifier calibration corpus**
+The false-green verifier (mutation, reachability, protected-test integrity,
+contract review) has no external calibration set. Needed: real fixes vs deceptive
+patches, then published sensitivity/specificity with confidence intervals. This is
+also the most publishable result in the repo.
+
+Ground rules that make contributions land: reuse existing contracts instead of
+adding parallel ones, add the test with the behavior, and **never widen a claim past
+its evidence** — the claim gate will reject it, and so will review.
 
 ## Contributing
 
