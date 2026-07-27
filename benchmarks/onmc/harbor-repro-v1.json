@@ -1,0 +1,91 @@
+{
+  "schema_version": "onmc-harbor-repro/v1",
+  "claim_eligible": false,
+  "baseline": {
+    "release": "v0.113.0",
+    "code_sha": "e54fa1ca3bd90068bcc2bf39bdaa86f2450d368e"
+  },
+  "portfolio": {
+    "path": "datasets/experiment/portfolio_external_v4.json",
+    "file_sha256": "e2b1745e576e01d93d2f165c8c680f894db75e6ec5bcc814aed577f2530c247d",
+    "task_set_sha256": "b48c2b7cb444dc01dbc36e2306dcf9d37d18ef309d054d42d949de9c0233d82d",
+    "task_count": 28
+  },
+  "execution": {
+    "harbor_version": "0.20.0",
+    "provider": "docker",
+    "docker": {
+      "image": "python:3.12.13-slim-bookworm",
+      "digest": "sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b",
+      "network_boundary": "Image build needs package and git network access; runtime egress denial is not independently verified."
+    },
+    "smoke_agent": "nop",
+    "smoke_model": "local",
+    "condition_semantics": "bare-agent and onmc-current are labels only in this free smoke"
+  },
+  "artifact_contract": {
+    "required": [
+      {
+        "kind": "trajectory",
+        "path": "agent/trajectory.json",
+        "media_type": "application/json"
+      },
+      {
+        "kind": "verifier-reward",
+        "path": "verifier/reward.json",
+        "media_type": "application/json"
+      },
+      {
+        "kind": "verifier-stdout",
+        "path": "verifier/test-stdout.txt",
+        "media_type": "text/plain"
+      },
+      {
+        "kind": "harbor-result",
+        "path": "result.json",
+        "media_type": "application/json"
+      },
+      {
+        "kind": "harbor-config",
+        "path": "config.json",
+        "media_type": "application/json"
+      },
+      {
+        "kind": "harbor-lock",
+        "path": "lock.json",
+        "media_type": "application/json"
+      }
+    ],
+    "non_empty": true,
+    "content_address": "sha256",
+    "identity_checks": [
+      "task",
+      "agent",
+      "model",
+      "docker environment",
+      "reward",
+      "ATIF schema and step order"
+    ]
+  },
+  "leakage_boundary": {
+    "publication_eligible": false,
+    "independent_audit": "missing",
+    "agent_visible": [
+      "task instruction",
+      "mutated upstream repository",
+      "upstream verifier tests",
+      "planted structural grader for jmespath-refactor-dedup-key-func"
+    ],
+    "withheld": [
+      "reference repair patches",
+      "seed implementation tables outside the exported task",
+      "expected artifact hashes"
+    ],
+    "limitations": [
+      "The free smoke has no hidden test material.",
+      "The planted structural grader is visible to the agent and is weaker evidence than upstream behavioral tests.",
+      "No independent leakage audit has passed.",
+      "nop/local validates plumbing and non-vacuity, not coding-agent quality."
+    ]
+  }
+}

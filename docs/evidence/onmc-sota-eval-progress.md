@@ -170,6 +170,10 @@ This is evidence for a stronger harness foundation:
   ATIF trajectory, verifier reward, verifier stdout, native result, config, and lock artifacts.
   Harbor's `nop` adapter emits no trajectory, so the smoke runner writes an explicitly
   non-claimable ATIF sentinel rather than presenting an empty file as coding-agent reasoning.
+- The checked-in `benchmarks/onmc/harbor-repro-v1.json` contract now binds the v4 portfolio and
+  task-set hashes, Harbor `0.20.0`, a digest-pinned Docker image, the same six-artifact importer
+  contract, and the explicit visible/withheld leakage boundary. Dry-run receipts preserve that
+  contract and remain non-claimable while the independent leakage audit is missing.
 
 This is not yet evidence that ONMC is better than plain Claude Code or Codex on external coding
 tasks. That requires the later Harbor/external benchmark waves in the plan.

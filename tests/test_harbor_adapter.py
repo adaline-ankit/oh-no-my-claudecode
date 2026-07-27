@@ -32,6 +32,11 @@ from oh_no_my_claudecode.experiment.harbor_adapter import (
     run_harbor_smoke,
     validate_harbor_seed_manifest,
 )
+from oh_no_my_claudecode.experiment.harbor_repro import (
+    DEFAULT_HARBOR_DOCKER_IMAGE,
+    HARBOR_REQUIRED_ARTIFACTS,
+    load_harbor_repro_manifest,
+)
 from oh_no_my_claudecode.experiment.portfolio import (
     PortfolioManifest,
     RepoRef,
@@ -44,6 +49,7 @@ IMPORT_SCRIPT_PATH = REPO_ROOT / "scripts" / "import_harbor_results.py"
 EXPORT_SCRIPT_PATH = REPO_ROOT / "scripts" / "export_harbor_tasks.py"
 RUN_SCRIPT_PATH = REPO_ROOT / "scripts" / "run_harbor_smoke.py"
 PORTFOLIO_V4_PATH = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.json"
+HARBOR_REPRO_PATH = REPO_ROOT / "benchmarks" / "onmc" / "harbor-repro-v1.json"
 SHA_A = "a" * 64
 SHA_B = "b" * 64
 
@@ -229,6 +235,7 @@ def test_export_portfolio_to_harbor_writes_task_directory(tmp_path: Path) -> Non
     assert test_script.stat().st_mode & 0o111
     assert "Fix cache invalidation" in (task_dir / "instruction.md").read_text(encoding="utf-8")
     dockerfile = (task_dir / "environment" / "Dockerfile").read_text(encoding="utf-8")
+    assert dockerfile.startswith(f"FROM {DEFAULT_HARBOR_DOCKER_IMAGE}\n")
     assert "git clone https://github.com/example/demo.git /workspace" in dockerfile
     assert "git checkout abcdef1234567890" in dockerfile
     assert "tests/test_cache.py" in test_script.read_text(encoding="utf-8")
@@ -236,7 +243,39 @@ def test_export_portfolio_to_harbor_writes_task_directory(tmp_path: Path) -> Non
     assert metadata["task_id"] == "cache-bugfix"
     dataset = json.loads((tmp_path / "onmc-harbor-dataset.json").read_text(encoding="utf-8"))
     assert dataset["schema_version"] == "onmc-harbor-dataset/v1"
+    assert dataset["environment"] == {
+        "provider": "docker",
+        "image": DEFAULT_HARBOR_DOCKER_IMAGE,
+    }
     assert dataset["tasks"] == [{"name": "onmc/cache-bugfix", "path": "onmc/cache-bugfix"}]
+
+
+def test_export_portfolio_to_harbor_rejects_mutable_container_tag(tmp_path: Path) -> None:
+    output = tmp_path / "harbor"
+    with pytest.raises(ValueError, match="immutable sha256 digest"):
+        export_portfolio_to_harbor(
+            _portfolio(),
+            output,
+            container_image="python:3.12-slim",
+        )
+    assert not output.exists()
+
+
+def test_checked_in_harbor_repro_manifest_binds_portfolio_and_evidence() -> None:
+    manifest = load_harbor_repro_manifest(
+        HARBOR_REPRO_PATH,
+        repository_root=REPO_ROOT,
+        portfolio_path=PORTFOLIO_V4_PATH,
+    )
+
+    assert manifest.docker_image == DEFAULT_HARBOR_DOCKER_IMAGE
+    assert manifest.harbor_version == "0.20.0"
+    assert manifest.payload["artifact_contract"]["required"] == [
+        {"kind": kind, "path": path, "media_type": media_type}
+        for kind, path, media_type in HARBOR_REQUIRED_ARTIFACTS
+    ]
+    assert manifest.leakage_boundary["publication_eligible"] is False
+    assert manifest.leakage_boundary["independent_audit"] == "missing"
 
 
 def test_export_portfolio_to_harbor_can_seed_text_regression(tmp_path: Path) -> None:
@@ -747,6 +786,18 @@ def test_run_harbor_smoke_script_validates_full_manifest_before_dry_run(
     payload = json.loads(stdout.getvalue())
     assert payload == json.loads(receipt.read_text(encoding="utf-8"))
     assert payload["executed"] is False
+    assert payload["reproduction"]["execution"]["harbor_version"] == "0.20.0"
+    assert (
+        payload["reproduction"]["execution"]["docker"]["image"]
+        + "@"
+        + payload["reproduction"]["execution"]["docker"]["digest"]
+        == DEFAULT_HARBOR_DOCKER_IMAGE
+    )
+    assert payload["reproduction"]["artifact_contract"]["required"] == [
+        {"kind": kind, "path": path, "media_type": media_type}
+        for kind, path, media_type in HARBOR_REQUIRED_ARTIFACTS
+    ]
+    assert payload["reproduction"]["leakage_boundary"]["independent_audit"] == "missing"
     assert payload["full_seed_validation"]["complete"] is True
     assert payload["full_seed_validation"]["task_count"] == 28
     assert payload["full_seed_validation"]["seeded_task_count"] == 28
@@ -759,4 +810,31 @@ def test_run_harbor_smoke_script_validates_full_manifest_before_dry_run(
     ]
     assert payload["claim_eligible"] is False
     assert "condition-label-only" in payload["limitations"]
+    dockerfile = (
+        out / "onmc" / "jmespath-refactor-dedup-key-func" / "environment" / "Dockerfile"
+    ).read_text(encoding="utf-8")
+    assert dockerfile.startswith(f"FROM {DEFAULT_HARBOR_DOCKER_IMAGE}\n")
     assert jobs.exists() is False
+
+
+def test_run_harbor_smoke_script_rejects_harbor_version_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = _load_script(RUN_SCRIPT_PATH, "_run_harbor_version_under_test")
+    repro = load_harbor_repro_manifest(
+        HARBOR_REPRO_PATH,
+        repository_root=REPO_ROOT,
+        portfolio_path=PORTFOLIO_V4_PATH,
+    )
+    monkeypatch.setattr(
+        script.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0],
+            0,
+            stdout="0.21.0\n",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="expected 0.20.0, got 0.21.0"):
+        script._verify_harbor_version(repro)

@@ -92,39 +92,45 @@ and the next gate. It is intentionally not a SOTA claim.
 Expected exit status: `2` (`refuse`). The response lists the failed quality,
 cost, SOTA, and report-coverage gates and provides a safe evidence statement.
 
-## 6. Run the free Harbor export smoke
+## 6. Validate the pinned Harbor/Docker smoke
 
-This creates a two-task Harbor dataset and a bounded `nop` plan. It makes no
-agent or model call:
+The checked-in reproduction contract binds the v4 portfolio file and task-set
+digests, Harbor `0.20.0`, a digest-pinned multi-platform Python image, the six
+required raw artifacts, and the current leakage boundary. The dry run validates
+all 28 seed definitions, exports one behavioral task plus the planted structural
+grader task, and makes no agent or model call:
 
 ```bash
-rm -rf /tmp/onmc-harbor-u14-smoke
-.venv/bin/python scripts/export_harbor_tasks.py \
+HARBOR_REPRO_ROOT="$(mktemp -d /tmp/onmc-harbor-repro.XXXXXX)"
+.venv/bin/python scripts/run_harbor_smoke.py \
   datasets/experiment/portfolio_external_v4.json \
-  --out /tmp/onmc-harbor-u14-smoke \
-  --limit-tasks 2 \
-  --seed-regressions \
-  --smoke-plan \
-  --smoke-trials 1 \
-  --max-cells 4 \
-  --agent nop \
-  --model local
+  --repro-manifest benchmarks/onmc/harbor-repro-v1.json \
+  --out "$HARBOR_REPRO_ROOT/tasks" \
+  --jobs-dir "$HARBOR_REPRO_ROOT/jobs" \
+  --receipt "$HARBOR_REPRO_ROOT/receipt.json" \
+  --task-id six-bugfix-integer-types \
+  --task-id jmespath-refactor-dedup-key-func \
+  --condition bare-agent \
+  --max-cells 2
 ```
 
-If Harbor and Docker are already available, run one seeded task with the `nop`
-agent. A failing verifier is the expected non-vacuity signal because no agent
-repairs the planted regression:
+Inspect the receipt. Expected signals:
 
-```bash
-harbor run \
-  -p /tmp/onmc-harbor-u14-smoke/onmc/tenacity-bugfix-find-ordinal \
-  -a nop \
-  -m local \
-  --env docker \
-  -n 1 \
-  -y \
-  --jobs-dir /tmp/onmc-harbor-u14-jobs
-```
+- `reproduction.sha256` content-addresses the checked-in reproduction manifest;
+- the Docker image includes `@sha256:`;
+- `full_seed_validation` reports 28/28 tasks;
+- `artifact_contract.required` lists trajectory, reward, verifier stdout,
+  result, config, and lock;
+- `leakage_boundary.independent_audit` is `missing`, and
+  `claim_eligible` remains `false`;
+- `executed` is `false`, and the jobs directory was not created.
+
+If Harbor `0.20.0` and Docker are already available, repeat the command with a
+new temporary root and add `--execute`. The runner rejects another Harbor
+version, refuses paid/model-backed agents, and imports the whole batch only when
+all six non-empty artifacts pass hash, identity, reward, and ATIF checks. A
+failing verifier is the expected non-vacuity signal because `nop` repairs
+nothing.
 
 Do not substitute a paid agent or cloud sandbox without an approved manifest
 budget and explicit authorization.
@@ -147,5 +153,8 @@ A publishable run still needs a frozen current-revision report with at least 50
 discriminative tasks, three seeds, all five benchmark arms, three agent/model
 configurations, multiple languages, complete cost telemetry, raw ATIF and
 verifier artifacts, an independent leakage audit, powered paired uncertainty,
-and signed release artifacts. Estimate the final matrix cost and obtain explicit
-approval before launching any paid cell.
+and signed release artifacts. The base container and repository revisions are
+pinned, but image-build package downloads are not yet vendored into an offline
+wheel/apt snapshot, and runtime egress denial has not been independently
+verified. Estimate the final matrix cost and obtain explicit approval before
+launching any paid cell.
