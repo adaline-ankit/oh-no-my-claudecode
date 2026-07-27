@@ -67,6 +67,19 @@ def _spec(run_id: str = "run-langgraph") -> RunSpec:
     )
 
 
+def _branching_spec(run_id: str = "run-langgraph-branching") -> RunSpec:
+    return RunSpec(
+        run_id=run_id,
+        task="Exercise deterministic DAG parity",
+        nodes=(
+            _node("plan"),
+            _node("right", dependencies=("plan",)),
+            _node("left", dependencies=("plan",)),
+            _node("join", dependencies=("right", "left"), side_effecting=True),
+        ),
+    )
+
+
 def _result(node: NodeSpec) -> NodeResult:
     evidence = (
         EvidenceRef(
@@ -172,6 +185,64 @@ def test_injected_driver_matches_native_terminal_contract(tmp_path: Path) -> Non
     assert {
         node_id: node.state for node_id, node in langgraph_snapshot.nodes.items()
     } == {node_id: node.state for node_id, node in native_snapshot.nodes.items()}
+
+
+def test_injected_driver_matches_native_branching_dag_order(tmp_path: Path) -> None:
+    spec = _branching_spec()
+    native = NativeExecutionBackend(RuntimeStore(tmp_path / "native"), repo_root=tmp_path)
+    langgraph = LangGraphExecutionBackend(
+        RuntimeStore(tmp_path / "langgraph"),
+        repo_root=tmp_path,
+        driver=_SequentialDriver(),
+    )
+    handlers = {node.node_id: _result for node in spec.nodes}
+
+    native_result = native.execute(spec, handlers)
+    langgraph_result = langgraph.execute(spec, handlers)
+
+    assert [item.node_id for item in native_result.results] == [
+        "plan",
+        "right",
+        "left",
+        "join",
+    ]
+    assert [item.to_dict() for item in langgraph_result.results] == [
+        item.to_dict() for item in native_result.results
+    ]
+
+
+def test_cancelled_run_matches_native_without_invoking_handlers(tmp_path: Path) -> None:
+    spec = _spec("cancelled-parity")
+    native = NativeExecutionBackend(RuntimeStore(tmp_path / "native"), repo_root=tmp_path)
+    langgraph = LangGraphExecutionBackend(
+        RuntimeStore(tmp_path / "langgraph"),
+        repo_root=tmp_path,
+        driver=_SequentialDriver(),
+    )
+    for backend in (native, langgraph):
+        backend.store.create_run(
+            spec.run_id,
+            node_ids=tuple(node.node_id for node in spec.nodes),
+            repo=tmp_path,
+            idempotency_key="runtime:create",
+        )
+        backend._write_spec_manifest(spec)
+        backend.store.cancel(
+            spec.run_id,
+            reason="operator cancelled",
+            idempotency_key="operator:cancel",
+        )
+
+    def must_not_run(node: NodeSpec) -> NodeResult:
+        raise AssertionError(f"handler ran after cancellation for {node.node_id}")
+
+    handlers = {node.node_id: must_not_run for node in spec.nodes}
+    native_result = native.execute(spec, handlers, resume=True)
+    langgraph_result = langgraph.execute(spec, handlers, resume=True)
+
+    assert langgraph_result.status is native_result.status is RunResultStatus.CANCELLED
+    assert langgraph_result.results == native_result.results == ()
+    assert langgraph.store.load(spec.run_id).state is native.store.load(spec.run_id).state
 
 
 def test_interrupt_resume_does_not_duplicate_side_effect_with_injected_driver(

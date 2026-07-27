@@ -32,7 +32,9 @@ Therefore:
 | Native remains default | Importing `oh_no_my_claudecode.runtime` and running `NativeExecutionBackend` succeeds with LangGraph absent. |
 | Fail closed | Selecting `LangGraphExecutionBackend` without the optional packages raises `LangGraphUnavailableError` before creating or changing a run. |
 | Terminal parity | The offline graph driver produces the same status, `spec_digest`, ordered `NodeResult` values, run state, and node states as the native backend. |
+| Branching DAG parity | A deterministic fan-out/fan-in fixture preserves native topological result order through the offline graph driver. |
 | Approval interrupt | ONMC persists the run/node approval interrupt before the handler; resume after approval invokes the side effect once; another replay reuses the result. |
+| Cancellation | A persisted operator cancellation returns the same terminal state as native execution without invoking any node handler. |
 | Crash replay | Crashes after `plan`, `execute`, or `verify` resume through persisted ONMC results without invoking any handler twice. |
 | Idempotency authority | Node results are written under ONMC's idempotency contract before graph-level completion; replay checks those results before handler invocation. |
 | Checkpoint schema | Checkpoint state carries a version and `RunSpec` digest. Unknown versions and digest mismatches fail without mutating the supplied prior state. |
