@@ -603,14 +603,14 @@ def _render_summary(
         "enabled on commit" if auto_sync_enabled else "not enabled",
     )
 
-    # What you can do now
+    # One canonical task path. Advanced commands remain available in the catalog.
     cmd_table = Table.grid(padding=(0, 2))
     cmd_table.add_column(style="bold cyan", no_wrap=True)
     cmd_table.add_column(style="dim")
-    cmd_table.add_row('onmc brief --task "…"', "get a contextual briefing for your next task")
-    cmd_table.add_row('onmc loop --goal "…"', "run an autonomous coding loop with memory")
-    cmd_table.add_row("onmc why <file>", "explain why a file is structured the way it is")
-    cmd_table.add_row("onmc ui", "open your visual memory dashboard")
+    cmd_table.add_row('onmc run "your task"', "preview the canonical runtime contract")
+    cmd_table.add_row("onmc status", "check repository and ONMC readiness")
+    cmd_table.add_row("onmc missioncontrol", "inspect durable run and proof state")
+    cmd_table.add_row("onmc commands --all", "browse advanced and compatibility controls")
 
     content = Text()
     content.append("Setup complete\n\n", style="bold green")
@@ -626,7 +626,7 @@ def _render_summary(
     console.print(
         Panel(
             cmd_table,
-            title="[bold]What you can do now[/bold]",
+            title="[bold]Next: run one task[/bold]",
             border_style="cyan",
             padding=(0, 2),
         )

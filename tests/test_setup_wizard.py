@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
+
+from rich.console import Console
 
 from oh_no_my_claudecode.config import load_config
 from oh_no_my_claudecode.core.service import OnmcService
@@ -15,10 +18,40 @@ from oh_no_my_claudecode.setup.wizard import (
     _integration_phase,
     _provider_phase,
     _render_first_win,
+    _render_summary,
     _ui_handoff,
     run_setup_wizard,
     should_seed_interactively,
 )
+
+
+def test_setup_summary_hands_off_to_one_runtime(
+    sample_repo: Path,
+    monkeypatch: object,
+) -> None:
+    """Completion checklist must point to run, status, and observed proof state."""
+    detection = detect_environment(sample_repo)
+    output_buffer = StringIO()
+    monkeypatch.setattr(
+        "oh_no_my_claudecode.setup.wizard.console",
+        Console(file=output_buffer, width=100, force_terminal=False),
+    )
+
+    _render_summary(
+        detection,
+        3,
+        claude_md_generated=True,
+        hooks_installed=False,
+        mcp_registered=False,
+        auto_sync_enabled=False,
+    )
+
+    output = output_buffer.getvalue()
+    assert "Capabilities" in output
+    assert 'onmc run "your task"' in output
+    assert "onmc status" in output
+    assert "onmc missioncontrol" in output
+    assert "onmc loop" not in output
 
 
 def test_detector_identifies_claude_code_presence(

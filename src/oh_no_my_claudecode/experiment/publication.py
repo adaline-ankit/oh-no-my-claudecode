@@ -201,6 +201,7 @@ def build_publication_bundle(
     product_surface: Mapping[str, object] | None = None,
     product_smoke: Mapping[str, object] | None = None,
     runtime_delegation: Mapping[str, object] | None = None,
+    routing_evidence: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build a deterministic report bundle without weakening any evidence gate."""
 
@@ -241,6 +242,7 @@ def build_publication_bundle(
     product_surface_gate = _product_surface_gate(product_surface)
     product_smoke_gate = _product_smoke_gate(product_smoke)
     runtime_delegation_gate = _runtime_delegation_gate(runtime_delegation)
+    routing_evidence_gate = _routing_evidence_gate(routing_evidence)
     publication_ready = (
         validation.publication_ready
         and claim_readiness.quality_claim_ready
@@ -250,6 +252,7 @@ def build_publication_bundle(
         and product_surface_gate["ready"] is True
         and product_smoke_gate["ready"] is True
         and runtime_delegation_gate["ready"] is True
+        and routing_evidence_gate["ready"] is True
     )
 
     return {
@@ -276,6 +279,7 @@ def build_publication_bundle(
         "product_surface": product_surface_gate,
         "product_smoke": product_smoke_gate,
         "runtime_delegation": runtime_delegation_gate,
+        "routing_evidence": routing_evidence_gate,
     }
 
 
@@ -298,6 +302,7 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
     runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
+    routing_evidence = _optional_mapping(bundle.get("routing_evidence"))
 
     task_count = _int_or_zero(validation.get("task_count"))
     min_tasks = _int_or_zero(benchmark_plan.get("min_tasks_required")) or 50
@@ -342,6 +347,10 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "runtime_delegation_blockers": list(
             _string_list(runtime_delegation.get("blockers"))
         ),
+        "routing_evidence_ready": routing_evidence.get("ready") is True,
+        "routing_evidence_blockers": list(
+            _string_list(routing_evidence.get("blockers"))
+        ),
         "coverage_fields_to_fill": [
             str(field.get("name"))
             for value in _optional_list(report_coverage.get("fields"))
@@ -369,6 +378,8 @@ def build_publication_work_plan(bundle: Mapping[str, object]) -> dict[str, objec
         "Run `scripts/run_runtime_delegation_audit.py` and include its JSON in the "
         "publication bundle so mission, wrap, and swarm claims are backed by "
         "canonical runtime contracts.",
+        "Include a shadow routing evaluation artifact with matched always-strong "
+        "and oracle regret, complete cost coverage, and claim-ready uncertainty.",
         "Run a one-seed calibration slice, then regenerate the publication bundle "
         "and this work plan.",
         "Only request approval for the full paid matrix after cost telemetry and "
@@ -500,6 +511,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     product_surface = _optional_mapping(bundle.get("product_surface"))
     product_smoke = _optional_mapping(bundle.get("product_smoke"))
     runtime_delegation = _optional_mapping(bundle.get("runtime_delegation"))
+    routing_evidence = _optional_mapping(bundle.get("routing_evidence"))
 
     lines = [
         "# ONMC External Benchmark Evidence Report",
@@ -613,6 +625,22 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
             f"- agent execution attempted: "
             f"`{str(runtime_delegation.get('agent_execution_attempted', True)).lower()}`",
             "",
+            "## Routing Evidence",
+            "",
+            f"- status: "
+            f"`{'READY' if routing_evidence.get('ready') is True else 'INCOMPLETE'}`",
+            f"- evaluated: `{str(routing_evidence.get('evaluated', False)).lower()}`",
+            f"- tasks: `{routing_evidence.get('task_count', 0)}`",
+            f"- cost coverage: `{_fmt(routing_evidence.get('cost_coverage'))}`",
+            f"- quality non-inferior: "
+            f"`{str(routing_evidence.get('quality_non_inferior', False)).lower()}`",
+            f"- observed cost gate: "
+            f"`{str(routing_evidence.get('cost_gate_met', False)).lower()}`",
+            f"- enforcement enabled: "
+            f"`{str(routing_evidence.get('enforcement_enabled', True)).lower()}`",
+            f"- claim ready: "
+            f"`{str(routing_evidence.get('claim_ready', False)).lower()}`",
+            "",
             "## Publication Blockers",
             "",
         ]
@@ -624,6 +652,7 @@ def render_publication_markdown(bundle: Mapping[str, object]) -> str:
     blockers.extend(str(item) for item in _optional_list(product_surface.get("blockers")))
     blockers.extend(str(item) for item in _optional_list(product_smoke.get("blockers")))
     blockers.extend(str(item) for item in _optional_list(runtime_delegation.get("blockers")))
+    blockers.extend(str(item) for item in _optional_list(routing_evidence.get("blockers")))
     fields = _optional_list(report_coverage.get("fields"))
     blockers.extend(
         f"report coverage missing {item.get('name')}: {item.get('reason')}"
@@ -719,6 +748,72 @@ def _product_surface_gate(surface: Mapping[str, object] | None) -> dict[str, obj
         "missing_primary": list(missing_primary),
         "hidden_primary": list(hidden_primary),
         "unexpected_visible": list(unexpected_visible),
+        "blockers": blockers,
+    }
+
+
+def _routing_evidence_gate(
+    evidence: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Fail closed unless routing evidence is shadow-only and claim-ready."""
+
+    if evidence is None:
+        return {
+            "schema_version": "onmc-routing-evidence-gate/v1",
+            "ready": False,
+            "evaluated": False,
+            "task_count": 0,
+            "cost_coverage": None,
+            "quality_non_inferior": False,
+            "cost_gate_met": False,
+            "observed_gate_met": False,
+            "enforcement_enabled": False,
+            "claim_ready": False,
+            "source_gate_reasons": [],
+            "blockers": ["routing evidence artifact was not provided"],
+        }
+
+    task_count = _int_or_zero(evidence.get("task_count"))
+    cost_coverage = _optional_number(evidence.get("cost_coverage"))
+    quality_non_inferior = evidence.get("quality_non_inferior") is True
+    cost_gate_met = evidence.get("cost_gate_met") is True
+    observed_gate_met = evidence.get("observed_gate_met") is True
+    enforcement_enabled = evidence.get("enforcement_enabled") is True
+    claim_ready = evidence.get("claim_ready") is True
+    blockers: list[str] = []
+
+    if enforcement_enabled:
+        blockers.append("routing evidence must remain shadow-only")
+    if task_count < 50:
+        blockers.append(
+            f"routing evidence requires at least 50 matched tasks; found {task_count}"
+        )
+    if cost_coverage != 1.0:
+        blockers.append("routing evidence requires complete reliable cost coverage")
+    if not quality_non_inferior:
+        blockers.append("routing quality non-inferiority gate did not pass")
+    if not cost_gate_met:
+        blockers.append("routing cost gate did not pass")
+    if not observed_gate_met:
+        blockers.append("routing observed point gate did not pass")
+    if not claim_ready:
+        blockers.append("routing evidence is not claim-ready")
+
+    return {
+        "schema_version": "onmc-routing-evidence-gate/v1",
+        "ready": not blockers,
+        "evaluated": True,
+        "source_schema_version": evidence.get("schema_version", "unknown"),
+        "task_count": task_count,
+        "cost_coverage": cost_coverage,
+        "quality_non_inferior": quality_non_inferior,
+        "cost_gate_met": cost_gate_met,
+        "observed_gate_met": observed_gate_met,
+        "enforcement_enabled": enforcement_enabled,
+        "claim_ready": claim_ready,
+        "router_quality_regret": evidence.get("router_quality_regret"),
+        "router_cost_regret_usd": evidence.get("router_cost_regret_usd"),
+        "source_gate_reasons": list(_string_list(evidence.get("gate_reasons"))),
         "blockers": blockers,
     }
 

@@ -11,6 +11,10 @@ onmc setup → onmc run "<task>" [--execute] → onmc missioncontrol
 ```
 
 - `run` is the only default task entry point and owns the canonical `RunSpec`.
+- `setup` is the only setup path shown in root help; `init`, `quickstart`, and
+  `wrap` remain callable compatibility primitives in the advanced catalog.
+- setup completion shows a capability checklist, then points to `run`; `status`
+  provides the repeatable readiness check.
 - `mission` renders plan, context, blast radius, and progress for that contract.
 - strict interactive hooks compile the same contract.
 - Mission Control reconstructs progress from `.onmc/harness-runtime` events and

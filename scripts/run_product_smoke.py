@@ -86,6 +86,7 @@ def run_product_smoke() -> dict[str, object]:
         plan = _mapping(run_payload.get("plan"))
 
         surface = _mapping(commands_payload.get("surface"))
+        visible_primary = _string_list(surface.get("visible_primary"))
         init_verified = (
             init_result.exit_code == 0
             and (repo / ".onmc" / "memory.db").exists()
@@ -93,7 +94,7 @@ def run_product_smoke() -> dict[str, object]:
         )
         commands_surface_ready = (
             commands_result.exit_code == 0
-            and "run" in _string_list(commands_payload.get("core"))
+            and "run" in visible_primary
             and surface.get("ready") is True
             and surface.get("canonical_entrypoint") == "run"
         )
@@ -127,7 +128,7 @@ def run_product_smoke() -> dict[str, object]:
             "run_exit_code": run_result.exit_code,
             "init_verified": init_verified,
             "commands_surface_ready": commands_surface_ready,
-            "visible_core_commands": _string_list(commands_payload.get("core")),
+            "visible_core_commands": visible_primary,
             "run_id": _mapping(plan).get("run_id"),
             "run_status": run_payload.get("status", "unknown"),
             "run_stop_reason": run_payload.get("stop_reason", "unknown"),

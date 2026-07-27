@@ -78,7 +78,12 @@ onmc setup
 ```
 
 Setup scans the repository, builds structured memory, generates agent context, installs supported
-hooks/MCP configuration, shows the first useful recall, and offers the local dashboard.
+hooks/MCP configuration, shows the first useful recall, and ends with a capability
+checklist plus the canonical next command. Confirm readiness any time with:
+
+```bash
+onmc status
+```
 
 No provider required. Use `onmc setup --no-llm` for a fully deterministic first run.
 

@@ -138,6 +138,18 @@ class TestGroupCommands:
         assert audit.hidden_advanced_count == 3
         assert audit.unexpected_visible == ()
 
+    def test_setup_primitives_stay_callable_but_hidden_from_primary(self) -> None:
+        """Root help exposes one setup while catalog preserves compatibility."""
+        hidden_setup_primitives = {"init", "quickstart", "wrap"}
+        assert hidden_setup_primitives.isdisjoint(PRIMARY_WORKFLOW_COMMANDS)
+
+        result = CliRunner().invoke(app, ["commands", "--json"], catch_exceptions=False)
+        assert result.exit_code == 0
+        data: dict[str, Any] = json.loads(result.output)
+        live = {name for commands in data["groups"].values() for name in commands}
+        assert hidden_setup_primitives <= live
+        assert hidden_setup_primitives.isdisjoint(data["surface"]["visible_primary"])
+
     def test_product_surface_audit_flags_visible_advanced_drift(self) -> None:
         """A new advanced command appearing in root help breaks readiness."""
         live = [*PRIMARY_WORKFLOW_COMMANDS, "whip"]

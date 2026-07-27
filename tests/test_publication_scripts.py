@@ -82,6 +82,28 @@ def _write_runtime_delegation(path: Path) -> None:
     )
 
 
+def _write_routing_evidence(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "task_count": 2,
+                "cost_coverage": 1.0,
+                "quality_non_inferior": True,
+                "cost_gate_met": True,
+                "observed_gate_met": True,
+                "enforcement_enabled": False,
+                "claim_ready": False,
+                "gate_reasons": [
+                    "point gate observed; shadow-only evidence is not claim-ready"
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def test_manifest_validator_cli_can_fail_on_publication_gate(tmp_path: Path) -> None:
     module = _load_script("validate_benchmark_manifest")
     output = tmp_path / "validation.json"
@@ -104,8 +126,10 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     work_plan_output = tmp_path / "work-plan.json"
     product_smoke = tmp_path / "product-smoke.json"
     runtime_delegation = tmp_path / "runtime-delegation.json"
+    routing_evidence = tmp_path / "routing-evidence.json"
     _write_product_smoke(product_smoke)
     _write_runtime_delegation(runtime_delegation)
+    _write_routing_evidence(routing_evidence)
 
     exit_code = module.main(
         [
@@ -116,6 +140,8 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
             str(product_smoke),
             "--runtime-delegation",
             str(runtime_delegation),
+            "--routing-evidence",
+            str(routing_evidence),
             "--json-out",
             str(json_output),
             "--markdown-out",
@@ -140,6 +166,9 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     assert payload["product_smoke"]["run_status"] == "planned"
     assert payload["runtime_delegation"]["ready"] is True
     assert payload["runtime_delegation"]["canonical_contract"] == "RunSpec"
+    assert payload["routing_evidence"]["evaluated"] is True
+    assert payload["routing_evidence"]["ready"] is False
+    assert payload["routing_evidence"]["enforcement_enabled"] is False
     assert artifact_index["complete"] is False
     assert work_plan["publication_ready"] is False
     assert work_plan["deficits"]["product_surface_ready"] is True
@@ -151,6 +180,7 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     assert "Product Surface" in markdown_output.read_text(encoding="utf-8")
     assert "Product Smoke" in markdown_output.read_text(encoding="utf-8")
     assert "Runtime Delegation" in markdown_output.read_text(encoding="utf-8")
+    assert "Routing Evidence" in markdown_output.read_text(encoding="utf-8")
 
 
 def test_external_claim_gate_cli_refuses_strong_claim(tmp_path: Path) -> None:

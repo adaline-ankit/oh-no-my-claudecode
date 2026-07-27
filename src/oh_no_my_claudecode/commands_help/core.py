@@ -44,8 +44,6 @@ PRIMARY_COMMAND_LIMIT = 14
 PRIMARY_WORKFLOW_COMMANDS: tuple[str, ...] = (
     "run",
     "setup",
-    "init",
-    "quickstart",
     "brief",
     "guard",
     "recall",
@@ -53,7 +51,6 @@ PRIMARY_WORKFLOW_COMMANDS: tuple[str, ...] = (
     "mission",
     "missioncontrol",
     "ui",
-    "wrap",
     "serve",
     "commands",
 )
@@ -63,13 +60,10 @@ CORE_COMMANDS: list[str] = list(PRIMARY_WORKFLOW_COMMANDS)
 
 PRIMARY_COMMAND_ROLES: dict[str, str] = {
     "setup": "one-time install and hook setup",
-    "init": "repo-local project bootstrap",
-    "quickstart": "first-run guided bootstrap",
     "run": "canonical verified runtime entry point",
     "mission": "plan and progress view over the runtime contract",
     "missioncontrol": "observed run, evidence, and worker state",
     "ui": "local Mission Control UI",
-    "wrap": "Claude Code hook integration for the same runtime contract",
     "serve": "local service surface for UI and integrations",
     "status": "repo and ONMC health summary",
     "brief": "context briefing before a run",
@@ -82,7 +76,8 @@ PRIMARY_COMMAND_ROLES: dict[str, str] = {
 # Category map — command-name → category
 # ---------------------------------------------------------------------------
 # Anything not listed here falls through to "Other" automatically.
-# "quickstart" is reserved so it lands in Core once that branch merges.
+# Compatibility setup primitives remain grouped in Core for the full catalog,
+# but only ``setup`` is exposed by root help.
 
 CATEGORY_MAP: dict[str, str] = {
     # ── Core ─────────────────────────────────────────────────────────────
