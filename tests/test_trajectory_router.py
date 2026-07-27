@@ -300,3 +300,8 @@ def test_loop_records_shadow_advice_without_changing_model_tier(tmp_path: Path) 
     assert shadow["preserve_worktree"] is True
     assert shadow["preserve_context"] is True
     assert "token telemetry unavailable" in shadow["telemetry_status"]
+    observation = shadow["observed_trajectory"]
+    assert isinstance(observation, dict)
+    assert observation["task_kind"] == "cross-module"
+    assert observation["file_breadth"] == 4
+    assert observation["dependency_breadth"] == 3

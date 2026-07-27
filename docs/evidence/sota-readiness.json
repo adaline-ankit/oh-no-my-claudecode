@@ -1,0 +1,269 @@
+{
+  "blocked_publication_gates": [
+    "benchmark_plan",
+    "portfolio_coverage",
+    "calibration",
+    "report_coverage",
+    "verifier_calibration"
+  ],
+  "claim_decision": "not-ready",
+  "deficits": {
+    "agent_model_configurations_to_register": 3,
+    "coverage_fields_to_fill": [
+      "raw_trajectories",
+      "verifier_artifacts",
+      "token_use",
+      "cost_coverage",
+      "failure_taxonomy",
+      "leakage_audit",
+      "environment_manifest"
+    ],
+    "discriminative_tasks_to_find": 10,
+    "languages_to_add": 2,
+    "leakage_audit_needed": true,
+    "missing_benchmark_arms": [
+      "context-only",
+      "onmc-single-agent",
+      "selective-swarm",
+      "trajectory-routed"
+    ],
+    "missing_cost_cells": 11,
+    "missing_raw_artifact_entries": 96,
+    "product_smoke_blockers": [],
+    "product_smoke_ready": true,
+    "product_surface_hidden_primary": [],
+    "product_surface_missing_primary": [],
+    "product_surface_ready": true,
+    "product_surface_unexpected_visible": [],
+    "repositories_to_add": 0,
+    "runtime_delegation_blockers": [],
+    "runtime_delegation_ready": true,
+    "seeds_to_register": 3,
+    "tasks_to_add": 22
+  },
+  "git_commit": "08a3969f292e3626bcf5e01c008f8096d8c5820f",
+  "next_actions": [
+    "Keep the live product surface collapsed around `onmc run`, setup, Mission Control, and operator views; advanced diagnostics must stay behind `onmc commands --all`.",
+    "Freeze one manifest revision with the five required arms and three seeds.",
+    "Add or replace tasks until at least 50 external tasks include at least 10 calibration-discriminative tasks.",
+    "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
+    "Run `scripts/run_product_smoke.py` and include its JSON in the publication bundle so product claims are tied to a working canonical entrypoint.",
+    "Run `scripts/run_runtime_delegation_audit.py` and include its JSON in the publication bundle so mission, wrap, and swarm claims are backed by canonical runtime contracts.",
+    "Run a one-seed calibration slice, then regenerate the publication bundle and this work plan.",
+    "Only request approval for the full paid matrix after cost telemetry and raw artifact paths are complete on the calibration slice."
+  ],
+  "publication_ready": false,
+  "ready_requirements": 2,
+  "requirements": [
+    {
+      "evidence": [
+        "docs/evidence/runtime-delegation.json",
+        "src/oh_no_my_claudecode/runtime/contracts.py"
+      ],
+      "id": "R1",
+      "next_gate": "fault-injection crash/resume audit across every RunSpec node",
+      "reason": "mission/wrap/swarm expose valid RunSpec contracts; crash-resume proof is not complete.",
+      "status": "partial",
+      "title": "canonical durable execution contract"
+    },
+    {
+      "evidence": [
+        "docs/evidence/runtime-delegation.json"
+      ],
+      "id": "R2",
+      "next_gate": "keep audit green after each workflow PR",
+      "reason": "runtime delegation audit validates mission, wrap, and swarm RunSpec digests.",
+      "status": "proven",
+      "title": "mission, wrap, swarm delegate to canonical runtime"
+    },
+    {
+      "evidence": [
+        "docs/evidence/runtime-delegation.json",
+        "src/oh_no_my_claudecode/runtime/contracts.py"
+      ],
+      "id": "R3",
+      "next_gate": "add typed input/output schema audit for every side-effecting node",
+      "reason": "audited side-effect nodes have idempotency, budget, retry, timeout, and completion conditions; typed I/O gate is not separately proven.",
+      "status": "partial",
+      "title": "side-effect nodes declare controls"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/runtime/fanout.py",
+        "src/oh_no_my_claudecode/durable_runtime/store.py"
+      ],
+      "id": "R4",
+      "next_gate": "run 24h soak plus fault injection for cancellation and resume",
+      "reason": "fan-out and durable state code exist; long soak, cancel, interrupt, and crash-recovery matrix is not proven.",
+      "status": "partial",
+      "title": "single-agent, fan-out, interrupts, cancellation, crash recovery"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/verifier",
+        "docs/evidence/verifier_external_v2_report.json"
+      ],
+      "id": "R5",
+      "next_gate": "pass external false-green sensitivity/specificity gate",
+      "reason": "independent verifier modules and external report exist; publication verifier calibration is still blocked.",
+      "status": "partial",
+      "title": "no prose/process/vacuous completion"
+    },
+    {
+      "evidence": [
+        "docs/evidence/verifier_external_v2_report.json"
+      ],
+      "id": "R6",
+      "next_gate": "make verifier calibration ready in publication bundle",
+      "reason": "verifier evidence exists; publication bundle still blocks verifier calibration.",
+      "status": "partial",
+      "title": "independent evidence and protected-test policy"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/sandbox",
+        "src/oh_no_my_claudecode/harness_run/sandboxing.py"
+      ],
+      "id": "R7",
+      "next_gate": "add isolation audit artifact proving autonomous runs declare and enforce sandbox mode",
+      "reason": "sandbox contracts exist; true default isolation is not proven by release evidence.",
+      "status": "partial",
+      "title": "isolated default for autonomous work"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/loop/receipt.py"
+      ],
+      "id": "R8",
+      "next_gate": "add receipt replay/export audit with hash-chain verification",
+      "reason": "receipt implementation exists; replay/export audit is not part of publication evidence.",
+      "status": "partial",
+      "title": "local tamper-evident receipts"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/retrieval_eval",
+        "src/oh_no_my_claudecode/retrieval"
+      ],
+      "id": "R9",
+      "next_gate": "run held-out retrieval eval with recall/nDCG/context-efficiency thresholds",
+      "reason": "retrieval policy and eval modules exist; held-out retrieval gate is not publication-ready.",
+      "status": "partial",
+      "title": "measured retrieval policy"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/retrieval/core.py"
+      ],
+      "id": "R10",
+      "next_gate": "add context-selection audit artifact and downstream smoke",
+      "reason": "context machinery exists; committed report does not prove per-query provenance/confidence/fallback coverage.",
+      "status": "partial",
+      "title": "context provenance, token cost, confidence, fallback"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/learning"
+      ],
+      "id": "R11",
+      "next_gate": "run promote/reject audit on held-out protected suite",
+      "reason": "learning promotion code exists; held-out protected-suite promotion proof is absent.",
+      "status": "partial",
+      "title": "eval-gated repository learning"
+    },
+    {
+      "evidence": [
+        "datasets/experiment/portfolio_external_v4.json",
+        "src/oh_no_my_claudecode/experiment/harbor_adapter.py"
+      ],
+      "id": "R12",
+      "next_gate": "freeze 50-task, 5-arm, 3-seed, 3-config Harbor manifest",
+      "reason": "external manifest exists, but publication matrix lacks required arms/seeds/configs.",
+      "status": "blocked",
+      "title": "containerized pinned agent-neutral trials"
+    },
+    {
+      "evidence": [
+        "docs/evidence/sota-report.json",
+        "docs/evidence/publication-work-plan.json"
+      ],
+      "id": "R13",
+      "next_gate": "fill all R13 report coverage fields and raw artifact index",
+      "reason": "report exists but raw trajectories, verifier artifacts, token/cost, failure taxonomy, leakage, and environment coverage are incomplete.",
+      "status": "blocked",
+      "title": "complete benchmark report evidence"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/autoroute/trajectory.py",
+        "src/oh_no_my_claudecode/experiment/routing.py"
+      ],
+      "id": "R14",
+      "next_gate": "run router regret benchmark against static baselines",
+      "reason": "shadow trajectory routing exists; cost/quality non-inferiority gate is not passed.",
+      "status": "partial",
+      "title": "observed-trajectory model routing"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/learning/prediction.py",
+        "src/oh_no_my_claudecode/experiment/kernel.py"
+      ],
+      "id": "R15",
+      "next_gate": "require prediction-backed experiment manifest before promotion",
+      "reason": "prediction and experiment kernels exist; repeated autonomous improvement proof is absent.",
+      "status": "partial",
+      "title": "governed self-improvement experiments"
+    },
+    {
+      "evidence": [
+        "docs/evidence/product-smoke.json",
+        "docs/evidence/sota-report.json"
+      ],
+      "id": "R16",
+      "next_gate": "keep root help collapsed and validate external activation task",
+      "reason": "product surface and smoke gates are ready.",
+      "status": "proven",
+      "title": "one setup and one task UX"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/loop/adapters.py",
+        "src/oh_no_my_claudecode/runtime/adapter_capabilities.py"
+      ],
+      "id": "R17",
+      "next_gate": "run adapter conformance suite with honest capability labels",
+      "reason": "adapter contracts exist; conformance coverage across agents is not publication-ready.",
+      "status": "partial",
+      "title": "same contracts across Claude, Codex, OpenCode"
+    },
+    {
+      "evidence": [
+        "src/oh_no_my_claudecode/missioncontrol/runtime.py"
+      ],
+      "id": "R18",
+      "next_gate": "add Mission Control artifact proving no synthetic progress",
+      "reason": "Mission Control runtime module exists; observed-only UI audit is not committed.",
+      "status": "partial",
+      "title": "Mission Control observed-only runtime view"
+    },
+    {
+      "evidence": [
+        "pyproject.toml"
+      ],
+      "id": "R19",
+      "next_gate": "add dependency-audit artifact for default and recommended extras",
+      "reason": "release comments quarantine a known optional advisory; default install audit is not emitted as a SOTA evidence artifact.",
+      "status": "partial",
+      "title": "no unpatched critical default dependencies"
+    }
+  ],
+  "schema_version": "onmc-sota-readiness-audit/v1",
+  "summary": {
+    "blocked": 2,
+    "missing": 0,
+    "partial": 15,
+    "proven": 2
+  },
+  "total_requirements": 19
+}
