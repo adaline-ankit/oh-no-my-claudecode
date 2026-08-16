@@ -64,6 +64,31 @@ Legend: `[x]` shipped · `[~]` partial · `[ ]` build next · 💰 = pay/infra s
 - Hosted agent execution (cost sink; local-first is the differentiator)
 - Dashboards beyond the existing local `ui` until a paying team asks
 
+## Trend radar — GitHub weekly trending, updated 2026-08-16
+
+What the world is building right now, and what it means for us:
+
+| Trending (stars/wk) | Signal | Our move |
+|---|---|---|
+| `semantica` (5.3k) — "Accountable AI Systems" infra | **Accountability is now a trending category** — thesis validated | Ship receipts first; we are the evidence layer they describe |
+| `TencentDB-Agent-Memory` (4.0k), `macro` (2.4k) — team memory hubs | Team-level "memory assets" going mainstream — storage race | Don't compete on storage. **Be the filter**: earned-memory ledger in front of ANY hub ("we decide what deserves to be remembered") |
+| `prime-agent` (8.5k) — self-improving coding agent | Self-improvement is the hot claim — with zero proof discipline | Position: "self-improving, and can **prove** each improvement" (gate + receipts + attribution = the missing trust layer for this whole category) |
+| `addyosmani/agent-skills` (3.3k) — skills for coding agents | Skills-as-artifacts marketplace forming | **Skill attribution** — our attribution module is content-agnostic (ids in, lift out): measure which *skills* lift pass@1 on your repo → measured-badge skill registry. Groundbreaking, near-zero new code |
+| `Switchyard` (NVIDIA, Rust) — LLM routing | Routing is commoditizing at the infra layer | Keep evidence-routing thin; interop with their API rather than compete |
+| `code-graph-rag` (1.7k) — codebase KG-RAG | Code-graph retrieval commoditizing | Already have codeindex + blast-radius; maintain, don't expand |
+
+**The read:** everyone is building the church (self-improvement, team memory,
+skills); nobody built the confession booth. The market's three hottest
+categories all *assume* their artifacts work. We are the only stack that can
+measure whether a memory, skill, or "improvement" actually pays — per repo,
+with CIs.
+
+### New checklist items from the radar
+- [x] Per-memory measured lift (attribution + retirement candidates)
+- [ ] **Skill attribution**: run the same leave-one-out ledger over skill packs (agent-skills format) — "this skill = +3 tasks on your repo"
+- [ ] Earned-memory export adapter: publish the ledger-approved subset to external hubs (mem0/Tencent-style), so we sit in front of any store
+- [ ] "Provable self-improvement" demo: flywheel promotes → attribution measures → receipt seals; one scripted end-to-end story
+
 ## Order of operations (next 3 moves)
 
 1. GitHub Action `onmc-verify` (wedge, mostly glue)
