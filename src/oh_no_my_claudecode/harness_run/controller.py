@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import secrets
 import shlex
 import subprocess
@@ -429,6 +430,11 @@ def _verify_runner_for(repo_root: Path) -> VerifyRunner:
                 capture_output=True,
                 text=True,
                 timeout=120,
+                # H11: verification must never trust bytecode caches — a stale
+                # .pyc from a pre-fix import can false-red (or false-green) the
+                # gate when the edited file has the same size within one mtime
+                # second. Caught live on CI; enforced here for every gate run.
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
             )
             combined = (completed.stdout + completed.stderr)[:2000]
             # `python -m <mod>` where the runner module itself is not installed
@@ -569,6 +575,10 @@ def _local_command(command: list[str], cwd: str, timeout: int) -> CompletedProc:
             capture_output=True,
             text=True,
             timeout=timeout,
+            # H11: agent runs must not seed bytecode caches the verifier would
+            # later read — DONTWRITE on the gate alone can't undo a stale .pyc
+            # the agent's own imports already wrote.
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
         )
         return CompletedProc(
             returncode=completed.returncode,

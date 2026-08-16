@@ -122,6 +122,9 @@ def _run_command(
         timeout=timeout,
         input=input_text,
         check=False,
+        # H11: benchmark gates never trust or seed bytecode caches — a stale
+        # .pyc (same file size, same mtime second) can flip a gate verdict.
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
     )
 
 
