@@ -88,6 +88,7 @@ from .capabilities import execution_capability_manifest
 from .completion import evaluate_completion_gate
 from .context import HybridRepositoryCandidateProvider
 from .context_selection import context_selection_manifest
+from .coverage_gate import coverage_false_green_check
 from .environment import environment_snapshot
 from .isolation import isolation_profile
 from .models import (
@@ -678,6 +679,9 @@ def default_dependencies(
             _monitor_policy(repo_root), enforced=True
         ),
         changes_reader=_git_changes,
+        # Default independent verifier: grades the run against coverage.json
+        # (fail-closed — no/unreadable evidence keeps the run unverified).
+        verifier_false_green_check=coverage_false_green_check(repo_root),
         retrieval_fallbacks=retrieval_fallbacks,
         retrieval_decisions=retrieval_decisions,
     )
