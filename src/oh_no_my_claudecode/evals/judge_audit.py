@@ -70,7 +70,7 @@ def _spearman(xs: Sequence[float], ys: Sequence[float]) -> float:
     vy = sum((b - my) ** 2 for b in ry) ** 0.5
     if vx == 0 or vy == 0:
         return 0.0
-    return cov / (vx * vy)
+    return float(cov / (vx * vy))
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,7 +113,7 @@ def audit_judge(
     """
     point = _auroc(episodes)
 
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # noqa: S311 — statistical bootstrap, not cryptography
     resampled: list[float] = []
     n = len(episodes)
     for _ in range(resamples):
