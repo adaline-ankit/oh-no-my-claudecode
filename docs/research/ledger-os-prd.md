@@ -29,7 +29,7 @@
 | M6 | Retirement→rollback wiring | ✅ shipped | HARMFUL verdict ⇒ sink removal + gate rollback, one call — met |
 | M7 | Hosted store (Supabase, RLS, pgvector) | ✅ shipped | retire = timestamp, never delete |
 | M8 | Temporal validity windows (Graphiti-style) | ✅ shipped | stale memory queryable by time, expires from recall — met |
-| M9 | Memory export adapters (mem0/Zep) | later | ledger-approved memories flow out, unapproved never |
+| M9 | Memory export adapters (mem0/Zep) | ✅ shipped | earned flows out with evidence; harmful/unmeasured refused by name — met |
 
 ### Layer 2 — Eval (the repo's own truth)
 
@@ -39,9 +39,9 @@
 | E2 | repo-bench compiler (history → private benchmark) | ✅ shipped | round-trip: bug fails gate, fix passes |
 | E3 | A/B harness + measured +0.267 pass@1 | ✅ shipped (internal) | paired, seeded, cost tracked |
 | E4 | Compaction-policy scoring (lift per token freed) | ✅ shipped | decay-rejecting, CI-ranked, fail-closed — met |
-| E5 | Corpus hygiene (saturation, leakage labels) | partial | saturated tasks auto-flagged |
+| E5 | Corpus hygiene (saturation, leakage labels) | ✅ shipped | saturated + dead tasks auto-flagged across trials — met |
 | E6 | External benchmark run (3 repos × 3 trials) | next (~$40) | flips claims internal→external |
-| E7 | SWE-bench-format export | later | tasks load in standard harnesses |
+| E7 | SWE-bench-format export | ✅ shipped | jsonl instances from real mined tasks; patch inversion round-trips — met |
 
 ### Layer 3 — Harness (fail-closed, self-evolving, attested)
 
@@ -56,7 +56,7 @@
 | H7 | in-toto/DSSE attestation | ✅ shipped | cosign/gh-attestation-compatible shape |
 | H8 | OTLP export (verdicts/ledger/enforcement) | ✅ shipped | renders in any OTel backend |
 | H9 | Provable self-improvement demo | ✅ shipped | `python -m oh_no_my_claudecode.demo.self_improvement` — met |
-| H10 | Sigstore keyless signer impl | next | rekor-logged signature verifies |
+| H10 | Sigstore keyless signer impl | ✅ shipped (adapter) | optional `attest` extra; live rekor signature needs OIDC identity (user) |
 | H11 | Product-gate bytecode hardening | ✅ shipped | gates never write or trust bytecode caches — met |
 
 ## Architecture (data flow)
@@ -82,9 +82,9 @@
 
 - **M-now — ✅ COMPLETE (2026-08-17):** M6 · M8 · E4 · H9 · H11 · M2 all landed;
   every loop the research agenda opened is closed.
-- **M-next:** H10 sigstore signer · E6 external run (approval: ~$40) · E5
-  corpus-hygiene completion.
-- **M-later:** E7 export, M9 adapters, hosted nightly runs (E2B).
+- **M-next — ✅ buildable half COMPLETE (2026-08-17):** H10 · E5 · E7 · M9 landed.
+- **Blocked on user resources:** E6 external run (~$40 approval) · live sigstore
+  signing (OIDC identity) · Supabase creds · hosted nightly runs (E2B account).
 
 ## Non-goals
 
