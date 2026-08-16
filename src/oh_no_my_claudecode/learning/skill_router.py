@@ -16,6 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from oh_no_my_claudecode.learning.attribution import LiftVerdict, MemoryLift
+from oh_no_my_claudecode.learning.validity import ValidityWindow, filter_active
 from oh_no_my_claudecode.retrieval.bm25 import BM25Corpus
 
 #: Score multiplier reserved for skills with EARNING evidence; unproven skills
@@ -49,15 +50,27 @@ def route_skills(
     ledger: Sequence[MemoryLift] = (),
     *,
     top_k: int = 2,
+    windows: Mapping[str, ValidityWindow] | None = None,
+    now_ms: int | None = None,
 ) -> list[RoutedSkill]:
     """Rank skills for *query*: BM25 relevance × (1 + earned lift).
 
     ``skills`` maps skill_id -> description/body text. Ledger entries are the
     attribution output for those same ids (missing = unproven). HARMFUL skills
     are excluded outright — measured poison never rides back in on relevance.
+
+    ``windows`` (M8) adds temporal validity: expired or not-yet-valid skills
+    leave recall entirely. Requires ``now_ms`` when provided — the router never
+    guesses the clock.
     """
     if not query.strip() or not skills or top_k <= 0:
         return []
+    if windows:
+        if now_ms is None:
+            raise ValueError("windows given without now_ms — the router never guesses the clock")
+        skills = filter_active(skills, windows, now_ms=now_ms)
+        if not skills:
+            return []
     by_id = {entry.memory_id: entry for entry in ledger}
     ids = sorted(skills)
     corpus = BM25Corpus(ids, [skills[i] for i in ids])
