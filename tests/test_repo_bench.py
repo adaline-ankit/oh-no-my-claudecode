@@ -2,14 +2,30 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 from oh_no_my_claudecode.evals.ab.repo_bench import compile_repo_bench, mine_fix_commits
 
+#: The gate must never trust __pycache__: the buggy and fixed calc.py have the
+#: SAME byte size, so a checkout within the same mtime second serves the stale
+#: .pyc of the bug (a real false-red caught on CI, where the run is fast enough
+#: to hit the window every time).
+_NO_BYTECODE = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
 
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def _gate(repo: Path) -> int:
+    return subprocess.run(
+        ["python", "-m", "pytest", "test_calc.py", "-x", "-q", "-p", "no:cacheprovider"],
+        cwd=repo,
+        capture_output=True,
+        env=_NO_BYTECODE,
+    ).returncode
 
 
 def _make_history(repo: Path) -> None:
@@ -53,16 +69,6 @@ def test_mines_and_compiles_a_replayable_bug(tmp_path: Path) -> None:
     )
     assert apply.returncode == 0, apply.stderr
     assert "return a - b" in (tmp_path / "calc.py").read_text()  # bug is back
-    gate = subprocess.run(
-        ["python", "-m", "pytest", "test_calc.py", "-x", "-q"],
-        cwd=tmp_path,
-        capture_output=True,
-    )
-    assert gate.returncode != 0  # fails with the bug planted
+    assert _gate(tmp_path) != 0  # fails with the bug planted
     _git(tmp_path, "checkout", "--", "calc.py")
-    gate = subprocess.run(
-        ["python", "-m", "pytest", "test_calc.py", "-x", "-q"],
-        cwd=tmp_path,
-        capture_output=True,
-    )
-    assert gate.returncode == 0  # passes once fixed
+    assert _gate(tmp_path) == 0  # passes once fixed
