@@ -36,7 +36,9 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "mcp>=1.0.0",
+  # mcp 2.0 renamed Tool/Resource kwargs (inputSchema -> input_schema); cap
+  # until mcp_server/ is migrated.
+  "mcp>=1.0.0,<2.0",
   "pydantic>=2.8,<3.0",
   "pyyaml>=6.0,<7.0",
   "questionary>=2.0.0",
