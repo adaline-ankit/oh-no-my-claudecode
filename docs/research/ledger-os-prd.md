@@ -80,10 +80,10 @@
 
 ## Milestones
 
-- **M-now: ✅ COMPLETE (2026-08-17):** M6 · M8 · E4 · H9 · H11 · M2 all landed
-  script — closes every loop the research agenda opened.
-- **M-next:** M8 validity windows · H10 sigstore · E6 external run (approval:
-  ~$40) · H11 gate hardening.
+- **M-now — ✅ COMPLETE (2026-08-17):** M6 · M8 · E4 · H9 · H11 · M2 all landed;
+  every loop the research agenda opened is closed.
+- **M-next:** H10 sigstore signer · E6 external run (approval: ~$40) · E5
+  corpus-hygiene completion.
 - **M-later:** E7 export, M9 adapters, hosted nightly runs (E2B).
 
 ## Non-goals
