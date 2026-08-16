@@ -28,6 +28,7 @@ from oh_no_my_claudecode.attest.attest import (
     verify_attestation,
 )
 from oh_no_my_claudecode.badge.badge import load_receipt
+from oh_no_my_claudecode.harness_run.attestation import Envelope, verify_envelope_payload
 
 
 def _repo_root() -> Path:
@@ -262,3 +263,55 @@ def register(app: typer.Typer) -> None:
         _render_reputation(summary)
 
     app.add_typer(attest_app, name="attest")
+
+    @app.command("attest-verify")
+    def attest_verify_command(
+        envelope_file: Annotated[
+            Path,
+            typer.Argument(
+                help="Path to a DSSE envelope JSON (the shape Envelope.to_dict() writes)."
+            ),
+        ],
+        receipt_hash: Annotated[
+            str,
+            typer.Argument(help="Expected receipt_hash the envelope's predicate must carry."),
+        ],
+    ) -> None:
+        """Verify a DSSE envelope binds to a receipt hash; exit 0 on true, 1 on false.
+
+        Reconstructs the in-toto/DSSE envelope written by ``Envelope.to_dict()``
+        and runs the offline structural check
+        (:func:`~oh_no_my_claudecode.harness_run.attestation.verify_envelope_payload`):
+        the embedded payload must be a v1 in-toto Statement carrying ONMC's
+        run-receipt predicate type, and its predicate's ``receipt_hash`` must
+        equal the expected hash. Fail-closed: any malformed input verifies
+        false and exits non-zero.
+        """
+        try:
+            raw = json.loads(envelope_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            typer.echo(f"Cannot read envelope {str(envelope_file)!r}: {exc}", err=True)
+            raise typer.Exit(code=1) from exc
+        if not isinstance(raw, dict):
+            typer.echo(f"Envelope {str(envelope_file)!r} is not a JSON object.", err=True)
+            raise typer.Exit(code=1)
+
+        raw_signatures = raw.get("signatures")
+        signatures: tuple[dict[str, str], ...] = (
+            tuple(
+                {str(key): str(value) for key, value in signature.items()}
+                for signature in raw_signatures
+                if isinstance(signature, dict)
+            )
+            if isinstance(raw_signatures, list)
+            else ()
+        )
+        envelope = Envelope(
+            payload_b64=str(raw.get("payload", "")),
+            payload_type=str(raw.get("payloadType", "")),
+            signatures=signatures,
+        )
+        ok = verify_envelope_payload(envelope, expected_receipt_hash=receipt_hash)
+        typer.echo(f"verified: {'true' if ok else 'false'}")
+        if not ok:
+            raise typer.Exit(code=1)

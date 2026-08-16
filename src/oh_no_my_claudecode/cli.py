@@ -4726,6 +4726,61 @@ def ledger_roi_command(
     console.print(f"  [dim]{estimate.assumption_note}[/dim]")
 
 
+@ledger_app.command("workflows")
+def ledger_workflows_command(
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Print machine-readable JSON to stdout."),
+    ] = False,
+) -> None:
+    """Mine recurring workflow candidates from verified run receipts.
+
+    Runs deterministic frequent-subsequence mining
+    (:func:`~oh_no_my_claudecode.learning.distill.distill_workflows`) over the
+    ``run-*.json`` receipts in ``.agent-memory/receipts/``.  Only verified
+    receipts teach — unverified trajectories are ignored — and no LLM is
+    called.  Prints each candidate's id, steps, and verified-run support
+    count.  An empty result prints an honest note and exits 0.
+    """
+    import json as _json
+
+    from oh_no_my_claudecode.learning.distill import distill_workflows
+    from oh_no_my_claudecode.ledger.accounting import load_receipts
+
+    try:
+        repo_root = discover_repo_root(Path.cwd())
+    except RepoDiscoveryError as exc:
+        raise typer.Exit(code=_fatal(str(exc))) from exc
+
+    candidates = distill_workflows(load_receipts(repo_root, scope="project"))
+
+    if json_output:
+        payload = [
+            {"id": c.workflow_id, "steps": list(c.steps), "support": len(c.support)}
+            for c in candidates
+        ]
+        typer.echo(_json.dumps(payload, indent=2))
+        return
+
+    if not candidates:
+        console.print(
+            "[yellow]No recurring workflows mined — need at least 2 verified receipts "
+            "sharing a multi-step pattern. Run `onmc loop` to accumulate receipts.[/yellow]"
+        )
+        return
+
+    console.print(
+        f"[bold cyan]onmc ledger workflows[/bold cyan]  {len(candidates)} candidate(s) mined"
+    )
+    for candidate in candidates:
+        console.print(
+            f"  [bold]{candidate.workflow_id}[/bold]  "
+            f"(support: {len(candidate.support)} verified runs)"
+        )
+        for index, step in enumerate(candidate.steps, start=1):
+            console.print(f"    {index}. {step}")
+
+
 @fleet_app.command("status")
 def fleet_status_command(
     swarm_id: Annotated[

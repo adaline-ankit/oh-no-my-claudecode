@@ -408,6 +408,35 @@ Usage: onmc attest verify [OPTIONS] FILE
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc attest-verify`
+
+```text
+Usage: onmc attest-verify [OPTIONS] ENVELOPE_FILE RECEIPT_HASH
+
+ Verify a DSSE envelope binds to a receipt hash; exit 0 on true, 1 on false.
+
+ Reconstructs the in-toto/DSSE envelope written by ``Envelope.to_dict()``
+ and runs the offline structural check
+ (:func:`~oh_no_my_claudecode.harness_run.attestation.verify_envelope_payload`)
+ :
+ the embedded payload must be a v1 in-toto Statement carrying ONMC's
+ run-receipt predicate type, and its predicate's ``receipt_hash`` must
+ equal the expected hash. Fail-closed: any malformed input verifies
+ false and exits non-zero.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    envelope_file      PATH  Path to a DSSE envelope JSON (the shape        │
+│                               Envelope.to_dict() writes).                    │
+│                               [required]                                     │
+│ *    receipt_hash       TEXT  Expected receipt_hash the envelope's predicate │
+│                               must carry.                                    │
+│                               [required]                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc audit`
 
 ```text
@@ -1937,6 +1966,31 @@ Usage: onmc conventions show [OPTIONS]
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Emit the conventions as JSON for agent injection.            │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc corpus-health`
+
+```text
+Usage: onmc corpus-health [OPTIONS] REPORT
+
+ Audit an A/B eval corpus for saturated and dead tasks.
+
+ Reads a serialized A/B report and flags each task as saturated (every
+ arm always passes — measures nothing), dead (every arm always fails —
+ broken task), or discriminating, plus the suite-level discriminating
+ ratio. Deterministic and offline — no LLM call. A corpus that cannot
+ discriminate is not a benchmark; drop or refresh the flagged tasks
+ before the next paid run.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    report      PATH  Path to an A/B report JSON (the shape                 │
+│                        ABReport.to_dict() writes).                           │
+│                        [required]                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Emit the corpus health verdict as JSON.                      │
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -3776,10 +3830,11 @@ Usage: onmc ledger [OPTIONS] COMMAND [ARGS]...
 │ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ───────────────────────────────────────────────────────────────────╮
-│ today    Account today's agent work: cost, wall-time, success-rate,          │
-│          breakdowns.                                                         │
-│ project  Account all agent work in this project across every run receipt.    │
-│ roi      Show an honestly-labelled ROI *estimate* (est) over all receipts.   │
+│ today      Account today's agent work: cost, wall-time, success-rate,        │
+│            breakdowns.                                                       │
+│ project    Account all agent work in this project across every run receipt.  │
+│ roi        Show an honestly-labelled ROI *estimate* (est) over all receipts. │
+│ workflows  Mine recurring workflow candidates from verified run receipts.    │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3826,6 +3881,26 @@ Usage: onmc ledger today [OPTIONS]
 
  Reads run receipts from ``.agent-memory/receipts/`` dated today (UTC).
  Cost is shown as ``n/a`` when no receipt reported it — never fabricated.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON to stdout.                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc ledger workflows`
+
+```text
+Usage: onmc ledger workflows [OPTIONS]
+
+ Mine recurring workflow candidates from verified run receipts.
+
+ Runs deterministic frequent-subsequence mining
+ (:func:`~oh_no_my_claudecode.learning.distill.distill_workflows`) over the
+ ``run-*.json`` receipts in ``.agent-memory/receipts/``.  Only verified
+ receipts teach — unverified trajectories are ignored — and no LLM is
+ called.  Prints each candidate's id, steps, and verified-run support
+ count.  An empty result prints an honest note and exits 0.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --json          Print machine-readable JSON to stdout.                       │

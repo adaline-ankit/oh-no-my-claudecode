@@ -16,7 +16,7 @@ SWE-bench-Verified's lesson (task validity rots) applied continuously.
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from oh_no_my_claudecode.evals.ab.models import ABTaskComparison
@@ -82,16 +82,17 @@ class CorpusHealth:
         }
 
 
-def audit_corpus(history: Iterable[ABTaskComparison]) -> CorpusHealth:
-    """Flag saturated/dead tasks across all trials in *history*.
+def audit_rows(rows: Iterable[Mapping[str, object]]) -> CorpusHealth:
+    """:func:`audit_corpus` over plain trial-row mappings.
 
-    Single-trial corpora are audited too (one all-pass trial already flags
-    saturation risk) — more trials only sharpen the verdict. Deterministic:
-    tasks ordered by id.
+    Each row carries ``task_id``, ``alone_passed``, ``onmc_passed`` — the shape
+    a serialized ``ABReport.to_dict()`` comparison reduces to — so callers
+    holding report JSON need not reconstruct :class:`ABTaskComparison` objects.
+    Same verdicts, same determinism (tasks ordered by id).
     """
     trials: dict[str, list[tuple[bool, bool]]] = defaultdict(list)
-    for comparison in history:
-        trials[comparison.task.id].append((comparison.alone.passed, comparison.onmc.passed))
+    for row in rows:
+        trials[str(row["task_id"])].append((bool(row["alone_passed"]), bool(row["onmc_passed"])))
     tasks = tuple(
         TaskHealth(
             task_id=task_id,
@@ -104,4 +105,17 @@ def audit_corpus(history: Iterable[ABTaskComparison]) -> CorpusHealth:
     return CorpusHealth(tasks)
 
 
-__all__ = ["CorpusHealth", "TaskHealth", "audit_corpus"]
+def audit_corpus(history: Iterable[ABTaskComparison]) -> CorpusHealth:
+    """Flag saturated/dead tasks across all trials in *history*.
+
+    Single-trial corpora are audited too (one all-pass trial already flags
+    saturation risk) — more trials only sharpen the verdict. Deterministic:
+    tasks ordered by id.
+    """
+    return audit_rows(
+        {"task_id": c.task.id, "alone_passed": c.alone.passed, "onmc_passed": c.onmc.passed}
+        for c in history
+    )
+
+
+__all__ = ["CorpusHealth", "TaskHealth", "audit_corpus", "audit_rows"]
