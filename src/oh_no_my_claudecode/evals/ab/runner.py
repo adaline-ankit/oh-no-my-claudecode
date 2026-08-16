@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from oh_no_my_claudecode.evals.ab.bench_guard import strip_history
 from oh_no_my_claudecode.evals.ab.models import (
     ABCondition,
     ABReport,
@@ -161,6 +162,9 @@ def _prepare_public_repo(task: ABTask, repo_root: Path) -> None:
         if result.returncode != 0:
             output = (result.stdout + result.stderr).strip()
             raise RuntimeError(f"benchmark setup command failed: {output}")
+    # E8: the fix this task replants is sitting in the clone's git log — strip
+    # history so it can't be read out (_commit_baseline re-inits fresh below).
+    strip_history(repo_root, this_is_a_disposable_workspace=True)
 
 
 def _commit_baseline(repo_root: Path) -> str:
