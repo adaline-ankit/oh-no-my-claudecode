@@ -225,7 +225,10 @@ Each ACT iteration:
   -> continue, converge, or stop at a hard limit
 ```
 
-A run is **verified** only when the loop converged **and** the final verifier exited successfully.
+A run is **verified** only when the loop converged **and** the final verifier exited successfully
+**and** independent coverage evidence shows the changed lines were actually executed by the passing
+suite — run your verifier with coverage (e.g. `pytest --cov --cov-report=json`) so `coverage.json`
+exists at the repo root; without that evidence the run stays honest-but-unverified.
 Model claims alone never produce verified status.
 
 **Receipts** (written to `.agent-memory/receipts/`) bind goal, agent, model, verifier result,
