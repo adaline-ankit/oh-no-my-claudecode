@@ -54,6 +54,11 @@ treesitter = [
   "tree-sitter>=0.23,<1.0",
   "tree-sitter-language-pack>=0.7",
 ]
+# Sigstore keyless signing for receipt attestations (H10).  Absent by
+# default — SigstoreKeylessSigner raises with an install hint when missing.
+attest = [
+  "sigstore>=4,<5",
+]
 sqlitevec = [
   "sqlite-vec>=0.1.0",
 ]
