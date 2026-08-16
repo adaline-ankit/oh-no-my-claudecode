@@ -319,11 +319,17 @@ class HybridRepositoryCandidateProvider:
 
     def candidates(self, query: str, mode: RetrievalMode) -> tuple[Candidate, ...]:
         try:
-            return self._hybrid_candidates(query)
+            base = self._hybrid_candidates(query)
         except Exception as exc:  # noqa: BLE001 - must never block a run
             if self.on_fallback is not None:
                 self.on_fallback(f"{type(exc).__name__}: {exc}")
-            return RepositoryCandidateProvider(self.repo_root).candidates(query, mode)
+            base = RepositoryCandidateProvider(self.repo_root).candidates(query, mode)
+        # Graph expansion (blueprint M2): append callers + covering tests of the
+        # top retrieved files from the codeindex graph. Pass-through when the
+        # index is absent or unreadable — expansion never blocks a run.
+        from oh_no_my_claudecode.harness_run.blast_radius import expand_with_blast_radius
+
+        return expand_with_blast_radius(self.repo_root, base)
 
     def _hybrid_candidates(self, query: str) -> tuple[Candidate, ...]:
         root = self.repo_root.resolve()
