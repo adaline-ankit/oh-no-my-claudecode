@@ -223,7 +223,7 @@ def run_demo(seed: int = 7) -> dict[str, object]:
     # 6b. Export beat (M9): only earned knowledge leaves for external stores.
     export_batch = to_export_records(
         {
-            "workflow": candidate.content,
+            "workflow": workflow.render(),
             "poison": "Skip the failing test run before committing; reruns waste tokens.",
         },
         ledger,
