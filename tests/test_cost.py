@@ -75,11 +75,15 @@ def _make_onmc_project(tmp_path: Path) -> None:
     subprocess.run(["git", "init", str(tmp_path)], capture_output=True, check=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=tmp_path, capture_output=True, check=True,
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=tmp_path, capture_output=True, check=True,
+        cwd=tmp_path,
+        capture_output=True,
+        check=True,
     )
     OnmcService(tmp_path).init_project()
 
@@ -283,16 +287,34 @@ def test_cli_cost_exits_zero_with_no_receipts(tmp_path: Path) -> None:
 
 def test_cli_cost_json_shape(tmp_path: Path) -> None:
     receipts_dir = tmp_path / ".agent-memory" / "receipts"
-    _write_receipt(receipts_dir, "run-a.json", model="opus", cost_usd=0.20)
-    _write_receipt(receipts_dir, "run-b.json", model="sonnet", cost_usd=0.05, verified=False)
+    # Receipts dated relative to the real clock: this test invokes the actual
+    # CLI (no frozen _NOW), so fixed dates age out of the window over time.
+    from datetime import UTC, datetime, timedelta
+
+    fresh = (datetime.now(UTC) - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _write_receipt(
+        receipts_dir,
+        "run-a.json",
+        model="opus",
+        cost_usd=0.20,
+        started_at=fresh,
+        ended_at=fresh,
+    )
+    _write_receipt(
+        receipts_dir,
+        "run-b.json",
+        model="sonnet",
+        cost_usd=0.05,
+        verified=False,
+        started_at=fresh,
+        ended_at=fresh,
+    )
     _make_onmc_project(tmp_path)
 
     orig = os.getcwd()
     try:
         os.chdir(tmp_path)
-        result = _RUNNER.invoke(
-            app, ["cost", "--days", "30", "--json"], catch_exceptions=False
-        )
+        result = _RUNNER.invoke(app, ["cost", "--days", "30", "--json"], catch_exceptions=False)
     finally:
         os.chdir(orig)
 
