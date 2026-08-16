@@ -146,11 +146,25 @@ _SEC_TOKEN = re.compile(
     |
     (?:sk-[A-Za-z0-9]{20,})                  # OpenAI-style secret key
     |
+    (?:sk-(?:proj|ant|live|test)-[A-Za-z0-9_\-]{6,})  # prefixed sk- keys (short forms too)
+    |
     (?:xox[baprs]-[A-Za-z0-9-]{10,})         # Slack tokens
     |
     (?:AIza[0-9A-Za-z_\-]{35})               # Google API key
     """,
     re.VERBOSE,
+)
+
+# LRN-INJ-007: fetch-piped-to-shell — a memory/skill that tells an agent to
+# download and execute remote code is an instruction-injection vector even
+# when every word looks like ordinary ops advice.
+_INJ_EXEC_FETCH = re.compile(
+    r"""
+    (?:curl|wget)[^|\n]{0,120}\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b   # curl ... | sh
+    |
+    (?:ba|z|da)?sh\s+-c\s+["']?\$\((?:curl|wget)\b                # sh -c "$(curl ...)"
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 
@@ -205,6 +219,13 @@ _RULES: tuple[_Rule, ...] = (
         "high",
         "Unicode tag character",
         "Characters from the Unicode tag block are invisible carriers for hidden text.",
+    ),
+    _Rule(
+        _INJ_EXEC_FETCH,
+        "LRN-INJ-007",
+        "high",
+        "Fetch-piped-to-shell execution",
+        "Content instructs downloading and executing remote code (curl|wget piped to a shell).",
     ),
     _Rule(
         _SEC_RAW,
