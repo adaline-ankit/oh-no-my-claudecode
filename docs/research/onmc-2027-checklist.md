@@ -1,96 +1,130 @@
-# ONMC 2027 Checklist — build today, used in 2027
+# ONMC — The Product Plan (2026 → 2027)
 
-Premise (from measured 2026 trends): by 2027 agents author most PRs, human
-review has structurally collapsed (5.3× pickup lag, 31% merged unreviewed),
-EU AI Act enforcement is routine, and fleets of heterogeneous agents
-(claude/codex/opencode) run unattended. What 2027 buys is **proof**, not more
-generation. Everything below is ordered by that bet.
+> **The product in one sentence:** the Reliability Ledger for coding agents —
+> every artifact an agent produces or consumes (a PR, a memory, a skill, a
+> model choice) gets a **measured, tamper-evident P&L on your own repo**, and
+> everything else (gates, routers, registries) is a surface that consumes it.
 
-Legend: `[x]` shipped · `[~]` partial · `[ ]` build next · 💰 = pay/infra setup
+Everyone else ships one of the arrows. The moat is the box:
 
-## 1. Proof layer (the moat — receipts as the artifact of record)
+```
+                        ┌─────────────────────────────────┐
+   verified runs ─────► │        THE LEDGER               │ ◄──── private repo-bench
+   (receipts)           │  per-artifact measured lift,    │       (your git history,
+                        │  CIs, provenance, verdicts      │        replayed nightly)
+                        └───┬──────┬──────┬──────┬────────┘
+                            ▼      ▼      ▼      ▼
+                       merge    memory   skill   model
+                       gate     curation router  routing
+```
 
-- [x] Tamper-evident, offline-verifiable run receipts (SHA-256 canonical)
-- [x] Coverage-graded verification (changed lines must be executed by passing tests)
-- [x] False-green detection (reachability, mutation, agent-claims-never-count)
-- [x] Enforced reference monitor + decision trace in the receipt
-- [ ] **Receipt signing** (sigstore/minisign) — 2027 auditors need *who* attests, not just *what*
-- [ ] **Receipt schema v3 as a portable public spec** (`onmc formats` exists; freeze + version + publish JSON Schema)
-- [ ] Receipt chain: link retry/supersede lineage across attempts (durable_runtime has attempts; surface in receipt)
+It exists because three things nobody else has assembled sit underneath:
+tamper-evident receipts, a per-repo living benchmark, and an experiment kernel
+with real statistics. Legend: `[x]` shipped · `[~]` partial · `[ ]` build.
 
-## 2. Merge gate product (the wedge)
+---
 
-- [~] `nomistakes` PR gate + `prbadge` (local; needs the hosted handshake)
-- [ ] **GitHub App / Action: `onmc verify` as a required PR status check** — posts receipt artifact + `explain` comment. Shortest path to product; ~80% is glue over nomistakes
-- [ ] Quantified **false-negative rate** (how often the gate blocks a good PR) — the number every buyer asks first
-- [ ] Auto-merge tier: policy says "receipt green + risk low → merge without human" (this is what 50-PR/day fleets need in 2027)
+## 1. The engine (built — this is what makes the product possible)
 
-## 3. Fleet & policy (multi-agent is the 2027 default)
+- [x] **Receipts** — tamper-evident, offline-verifiable, coverage-graded ("verified" ⇒ changed lines executed by passing tests), false-green detection, enforcement trace
+- [x] **Private repo-bench** — compile YOUR git history into a living benchmark (revert-fix + real-test gates); dogfooded: 5 replayable tasks mined from this repo on first run
+- [x] **Experiment kernel** — seeded trials, bootstrap CIs, paired deltas
+- [x] **Attribution** — leave-one-out measured lift per artifact (memory/skill/anything), EARNING / UNPROVEN / HARMFUL verdicts, retirement candidates
+- [x] **Enforcement** — reference monitor on by default; traversal/exfil/destructive → BLOCKED, never verified
+- [x] **Learning gate** — nothing becomes active memory without sanitize → scope → shadow-eval → promotion record; rollback always
+- [x] Retrieval competitive: hybrid BM25+dense+RRF, sqlite-vec store, reranker, blast-radius graph expansion
+- [x] Evidence-weighted skill router (relevance proposes, ledger disposes; HARMFUL never loads)
+- [x] Measured internal result: **0.20 → 0.47 pass@1 (+0.267, CI excludes zero), −26% cost, 90 runs**
 
-- [x] Org policy file (`policy.toml`) + per-repo enforcement
-- [x] Outcome-learned routing (`autoroute` from verified receipts, not keywords)
-- [ ] **Policy packs**: versioned, distributable org policies (protected suites, egress, spend caps) — one repo publishes, fleet consumes
-- [ ] Kill switch: org-level "stop all agent merges now" (one flag, audited)
-- [ ] A2A receipt exchange: agent B trusts agent A's receipt without re-verifying (needs signing first)
+## 2. Product surface A — **Trust Gate** (first revenue, ship first)
 
-## 4. Evidence (what makes any 2027 claim sellable)
+*"Your agents ship 50 PRs a day. How many can you prove?"*
 
-- [x] Experiment kernel: seeded trials, bootstrap CIs, paired deltas
-- [x] Internal significant result: 0.20 → 0.47 pass@1 (+0.267, CI excludes zero), −26% cost, 90 runs
-- [x] M6 external-portfolio harness (audited corpus schema, claim-level gating)
-- [ ] **External benchmark run** (≥3 outside repos, ≥3 trials) — the gap between "internal" and a public claim (~$35–50)
-- [ ] Publish methodology + raw artifacts (reproduction command already pinned via Harbor contract)
+- [ ] **GitHub Action/App: `onmc verify` as a required PR check** — receipt artifact + plain-English `explain` comment (~80% glue over `nomistakes`+`prbadge`)
+- [ ] Quantified false-negative rate (how often we block a good PR — the first buyer question)
+- [ ] Auto-merge tier: receipt green + low risk ⇒ merge without a human
+- [ ] Receipt signing (sigstore) + frozen public receipt schema (auditor-grade)
+- 💰 Infra: GitHub App registration + Marketplace listing; sigstore identity
 
-## 5. Retrieval (already competitive; finish the last item)
+## 3. Product surface B — **Private SWE-bench** (the platform sell)
 
-- [x] Hybrid BM25+dense+RRF, citations, taint, budget modes (BM25-first — measured)
-- [x] sqlite-vec persistent vector store, reranker, query decomposition
-- [x] Blast-radius graph expansion (callers + covering tests join context)
-- [ ] Failure-driven re-retrieval (retrieve again on failed verify — last M2 item; hot loop engine, do carefully)
+*"Which agent/model/config actually works on OUR code — measured nightly."*
 
-## 6. Infra to set up now 💰 (cheap today, compounding by 2027)
+- [x] Repo→benchmark compiler
+- [ ] Nightly scheduled runs (GH Action first, hosted runners later) + trend line
+- [ ] Agent/model comparison report (uses existing A/B suite + kernel; per-task pairing)
+- [ ] Corpus hygiene: dedupe, leakage labels, saturation detection (a prior corpus saturated 24/24 both arms — detect and refresh)
 
-- [x] PyPI distribution (shipping since v0.107)
-- [ ] **GitHub App registration** + marketplace listing (free tier) — the distribution channel
-- [ ] **Signing keys / sigstore identity** for receipts (org identity is the 2027 trust anchor)
-- [ ] **Hosted receipt registry** — start lazy: signed receipts committed to a git ref (`refs/onmc/receipts`), zero servers; graduate to hosted store only when a team pays
-- [ ] Docs site + 90-second demo video of `onmc run` → receipt → `explain`
-- [ ] Opt-in anonymous telemetry (verified-rate, gate outcomes) — the dataset that trains 2027 routing
+## 4. Product surface C — **Earned Memory & Skills** (the groundbreaking claim)
 
-## 7. Deliberately NOT building
+*"Memory hubs store. Self-improvers claim. Skill packs promise. We measure."*
+
+- [x] Gated ingestion (no promotion record → no active memory)
+- [x] Per-memory measured lift + evidence-based retirement (poison is measured out — vs the literature's 100% conversational-relapse rate)
+- [x] Evidence-weighted skill routing
+- [ ] Wire `retirement_candidates` → gate rollback (close the loop live)
+- [ ] Skill-pack attribution runs over `agent-skills`-format packs → **measured-badge skill registry**
+- [ ] Earned-memory export adapter: ledger-approved subset published to any hub (mem0/Tencent-style) — *be the filter in front of every store*
+- [ ] "Provable self-improvement" scripted demo: flywheel promotes → attribution measures → receipt seals
+
+## 5. Product surface D — **Fleet Control** (enterprise tier)
+
+- [x] Org policy file + outcome-learned routing (`autoroute`)
+- [ ] Versioned policy packs (protected suites, egress, spend caps) — publish once, fleet consumes
+- [ ] Org kill switch (audited)
+- [ ] A2A receipt exchange (needs signing)
+- [ ] EU-AI-Act audit exports from the receipt registry
+
+## 6. Hosted plane 💰 (only what must be hosted; local-first stays the moat)
+
+- [ ] Receipt registry: start at zero servers (signed receipts on a git ref), graduate to hosted when a team pays
+- [ ] Hosted nightly bench runners (tier 2)
+- [ ] Fleet-shared earned memory over MCP (tier 3 — the network effect: more verified runs → better shared memory → better agents)
+- [x] PyPI distribution (since v0.107)
+- [ ] Docs site + 90-second demo (run → receipt → explain)
+- [ ] Opt-in telemetry (verified-rate, gate outcomes) — trains 2027 routing
+
+## 7. Money — the $1M ARR shape
+
+| Tier | Price | Who | Needs |
+|---|---|---|---|
+| OSS CLI | $0 | every dev (funnel) | done |
+| Team | ~$20/dev/mo | eng leads drowning in agent PRs | surfaces A+B |
+| Platform | $2–5k/mo | teams running fleets | surfaces B+C hosted |
+| Compliance | ~$50k/yr | CISO / EU AI Act | surface D + signed registry |
+
+Blend to $1M: ~30–50 teams + 5–8 compliance accounts. De-risk ladder:
+Action installs → 10 design partners (measure FN rate) → 3 paying teams →
+$100k → $1M. **No certainty is claimed — each rung is a cheap kill-test.**
+
+## 8. Evidence gates (claims we may make, per rung)
+
+- [x] "implemented / internal": everything above marked `[x]`
+- [ ] External benchmark (≥3 outside repos, ≥3 trials, ~$35–50) → unlocks public comparative claims
+- [ ] Design-partner FN rate → unlocks selling the gate
+- Never claimed without the rung: "SOTA", "improves Claude Code", percentages
+
+## 9. Deliberately NOT building
 
 - Another LLM code reviewer (agent-reviews-agent recurses the trust problem)
-- Agent runtime/orchestrator (crowded; Anthropic's home turf — we verify, not run)
-- Hosted agent execution (cost sink; local-first is the differentiator)
-- Dashboards beyond the existing local `ui` until a paying team asks
+- Agent runtime/orchestrator (Anthropic's home turf; prime-agent's crowd)
+- Memory *storage* (47k-star incumbents; we filter, not store)
+- Generic routing infra (NVIDIA Switchyard exists; we interop)
+- Hosted agent execution; dashboards beyond local `ui` until someone pays
 
-## Trend radar — GitHub weekly trending, updated 2026-08-16
-
-What the world is building right now, and what it means for us:
+## 10. Trend radar — GitHub weekly trending, 2026-08-16 (refresh weekly)
 
 | Trending (stars/wk) | Signal | Our move |
 |---|---|---|
-| `semantica` (5.3k) — "Accountable AI Systems" infra | **Accountability is now a trending category** — thesis validated | Ship receipts first; we are the evidence layer they describe |
-| `TencentDB-Agent-Memory` (4.0k), `macro` (2.4k) — team memory hubs | Team-level "memory assets" going mainstream — storage race | Don't compete on storage. **Be the filter**: earned-memory ledger in front of ANY hub ("we decide what deserves to be remembered") |
-| `prime-agent` (8.5k) — self-improving coding agent | Self-improvement is the hot claim — with zero proof discipline | Position: "self-improving, and can **prove** each improvement" (gate + receipts + attribution = the missing trust layer for this whole category) |
-| `addyosmani/agent-skills` (3.3k) — skills for coding agents | Skills-as-artifacts marketplace forming | **Skill attribution** — our attribution module is content-agnostic (ids in, lift out): measure which *skills* lift pass@1 on your repo → measured-badge skill registry. Groundbreaking, near-zero new code |
-| `Switchyard` (NVIDIA, Rust) — LLM routing | Routing is commoditizing at the infra layer | Keep evidence-routing thin; interop with their API rather than compete |
-| `code-graph-rag` (1.7k) — codebase KG-RAG | Code-graph retrieval commoditizing | Already have codeindex + blast-radius; maintain, don't expand |
-
-**The read:** everyone is building the church (self-improvement, team memory,
-skills); nobody built the confession booth. The market's three hottest
-categories all *assume* their artifacts work. We are the only stack that can
-measure whether a memory, skill, or "improvement" actually pays — per repo,
-with CIs.
-
-### New checklist items from the radar
-- [x] Per-memory measured lift (attribution + retirement candidates)
-- [ ] **Skill attribution**: run the same leave-one-out ledger over skill packs (agent-skills format) — "this skill = +3 tasks on your repo"
-- [ ] Earned-memory export adapter: publish the ledger-approved subset to external hubs (mem0/Tencent-style), so we sit in front of any store
-- [ ] "Provable self-improvement" demo: flywheel promotes → attribution measures → receipt seals; one scripted end-to-end story
+| `semantica` 5.3k — "Accountable AI" infra | accountability is a category now | we are its evidence engine |
+| `TencentDB-Agent-Memory` 4.0k, `macro` 2.4k | team memory hubs mainstream | be the filter, not the store |
+| `prime-agent` 8.5k — self-improving agent | hottest claim, zero proof discipline | "self-improving, **and can prove it**" |
+| `agent-skills` 3.3k | skills marketplace forming | measured-badge registry (surface C) |
+| `Switchyard` (NVIDIA) | routing commoditizing | interop, don't compete |
+| `code-graph-rag` 1.7k | code-KG retrieval commoditizing | have it (blast-radius); maintain |
 
 ## Order of operations (next 3 moves)
 
-1. GitHub Action `onmc-verify` (wedge, mostly glue)
-2. Receipt signing + frozen public schema (unlocks registry + A2A)
-3. External benchmark run (unlocks the public claim)
+1. **Surface A wedge**: GitHub Action `onmc-verify` (distribution + first revenue path)
+2. **Close the C loop**: retirement→rollback wiring + skill-pack attribution (the groundbreaking demo)
+3. **Evidence rung**: external benchmark run (unlocks every public claim)
