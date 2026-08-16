@@ -7,7 +7,7 @@ that has receipts, a private benchmark, and per-artifact measured lift?* The
 answers below are ranked; ★ marks the five that are genuinely novel — nobody
 can copy them without rebuilding our spine.
 
-## ★1. Verified Cascade — speculative decoding at task scale (from spec-dec + FrugalGPT)
+## ★1. Verified Cascade ✅ SHIPPED (experiment/cascade.py) — speculative decoding at task scale (from spec-dec + FrugalGPT)
 
 Speculative decoding's shape: cheap generator proposes, expensive verifier
 accepts/rejects, exactness preserved. We have the verifier — the completion
@@ -24,7 +24,7 @@ receipt-sealed, so the cost saving is *measured*, not vibes: "cascade saved
 cascades on judge scores. Nobody cascades on *executed verification* — the
 only acceptance signal that can't be gamed.
 
-## ★2. RLVR Export — your repo's verified history as a training set (from RLVR/GRPO + LoRA)
+## ★2. RLVR Export ✅ SHIPPED (evals/rlvr_export.py) — your repo's verified history as a training set (from RLVR/GRPO + LoRA)
 
 The frontier converged on "reward only what can be verified." Our receipts ARE
 verifiable rewards at software-engineering grain: trajectory + executed-test
@@ -41,7 +41,7 @@ repo-bench (E2) as the post-tune eval.
 **Why world-class:** everyone wants RLVR data; nobody has a *provenance-clean,
 false-green-filtered* source of it per private repo.
 
-## ★3. Agent Arena — Bradley-Terry on your own repo (from LMSYS Arena)
+## ★3. Agent Arena ✅ SHIPPED (experiment/arena.py) — Bradley-Terry on your own repo (from LMSYS Arena)
 
 Arena's crack: paired battles + Elo when absolute scores lie. Our A/B harness
 already produces paired per-task outcomes between agent configs.
@@ -55,7 +55,7 @@ CIs; OTLP (H8) renders the ladder in any dashboard.
 **Why world-class:** public leaderboards rank models on other people's code.
 No product gives a team an Elo ladder on *their* codebase.
 
-## ★4. Outcome-driven context eviction (from MemGPT + Generative Agents)
+## ★4. Outcome-driven context eviction ✅ SHIPPED (context_engine/eviction.py) (from MemGPT + Generative Agents)
 
 MemGPT treats context as RAM with paging; Generative Agents score memories by
 recency × importance × relevance — with *importance guessed by an LLM*.
@@ -70,7 +70,7 @@ opinion.
 **Why world-class:** the first eviction policy with an evidence-based
 importance term — "we page out what provably doesn't pay."
 
-## ★5. Judge Audit — calibrate any LLM judge against executed truth (from G-Eval literature)
+## ★5. Judge Audit ✅ SHIPPED (evals/judge_audit.py) — calibrate any LLM judge against executed truth (from G-Eval literature)
 
 The judge literature's cracks (position bias, verbosity bias, self-preference)
 are measurable — *if* you own ground truth. We do: executed-test outcomes on
