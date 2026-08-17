@@ -42,6 +42,9 @@
 | E5 | Corpus hygiene (saturation, leakage labels) | ✅ shipped | saturated + dead tasks auto-flagged across trials — met |
 | E6 | External benchmark run (3 repos × 3 trials) | next (~$40) | flips claims internal→external |
 | E7 | SWE-bench-format export | ✅ shipped | jsonl instances from real mined tasks; patch inversion round-trips — met |
+| E8 | Retrieval IR metrics (nDCG/R@k/MRR/P@k) | ✅ shipped | known-answer + edge cases; scores R3 rankings — met |
+| E9 | Budget-aware active evaluation | ✅ shipped | ranks tasks by A/B disagreement; more signal per dollar — met |
+| E10 | Judge calibration (ECE/Brier/reliability) | ✅ shipped | overconfident judge caught; pairs with AUROC axis — met |
 
 ### Layer 3 — Harness (fail-closed, self-evolving, attested)
 
