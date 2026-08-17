@@ -62,7 +62,7 @@ class EvolutionResult:
             "champion_id": self.champion_id,
             "winner_id": self.winner_id,
             "promoted": self.promoted,
-            "pass_rates": {vid: rate for vid, rate in self.pass_rates},
+            "pass_rates": dict(self.pass_rates),
             "delta_mean": round(self.delta_mean, 4),
             "delta_ci95": [round(self.delta_ci95[0], 4), round(self.delta_ci95[1], 4)],
             "n_tasks": self.n_tasks,
@@ -110,7 +110,7 @@ def evolve_step(
         "champion": champion.to_dict(),
         "winner": best_id,
         "promoted": promoted,
-        "scores": {vid: s for vid, s in sorted(scores.items())},
+        "scores": dict(sorted(scores.items())),
         "delta_ci95": [low, high],
         "seed": seed,
     }

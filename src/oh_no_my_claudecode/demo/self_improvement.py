@@ -228,7 +228,7 @@ def run_demo(seed: int = 7) -> dict[str, object]:
         },
         ledger,
     )
-    refused_reasons = {memory_id: reason for memory_id, reason in export_batch.refused}
+    refused_reasons = dict(export_batch.refused)
     narrative.append(
         f"export: {len(export_batch.records)} earned memory flowed out with evidence "
         f"inline; 'poison' refused ({refused_reasons.get('poison', 'not present')})"
