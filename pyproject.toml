@@ -59,6 +59,12 @@ treesitter = [
 attest = [
   "sigstore>=4,<5",
 ]
+# OTLP protobuf encoding for `onmc observe` — needed only for backends whose
+# OTLP receiver rejects JSON (e.g. Phoenix's 415). Absent by default — the
+# shipper sends JSON and raises with an install hint on a 415.
+observe = [
+  "opentelemetry-proto>=1.25",
+]
 sqlitevec = [
   "sqlite-vec>=0.1.0",
 ]

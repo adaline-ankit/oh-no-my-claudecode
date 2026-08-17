@@ -48,19 +48,34 @@ def ship_payload(
     headers: Mapping[str, str],
     transport: Transport | None = None,
 ) -> tuple[int, str]:
-    """POST one OTLP-JSON payload to ``{endpoint}/v1/traces``. Loud on failure."""
+    """POST one OTLP payload to ``{endpoint}/v1/traces``. Loud on failure.
+
+    Sends JSON first; if the receiver rejects the content type (415 — e.g.
+    Phoenix is protobuf-only), transparently retries as protobuf when the
+    ``observe`` extra is installed, and raises with the install hint when not.
+    """
     if not endpoint:
         raise ValueError(
             "no OTLP endpoint configured — set OTEL_EXPORTER_OTLP_ENDPOINT "
             "(see docs/observability.md)"
         )
     send: Transport = transport or _urllib_transport
+    url = f"{endpoint}/v1/traces"
     status, body = send(
         "POST",
-        f"{endpoint}/v1/traces",
+        url,
         {**dict(headers), "Content-Type": "application/json"},
         json.dumps(payload).encode(),
     )
+    if status == 415:
+        from oh_no_my_claudecode.trace.otel_pb import encode_protobuf
+
+        status, body = send(
+            "POST",
+            url,
+            {**dict(headers), "Content-Type": "application/x-protobuf"},
+            encode_protobuf(payload),
+        )
     if status >= 300:
         raise RuntimeError(f"otlp ship failed ({status}): {body[:200]}")
     return status, body

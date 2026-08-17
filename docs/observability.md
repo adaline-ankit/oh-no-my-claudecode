@@ -41,13 +41,21 @@ onmc observe                                # UI on http://localhost:16686
 First-spans run 2026-08-17: 3 spans shipped and read back through Jaeger's
 query API (verdict verified=True; workflow lift +0.5; poison lift −0.3).
 
-## Arize Phoenix (local) — protobuf caveat, measured
+## Arize Phoenix (local, free — verified working with the `observe` extra)
 
-Phoenix's OTLP receiver **rejects JSON** (`415 Unsupported content type` —
-the OTLP spec makes JSON optional for receivers, and Phoenix opted out).
-`onmc observe` fails loud rather than pretending. To use Phoenix, put an
-OTel Collector in front (JSON in → protobuf out), or wait for the optional
-protobuf-encoding extra.
+Phoenix's OTLP receiver rejects JSON (`415` — measured), so install the
+protobuf extra once; the shipper then falls back transparently on any 415:
+
+```bash
+pip install 'oh-no-my-claudecode[observe]'
+uvx arize-phoenix serve                     # UI on http://localhost:6006
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006
+onmc observe
+```
+
+Verified 2026-08-17: 3 spans shipped via the auto protobuf fallback,
+confirmed inside Phoenix by its GraphQL API (`traceCount: 3`). Without the
+extra, a 415 raises with this install hint rather than pretending success.
 
 ## Grafana Cloud / any collector
 
