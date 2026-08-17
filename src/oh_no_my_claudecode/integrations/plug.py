@@ -448,9 +448,7 @@ def _plug_opencode(*, repo_root: Path) -> PlugResult:
         else:
             skills_index.write_text(skills_index_content, encoding="utf-8")
             result.files_written.append(str(skills_index))
-            result.notes.append(
-                "Wrote .opencode/skills/onmc.md — onmc skills index for OpenCode."
-            )
+            result.notes.append("Wrote .opencode/skills/onmc.md — onmc skills index for OpenCode.")
     except OSError:
         result.notes.append(
             "Warning: could not write .opencode/skills/onmc.md — check permissions."
@@ -532,9 +530,7 @@ def _plug_cursor(*, repo_root: Path) -> PlugResult:
     rules_file.write_text(content, encoding="utf-8")
     result.files_written.append(str(rules_file))
     result.notes.append("Wrote .cursor/rules/onmc.md (Cursor >=0.40 rules format).")
-    result.notes.append(
-        "Older Cursor versions use .cursorrules — see docs/integrations/cursor.md."
-    )
+    result.notes.append("Older Cursor versions use .cursorrules — see docs/integrations/cursor.md.")
     return result
 
 
@@ -557,9 +553,7 @@ def _plug_omc(*, repo_root: Path) -> PlugResult:
 
     omc_doc.write_text(_OMC_ADAPTER_DOC, encoding="utf-8")
     result.files_written.append(str(omc_doc))
-    result.notes.append(
-        "Wrote docs/integrations/omc.md with copy-paste OMC adapter instructions."
-    )
+    result.notes.append("Wrote docs/integrations/omc.md with copy-paste OMC adapter instructions.")
     result.notes.append(
         "NOTE: OMC's hook API is assumed based on its documented skill/hook model. "
         "Verify hook point names against your installed OMC version."
@@ -679,9 +673,7 @@ def _plug_omx(*, repo_root: Path) -> PlugResult:
 
     omx_doc.write_text(_OMX_ADAPTER_DOC, encoding="utf-8")
     result.files_written.append(str(omx_doc))
-    result.notes.append(
-        "Wrote docs/integrations/omx.md with copy-paste OMX adapter instructions."
-    )
+    result.notes.append("Wrote docs/integrations/omx.md with copy-paste OMX adapter instructions.")
     result.notes.append(
         "NOTE: OMX's exact hook API is assumed based on Codex AGENTS.md conventions. "
         "Verify hook point names against your installed OMX version."

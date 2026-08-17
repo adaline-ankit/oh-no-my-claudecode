@@ -120,12 +120,10 @@ def _checkout_and_python_steps() -> str:
 def _build_issue_context() -> tuple[str, str]:
     """onmc-issue-context.yml — post memory context on new issues."""
     path = ".github/workflows/onmc-issue-context.yml"
-    content = (
-        _workflow_header(
-            "onmc-issue-context",
-            "Post related memory context as a comment when an issue is opened.",
-        )
-        + textwrap.dedent(f"""\
+    content = _workflow_header(
+        "onmc-issue-context",
+        "Post related memory context as a comment when an issue is opened.",
+    ) + textwrap.dedent(f"""\
             name: onmc-issue-context
 
             on:
@@ -207,19 +205,16 @@ def _build_issue_context() -> tuple[str, str]:
                         --repo "$GITHUB_REPOSITORY" \\
                         --body "$BODY"
         """)
-    )
     return path, content
 
 
 def _build_pr_preflight() -> tuple[str, str]:
     """onmc-pr-preflight.yml — blast-radius + memory + audit comment on PRs."""
     path = ".github/workflows/onmc-pr-preflight.yml"
-    content = (
-        _workflow_header(
-            "onmc-pr-preflight",
-            "Post blast-radius, related memories, and security audit on PR open/update.",
-        )
-        + textwrap.dedent(f"""\
+    content = _workflow_header(
+        "onmc-pr-preflight",
+        "Post blast-radius, related memories, and security audit on PR open/update.",
+    ) + textwrap.dedent(f"""\
             name: onmc-pr-preflight
 
             on:
@@ -359,19 +354,16 @@ def _build_pr_preflight() -> tuple[str, str]:
                         echo "Posted new preflight comment"
                       fi
         """)
-    )
     return path, content
 
 
 def _build_pr_learn() -> tuple[str, str]:
     """onmc-pr-learn.yml — record outcome when a PR is merged."""
     path = ".github/workflows/onmc-pr-learn.yml"
-    content = (
-        _workflow_header(
-            "onmc-pr-learn",
-            "Record merged PR outcome so future agents learn from what shipped.",
-        )
-        + textwrap.dedent(f"""\
+    content = _workflow_header(
+        "onmc-pr-learn",
+        "Record merged PR outcome so future agents learn from what shipped.",
+    ) + textwrap.dedent(f"""\
             name: onmc-pr-learn
 
             on:
@@ -408,19 +400,16 @@ def _build_pr_learn() -> tuple[str, str]:
                       echo "Recorded outcome for PR #${{PR_NUMBER}}: ${{PR_TITLE}}"
                       echo "Merge commit: ${{MERGE_COMMIT::8}}"
         """)
-    )
     return path, content
 
 
 def _build_weekly_audit() -> tuple[str, str]:
     """onmc-weekly-audit.yml — weekly stale-memory audit, opens a GitHub issue."""
     path = ".github/workflows/onmc-weekly-audit.yml"
-    content = (
-        _workflow_header(
-            "onmc-weekly-audit",
-            "Weekly stale-memory audit: opens a GitHub issue with prune candidates.",
-        )
-        + textwrap.dedent(f"""\
+    content = _workflow_header(
+        "onmc-weekly-audit",
+        "Weekly stale-memory audit: opens a GitHub issue with prune candidates.",
+    ) + textwrap.dedent(f"""\
             name: onmc-weekly-audit
 
             on:
@@ -508,7 +497,6 @@ def _build_weekly_audit() -> tuple[str, str]:
                         --title "$TITLE" \\
                         --body "$BODY"
         """)
-    )
     return path, content
 
 

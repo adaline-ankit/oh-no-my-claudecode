@@ -3576,6 +3576,20 @@ Usage: onmc init [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc integrations`
+
+```text
+Usage: onmc integrations [OPTIONS]
+
+ Show every third-party integration: installed / configured / live.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --probe          Run real network probes.                                    │
+│ --json           JSON output.                                                │
+│ --help           Show this message and exit.                                 │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc land`
 
 ```text
