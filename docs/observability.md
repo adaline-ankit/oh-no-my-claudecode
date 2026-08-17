@@ -30,13 +30,24 @@ Spans appear under Tracing with `onmc.kind = verdict | attribution |
 enforcement` attributes — filter on `onmc.verified = false` for the failures
 feed, or chart `onmc.lift.mean` by `onmc.artifact.id` for the memory P&L.
 
-## Arize Phoenix (local, free, OTel-native)
+## Jaeger (local, free — verified working)
 
 ```bash
-uvx arize-phoenix serve                     # UI on http://localhost:6006
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006
-onmc observe
+docker run -d --rm -p 4318:4318 -p 16686:16686 jaegertracing/all-in-one
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+onmc observe                                # UI on http://localhost:16686
 ```
+
+First-spans run 2026-08-17: 3 spans shipped and read back through Jaeger's
+query API (verdict verified=True; workflow lift +0.5; poison lift −0.3).
+
+## Arize Phoenix (local) — protobuf caveat, measured
+
+Phoenix's OTLP receiver **rejects JSON** (`415 Unsupported content type` —
+the OTLP spec makes JSON optional for receivers, and Phoenix opted out).
+`onmc observe` fails loud rather than pretending. To use Phoenix, put an
+OTel Collector in front (JSON in → protobuf out), or wait for the optional
+protobuf-encoding extra.
 
 ## Grafana Cloud / any collector
 
