@@ -5231,6 +5231,20 @@ Usage: onmc notify test [OPTIONS]
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
+## `onmc observe`
+
+```text
+Usage: onmc observe [OPTIONS]
+
+ Ship run-receipt verdicts to the configured OTel backend.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --dry-run               Show what would ship, send nothing.                  │
+│ --endpoint        TEXT  Override OTEL_EXPORTER_OTLP_ENDPOINT.                │
+│ --help                  Show this message and exit.                          │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 ## `onmc onboard`
 
 ```text
