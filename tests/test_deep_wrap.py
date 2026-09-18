@@ -368,6 +368,7 @@ def test_session_start_auto_activates_on_default_active(
     """SessionStart hook auto-activates the session when default_active=True."""
     from oh_no_my_claudecode.cli import hooks_session_start_command
 
+    monkeypatch.chdir(tmp_path)
     write_wrap_state(tmp_path, strict=True, default_active=True)
     # No explicit set_active — relying on auto-activation.
     marker = session_active_path(tmp_path)
@@ -395,6 +396,8 @@ def test_all_hooks_exit_zero_on_garbage_payload(
         hooks_task_intercept_command,
     )
 
+    # Missing payload cwd falls back to the process cwd, including state writes.
+    monkeypatch.chdir(tmp_path)
     garbage = {"unexpected_key": None, "numbers": [1, 2, 3]}
     for cmd in (
         hooks_session_start_command,

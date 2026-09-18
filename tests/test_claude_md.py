@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
 
 from oh_no_my_claudecode.claude_md import (
     claude_md_meta_path,
@@ -12,6 +16,7 @@ from oh_no_my_claudecode.claude_md import (
     preview_claude_md_update,
     update_claude_md,
 )
+from oh_no_my_claudecode.claude_md import generator as generator_module
 from oh_no_my_claudecode.core.service import OnmcService
 from oh_no_my_claudecode.models import MemoryEntry, MemoryKind, SourceType
 from oh_no_my_claudecode.storage import SQLiteStorage
@@ -141,6 +146,192 @@ def test_claude_md_preview_does_not_write_to_disk(
 
     assert "## Hotspot areas" in preview
     assert not claude_md_path(sample_repo).exists()
+
+
+def test_compaction_refresh_preserves_authored_claude_md(sample_repo: Path) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    path = claude_md_path(sample_repo)
+    original = "# Repository instructions\n\nKeep the author's requirements.\n"
+    path.write_text(original, encoding="utf-8")
+    service.pre_compact()
+
+    service.session_start()
+
+    assert path.read_text(encoding="utf-8") == original
+    assert not claude_md_meta_path(sample_repo).exists()
+
+
+def test_explicit_generation_overwrites_and_records_exact_content_digest(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    path = claude_md_path(sample_repo)
+    path.write_text("# Author instructions\n", encoding="utf-8")
+    monkeypatch.setattr(
+        generator_module,
+        "build_claude_md_markdown",
+        Mock(return_value={"Project overview": "Café workers handle retries.\n"}),
+    )
+
+    markdown = service.generate_claude_md(no_llm=True)
+
+    assert "Café" in markdown
+    assert path.read_bytes() == markdown.encode("utf-8")
+    metadata = json.loads(claude_md_meta_path(sample_repo).read_text(encoding="utf-8"))
+    assert metadata["content_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_compaction_refresh_creates_missing_or_refreshes_unchanged_owned_file(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, existing: bool
+) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    # Keep fresh metadata even in the missing-file case: it must allow recreation.
+    service.generate_claude_md(no_llm=True)
+    path = claude_md_path(sample_repo)
+    if existing:
+        monkeypatch.setattr("oh_no_my_claudecode.core.service._is_recent_enough", lambda _: False)
+    else:
+        path.unlink()
+    builder = Mock(return_value={"Project overview": "Refreshed repository guidance."})
+    monkeypatch.setattr(generator_module, "build_claude_md_markdown", builder)
+    service.pre_compact()
+
+    service.session_start()
+
+    builder.assert_called_once()
+    assert "Refreshed repository guidance." in path.read_text(encoding="utf-8")
+    metadata = json.loads(claude_md_meta_path(sample_repo).read_text(encoding="utf-8"))
+    assert metadata["content_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("state", ["edited", "legacy", "symlink", "dangling_symlink"])
+def test_compaction_refresh_preserves_unowned_file_before_generation(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.generate_claude_md(no_llm=True)
+    path = claude_md_path(sample_repo)
+    metadata_path = claude_md_meta_path(sample_repo)
+    if state == "edited":
+        path.write_text("# Added user requirements\n", encoding="utf-8")
+    elif state == "legacy":
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        del metadata["content_sha256"]
+        metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    else:
+        linked = sample_repo / "linked-instructions.md"
+        if state == "symlink":
+            # Even identical bytes with matching metadata cannot authorize links.
+            linked.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(linked)
+    previous = path.read_bytes() if path.exists() else None
+    previous_metadata = metadata_path.read_bytes()
+    monkeypatch.setattr("oh_no_my_claudecode.core.service._is_recent_enough", lambda _: False)
+    builder = Mock(return_value={"Project overview": "Replacement"})
+    monkeypatch.setattr(generator_module, "build_claude_md_markdown", builder)
+    service.pre_compact()
+
+    service.session_start()
+
+    builder.assert_not_called()
+    assert (path.read_bytes() if path.exists() else None) == previous
+    assert metadata_path.read_bytes() == previous_metadata
+    if state in {"symlink", "dangling_symlink"}:
+        assert path.is_symlink()
+
+
+def test_compaction_refresh_preserves_mixed_output_from_explicit_update(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    service.ingest(no_llm=True)
+    service.generate_claude_md(no_llm=True)
+    path = claude_md_path(sample_repo)
+    path.write_text(
+        "# CLAUDE.md\n\n<!-- user-written -->\n"
+        "## Architecture decisions\nKeep the author's deployment requirements.\n",
+        encoding="utf-8",
+    )
+
+    updated, _ = service.update_claude_md(no_llm=True)
+
+    assert "Keep the author's deployment requirements." in updated
+    assert "## Critical invariants" in updated
+    metadata_path = claude_md_meta_path(sample_repo)
+    previous_metadata = metadata_path.read_bytes()
+    assert "content_sha256" not in json.loads(previous_metadata)
+    monkeypatch.setattr("oh_no_my_claudecode.core.service._is_recent_enough", lambda _: False)
+    builder = Mock(return_value={"Project overview": "Replacement"})
+    monkeypatch.setattr(generator_module, "build_claude_md_markdown", builder)
+    service.pre_compact()
+
+    service.session_start()
+
+    builder.assert_not_called()
+    assert path.read_text(encoding="utf-8") == updated
+    assert metadata_path.read_bytes() == previous_metadata
+
+
+@pytest.mark.parametrize(
+    ("existing", "change"),
+    [(False, "edit"), (False, "symlink"), (True, "edit"), (True, "symlink"),
+     (True, "delete"), (True, "new_generation")],
+)
+def test_compaction_refresh_preserves_changes_made_during_generation(
+    sample_repo: Path, monkeypatch: pytest.MonkeyPatch, existing: bool, change: str
+) -> None:
+    service = OnmcService(sample_repo)
+    service.init_project()
+    path = claude_md_path(sample_repo)
+    metadata_path = claude_md_meta_path(sample_repo)
+    if existing:
+        service.generate_claude_md(no_llm=True)
+    original_metadata = metadata_path.read_bytes() if metadata_path.exists() else None
+    user_content = b"# Concurrent instructions\n"
+    concurrent_metadata = b""
+
+    def generate_while_file_changes(**_: object) -> dict[str, str]:
+        nonlocal concurrent_metadata
+        if change == "symlink":
+            linked = sample_repo / "concurrent-instructions.md"
+            linked.write_bytes(user_content)
+            path.unlink(missing_ok=True)
+            path.symlink_to(linked)
+        elif change == "delete":
+            path.unlink()
+        else:
+            path.write_bytes(user_content)
+            if change == "new_generation":
+                # Another writer's new digest must not authorize our older generation.
+                concurrent_metadata = json.dumps(
+                    {"content_sha256": hashlib.sha256(user_content).hexdigest()}
+                ).encode("utf-8")
+                metadata_path.write_bytes(concurrent_metadata)
+        return {"Project overview": "This outdated generation must not be written."}
+
+    monkeypatch.setattr("oh_no_my_claudecode.core.service._is_recent_enough", lambda _: False)
+    builder = Mock(side_effect=generate_while_file_changes)
+    monkeypatch.setattr(generator_module, "build_claude_md_markdown", builder)
+    service.pre_compact()
+
+    service.session_start()
+
+    builder.assert_called_once()
+    if change == "delete":
+        assert not path.exists()
+    else:
+        assert path.read_bytes() == user_content
+    if change == "symlink":
+        assert path.is_symlink()
+    expected_metadata = concurrent_metadata if change == "new_generation" else original_metadata
+    assert (metadata_path.read_bytes() if metadata_path.exists() else None) == expected_metadata
 
 
 # ---------------------------------------------------------------------------

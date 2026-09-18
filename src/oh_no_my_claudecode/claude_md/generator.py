@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +51,17 @@ def load_claude_md_meta(repo_root: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _refresh_target_digest(path: Path) -> str | None:
+    """Fingerprint a regular file without accepting links or special files."""
+    try:
+        state = path.lstat()
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(state.st_mode):
+        raise FileExistsError("Automatic CLAUDE.md refresh requires a regular file.")
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def generate_claude_md(
     *,
     repo_root: Path,
@@ -57,8 +69,23 @@ def generate_claude_md(
     provider: BaseLLMProvider | None,
     log_path: Path | None,
     write: bool = True,
+    preserve_user_edits: bool = False,
 ) -> tuple[str, dict[str, str]]:
-    """Generate CLAUDE.md markdown and optionally write it to disk."""
+    """Generate CLAUDE.md, optionally protecting user content during auto-refresh.
+
+    Protected writes require a missing file or a matching generated-content
+    digest, checked before generation and again before writing. This is a
+    best-effort guard, not an atomic compare-and-swap with external editors.
+    """
+    target = claude_md_path(repo_root)
+    expected_digest = None
+    if write and preserve_user_edits:
+        expected_digest = _refresh_target_digest(target)
+        if (
+            expected_digest is not None
+            and load_claude_md_meta(repo_root).get("content_sha256") != expected_digest
+        ):
+            raise FileExistsError("Automatic CLAUDE.md refresh preserves unowned or edited files.")
     sections = build_claude_md_markdown(
         repo_root=repo_root,
         storage=storage,
@@ -68,12 +95,16 @@ def generate_claude_md(
     section_hashes = _section_hashes(repo_root, storage)
     markdown = _join_sections(sections)
     if write:
-        claude_md_path(repo_root).write_text(markdown, encoding="utf-8")
+        if preserve_user_edits and _refresh_target_digest(target) != expected_digest:
+            raise FileExistsError("CLAUDE.md changed while automatic refresh was generating.")
+        content = markdown.encode("utf-8")
+        target.write_bytes(content)
         claude_md_meta_path(repo_root).write_text(
             json.dumps(
                 {
                     "generated_at": isoformat_utc(utc_now()),
                     "section_hashes": section_hashes,
+                    "content_sha256": hashlib.sha256(content).hexdigest(),
                 },
                 indent=2,
                 sort_keys=True,

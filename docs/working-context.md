@@ -135,6 +135,18 @@ Disable stops adaptive injection; it preserves stored state and other ONMC
 hooks. Hook errors remain nonblocking and report degraded context instead of
 silently falling back to stale recall.
 
+Legacy automatic `CLAUDE.md` refresh also preserves authored instructions. ONMC
+records the digest of files it generates and automatically refreshes an existing
+file only while its contents still match that digest. Manual edits, symlinks, and
+older metadata without an ownership digest prevent automatic replacement. A file
+changed while generation is running is preserved too; this is not an atomic lock
+against arbitrary concurrent editors. Explicit `onmc claude-md generate` and
+`onmc claude-md update` remain intentional write operations. Preview first with
+`onmc claude-md preview --no-llm` when reviewing existing guidance.
+Because `update` can retain user-written sections, its output is conservatively
+excluded from automatic whole-file refresh; explicit `generate` establishes
+ownership of the complete generated file.
+
 ## Reproduce the demonstration
 
 ```bash

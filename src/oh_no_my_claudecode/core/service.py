@@ -4300,19 +4300,20 @@ class OnmcService:
         home: Path | None,
     ) -> None:
         repo_root, config, _ = self._load_context()
-        meta = load_claude_md_meta(repo_root)
-        generated_at = meta.get("generated_at")
-        if generated_at:
-            parsed = generated_at if isinstance(generated_at, str) else ""
-            if parsed and _is_recent_enough(parsed):
-                return
         try:
+            meta = load_claude_md_meta(repo_root)
+            generated_at = meta.get("generated_at")
+            if generated_at and claude_md_path(repo_root).exists():
+                parsed = generated_at if isinstance(generated_at, str) else ""
+                if parsed and _is_recent_enough(parsed):
+                    return
             generate_claude_md(
                 repo_root=repo_root,
                 storage=storage,
                 provider=self._optional_provider(config=config, no_llm=False),
                 log_path=self._llm_log_path(repo_root, config),
                 write=True,
+                preserve_user_edits=True,
             )
         except Exception:
             return

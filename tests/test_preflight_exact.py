@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -409,21 +410,28 @@ _HAS_UV = shutil.which("uv") is not None
 
 @pytest.mark.skipif(not _HAS_UV, reason="uv not installed — skipping real smoke")
 def test_exact_smoke_real_run(tmp_path: Path) -> None:
-    """Run the exact gate against the actual repo root.
+    """Run the exact gate against an isolated minimal project.
 
     This smoke test verifies end-to-end wiring (uv provisioning, actual
     subprocess execution) without mocking.  It only runs when ``uv`` is
-    installed; CI always has uv so it runs there.
+    installed.
     """
-    # Discover actual repo root from the test file's location.
-    repo_root = Path(__file__).resolve().parents[1]
+    # uv may create or refresh uv.lock and .venv in the project it runs against.
+    repo_root = tmp_path
+    subprocess.run(["git", "init", "--quiet"], cwd=repo_root, check=True, capture_output=True)
+    (repo_root / "pyproject.toml").write_text(
+        '[project]\nname = "preflight-smoke"\nversion = "0.0.0"\n'
+        'requires-python = ">=3.11"\n',
+        encoding="utf-8",
+    )
+    (repo_root / "example.py").write_text("answer = 42\n", encoding="utf-8")
     report = run_preflight_exact(
         repo_root,
-        steps=["ruff"],  # Only ruff — cheap, fast, no network.
+        steps=["ruff"],  # Only ruff — keep the real subprocess smoke small.
         executor=None,  # Real subprocess.
     )
     assert isinstance(report, PreflightReport)
     assert len(report.steps) == 1
     assert report.steps[0].name == "ruff"
-    # ruff must pass on a clean checkout.
+    # ruff must pass on the valid fixture project.
     assert report.steps[0].ok, f"ruff failed: {report.steps[0].summary}"

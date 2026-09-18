@@ -28,6 +28,10 @@ All notable changes to this project are documented here.
   references without bypassing containment or source-hash checks.
 - Native hooks re-deliver context after recovering from an unavailable-context
   warning, instead of suppressing it as an unchanged packet.
+- Legacy automatic `CLAUDE.md` refresh preserves authored instructions and edits
+  to generated files; refresh requires a matching recorded content digest.
+- Hook and real preflight tests use temporary repositories instead of modifying
+  the contributor checkout's `CLAUDE.md` or `uv.lock`.
 - The standard dev quality gate now handles optional OpenTelemetry protobuf
   imports without requiring the `observe` extra. Wheel/sdist metadata stays at
   version 2.4 for compatibility with the declared Twine 6 validation tool.
