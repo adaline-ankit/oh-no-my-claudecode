@@ -17,9 +17,17 @@ All notable changes to this project are documented here.
   project hook installations both include the tool events.
 - A reproducible functional demo and setup/limitations guide. This release does
   not claim improved model accuracy or task success from the demo.
+- Reproducible working-context scale and delivery benchmarks, plus an opt-in
+  paired Codex pilot with matched information access, independent external
+  graders, negative controls, usage capture, and retained failed attempts.
 
 ### Fixed
 
+- Working-context freshness now handles extensionless/dotfiles and mixed
+  provenance/file references. Active-file recall recognizes whitespace and `./`
+  references without bypassing containment or source-hash checks.
+- Native hooks re-deliver context after recovering from an unavailable-context
+  warning, instead of suppressing it as an unchanged packet.
 - The standard dev quality gate now handles optional OpenTelemetry protobuf
   imports without requiring the `observe` extra. Wheel/sdist metadata stays at
   version 2.4 for compatibility with the declared Twine 6 validation tool.

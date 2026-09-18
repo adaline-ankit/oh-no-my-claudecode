@@ -1,0 +1,354 @@
+{
+  "manifest": {
+    "kind": "synthetic_live_coding_pilot",
+    "schema_version": 1,
+    "model": "gpt-6-astra",
+    "reasoning_effort": "medium",
+    "timeout_seconds": 180,
+    "repeats": 1,
+    "planned_attempts": 6,
+    "agent_config": "ignore-user-config; ephemeral; workspace-write",
+    "python": "3.13.13",
+    "platform": "macOS-26.3.1-arm64-arm-64bit-Mach-O",
+    "codex_version": "codex-cli 0.154.0-alpha.6.2",
+    "git_head": "64a4485c318c3d34d57496750ab4e9716fdc1b52",
+    "input_sha256": {
+      "scripts/benchmark-working-context-live.py": "bebd992bc8a75d7efc97f351fa7db4b450f3dbe9f28108f106d582f6966d5a24",
+      "scripts/working_context_pilot_fixtures.py": "15d79e8df7aa55d59322ace01cbca85066139da8ebda80f2cb3a43a08c7660e9",
+      "src/oh_no_my_claudecode/working_context/__init__.py": "baa5f1905e4ffeccefc8ee721c0cec34b8b5aa3c982411af169eb9fad06149f3",
+      "src/oh_no_my_claudecode/working_context/commands.py": "843c6def6bfca881bf6fbe7ccae4bbe1b2119f6f056baea034569097faa3a7c1",
+      "src/oh_no_my_claudecode/working_context/engine.py": "61659ae71d5c4997c2cff8f5c15d4c4a554d850cc1da1bcebe99c186862f9ce3",
+      "src/oh_no_my_claudecode/working_context/hooks.py": "a7ed6f2efeb3ee02127774073364ad022c678e85923c1906a7870e8c885df67a",
+      "src/oh_no_my_claudecode/working_context/models.py": "bdfb464bb269b518ab7ebe17f803903a30100dc0e1bd9658099534fcb94f8eec",
+      "src/oh_no_my_claudecode/working_context/store.py": "43cdf65d447871383a538a1838602754efdc38e386f90918a5e0898d431c68e0"
+    },
+    "fixture_checks": [
+      {
+        "task": "expiry",
+        "reference": {
+          "passed": true,
+          "tests_run": 6,
+          "output": "test_boundary (__main__.Checks.test_boundary) ... ok\ntest_negative_removes (__main__.Checks.test_negative_removes) ... ok\ntest_none_value (__main__.Checks.test_none_value) ... ok\ntest_overwrite (__main__.Checks.test_overwrite) ... ok\ntest_purge (__main__.Checks.test_purge) ... ok\ntest_zero_removes (__main__.Checks.test_zero_removes) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+        },
+        "stub": {
+          "passed": false,
+          "tests_run": 6,
+          "output": "test_boundary (__main__.Checks.test_boundary) ... ERROR\ntest_negative_removes (__main__.Checks.test_negative_removes) ... ERROR\ntest_none_value (__main__.Checks.test_none_value) ... ERROR\ntest_overwrite (__main__.Checks.test_overwrite) ... ERROR\ntest_purge (__main__.Checks.test_purge) ... ERROR\ntest_zero_removes (__main__.Checks.test_zero_removes) ... ERROR\n\n======================================================================\nERROR: test_boundary (__main__.Checks.test_boundary)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 10, in test_boundary\n    self.c.put('x', 7, 5)\n    ~~~~~~~~~~^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_negative_removes (__main__.Checks.test_negative_removes)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 21, in test_negative_removes\n    self.c.put('x', 7, None)\n    ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_none_value (__main__.Checks.test_none_value)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 25, in test_none_value\n    self.c.put('x', None, None)\n    ~~~~~~~~~~^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_overwrite (__main__.Checks.test_overwrite)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 29, in test_overwrite\n    self.c.put('x', 7, 5)\n    ~~~~~~~~~~^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_purge (__main__.Checks.test_purge)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 35, in test_purge\n    self.c.put('a', 1, 2)\n    ~~~~~~~~~~^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_zero_removes (__main__.Checks.test_zero_removes)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 17, in test_zero_removes\n    self.c.put('x', 7, None)\n    ~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-dkbsclcy/solution.py\", line 7, in put\n    raise NotImplementedError\nNotImplementedError\n\n----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nFAILED (errors=6)\n"
+        }
+      },
+      {
+        "task": "ledger",
+        "reference": {
+          "passed": true,
+          "tests_run": 6,
+          "output": "test_bad_atomic (__main__.Checks.test_bad_atomic) ... ok\ntest_conflict_atomic (__main__.Checks.test_conflict_atomic) ... ok\ntest_input_and_output_detached (__main__.Checks.test_input_and_output_detached) ... ok\ntest_invalid_identity (__main__.Checks.test_invalid_identity) ... ok\ntest_replays (__main__.Checks.test_replays) ... ok\ntest_zero_and_accounts (__main__.Checks.test_zero_and_accounts) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+        },
+        "stub": {
+          "passed": false,
+          "tests_run": 6,
+          "output": "test_bad_atomic (__main__.Checks.test_bad_atomic) ... ERROR\ntest_conflict_atomic (__main__.Checks.test_conflict_atomic) ... ERROR\ntest_input_and_output_detached (__main__.Checks.test_input_and_output_detached) ... ERROR\ntest_invalid_identity (__main__.Checks.test_invalid_identity) ... ERROR\ntest_replays (__main__.Checks.test_replays) ... ERROR\ntest_zero_and_accounts (__main__.Checks.test_zero_and_accounts) ... ERROR\n\n======================================================================\nERROR: test_bad_atomic (__main__.Checks.test_bad_atomic)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 24, in test_bad_atomic\n    x.apply([event('1'), event('2', bad)])\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_conflict_atomic (__main__.Checks.test_conflict_atomic)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 15, in test_conflict_atomic\n    x.apply([event('1')])\n    ~~~~~~~^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_input_and_output_detached (__main__.Checks.test_input_and_output_detached)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 31, in test_input_and_output_detached\n    result = x.apply(events)\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_invalid_identity (__main__.Checks.test_invalid_identity)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 43, in test_invalid_identity\n    x.apply([event('valid'), bad])\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_replays (__main__.Checks.test_replays)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 11, in test_replays\n    self.assertEqual(x.apply([event('1'), event('1')]), {'a': 3})\n                     ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_zero_and_accounts (__main__.Checks.test_zero_and_accounts)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 36, in test_zero_and_accounts\n    self.assertEqual(Ledger().apply([event('1'), event('2', -3), event('3', 9, 'b')]),\n                     ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-_3tyijqb/solution.py\", line 6, in apply\n    raise NotImplementedError\nNotImplementedError\n\n----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nFAILED (errors=6)\n"
+        }
+      },
+      {
+        "task": "intervals",
+        "reference": {
+          "passed": true,
+          "tests_run": 6,
+          "output": "test_chain (__main__.Checks.test_chain) ... ok\ntest_negative_empty (__main__.Checks.test_negative_empty) ... ok\ntest_no_mutation (__main__.Checks.test_no_mutation) ... ok\ntest_overlap_and_nested (__main__.Checks.test_overlap_and_nested) ... ok\ntest_touching (__main__.Checks.test_touching) ... ok\ntest_validation (__main__.Checks.test_validation) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+        },
+        "stub": {
+          "passed": false,
+          "tests_run": 6,
+          "output": "test_chain (__main__.Checks.test_chain) ... ERROR\ntest_negative_empty (__main__.Checks.test_negative_empty) ... ERROR\ntest_no_mutation (__main__.Checks.test_no_mutation) ... ERROR\ntest_overlap_and_nested (__main__.Checks.test_overlap_and_nested) ... ERROR\ntest_touching (__main__.Checks.test_touching) ... ERROR\ntest_validation (__main__.Checks.test_validation) ... ERROR\n\n======================================================================\nERROR: test_chain (__main__.Checks.test_chain)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 24, in test_chain\n    self.assertEqual(norm([(8,10),(1,4),(3,6),(6,9)]), [(1,6),(6,10)])\n                     ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_negative_empty (__main__.Checks.test_negative_empty)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 12, in test_negative_empty\n    self.assertEqual(norm([(0,0),(-5,-2),(-3,1)]), [(-5,1)])\n                     ~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_no_mutation (__main__.Checks.test_no_mutation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 21, in test_no_mutation\n    self.assertEqual(norm(source), [(1,3),(5,9)])\n                     ~~~~^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_overlap_and_nested (__main__.Checks.test_overlap_and_nested)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 10, in test_overlap_and_nested\n    self.assertEqual(norm([(5,9),(1,7),(2,3),(1,7)]), [(1,9)])\n                     ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_touching (__main__.Checks.test_touching)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 8, in test_touching\n    self.assertEqual(norm([(3,5),(1,3)]), [(1,3),(3,5)])\n                     ~~~~^^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n======================================================================\nERROR: test_validation (__main__.Checks.test_validation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-oracle-dgn8uho2/external_checks.py\", line 17, in test_validation\n    norm([(0,2),pair])\n    ~~~~^^^^^^^^^^^^^^\n  File \"/var/folders/78/1_d0vnm52csdy4kr00p088zr0000gp/T/onmc-grade-9lzr28t5/solution.py\", line 2, in normalize_intervals\n    raise NotImplementedError\nNotImplementedError\n\n----------------------------------------------------------------------\nRan 6 tests in 0.001s\n\nFAILED (errors=6)\n"
+        }
+      }
+    ],
+    "limitations": [
+      "Three small synthetic tasks; no general accuracy claim or SWE-bench score.",
+      "Both arms have all source facts; treatment also gets compiled context.",
+      "No native Claude hooks exercised; one initial packet per fresh Codex run.",
+      "Provider nondeterminism and cache effects remain; costs unknown."
+    ]
+  },
+  "rows": [
+    {
+      "task": "expiry",
+      "repeat": 0,
+      "arm": "baseline",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 122796,
+        "cached_input_tokens": 99840,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1573,
+        "reasoning_output_tokens": 12
+      },
+      "cost_usd": null,
+      "wall_seconds": 61.591,
+      "prompt_chars": 270,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_boundary (__main__.Checks.test_boundary) ... ok\ntest_negative_removes (__main__.Checks.test_negative_removes) ... ok\ntest_none_value (__main__.Checks.test_none_value) ... ok\ntest_overwrite (__main__.Checks.test_overwrite) ... ok\ntest_purge (__main__.Checks.test_purge) ... ok\ntest_zero_removes (__main__.Checks.test_zero_removes) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "eeb5345b62545d7c1c2f4bf592ffac56bd79f44f8f976f95f12aeb3cc774c302",
+      "passed": true
+    },
+    {
+      "task": "expiry",
+      "repeat": 0,
+      "arm": "adaptive",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 106009,
+        "cached_input_tokens": 89088,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1449,
+        "reasoning_output_tokens": 16
+      },
+      "cost_usd": null,
+      "wall_seconds": 62.234,
+      "prompt_chars": 1638,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_boundary (__main__.Checks.test_boundary) ... ok\ntest_negative_removes (__main__.Checks.test_negative_removes) ... ok\ntest_none_value (__main__.Checks.test_none_value) ... ok\ntest_overwrite (__main__.Checks.test_overwrite) ... ok\ntest_purge (__main__.Checks.test_purge) ... ok\ntest_zero_removes (__main__.Checks.test_zero_removes) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "eeb5345b62545d7c1c2f4bf592ffac56bd79f44f8f976f95f12aeb3cc774c302",
+      "passed": true
+    },
+    {
+      "task": "ledger",
+      "repeat": 0,
+      "arm": "adaptive",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 121060,
+        "cached_input_tokens": 99072,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1825,
+        "reasoning_output_tokens": 20
+      },
+      "cost_usd": null,
+      "wall_seconds": 71.187,
+      "prompt_chars": 1720,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_bad_atomic (__main__.Checks.test_bad_atomic) ... ok\ntest_conflict_atomic (__main__.Checks.test_conflict_atomic) ... ok\ntest_input_and_output_detached (__main__.Checks.test_input_and_output_detached) ... ok\ntest_invalid_identity (__main__.Checks.test_invalid_identity) ... ok\ntest_replays (__main__.Checks.test_replays) ... ok\ntest_zero_and_accounts (__main__.Checks.test_zero_and_accounts) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "c857cd38f511b1f9a33bc0cbf79b5074aba47a30529e8b16f7df5ecd25572528",
+      "passed": true
+    },
+    {
+      "task": "ledger",
+      "repeat": 0,
+      "arm": "baseline",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 109109,
+        "cached_input_tokens": 82688,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1985,
+        "reasoning_output_tokens": 11
+      },
+      "cost_usd": null,
+      "wall_seconds": 69.777,
+      "prompt_chars": 263,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_bad_atomic (__main__.Checks.test_bad_atomic) ... ok\ntest_conflict_atomic (__main__.Checks.test_conflict_atomic) ... ok\ntest_input_and_output_detached (__main__.Checks.test_input_and_output_detached) ... ok\ntest_invalid_identity (__main__.Checks.test_invalid_identity) ... ok\ntest_replays (__main__.Checks.test_replays) ... ok\ntest_zero_and_accounts (__main__.Checks.test_zero_and_accounts) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "44b629d9bc76ce4e8d8db130408865472698a85f324e2eedfc6873ccf0c31338",
+      "passed": true
+    },
+    {
+      "task": "intervals",
+      "repeat": 0,
+      "arm": "baseline",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 126195,
+        "cached_input_tokens": 102144,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1489,
+        "reasoning_output_tokens": 11
+      },
+      "cost_usd": null,
+      "wall_seconds": 64.703,
+      "prompt_chars": 258,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_chain (__main__.Checks.test_chain) ... ok\ntest_negative_empty (__main__.Checks.test_negative_empty) ... ok\ntest_no_mutation (__main__.Checks.test_no_mutation) ... ok\ntest_overlap_and_nested (__main__.Checks.test_overlap_and_nested) ... ok\ntest_touching (__main__.Checks.test_touching) ... ok\ntest_validation (__main__.Checks.test_validation) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "4280bfd795771f86c1115fb76bbec9ffc2c8bed8246f962f418d83e64455460c",
+      "passed": true
+    },
+    {
+      "task": "intervals",
+      "repeat": 0,
+      "arm": "adaptive",
+      "provider_returncode": 0,
+      "timeout": false,
+      "agent_error": null,
+      "artifact_error": null,
+      "status": "completed",
+      "usage": {
+        "input_tokens": 123902,
+        "cached_input_tokens": 94464,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1380,
+        "reasoning_output_tokens": 45
+      },
+      "cost_usd": null,
+      "wall_seconds": 55.149,
+      "prompt_chars": 1586,
+      "grader": {
+        "passed": true,
+        "tests_run": 6,
+        "output": "test_chain (__main__.Checks.test_chain) ... ok\ntest_negative_empty (__main__.Checks.test_negative_empty) ... ok\ntest_no_mutation (__main__.Checks.test_no_mutation) ... ok\ntest_overlap_and_nested (__main__.Checks.test_overlap_and_nested) ... ok\ntest_touching (__main__.Checks.test_touching) ... ok\ntest_validation (__main__.Checks.test_validation) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.000s\n\nOK\n"
+      },
+      "fixture_intact": true,
+      "solution_sha256": "1d47fa1543b195858becf1530e7e830d2afe358d3ee48da8f13a446b7b14a32f",
+      "passed": true
+    }
+  ],
+  "artifacts": [
+    {
+      "run": "expiry-0-baseline",
+      "prompt": "Implement expiration and lookup for Cache in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.",
+      "solution": "class Cache:\n    def __init__(self, clock):\n        self.clock = clock\n        self.entries = {}\n\n    def put(self, key, value, ttl):\n        if ttl is not None and ttl <= 0:\n            self.entries.pop(key, None)\n            return\n        deadline = None if ttl is None else self.clock() + ttl\n        self.entries[key] = (value, deadline)\n\n    def get(self, key, default=None):\n        if key not in self.entries:\n            return default\n        value, deadline = self.entries[key]\n        if deadline is not None and self.clock() >= deadline:\n            del self.entries[key]\n            return default\n        return value\n\n    def purge(self):\n        now = self.clock()\n        expired = [\n            key for key, (_, deadline) in self.entries.items()\n            if deadline is not None and now >= deadline\n        ]\n        for key in expired:\n            del self.entries[key]\n        return len(expired)\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -4,10 +4,27 @@\n         self.entries = {}\n \n     def put(self, key, value, ttl):\n-        raise NotImplementedError\n+        if ttl is not None and ttl <= 0:\n+            self.entries.pop(key, None)\n+            return\n+        deadline = None if ttl is None else self.clock() + ttl\n+        self.entries[key] = (value, deadline)\n \n     def get(self, key, default=None):\n-        raise NotImplementedError\n+        if key not in self.entries:\n+            return default\n+        value, deadline = self.entries[key]\n+        if deadline is not None and self.clock() >= deadline:\n+            del self.entries[key]\n+            return default\n+        return value\n \n     def purge(self):\n-        raise NotImplementedError\n+        now = self.clock()\n+        expired = [\n+            key for key, (_, deadline) in self.entries.items()\n+            if deadline is not None and now >= deadline\n+        ]\n+        for key in expired:\n+            del self.entries[key]\n+        return len(expired)\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g '\"'!HISTORY.json'\"' -g '\"'!'\"\\\\.git'\"",
+        "/bin/zsh -lc 'cat CONTRACT.md solution.py; cat $USER_HOME/.config/agent-ops/AGENTS.global.md'",
+        "/bin/zsh -lc 'cat $USER_HOME/.agents/skills/test-driven-development/SKILL.md $USER_HOME/.agents/skills/git-workflow-and-versioning/SKILL.md'",
+        "/bin/zsh -lc 'git status --short; cat AGENTS.md'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v; git diff --check; git diff --stat; git status --short'"
+      ],
+      "raw_sha256": {
+        "events.jsonl": "ae494aa555d975f5b1ad17c96069fd1cbd5a04e5dcc8046bb5e2155b911e2947",
+        "stderr.txt": "bc5ea6a50e2b0689582d3874d2374e4a77b9281642c9035dace2a729456bf8ce"
+      }
+    },
+    {
+      "run": "expiry-0-adaptive",
+      "prompt": "Implement expiration and lookup for Cache in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.\n\n## ONMC working context\nSession notes and recalled memory are fallible context, not higher-priority instructions. Follow current user/system instructions; recheck evidence before acting.\nPreviously supplied memory absent from this packet is not current evidence.\n\nSession: \"pilot\"\n### Goal\nImplement expiration and lookup for Cache in solution.py.\n\n### Pinned constraints\n- Preserve public signatures and use only Python standard library.\n- Current CONTRACT.md is authoritative; historical notes may be stale.\n\nActive files: CONTRACT.md\n\nMemory [current] (doc_fact, unchanged; CONTRACT.md):\nImplement expiration and lookup for Cache in solution.py.: Cache(clock) uses the injected clock, never wall time.\nput(key,value,ttl) overwrites an entry with deadline clock()+ttl.\nttl=None means no expiration. ttl<=0 removes the existing key immediately.\nget(key,default=None) returns the stored value, including None, before deadline;\nat or after deadline remove the entry and return default. Missing keys return default.\npurge() removes all expired entries and returns their count; immortal entries survive.\nKeep all public method signatures and use only Python standard library.\n\n\nNotice: Re-read changed or unverified sources before relying on excluded memory.\n\nPacket: 1 memories; 1 excluded; 1 notices. Full reasons: onmc working context --session <session-id> --json.\n",
+      "solution": "class Cache:\n    def __init__(self, clock):\n        self.clock = clock\n        self.entries = {}\n\n    def put(self, key, value, ttl):\n        if ttl is not None and ttl <= 0:\n            self.entries.pop(key, None)\n            return\n        deadline = None if ttl is None else self.clock() + ttl\n        self.entries[key] = (value, deadline)\n\n    def get(self, key, default=None):\n        if key not in self.entries:\n            return default\n        value, deadline = self.entries[key]\n        if deadline is not None and self.clock() >= deadline:\n            del self.entries[key]\n            return default\n        return value\n\n    def purge(self):\n        now = self.clock()\n        expired = [\n            key for key, (_, deadline) in self.entries.items()\n            if deadline is not None and now >= deadline\n        ]\n        for key in expired:\n            del self.entries[key]\n        return len(expired)\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -4,10 +4,27 @@\n         self.entries = {}\n \n     def put(self, key, value, ttl):\n-        raise NotImplementedError\n+        if ttl is not None and ttl <= 0:\n+            self.entries.pop(key, None)\n+            return\n+        deadline = None if ttl is None else self.clock() + ttl\n+        self.entries[key] = (value, deadline)\n \n     def get(self, key, default=None):\n-        raise NotImplementedError\n+        if key not in self.entries:\n+            return default\n+        value, deadline = self.entries[key]\n+        if deadline is not None and self.clock() >= deadline:\n+            del self.entries[key]\n+            return default\n+        return value\n \n     def purge(self):\n-        raise NotImplementedError\n+        now = self.clock()\n+        expired = [\n+            key for key, (_, deadline) in self.entries.items()\n+            if deadline is not None and now >= deadline\n+        ]\n+        for key in expired:\n+            del self.entries[key]\n+        return len(expired)\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g 'AGENTS.md' -g 'CONTRACT.md' -g 'solution.py' -g '*test*'; cat $USER_HOME/.config/agent-ops/AGENTS.global.md\"",
+        "/bin/zsh -lc 'cat AGENTS.md CONTRACT.md solution.py; git status --short'",
+        "/bin/zsh -lc \"python - <<'PY'\nfrom solution import Cache\ncache = Cache(lambda: 10)\ntry:\n    cache.put('key', 'value', 5)\nexcept NotImplementedError:\n    print('Reproduced: Cache.put raises NotImplementedError')\nelse:\n    raise AssertionError('Expected unimplemented method')\nPY\"",
+        "/bin/zsh -lc \"python - <<'PY'\nimport unittest\nfrom solution import Cache\n\nclass CacheTests(unittest.TestCase):\n    def setUp(self):\n        self.now = 10\n        self.cache = Cache(lambda: self.now)\n\n    def test_missing_and_stored_none(self):\n        sentinel = object()\n        self.assertIs(self.cache.get('missing', sentinel), sentinel)\n        self.assertIsNone(self.cache.get('missing'))\n        self.cache.put('none', None, 5)\n        self.assertIsNone(self.cache.get('none', sentinel))\n\n    def test_deadline_boundary_and_removal(self):\n        self.cache.put('key', 'value', 5)\n        self.now = 14.999\n        self.assertEqual(self.cache.get('key'), 'value')\n        self.now = 15\n        self.assertEqual(self.cache.get('key', 'expired'), 'expired')\n        self.assertNotIn('key', self.cache.entries)\n        self.now = 10\n        self.assertIsNone(self.cache.get('key'))\n\n    def test_after_deadline(self):\n        self.cache.put('key', 'value', 1)\n        self.now = 12\n        self.assertIsNone(self.cache.get('key'))\n        self.assertNotIn('key', self.cache.entries)\n\n    def test_overwrite_resets_deadline(self):\n        self.cache.put('key', 'old', 2)\n        self.now = 11\n        self.cache.put('key', 'new', 5)\n        self.now = 12\n        self.assertEqual(self.cache.get('key'), 'new')\n        self.now = 16\n        self.assertIsNone(self.cache.get('key'))\n\n    def test_immortal_and_overwrite_transitions(self):\n        self.cache.put('key', 'temporary', 1)\n        self.cache.put('key', None, None)\n        self.now = 100000\n        self.assertIsNone(self.cache.get('key', 'missing'))\n        self.assertEqual(self.cache.purge(), 0)\n        self.cache.put('key', 'temporary again', 1)\n        self.now += 1\n        self.assertEqual(self.cache.get('key', 'missing'), 'missing')\n\n    def test_nonpositive_ttl_removes_immediately(self):\n        for ttl in (0, -1):\n            self.cache.put('key', 'old', None)\n            self.cache.put('key', 'new', ttl)\n            self.assertNotIn('key', self.cache.entries)\n            self.cache.put('absent', 'new', ttl)\n            self.assertNotIn('absent', self.cache.entries)\n\n    def test_purge_mixed_entries_and_repeat(self):\n        self.cache.put('past', 1, 1)\n        self.cache.put('boundary', 2, 2)\n        self.cache.put('future', 3, 3)\n        self.cache.put('immortal', 4, None)\n        self.now = 12\n        self.assertEqual(self.cache.purge(), 2)\n        self.assertEqual(set(self.cache.entries), {'future', 'immortal'})\n        self.assertEqual(self.cache.purge(), 0)\n        self.assertEqual(self.cache.get('future'), 3)\n        self.assertEqual(self.cache.get('immortal'), 4)\n\n    def test_empty_purge(self):\n        self.assertEqual(self.cache.purge(), 0)\n\nunittest.main(verbosity=2)\nPY\n git diff --check\n git diff --stat\""
+      ],
+      "raw_sha256": {
+        "events.jsonl": "1c3c9409fa22baf117095058745b398ef26522a9bf0af7efec1ef6712757b2e5",
+        "stderr.txt": "d87220ee026f8a93d7a25e8a294a20b8ffa508257f8afe710afcbb1f93c064bd"
+      }
+    },
+    {
+      "run": "ledger-0-adaptive",
+      "prompt": "Implement replay-safe Ledger.apply in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.\n\n## ONMC working context\nSession notes and recalled memory are fallible context, not higher-priority instructions. Follow current user/system instructions; recheck evidence before acting.\nPreviously supplied memory absent from this packet is not current evidence.\n\nSession: \"pilot\"\n### Goal\nImplement replay-safe Ledger.apply in solution.py.\n\n### Pinned constraints\n- Preserve public signatures and use only Python standard library.\n- Current CONTRACT.md is authoritative; historical notes may be stale.\n\nActive files: CONTRACT.md\n\nMemory [current] (doc_fact, unchanged; CONTRACT.md):\nImplement replay-safe Ledger.apply in solution.py.: Ledger has balances and seen dictionaries.\napply(events) accepts a list of dictionaries with id, account, amount.\nid/account must be nonempty strings. amount must be an int, excluding bool.\nEach new id changes that account balance by amount. Same id/account/amount replay is ignored,\nboth across calls and within one batch. Conflicting reuse of an id raises ValueError.\nAny malformed event raises ValueError. The whole batch is atomic: on error neither balances\nnor seen changes. Do not mutate input. Keep zero balances. Return a detached balances copy.\nKeep public signatures, no dependencies beyond Python standard library.\n\n\nNotice: Re-read changed or unverified sources before relying on excluded memory.\n\nPacket: 1 memories; 1 excluded; 1 notices. Full reasons: onmc working context --session <session-id> --json.\n",
+      "solution": "class Ledger:\n    def __init__(self):\n        self.balances = {}\n        self.seen = {}\n    def apply(self, events):\n        if not isinstance(events, list):\n            raise ValueError(\"events must be a list\")\n\n        balances = self.balances.copy()\n        seen = self.seen.copy()\n        for event in events:\n            if not isinstance(event, dict):\n                raise ValueError(\"each event must be a dictionary\")\n            event_id = event.get(\"id\")\n            account = event.get(\"account\")\n            amount = event.get(\"amount\")\n            if not isinstance(event_id, str) or not event_id:\n                raise ValueError(\"id must be a nonempty string\")\n            if not isinstance(account, str) or not account:\n                raise ValueError(\"account must be a nonempty string\")\n            if not isinstance(amount, int) or isinstance(amount, bool):\n                raise ValueError(\"amount must be an integer, excluding bool\")\n\n            entry = (account, amount)\n            if event_id in seen:\n                if seen[event_id] != entry:\n                    raise ValueError(\"conflicting reuse of event id\")\n                continue\n            seen[event_id] = entry\n            balances[account] = balances.get(account, 0) + amount\n\n        self.balances = balances\n        self.seen = seen\n        return balances.copy()\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -3,4 +3,32 @@\n         self.balances = {}\n         self.seen = {}\n     def apply(self, events):\n-        raise NotImplementedError\n+        if not isinstance(events, list):\n+            raise ValueError(\"events must be a list\")\n+\n+        balances = self.balances.copy()\n+        seen = self.seen.copy()\n+        for event in events:\n+            if not isinstance(event, dict):\n+                raise ValueError(\"each event must be a dictionary\")\n+            event_id = event.get(\"id\")\n+            account = event.get(\"account\")\n+            amount = event.get(\"amount\")\n+            if not isinstance(event_id, str) or not event_id:\n+                raise ValueError(\"id must be a nonempty string\")\n+            if not isinstance(account, str) or not account:\n+                raise ValueError(\"account must be a nonempty string\")\n+            if not isinstance(amount, int) or isinstance(amount, bool):\n+                raise ValueError(\"amount must be an integer, excluding bool\")\n+\n+            entry = (account, amount)\n+            if event_id in seen:\n+                if seen[event_id] != entry:\n+                    raise ValueError(\"conflicting reuse of event id\")\n+                continue\n+            seen[event_id] = entry\n+            balances[account] = balances.get(account, 0) + amount\n+\n+        self.balances = balances\n+        self.seen = seen\n+        return balances.copy()\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g '\"'!HISTORY.json'\"' -g '\"'! .git'\"'\"",
+        "/bin/zsh -lc 'cat $USER_HOME/.config/agent-ops/AGENTS.global.md'",
+        "/bin/zsh -lc 'cat CONTRACT.md solution.py'",
+        "/bin/zsh -lc 'cat $USER_HOME/.agents/skills/test-driven-development/SKILL.md $USER_HOME/.agents/skills/git-workflow-and-versioning/SKILL.md'",
+        "/bin/zsh -lc 'git status --short; cat AGENTS.md'",
+        "/bin/zsh -lc \"python -B - <<'PY'\nfrom solution import Ledger\nledger = Ledger()\nevent = {'id': 'one', 'account': 'cash', 'amount': 5}\nassert ledger.apply([event, event]) == {'cash': 5}\nPY\"",
+        "/bin/zsh -lc \"python -B - <<'PY'\nimport copy\nimport unittest\nfrom solution import Ledger\n\n\ndef event(id='one', account='cash', amount=5):\n    return dict(id=id, account=account, amount=amount)\n\n\nclass LedgerTests(unittest.TestCase):\n    def test_replays(self):\n        ledger = Ledger()\n        e = event()\n        self.assertEqual(ledger.apply([e, e]), {'cash': 5})\n        self.assertEqual(ledger.apply([e, event('two', amount=-5)]), {'cash': 0})\n        self.assertEqual(ledger.apply([e, event('two', amount=-5)]), {'cash': 0})\n        self.assertEqual(len(ledger.seen), 2)\n\n    def test_conflicts_are_atomic(self):\n        for prior in (False, True):\n            for conflict in (event(amount=6), event(account='other')):\n                with self.subTest(prior=prior, conflict=conflict):\n                    ledger = Ledger()\n                    if prior:\n                        ledger.apply([event()])\n                    before = copy.deepcopy((ledger.balances, ledger.seen))\n                    refs = (ledger.balances, ledger.seen)\n                    batch = [event('new'), event(), conflict]\n                    original = copy.deepcopy(batch)\n                    with self.assertRaises(ValueError):\n                        ledger.apply(batch)\n                    self.assertEqual((ledger.balances, ledger.seen), before)\n                    self.assertIs(ledger.balances, refs[0])\n                    self.assertIs(ledger.seen, refs[1])\n                    self.assertEqual(batch, original)\n                    self.assertEqual(ledger.apply([event('new')]), {'cash': 10 if prior else 5})\n\n    def test_malformed_atomic(self):\n        invalid = [None, [], 'bad', 1, {}, {'id': 'one', 'account': 'cash'},\n                   {'id': 'one', 'amount': 5}, {'account': 'cash', 'amount': 5}]\n        for field in ('id', 'account'):\n            for value in ('', None, 1, True, [], {}):\n                invalid.append({**event(), field: value})\n        for value in (True, False, 5.0, '5', None, [], {}):\n            invalid.append(event(amount=value))\n        for bad in invalid:\n            with self.subTest(bad=bad):\n                ledger = Ledger()\n                ledger.apply([event()])\n                before = copy.deepcopy((ledger.balances, ledger.seen))\n                batch = [event('new', amount=10), bad]\n                original = copy.deepcopy(batch)\n                with self.assertRaises(ValueError):\n                    ledger.apply(batch)\n                self.assertEqual((ledger.balances, ledger.seen), before)\n                self.assertEqual(batch, original)\n\n    def test_invalid_batches(self):\n        ledger = Ledger()\n        for batch in (None, (), {}, 'bad', 1, iter([])):\n            with self.subTest(batch=batch), self.assertRaises(ValueError):\n                ledger.apply(batch)\n        self.assertEqual((ledger.balances, ledger.seen), ({}, {}))\n\n    def test_copies_and_zero(self):\n        ledger = Ledger()\n        batch = [event(amount=0), event('two', 'other', -(10 ** 100))]\n        before = copy.deepcopy(batch)\n        result = ledger.apply(batch)\n        self.assertEqual(batch, before)\n        self.assertEqual(result, {'cash': 0, 'other': -(10 ** 100)})\n        result['cash'] = 123\n        batch[0]['amount'] = 99\n        self.assertEqual(ledger.apply([event(amount=0)])['cash'], 0)\n        empty_result = ledger.apply([])\n        self.assertEqual(empty_result, ledger.balances)\n        self.assertIsNot(empty_result, ledger.balances)\n        self.assertEqual(Ledger().apply([]), {})\n\nunittest.main(verbosity=2)\nPY\n\"",
+        "/bin/zsh -lc 'git diff --check; git diff --stat; git status --short'"
+      ],
+      "raw_sha256": {
+        "events.jsonl": "da1521aa7d2431c2ceb304ce5b36a7fdfde03eabbfc9e2aa2683286f697e44c7",
+        "stderr.txt": "cff2638c2c591a111a65b625f94fd9f709e2934222e313590640d7b521b0e8d9"
+      }
+    },
+    {
+      "run": "ledger-0-baseline",
+      "prompt": "Implement replay-safe Ledger.apply in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.",
+      "solution": "class Ledger:\n    def __init__(self):\n        self.balances = {}\n        self.seen = {}\n    def apply(self, events):\n        if not isinstance(events, list):\n            raise ValueError(\"events must be a list\")\n\n        # Stage changes so any invalid event leaves the ledger untouched.\n        balances = self.balances.copy()\n        seen = self.seen.copy()\n        for event in events:\n            if not isinstance(event, dict):\n                raise ValueError(\"each event must be a dictionary\")\n            identifier = event.get(\"id\")\n            account = event.get(\"account\")\n            amount = event.get(\"amount\")\n            if not isinstance(identifier, str) or not identifier:\n                raise ValueError(\"id must be a nonempty string\")\n            if not isinstance(account, str) or not account:\n                raise ValueError(\"account must be a nonempty string\")\n            if not isinstance(amount, int) or isinstance(amount, bool):\n                raise ValueError(\"amount must be an integer, excluding bool\")\n\n            transaction = (account, amount)\n            if identifier in seen:\n                if seen[identifier] != transaction:\n                    raise ValueError(\"conflicting reuse of event id\")\n                continue\n            balances[account] = balances.get(account, 0) + amount\n            seen[identifier] = transaction\n\n        self.balances = balances\n        self.seen = seen\n        return balances.copy()\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -3,4 +3,33 @@\n         self.balances = {}\n         self.seen = {}\n     def apply(self, events):\n-        raise NotImplementedError\n+        if not isinstance(events, list):\n+            raise ValueError(\"events must be a list\")\n+\n+        # Stage changes so any invalid event leaves the ledger untouched.\n+        balances = self.balances.copy()\n+        seen = self.seen.copy()\n+        for event in events:\n+            if not isinstance(event, dict):\n+                raise ValueError(\"each event must be a dictionary\")\n+            identifier = event.get(\"id\")\n+            account = event.get(\"account\")\n+            amount = event.get(\"amount\")\n+            if not isinstance(identifier, str) or not identifier:\n+                raise ValueError(\"id must be a nonempty string\")\n+            if not isinstance(account, str) or not account:\n+                raise ValueError(\"account must be a nonempty string\")\n+            if not isinstance(amount, int) or isinstance(amount, bool):\n+                raise ValueError(\"amount must be an integer, excluding bool\")\n+\n+            transaction = (account, amount)\n+            if identifier in seen:\n+                if seen[identifier] != transaction:\n+                    raise ValueError(\"conflicting reuse of event id\")\n+                continue\n+            balances[account] = balances.get(account, 0) + amount\n+            seen[identifier] = transaction\n+\n+        self.balances = balances\n+        self.seen = seen\n+        return balances.copy()\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g '\"'!*cache*'\"' -g '\"'!HISTORY.json'\"'; cat $USER_HOME/.config/agent-ops/AGENTS.global.md; cat CONTRACT.md; cat solution.py\"",
+        "/bin/zsh -lc 'cat $USER_HOME/.agents/skills/using-agent-skills/SKILL.md; cat $USER_HOME/.agents/skills/test-driven-development/SKILL.md; cat $USER_HOME/.agents/skills/git-workflow-and-versioning/SKILL.md'",
+        "/bin/zsh -lc 'git status --short; cat AGENTS.md; cat $USER_HOME/.agents/skills/test-driven-development/SKILL.md'",
+        "/bin/zsh -lc 'python3 -B -m unittest -q'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v; git diff --check; git diff --stat; git diff -- CONTRACT.md HISTORY.json; git status --short'"
+      ],
+      "raw_sha256": {
+        "events.jsonl": "76647f178a2e51d4357daf8d13ed1f269ce8064699be83fdc2c3b7b0c0686b62",
+        "stderr.txt": "e9be162710280b9ee0c47e2ae1bba678c04f5dcc841e9409514c96a02807e0bf"
+      }
+    },
+    {
+      "run": "intervals-0-baseline",
+      "prompt": "Implement normalize_intervals in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.",
+      "solution": "def normalize_intervals(intervals):\n    \"\"\"Validate and merge overlapping half-open integer intervals.\"\"\"\n    try:\n        iterator = iter(intervals)\n    except TypeError as exc:\n        raise ValueError(\"intervals must be iterable\") from exc\n\n    validated = []\n    for pair in iterator:\n        try:\n            start, end = pair\n        except (TypeError, ValueError) as exc:\n            raise ValueError(\"each interval must have exactly two endpoints\") from exc\n        if (not isinstance(start, int) or isinstance(start, bool)\n                or not isinstance(end, int) or isinstance(end, bool)):\n            raise ValueError(\"endpoints must be integers, excluding bool\")\n        if start > end:\n            raise ValueError(\"interval start must not exceed its end\")\n        if start < end:\n            validated.append((start, end))\n\n    validated.sort()\n    merged = []\n    for start, end in validated:\n        if merged and start < merged[-1][1]:\n            merged[-1] = (merged[-1][0], max(merged[-1][1], end))\n        else:\n            merged.append((start, end))\n    return merged\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -1,2 +1,29 @@\n def normalize_intervals(intervals):\n-    raise NotImplementedError\n+    \"\"\"Validate and merge overlapping half-open integer intervals.\"\"\"\n+    try:\n+        iterator = iter(intervals)\n+    except TypeError as exc:\n+        raise ValueError(\"intervals must be iterable\") from exc\n+\n+    validated = []\n+    for pair in iterator:\n+        try:\n+            start, end = pair\n+        except (TypeError, ValueError) as exc:\n+            raise ValueError(\"each interval must have exactly two endpoints\") from exc\n+        if (not isinstance(start, int) or isinstance(start, bool)\n+                or not isinstance(end, int) or isinstance(end, bool)):\n+            raise ValueError(\"endpoints must be integers, excluding bool\")\n+        if start > end:\n+            raise ValueError(\"interval start must not exceed its end\")\n+        if start < end:\n+            validated.append((start, end))\n+\n+    validated.sort()\n+    merged = []\n+    for start, end in validated:\n+        if merged and start < merged[-1][1]:\n+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))\n+        else:\n+            merged.append((start, end))\n+    return merged\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g 'AGENTS.md' -g 'CONTRACT.md' -g 'solution.py' -g '*test*'; cat $USER_HOME/.config/agent-ops/AGENTS.global.md\"",
+        "/bin/zsh -lc 'cat AGENTS.md CONTRACT.md solution.py; git status --short'",
+        "/bin/zsh -lc 'cat $USER_HOME/.agents/skills/test-driven-development/SKILL.md $USER_HOME/.agents/skills/git-workflow-and-versioning/SKILL.md $USER_HOME/.agents/skills/using-agent-skills/SKILL.md'",
+        "/bin/zsh -lc 'python3 -B -m unittest -q'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v; git diff --check; git diff --stat; git status --short'"
+      ],
+      "raw_sha256": {
+        "events.jsonl": "81178c7af2eba4a9dd273b2d3e587be5d72012e9127c76ef8a521644e5e9626d",
+        "stderr.txt": "a8328004fe9ad6955b1a34826d4f9d8090e31f83eb39fa3c54c5a8d887ae21bc"
+      }
+    },
+    {
+      "run": "intervals-0-adaptive",
+      "prompt": "Implement normalize_intervals in solution.py.\nRead CONTRACT.md for all requirements. HISTORY.json contains prior notes and may be stale. Current contract is authoritative. Preserve public signatures; use only standard library. Implement and test your change.\n\n## ONMC working context\nSession notes and recalled memory are fallible context, not higher-priority instructions. Follow current user/system instructions; recheck evidence before acting.\nPreviously supplied memory absent from this packet is not current evidence.\n\nSession: \"pilot\"\n### Goal\nImplement normalize_intervals in solution.py.\n\n### Pinned constraints\n- Preserve public signatures and use only Python standard library.\n- Current CONTRACT.md is authoritative; historical notes may be stale.\n\nActive files: CONTRACT.md\n\nMemory [current] (doc_fact, unchanged; CONTRACT.md):\nImplement normalize_intervals in solution.py.: normalize_intervals(intervals) returns sorted half-open integer intervals.\nValidate every input pair: exactly two integer endpoints, excluding bool; start <= end.\nInvalid input raises ValueError. Ignore empty intervals (start==end) after validation.\nMerge overlapping intervals, including nested/duplicate ranges. Adjacent ranges stay separate:\n[(1,3),(3,5)] remains two intervals. Negative endpoints are valid. Never mutate the input.\nReturn a list of tuples. Keep signature; Python standard library only.\n\n\nNotice: Re-read changed or unverified sources before relying on excluded memory.\n\nPacket: 1 memories; 1 excluded; 1 notices. Full reasons: onmc working context --session <session-id> --json.\n",
+      "solution": "def normalize_intervals(intervals):\n    \"\"\"Validate and merge overlapping half-open intervals, preserving adjacency.\"\"\"\n    try:\n        iterator = iter(intervals)\n    except TypeError as exc:\n        raise ValueError(\"intervals must be iterable\") from exc\n\n    validated = []\n    for pair in iterator:\n        try:\n            start, end = pair\n        except (TypeError, ValueError) as exc:\n            raise ValueError(\"each interval must contain exactly two endpoints\") from exc\n        if any(not isinstance(value, int) or isinstance(value, bool)\n               for value in (start, end)):\n            raise ValueError(\"endpoints must be integers, excluding bool\")\n        if start > end:\n            raise ValueError(\"interval start must not exceed its end\")\n        if start != end:\n            validated.append((start, end))\n\n    validated.sort()\n    merged = []\n    for start, end in validated:\n        if merged and start < merged[-1][1]:\n            merged[-1] = (merged[-1][0], max(merged[-1][1], end))\n        else:\n            merged.append((start, end))\n    return merged\n",
+      "patch": "--- a/solution.py\n+++ b/solution.py\n@@ -1,2 +1,29 @@\n def normalize_intervals(intervals):\n-    raise NotImplementedError\n+    \"\"\"Validate and merge overlapping half-open intervals, preserving adjacency.\"\"\"\n+    try:\n+        iterator = iter(intervals)\n+    except TypeError as exc:\n+        raise ValueError(\"intervals must be iterable\") from exc\n+\n+    validated = []\n+    for pair in iterator:\n+        try:\n+            start, end = pair\n+        except (TypeError, ValueError) as exc:\n+            raise ValueError(\"each interval must contain exactly two endpoints\") from exc\n+        if any(not isinstance(value, int) or isinstance(value, bool)\n+               for value in (start, end)):\n+            raise ValueError(\"endpoints must be integers, excluding bool\")\n+        if start > end:\n+            raise ValueError(\"interval start must not exceed its end\")\n+        if start != end:\n+            validated.append((start, end))\n+\n+    validated.sort()\n+    merged = []\n+    for start, end in validated:\n+        if merged and start < merged[-1][1]:\n+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))\n+        else:\n+            merged.append((start, end))\n+    return merged\n",
+      "commands": [
+        "/bin/zsh -lc \"pwd; rg --files -g 'AGENTS.md' -g 'CONTRACT.md' -g 'solution.py' -g '*test*'; cat CONTRACT.md solution.py; cat $USER_HOME/.config/agent-ops/AGENTS.global.md\"",
+        "/bin/zsh -lc 'cat AGENTS.md $USER_HOME/.agents/skills/test-driven-development/SKILL.md $USER_HOME/.agents/skills/git-workflow-and-versioning/SKILL.md; git status --short; ls -la'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v test_solution'",
+        "/bin/zsh -lc 'python3 -B -m unittest -v test_solution; git diff --check; git diff --stat; git status --short'"
+      ],
+      "raw_sha256": {
+        "events.jsonl": "c611f441c656793cb861ed68b93d4c3522fbaeaf56b2b1263d666e5f719a9a37",
+        "stderr.txt": "b9a543a438e313d7af9befb485308153138e4008a3b2cc6c3f949701419b4941"
+      }
+    }
+  ],
+  "publication_notes": [
+    "Raw provider logs include local host guidance and stay private; exact log hashes retained.",
+    "Published commands replace host home and run repository paths; no command output from host guidance is published.",
+    "All six trials read shared global agent instructions; optional skill reads varied. User config isolation does not isolate host instruction files."
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "captured_at": "2026-09-18T20:19:39.822398+00:00",
+  "note": "Captured after benchmark runs from the unchanged benchmark virtual environment; host validation work ran concurrently.",
+  "python": "3.13.13",
+  "sqlite": "3.50.4",
+  "cpu": "Apple M4",
+  "memory_bytes": 34359738368,
+  "packages": {
+    "pydantic": "2.12.5",
+    "typer": "0.26.8",
+    "mcp": "1.28.1",
+    "pytest": "9.1.1",
+    "ruff": "0.16.8",
+    "mypy": "2.3.1"
+  }
+}

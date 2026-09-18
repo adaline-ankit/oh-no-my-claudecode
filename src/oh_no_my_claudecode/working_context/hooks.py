@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,8 +45,9 @@ def working_hook_output(event: str, payload: dict[str, object]) -> tuple[bool, s
     the engine validates their repository boundaries and refreshes source hashes.
     """
     enabled = False
+    engine = None
+    session_id = payload.get("session_id")
     try:
-        session_id = payload.get("session_id")
         if not isinstance(session_id, str) or not session_id.strip():
             return False, ""
         if payload.get("agent_id"):
@@ -77,6 +79,10 @@ def working_hook_output(event: str, payload: dict[str, object]) -> tuple[bool, s
         return True, ""
     except Exception:  # noqa: BLE001 - advisory hooks must never block the session.
         # Once enabled, an error must not fall back to legacy stale recall.
+        if enabled and engine is not None and isinstance(session_id, str):
+            # Preserve corrupt state and still emit the unavailable advisory.
+            with suppress(Exception):
+                engine.invalidate_delivery(session_id)
         return enabled, _UNAVAILABLE if enabled else ""
 
 

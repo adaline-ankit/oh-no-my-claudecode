@@ -71,6 +71,27 @@ def _constraints(values: list[str]) -> list[str]:
     return list(dict.fromkeys(_clean_text(v, limit=2000, label="constraint") for v in values))
 
 
+def _file_references(source_ref: str) -> list[str]:
+    """Separate file references from per-token provenance, without reading files."""
+    if source_ref.startswith("unpromoted:"):
+        return []
+    references: list[str] = []
+    for token in source_ref.split("|"):
+        token = re.sub(r":\d+(?::\d+)?$", "", token.strip())
+        if token in {"manual", "repo_tree", "unknown", ""}:
+            continue
+        if token.startswith(("manual:", "http:", "https:")):
+            continue
+        # Existing opaque IDs such as loop:engine and manual_seed:setup have
+        # no path syntax. Do not let this exception absorb file-shaped refs.
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_-]*:[A-Za-z0-9_:-]+", token):
+            continue
+        references.append(token)
+    if len(references) > _MAX_FILES:
+        raise ValueError("Too many source anchors")
+    return references
+
+
 def _mandatory(session: WorkingSession) -> str:
     lines = [
         _HEADER,
@@ -122,6 +143,13 @@ class WorkingContext:
     def session(self, session_id: str) -> WorkingSession | None:
         raw = self.storage.get_meta(store.session_key(session_id))
         return None if raw is None else WorkingSession.model_validate_json(raw)
+
+    def invalidate_delivery(self, session_id: str) -> None:
+        """Ensure recovery after an unavailable advisory delivers fresh context."""
+        with store.transaction(self.storage.db_path) as conn:
+            session = self._require_session(conn, session_id)
+            session.last_fingerprint = ""
+            store.save_session(conn, session)
 
     def start(
         self,
@@ -260,19 +288,10 @@ class WorkingContext:
         return relative.as_posix()
 
     def _anchor_paths(self, source_ref: str) -> list[str]:
-        if source_ref.startswith(("manual:", "unpromoted:", "http:", "https:")):
-            return []
-        paths: list[str] = []
-        for token in source_ref.split("|"):
-            token = re.sub(r":\d+(?::\d+)?$", "", token.strip())
-            if token in {"manual", "repo_tree", "unknown"} or not token:
-                continue
-            # Match file references, including extensionless instruction files.
-            if Path(token).suffix or token in {"AGENTS", "CLAUDE", "Dockerfile", "Makefile"}:
-                paths.append(self._relative(token))
-        if len(paths) > _MAX_FILES:
-            raise ValueError("Too many source anchors")
-        return list(dict.fromkeys(paths))
+        # Extensionless and deleted files remain anchors. Existence-based
+        # classification would silently turn deleted evidence into unanchored
+        # context; actual availability is checked by _hash_files instead.
+        return list(dict.fromkeys(self._relative(token) for token in _file_references(source_ref)))
 
     def _hash_files(
         self,
@@ -413,25 +432,37 @@ class WorkingContext:
         if session.active_files:
             # FTS does not index source_ref. Retrieve file-anchored entries even
             # when their prose shares no words with a generic current task.
-            clauses: list[str] = []
-            params: list[str] = []
-            for path in session.active_files:
-                for reference in (path, str(self.repo_root / path)):
-                    clauses.extend(
-                        [
-                            "instr('|' || source_ref || '|', ?) > 0",
-                            "instr('|' || source_ref || '|', ?) > 0",
-                        ]
-                    )
-                    params.extend([f"|{reference}|", f"|{reference}:"])
+            active = set(session.active_files)
+
+            def matches_source(source_ref: str) -> int:
+                # Lexical only: no filesystem probes while scanning candidates.
+                # Freshness still checks containment, symlinks, and content.
+                try:
+                    for reference in _file_references(source_ref):
+                        path = Path(reference)
+                        if path.is_absolute():
+                            try:
+                                path = path.relative_to(self.repo_root)
+                            except ValueError:
+                                continue
+                        if path.as_posix() in active:
+                            return 1
+                except ValueError:
+                    return 0
+                return 0
+
+            conn.create_function("onmc_active_source", 1, matches_source, deterministic=True)
+            names = sorted({Path(path).name for path in active})
+            clauses = ["instr(source_ref, ?) > 0" for _ in names]
             query = "".join(
                 [
-                    "SELECT id FROM memories WHERE ",
+                    "SELECT id FROM memories WHERE (",
                     " OR ".join(clauses),
+                    ") AND onmc_active_source(source_ref) = 1",
                     " ORDER BY updated_at DESC, id LIMIT 40",
                 ]
             )
-            for row in conn.execute(query, params):
+            for row in conn.execute(query, names):
                 anchored = self.storage.get_memory(str(row[0]))
                 if anchored is not None:
                     found.setdefault(anchored.id, anchored)

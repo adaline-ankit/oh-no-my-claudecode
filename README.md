@@ -54,6 +54,10 @@ three MCP tools use the same local SQLite state; no model calls are required.
 This feature supplies advisory context, not a correctness guarantee. See the
 [workflow, source-freshness rules, and limitations](docs/working-context.md), or
 run `python scripts/demo-working-context.py` for a reproducible local demonstration.
+The [working-context benchmarks](docs/benchmarks/working-context.md) add a
+reproducible 10,000-memory scale test, delivery ablation, and externally graded
+Codex pilot with matched source access. These are internal experiments, not a
+claim that ONMC improves general coding accuracy.
 
 ## Evidence status — read this before believing anything
 

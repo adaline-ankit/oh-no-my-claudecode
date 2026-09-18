@@ -63,6 +63,7 @@ constraints requires explicit `working start --replace`; MCP cannot replace them
 | Read/edit/write/shell tool boundary | Refresh relevant context and recheck file anchors |
 | Source content changes | Exclude affected memories; label anchored notes for rechecking |
 | Packet unchanged | Emit no repeated context |
+| Context refresh fails, then recovers | Emit an unavailable notice, then deliver a fresh packet |
 | Session resume or compaction | Emit full current goal, constraints, notes, and eligible memory |
 | Explicit memory conflict | Exclude both eligible conflicting entries; report conflict |
 
@@ -79,7 +80,11 @@ automatic binding requires a clean tracked source whose last commit predates
 the memory. File content is compared with Git's stored object, including when
 Git marks a file assume-unchanged. Later packets compare content hashes, so dirty
 edits and timestamp-preserving changes are visible. Every declared file in a
-pipe-separated source reference is checked.
+pipe-separated source reference is checked, including extensionless files and
+dotfiles. Provenance such as `manual:review | ./src/cache.py:12` is parsed per
+reference, so the provenance prefix cannot bypass the file freshness check.
+Active-file retrieval accepts the same whitespace and `./` forms. Directory
+references are excluded as unavailable; directory hashing is not supported.
 
 Dirty/untracked sources require explicit acknowledgement after reviewing the
 memory against the current file:
@@ -143,6 +148,11 @@ same file timestamp, then checks withdrawal, repeat suppression, constraint
 restoration, session isolation, and packet budgets. Output distinguishes checks
 from observed local timing. It performs no model calls and does not measure
 Claude task success or claim a quality/cost improvement over native Claude.
+
+For a reproducible scale/ablation benchmark and paired Codex coding pilot, see
+the [benchmark protocol and results](benchmarks/working-context.md). Component
+checks, context delivery savings, and externally graded coding success are
+reported separately.
 
 Instructions remain advisory. ONMC cannot erase text already in Claude's
 conversation, inspect its hidden context, guarantee instruction adherence, or

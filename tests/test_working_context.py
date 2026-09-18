@@ -373,3 +373,79 @@ def test_active_file_retrieval_does_not_require_prose_overlap(
     packet = engine.context("s", files=["cache.py"])
     assert [item.id for item in packet.selected] == ["ttl"]
     assert packet.selected[0].reason == "active_file"
+
+
+@pytest.mark.parametrize(
+    ("path", "reference"),
+    [
+        ("worker", "worker"),
+        ("bin/worker", "bin/worker"),
+        (".python-version", ".python-version"),
+        ("worker", "manual:review|worker"),
+        ("worker", "https://example.test/guide.md|worker"),
+        ("worker", "worker|https://example.test/guide.md"),
+    ],
+)
+def test_all_file_anchors_are_checked_even_in_mixed_references(
+    engine: WorkingContext, path: str, reference: str
+) -> None:
+    source = engine.repo_root / path
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("INITIAL = 1\n")
+    memory(engine, source_ref=reference)
+    engine.verify_memory("ttl")
+    engine.start("s", "Cache expiration")
+    assert engine.context("s").selected[0].freshness == "acknowledged"
+    source.write_text("INITIAL = 2\n")
+    changed = engine.context("s")
+    assert not changed.selected
+    assert reasons(changed)["ttl"] == "source_changed"
+    source.unlink()
+    missing = engine.context("s")
+    assert not missing.selected
+    assert reasons(missing)["ttl"].startswith("source_unavailable:")
+
+
+@pytest.mark.parametrize(
+    "reference", [" cache.py:12 ", "./cache.py", "README.md | cache.py:12"]
+)
+def test_active_file_lookup_normalizes_reference_tokens(
+    engine: WorkingContext, reference: str
+) -> None:
+    (engine.repo_root / "README.md").write_text("Docs\n")
+    memory(engine, title="Billing replay", summary="One credit per event", source_ref=reference)
+    engine.verify_memory("ttl")
+    engine.start("s", "Inspect implementation")
+    packet = engine.context("s", files=["cache.py"])
+    assert [item.id for item in packet.selected] == ["ttl"]
+    assert packet.selected[0].reason == "active_file"
+
+
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "manual:review|../secret",
+        "https://example.test/guide.md|.git/config",
+        "manual:review|.onmc/memory",
+        "loop:../secret.py",
+    ],
+)
+def test_mixed_unsafe_references_are_excluded_instead_of_unanchored(
+    engine: WorkingContext, reference: str
+) -> None:
+    memory(engine, source_ref=reference)
+    engine.start("s", "Cache expiration")
+    packet = engine.context("s")
+    assert not packet.selected
+    assert reasons(packet)["ttl"].startswith("source_unavailable:")
+
+
+@pytest.mark.parametrize(
+    "reference", ["loop:engine", "manual_seed:setup", "https://example.test/guide.md", "unknown"]
+)
+def test_non_file_provenance_remains_explicitly_unanchored(
+    engine: WorkingContext, reference: str
+) -> None:
+    memory(engine, source_ref=reference)
+    engine.start("s", "Cache expiration")
+    assert engine.context("s").selected[0].freshness == "unanchored"

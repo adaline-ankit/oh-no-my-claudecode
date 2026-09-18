@@ -1,0 +1,152 @@
+{
+  "memory": {
+    "dataset_sha": "eeff58b47d051e58351fa048f778d12cd16d974c3014da62dac586277ae6c42d",
+    "surfaces": [
+      {
+        "surface": "recall",
+        "n_cases": 15,
+        "recall@5": 0.8,
+        "recall@10": 0.8778,
+        "p@5": 0.28,
+        "mrr@10": 0.8889,
+        "ndcg@10": 0.8154,
+        "latency_p50_ms": 3.54,
+        "latency_p95_ms": 4.4,
+        "context_tokens": 9.1
+      },
+      {
+        "surface": "guard",
+        "n_cases": 10,
+        "recall@5": 0.7833,
+        "recall@10": 0.8333,
+        "p@5": 0.26,
+        "mrr@10": 0.95,
+        "ndcg@10": 0.8135,
+        "latency_p50_ms": 1.41,
+        "latency_p95_ms": 1.66,
+        "context_tokens": 9.5
+      },
+      {
+        "surface": "search_memory",
+        "skipped": true,
+        "skip_reason": "no cases for surface 'search_memory' in dataset"
+      },
+      {
+        "surface": "context_engine",
+        "skipped": true,
+        "skip_reason": "no cases for surface 'context_engine' in dataset"
+      }
+    ]
+  },
+  "code": {
+    "dataset_sha": "8e8f6d527b9836b3bf1045c1de6b2e852f85d81612e4cdfebbe72aefefda62bc",
+    "surfaces": [
+      {
+        "surface": "code-bm25",
+        "n_cases": 40,
+        "recall@5": 0.95,
+        "recall@10": 1.0,
+        "p@5": 0.19,
+        "mrr@10": 0.8101,
+        "ndcg@10": 0.8574,
+        "latency_p50_ms": 0.18,
+        "latency_p95_ms": 0.35,
+        "context_tokens": 3299.3
+      },
+      {
+        "surface": "code-hybrid",
+        "n_cases": 40,
+        "recall@5": 0.875,
+        "recall@10": 0.95,
+        "p@5": 0.175,
+        "mrr@10": 0.7637,
+        "ndcg@10": 0.8082,
+        "latency_p50_ms": 4.99,
+        "latency_p95_ms": 7.9,
+        "context_tokens": 2887.3
+      },
+      {
+        "surface": "code-dense",
+        "n_cases": 40,
+        "recall@5": 0.75,
+        "recall@10": 0.825,
+        "p@5": 0.15,
+        "mrr@10": 0.6198,
+        "ndcg@10": 0.6683,
+        "latency_p50_ms": 4.61,
+        "latency_p95_ms": 4.83,
+        "context_tokens": 2807.9,
+        "notes": "dense-only (embedding cosine similarity), embedder=hash-ngram-v1-d512; scored on the frozen 'code-bm25' label set (identical queries + relevant_ids)"
+      },
+      {
+        "surface": "code-graph",
+        "skipped": true,
+        "skip_reason": "no graph retrieval primitive can rank the frozen code corpus from a query. (1) Every graph primitive needs a seed, not a query: codeindex.query.neighbors/callers/callees take a chunk_id or symbol, and codegraph.builder.neighbors takes a file or symbol \u2014 seeding them from BM25 would make 'graph-only' secretly BM25+graph. (2) The one query-taking function, codegraph.builder.context_files, ranks files (18 here) not chunks (149) and scores path/symbol token overlap without consulting a single graph edge \u2014 a lexical ranker, not graph retrieval, and it yields no chunk-level order to score against chunk-id labels. (3) The frozen corpus holds only function/method/class chunks, so it contains no import or call edges to build a graph from; rebuilding from the working tree is non-deterministic and breaks the id join (chunk ids embed the git blob SHA, so they drift on every edit to an in-scope file). Implementing a query-to-node ranker would mean writing a new retriever and reporting invented numbers, so this surface is honestly skipped instead.",
+        "skip_code": "no_graph_query_ranker"
+      }
+    ],
+    "promotion_evidence": [
+      {
+        "schema_version": "1",
+        "baseline": "code-bm25",
+        "candidate": "code-hybrid",
+        "status": "rejected",
+        "offline_metric": "ndcg@10",
+        "offline_baseline": 0.8574,
+        "offline_candidate": 0.8082,
+        "offline_delta": -0.0492,
+        "baseline_context_tokens": 3299.3,
+        "candidate_context_tokens": 2887.3,
+        "context_token_delta": -412.0,
+        "downstream_baseline": null,
+        "downstream_candidate": null,
+        "downstream_delta": null,
+        "candidate_provenance": "",
+        "reasons": [
+          "offline_metric_not_improved"
+        ]
+      },
+      {
+        "schema_version": "1",
+        "baseline": "code-bm25",
+        "candidate": "code-dense",
+        "status": "rejected",
+        "offline_metric": "ndcg@10",
+        "offline_baseline": 0.8574,
+        "offline_candidate": 0.6683,
+        "offline_delta": -0.1891,
+        "baseline_context_tokens": 3299.3,
+        "candidate_context_tokens": 2807.9,
+        "context_token_delta": -491.4,
+        "downstream_baseline": null,
+        "downstream_candidate": null,
+        "downstream_delta": null,
+        "candidate_provenance": "dense-only (embedding cosine similarity), embedder=hash-ngram-v1-d512; scored on the frozen 'code-bm25' label set (identical queries + relevant_ids)",
+        "reasons": [
+          "offline_metric_not_improved"
+        ]
+      },
+      {
+        "schema_version": "1",
+        "baseline": "code-bm25",
+        "candidate": "code-graph",
+        "status": "rejected",
+        "offline_metric": "ndcg@10",
+        "offline_baseline": 0.8574,
+        "offline_candidate": 0.0,
+        "offline_delta": -0.8574,
+        "baseline_context_tokens": 3299.3,
+        "candidate_context_tokens": 0.0,
+        "context_token_delta": -3299.3,
+        "downstream_baseline": null,
+        "downstream_candidate": null,
+        "downstream_delta": null,
+        "candidate_provenance": "",
+        "reasons": [
+          "candidate_skipped",
+          "offline_metric_not_improved"
+        ]
+      }
+    ]
+  }
+}

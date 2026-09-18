@@ -145,6 +145,28 @@ def test_adaptive_failure_withdraws_trust_without_legacy_fallback(
     assert "private-invalid-state" not in output
 
 
+def test_hook_recovery_redelivers_packet_after_unavailable_advisory(
+    working_repo: tuple[Path, OnmcRepo],
+) -> None:
+    root, _ = working_repo
+    _command("enable", "--constraint", "Preserve API compatibility")
+    _command("start", "--session", "alpha", "--task", "Fix cache refresh")
+    payload = {
+        "cwd": str(root),
+        "session_id": "alpha",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "src/worker.py"},
+    }
+    first = _hook("pre-tool-use", payload)
+    assert "Preserve API compatibility" in first
+    unavailable = _hook(
+        "pre-tool-use", {**payload, "tool_input": {"file_path": "../outside.py"}}
+    )
+    assert "Working context unavailable" in unavailable
+    assert _hook("pre-tool-use", payload) == first
+    assert _hook("pre-tool-use", payload) == ""
+
+
 def test_enable_validates_before_install_and_keeps_global_settings_untouched(
     working_repo: tuple[Path, OnmcRepo],
 ) -> None:
