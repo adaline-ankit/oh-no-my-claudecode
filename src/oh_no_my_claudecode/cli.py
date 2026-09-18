@@ -13,7 +13,6 @@ from oh_no_my_claudecode.command_registry import register_feature_commands
 from oh_no_my_claudecode.commands_help.core import PRIMARY_WORKFLOW_COMMANDS
 from oh_no_my_claudecode.core.repo import RepoDiscoveryError, discover_repo_root
 from oh_no_my_claudecode.core.service import OnmcService
-from oh_no_my_claudecode.hooks import session_start_context_json
 from oh_no_my_claudecode.llm.base import LLMConfigurationError, LLMProviderError
 from oh_no_my_claudecode.mcp_server import run_mcp_server
 from oh_no_my_claudecode.models import (
@@ -2221,6 +2220,23 @@ def hooks_pre_compact_command() -> None:
         typer.echo(f"ONMC pre-compact warning: {exc}", err=True)
 
 
+def _working_hook_output(event: str, payload: dict[str, object]) -> tuple[bool, str]:
+    from oh_no_my_claudecode.working_context.hooks import working_hook_output
+
+    return working_hook_output(event, payload)
+
+
+def _emit_hook_context(event: str, *parts: str) -> None:
+    """One hook event emits at most one JSON object, even with several providers."""
+    context = "\n\n".join(part for part in parts if part)
+    if context:
+        sys.stdout.write(
+            json.dumps(
+                {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
+            ) + "\n"
+        )
+
+
 def _run_session_start_hook(payload: dict[str, object] | None = None) -> None:
     """Emit the SessionStart additionalContext JSON.
 
@@ -2235,19 +2251,20 @@ def _run_session_start_hook(payload: dict[str, object] | None = None) -> None:
     *payload* is accepted so the session-start command can pass the already-read
     payload (stdin can only be read once); when ``None``, reads from stdin.
     """
-    try:
-        p = payload if payload is not None else _read_hook_payload()
-        source = p.get("source", "")
-        if isinstance(source, str) and source in {"startup", "resume", "clear"}:
-            digest_md, _ = _service().boot_digest()
-            if digest_md:
-                sys.stdout.write(session_start_context_json(digest_md) + "\n")
-            return
-        # source == "compact" or absent/unknown -- emit continuation brief.
-        _, brief_md = _service().session_start()
-        sys.stdout.write(session_start_context_json(brief_md) + "\n")
-    except Exception as exc:  # noqa: BLE001 - hook commands must never block the session.
-        typer.echo(f"ONMC session-start warning: {exc}", err=True)
+    p = payload if payload is not None else _read_hook_payload()
+    handled, working = _working_hook_output("SessionStart", p)
+    legacy = ""
+    if not handled and _wrap_active_for(p):
+        try:
+            source = p.get("source", "")
+            if isinstance(source, str) and source in {"startup", "resume", "clear"}:
+                legacy, _ = _service().boot_digest()
+            else:
+                # source == "compact" or absent/unknown.
+                _, legacy = _service().session_start()
+        except Exception as exc:  # noqa: BLE001 - hooks never block the session.
+            typer.echo(f"ONMC session-start warning: {exc}", err=True)
+    _emit_hook_context("SessionStart", working, legacy)
 
 
 @hooks_app.command("session-start")
@@ -2271,8 +2288,6 @@ def hooks_session_start_command() -> None:
             set_active(_rr, on=True)
     except Exception:  # noqa: BLE001, S110 - auto-activate failure must never block the session.
         pass
-    if not _wrap_active_for(payload):
-        return
     _run_session_start_hook(payload)
 
 
@@ -2293,8 +2308,7 @@ def hooks_prompt_recall_command() -> None:
     """
     try:
         payload = _read_hook_payload()
-        if not _wrap_active_for(payload):
-            return
+        handled, working = _working_hook_output("UserPromptSubmit", payload)
         raw_prompt = payload.get("prompt", "")
         prompt = raw_prompt if isinstance(raw_prompt, str) else ""
         if not prompt.strip():
@@ -2303,23 +2317,14 @@ def hooks_prompt_recall_command() -> None:
         # exceptions — hooks must never block or crash the host agent session.
         from oh_no_my_claudecode.hooks.prompt_recall import compile_prompt_recall_safe
 
-        try:
-            _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
-        except Exception:  # noqa: BLE001
-            return
-        recall_text, _ = compile_prompt_recall_safe(storage, prompt)
-        if recall_text:
-            sys.stdout.write(
-                json.dumps(
-                    {
-                        "hookSpecificOutput": {
-                            "hookEventName": "UserPromptSubmit",
-                            "additionalContext": recall_text,
-                        }
-                    }
-                )
-                + "\n"
-            )
+        recall_text = ""
+        if not handled and _wrap_active_for(payload):
+            try:
+                _repo_root, _config, storage = _service()._load_context()  # noqa: SLF001
+                recall_text, _ = compile_prompt_recall_safe(storage, prompt)
+            except Exception:  # noqa: BLE001, S110 - never block the session on recall failure.
+                pass
+        _emit_hook_context("UserPromptSubmit", working, recall_text)
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 
@@ -2381,6 +2386,10 @@ def hooks_pre_tool_use_command() -> None:
     """
     try:
         payload = _read_hook_payload()
+        handled, working = _working_hook_output("PreToolUse", payload)
+        if handled:
+            _emit_hook_context("PreToolUse", working)
+            return
         if not _wrap_active_for(payload):
             return
         tool_name = payload.get("tool_name", "")
@@ -2442,9 +2451,10 @@ def hooks_post_tool_use_command() -> None:
         from oh_no_my_claudecode.hooks.post_tool_use import handle_post_tool_use
 
         payload = _read_hook_payload()
-        if not _wrap_active_for(payload):
-            return
-        handle_post_tool_use(payload)
+        _, working = _working_hook_output("PostToolUse", payload)
+        if _wrap_active_for(payload):
+            handle_post_tool_use(payload)
+        _emit_hook_context("PostToolUse", working)
     except Exception:  # noqa: BLE001, S110 - hook commands must never block the session.
         pass
 

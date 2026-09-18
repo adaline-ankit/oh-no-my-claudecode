@@ -21,8 +21,9 @@ POST_TOOL_USE_COMMAND = "onmc hooks post-tool-use"
 SUBAGENT_STOP_COMMAND = "onmc hooks subagent-stop"
 MCP_SERVER_NAME = "onmc"
 
-# Matcher for PreToolUse: fires on file-editing tools only.
-_PRE_TOOL_USE_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
+# Working context also refreshes at read and shell boundaries. Legacy file
+# warnings still run only for editing tools inside the CLI handler.
+_PRE_TOOL_USE_MATCHER = "Read|Bash|Edit|Write|MultiEdit|NotebookEdit"
 # Matcher for the ``onmc wrap`` Task intercept: the native agent-spawning tool.
 _TASK_INTERCEPT_MATCHER = "Task"
 _DECISION_INTERCEPT_MATCHER = "AskUserQuestion"
@@ -141,6 +142,7 @@ def install_claude_hooks(
     backup_path: Path | None = None,
     mcp_path: Path | None = None,
     global_settings_path: Path | None = None,
+    clean_global: bool = True,
 ) -> HookInstallResult:
     """Install project-scoped onmc hooks and (optionally) MCP registration.
 
@@ -155,16 +157,17 @@ def install_claude_hooks(
     - ``UserPromptSubmit`` (matcher ``""``) runs ``onmc hooks prompt-recall``
       on every user prompt, injecting only the memories most relevant to that
       specific prompt.
-    - ``PreToolUse`` (matcher ``"Edit|Write|MultiEdit|NotebookEdit"``) runs
-      ``onmc hooks pre-tool-use`` before every file edit, injecting hotspot /
-      invariant / failed-approach warnings for the target file.
+    - ``PreToolUse`` runs ``onmc hooks pre-tool-use`` before reads, shell
+      commands, and file edits. Enabled working context is refreshed; otherwise
+      edits receive legacy hotspot / invariant / failed-approach warnings.
 
     MCP registration is merged into ``<repo>/.mcp.json`` (Claude Code does not
     read MCP servers from settings.json). A backup of the pre-install settings
     is written next to settings.json only if no backup exists yet, so a
     reinstall never overwrites the pristine backup. Legacy global entries in
     the user-level ``~/.claude/settings.json`` (from earlier onmc versions,
-    including the fabricated ``PostCompact`` event) are removed when found.
+    including the fabricated ``PostCompact`` event) are removed when found,
+    unless ``clean_global=False`` requests changes confined to this project.
     """
     settings_path = settings_path or project_settings_path(repo_root)
     backup_path = backup_path or project_settings_backup_path(repo_root)
@@ -231,8 +234,10 @@ def install_claude_hooks(
     _write_json(settings_path, settings)
     if register_mcp:
         _register_mcp_server(mcp_path)
-    legacy_global_cleaned = _clean_legacy_global_settings(
-        global_settings_path or user_settings_path()
+    legacy_global_cleaned = (
+        _clean_legacy_global_settings(global_settings_path or user_settings_path())
+        if clean_global
+        else False
     )
     return HookInstallResult(
         settings_path=settings_path,

@@ -4,7 +4,25 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
 
+- Opt-in **adaptive working context** (`onmc working`): isolated session goals,
+  pinned constraints, decisions, hypotheses, and next steps in the existing SQLite
+  store, with atomic updates and compaction/resume restoration.
+- Content-hash freshness checks for recalled evidence, including uncommitted
+  source changes, explicit withdrawal notices, promotion/conflict gates, bounded
+  context packets, repeat suppression, and inspectable exclusion reasons.
+- Claude prompt/tool/session hook integration and MCP tools for starting a
+  working session, refreshing context, and recording working notes. Plugin and
+  project hook installations both include the tool events.
+- A reproducible functional demo and setup/limitations guide. This release does
+  not claim improved model accuracy or task success from the demo.
+
+### Fixed
+
+- The standard dev quality gate now handles optional OpenTelemetry protobuf
+  imports without requiring the `observe` extra. Wheel/sdist metadata stays at
+  version 2.4 for compatibility with the declared Twine 6 validation tool.
 
 
 

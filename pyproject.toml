@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25.0"]
+requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -119,7 +119,13 @@ dev = [
 [project.scripts]
 onmc = "oh_no_my_claudecode.cli:main"
 
+# Explicit metadata version keeps new Hatchling releases compatible with the
+# declared Twine 6 quality gate, which does not accept metadata 2.5.
+[tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
+
 [tool.hatch.build.targets.wheel]
+core-metadata-version = "2.4"
 packages = ["src/oh_no_my_claudecode", "src/onmc"]
 
 [tool.hatch.build.targets.wheel.force-include]
@@ -156,6 +162,12 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["yaml", "sqlite_vec"]
+ignore_missing_imports = true
+
+# Optional OTLP protobuf encoding is guarded at runtime and is not installed
+# by the dev extra. Keep the core quality gate valid without the observe extra.
+[[tool.mypy.overrides]]
+module = ["opentelemetry", "opentelemetry.proto", "opentelemetry.proto.*"]
 ignore_missing_imports = true
 
 # Optional unified LLM backend — absent by default and ships no type stubs.

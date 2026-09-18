@@ -30,8 +30,30 @@ What it actually does on every run:
 - **Measures itself.** Experiment kernel with paired deltas and bootstrap
   confidence intervals, plus Harbor integration for agent-neutral trials.
 
-One command is the product: `onmc run`. Local-first, cross-agent, no hosted
-account.
+The verified runtime starts with `onmc run`. Local-first, cross-agent, no hosted
+account. For day-to-day Claude sessions, opt into adaptive working context below.
+
+## Adaptive working context
+
+**Keep the task intact while the code changes.** ONMC preserves each session's
+goal and explicit constraints, carries decisions and next steps across compaction,
+and withdraws recalled evidence when its source files change—even before commit.
+
+```bash
+# In an initialized project; then start or resume Claude Code.
+onmc working enable \
+  --constraint "Preserve public APIs" \
+  --constraint "Add no new runtime dependencies"
+```
+
+Context refreshes around prompts and tool calls. Unchanged packets stay quiet.
+Every packet has a character budget and inspectable inclusion/exclusion reasons.
+Working notes stay separate from promoted repository memory. Claude hooks and
+three MCP tools use the same local SQLite state; no model calls are required.
+
+This feature supplies advisory context, not a correctness guarantee. See the
+[workflow, source-freshness rules, and limitations](docs/working-context.md), or
+run `python scripts/demo-working-context.py` for a reproducible local demonstration.
 
 ## Evidence status — read this before believing anything
 

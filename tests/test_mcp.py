@@ -19,6 +19,9 @@ from oh_no_my_claudecode.mcp_server.server import STARTUP_SNIPPET, build_mcp_ser
 from oh_no_my_claudecode.mcp_server.tools import call_onmc_tool, list_onmc_tools
 
 EXPECTED_TOOL_NAMES = {
+    "start_working_context",
+    "get_working_context",
+    "record_working_note",
     "search_memory",
     "get_brief",
     "record_attempt",

@@ -34,6 +34,8 @@ Usage: onmc [OPTIONS] COMMAND [ARGS]...
 │ mission         View the canonical runtime as a mission plan.                │
 │ missioncontrol  Read-only progress and proof view over the canonical         │
 │                 runtime.                                                     │
+│ working         Keep task constraints and fresh context across Claude tool   │
+│                 steps.                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
  Default workflow:  onmc setup  →  onmc run "your task"  →  onmc missioncontrol
@@ -8904,6 +8906,143 @@ Usage: onmc wiki site [OPTIONS]
 │                     .onmc/site/ (gitignored).                                │
 │ --json              Print a JSON envelope listing written paths.             │
 │ --help              Show this message and exit.                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working`
+
+```text
+Usage: onmc working [OPTIONS] COMMAND [ARGS]...
+
+ Keep task constraints and fresh context across Claude tool steps.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────╮
+│ enable         Enable working context and install project hooks and ONMC MCP │
+│                registration.                                                 │
+│ disable        Stop adaptive context injection without removing other ONMC   │
+│                hooks.                                                        │
+│ start          Start a named task; replacing its goal or constraints         │
+│                requires --replace.                                           │
+│ context        Show a fresh working packet with evidence and exclusions.     │
+│ note           Record a decision, hypothesis, or next_step; file anchors     │
+│                track freshness.                                              │
+│ status         Inspect enablement, constraints, and a session without        │
+│                creating it.                                                  │
+│ verify-memory  Acknowledge current file anchors; does not approve or promote │
+│                memory content.                                               │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working context`
+
+```text
+Usage: onmc working context [OPTIONS]
+
+ Show a fresh working packet with evidence and exclusions.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --session        TEXT  [default: default]                                    │
+│ --focus          TEXT                                                        │
+│ --file           TEXT                                                        │
+│ --json                                                                       │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working disable`
+
+```text
+Usage: onmc working disable [OPTIONS]
+
+ Stop adaptive context injection without removing other ONMC hooks.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                                                       │
+│ --help          Show this message and exit.                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working enable`
+
+```text
+Usage: onmc working enable [OPTIONS]
+
+ Enable working context and install project hooks and ONMC MCP registration.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --budget-chars        INTEGER RANGE               [default: 6000]            │
+│                       [1000<=x<=32000]                                       │
+│ --constraint          TEXT                                                   │
+│ --json                                                                       │
+│ --help                                            Show this message and      │
+│                                                   exit.                      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working note`
+
+```text
+Usage: onmc working note [OPTIONS]
+
+ Record a decision, hypothesis, or next_step; file anchors track freshness.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --kind           TEXT  [required]                                         │
+│ *  --text           TEXT  [required]                                         │
+│    --session        TEXT  [default: default]                                 │
+│    --file           TEXT                                                     │
+│    --json                                                                    │
+│    --help                 Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working start`
+
+```text
+Usage: onmc working start [OPTIONS]
+
+ Start a named task; replacing its goal or constraints requires --replace.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ *  --task              TEXT  [required]                                      │
+│    --session           TEXT  [default: default]                              │
+│    --constraint        TEXT                                                  │
+│    --replace                                                                 │
+│    --json                                                                    │
+│    --help                    Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working status`
+
+```text
+Usage: onmc working status [OPTIONS]
+
+ Inspect enablement, constraints, and a session without creating it.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --session        TEXT  [default: default]                                    │
+│ --json                                                                       │
+│ --help                 Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## `onmc working verify-memory`
+
+```text
+Usage: onmc working verify-memory [OPTIONS] MEMORY_ID
+
+ Acknowledge current file anchors; does not approve or promote memory content.
+
+╭─ Arguments ──────────────────────────────────────────────────────────────────╮
+│ *    memory_id      TEXT  [required]                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json                                                                       │
+│ --help          Show this message and exit.                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 

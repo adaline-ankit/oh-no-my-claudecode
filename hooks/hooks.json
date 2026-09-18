@@ -30,6 +30,27 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Bash|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "onmc hooks pre-tool-use"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "onmc hooks post-tool-use"
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "hooks": [

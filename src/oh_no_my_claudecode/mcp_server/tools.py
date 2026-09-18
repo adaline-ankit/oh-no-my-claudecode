@@ -35,6 +35,7 @@ _DEFAULT_SEARCH_LIMIT = 10
 def list_onmc_tools() -> list[Tool]:
     """List the ONMC MCP tools with their JSON-schema inputs."""
     return [
+        *_working_context_tools(),
         Tool(
             name="recall",
             title="Recall past incidents matching an error",
@@ -411,10 +412,109 @@ def call_onmc_tool(
         text = _get_profile(repo, args)
     elif name == "ask":
         text = _ask(repo, args)
+    elif name in {"start_working_context", "get_working_context", "record_working_note"}:
+        text = _working_context_tool(repo, name, args)
     else:
         msg = f"Unknown ONMC tool: {name}"
         raise ValueError(msg)
     return [TextContent(type="text", text=text)]
+
+
+def _working_context_tools() -> list[Tool]:
+    session = {
+        "type": "string",
+        "description": "The session_id printed in your adaptive working-context packet.",
+    }
+    files = {"type": "array", "items": {"type": "string"}, "maxItems": 16}
+    definitions: list[tuple[str, str, dict[str, object], list[str]]] = [
+        (
+            "start_working_context",
+            "Start advisory working context for an explicit session and user goal. "
+            "Requires `onmc working enable`; cannot replace an existing goal or constraints.",
+            {"session_id": session, "goal": {"type": "string"}},
+            ["session_id", "goal"],
+        ),
+        (
+            "get_working_context",
+            "Read the task goal, constraints, decisions, relevant memories, and stale-evidence "
+            "warnings before changing code. Does not certify correctness or enforce permissions.",
+            {"session_id": session, "focus": {"type": "string"}, "files": files},
+            ["session_id"],
+        ),
+        (
+            "record_working_note",
+            "Record an advisory decision, hypothesis, or next step for the current task. "
+            "Optional files bind it to current source content. Does not change user constraints "
+            "or promote a durable memory; hypotheses remain unverified.",
+            {
+                "session_id": session,
+                "kind": {"type": "string", "enum": ["decision", "hypothesis", "next_step"]},
+                "text": {"type": "string"},
+                "files": files,
+            },
+            ["session_id", "kind", "text"],
+        ),
+    ]
+    return [
+        Tool(
+            name=name,
+            description=description,
+            inputSchema={
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        )
+        for name, description, properties, required in definitions
+    ]
+
+
+def _working_context_tool(repo: OnmcRepo, name: str, args: dict[str, Any]) -> str:
+    from typing import cast
+
+    from oh_no_my_claudecode.working_context.engine import WorkingContext
+    from oh_no_my_claudecode.working_context.models import NoteKind
+
+    root, _, storage = repo._service._load_context()  # noqa: SLF001
+    engine = WorkingContext(root, storage)
+    if not engine.config().enabled:
+        raise ValueError("Working context is disabled. Enable it with `onmc working enable`.")
+    session_id = _require_str(args, "session_id")
+    if name == "start_working_context":
+        result = engine.start(session_id, _require_str(args, "goal"))
+        return _json_text(
+            {
+                "session_id": result.session_id,
+                "goal": result.goal,
+                "constraints": result.constraints,
+                "revision": result.revision,
+            }
+        )
+    files = _optional_str_list(args, "files") or None
+    if name == "record_working_note":
+        kind = _require_str(args, "kind")
+        if kind not in {"decision", "hypothesis", "next_step"}:
+            raise ValueError("kind must be decision, hypothesis, or next_step")
+        result = engine.note(
+            session_id, cast(NoteKind, kind), _require_str(args, "text"), files=files
+        )
+        return _json_text(
+            {"session_id": result.session_id, "revision": result.revision, "recorded": kind}
+        )
+    packet = engine.context(
+        session_id, focus=_optional_str(args, "focus"), files=files, force=True
+    )
+    return _json_text(
+        {
+            "session_id": packet.session_id,
+            "revision": packet.revision,
+            "context": packet.markdown,
+            "used_chars": packet.used_chars,
+            "budget_chars": packet.budget_chars,
+            "estimated_tokens": packet.estimated_tokens,
+        }
+    )
 
 
 def score_memory(query: str, files: list[str], memory: MemoryEntry) -> float:

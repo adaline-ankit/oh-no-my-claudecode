@@ -43,6 +43,7 @@ PRIMARY_COMMAND_LIMIT = 14
 
 PRIMARY_WORKFLOW_COMMANDS: tuple[str, ...] = (
     "run",
+    "working",
     "setup",
     "brief",
     "guard",
@@ -59,6 +60,7 @@ CORE_COMMANDS: list[str] = list(PRIMARY_WORKFLOW_COMMANDS)
 """Backward-compatible alias for tests and users of the older help tier."""
 
 PRIMARY_COMMAND_ROLES: dict[str, str] = {
+    "working": "adaptive session context, constraints, and evidence freshness",
     "setup": "one-time install and hook setup",
     "run": "canonical verified runtime entry point",
     "mission": "plan and progress view over the runtime contract",
@@ -82,6 +84,7 @@ PRIMARY_COMMAND_ROLES: dict[str, str] = {
 CATEGORY_MAP: dict[str, str] = {
     # ── Core ─────────────────────────────────────────────────────────────
     "run": "Core",
+    "working": "Core",
     "setup": "Core",
     "quickstart": "Core",
     "wrap": "Core",
