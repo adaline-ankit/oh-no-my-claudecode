@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -77,6 +82,35 @@ def test_plug_codex_writes_agents_md(sample_repo: Path) -> None:
     assert "onmc brief" in content
     assert "onmc guard" in content
     assert str(agents_md) in result.files_written
+
+
+def test_plug_codex_mcp_config_launches_console_script(sample_repo: Path) -> None:
+    """The copy-paste TOML supplies an executable and separate MCP arguments."""
+    plug_target("codex", repo_root=sample_repo)
+    content = (sample_repo / "AGENTS.md").read_text(encoding="utf-8")
+    toml_block = content.split("```toml\n", 1)[1].split("```", 1)[0]
+    config = tomllib.loads(toml_block)["mcp_servers"]["onmc"]
+
+    script_path = os.pathsep.join((str(Path(sys.executable).parent), os.environ.get("PATH", "")))
+    executable = shutil.which(config["command"], path=script_path)
+    assert executable is not None, "MCP command must resolve without shell word splitting"
+    assert config["args"] == ["serve", "--mcp"]
+    assert config["enabled"] is True
+
+    env = os.environ.copy()
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    env["PYTHONPATH"] = os.pathsep.join((str(source_root), env.get("PYTHONPATH", "")))
+    result = subprocess.run(
+        [executable, *config["args"], "--help"],
+        cwd=sample_repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "--mcp" in result.stdout
 
 
 def test_plug_codex_is_idempotent(sample_repo: Path) -> None:

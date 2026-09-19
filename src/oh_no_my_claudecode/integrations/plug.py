@@ -260,7 +260,8 @@ _CODEX_STANZA = textwrap.dedent("""\
 
     ```toml
     [mcp_servers.onmc]
-    command = "onmc serve --mcp"
+    command = "onmc"
+    args = ["serve", "--mcp"]
     enabled = true
     ```
 
@@ -270,7 +271,7 @@ _CODEX_STANZA = textwrap.dedent("""\
 
     | Tool | Purpose |
     |---|---|
-    | `search_memory` | Semantic search over repo decisions, invariants, hotspots |
+    | `search_memory` | Ranked search over repo decisions, invariants, hotspots |
     | `guard_task` | Ranked list of recorded dead-ends for a task |
     | `get_brief` | Compile a task-focused brief on demand |
 
@@ -364,7 +365,7 @@ _OPENCODE_STANZA = textwrap.dedent("""\
 
     | Tool | Purpose |
     |---|---|
-    | `search_memory` | Semantic search over repo decisions, invariants, hotspots |
+    | `search_memory` | Ranked search over repo decisions, invariants, hotspots |
     | `guard_task` | Ranked list of recorded dead-ends for a task |
     | `get_brief` | Compile a task-focused brief on demand |
 
@@ -439,7 +440,7 @@ def _plug_opencode(*, repo_root: Path) -> PlugResult:
               Usage: `onmc brief --task "DESCRIBE YOUR TASK" --stdout`
             - **guard**: List recorded dead-ends for a task.
               Usage: `onmc guard --task "DESCRIBE YOUR TASK"`
-            - **search_memory**: Semantic search over repo decisions and hotspots.
+            - **search_memory**: Ranked search over repo decisions and hotspots.
               Usage: `onmc serve --mcp` then call the `search_memory` MCP tool.
         """)
         existing_index = skills_index.read_text(encoding="utf-8") if skills_index.exists() else ""
