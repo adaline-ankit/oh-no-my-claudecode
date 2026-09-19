@@ -23,9 +23,16 @@ onmc serve --mcp
 
 | Tool | What it does |
 |---|---|
-| `search_memory` | Semantic search over the memory store — returns relevant decisions, gotchas, and hotspots |
+| `search_memory` | Ranked search over the memory store — returns relevant decisions, gotchas, and hotspots |
 | `guard_task` | Returns recorded failed approaches for a task so the agent skips known dead-ends |
 | `get_brief` | Compiles a task-specific brief (files + context) on demand |
+| `start_working_context` | Starts an explicit working session with a goal and constraints |
+| `get_working_context` | Refreshes a session packet with source-freshness checks |
+| `record_working_note` | Saves a decision, hypothesis, or next step |
+
+Working-context tools require `onmc working enable`. Use the real Claude session
+ID from its packet when updating a native-hook session; an arbitrary ID creates a
+separate task. See [working context](docs/working-context.md).
 
 ### MCP server configuration for Codex
 
@@ -35,7 +42,8 @@ To give Codex access to onmc MCP tools mid-session, add this to
 ```toml
 # onmc — repo-native memory MCP server
 [mcp_servers.onmc]
-command = "onmc serve --mcp"
+command = "onmc"
+args = ["serve", "--mcp"]
 enabled = true
 ```
 

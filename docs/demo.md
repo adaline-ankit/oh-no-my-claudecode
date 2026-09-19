@@ -1,5 +1,8 @@
 # Two Agents, One Brain
 
+> Historical Git-portable memory demo, captured with v0.7.0. For the current
+> source-freshness demo, see [adaptive working context](working-context.md#reproduce-the-demonstration).
+
 A walkthrough of onmc's cross-agent shared memory — how Agent A records a dead-end
 and Agent B avoids repeating it, just by cloning the same repository.
 

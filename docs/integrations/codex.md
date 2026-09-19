@@ -4,7 +4,7 @@
 
 Codex reads `AGENTS.md` at the start of every session and resolves MCP servers from
 `~/.codex/config.toml` or `.codex/config.toml`. `onmc plug codex` writes a managed
-stanza into `AGENTS.md` so Codex always runs `onmc brief` and `onmc guard` before it
+stanza into `AGENTS.md` instructing Codex to run `onmc brief` and `onmc guard` before it
 starts working.
 
 ## One-command install
@@ -34,8 +34,8 @@ onmc guard --task "$TASK"
 onmc serve --mcp &
 ```
 
-Codex sees these instructions on every run and calls the commands before
-executing the user's task.
+These instructions ask Codex to call the commands before working. As with other
+agent instructions, compliance is not guaranteed.
 
 ---
 
@@ -49,7 +49,8 @@ Add the following to `~/.codex/config.toml` (user-level, all projects) or
 # ~/.codex/config.toml  or  .codex/config.toml
 # onmc — repo-native memory MCP server
 [mcp_servers.onmc]
-command = "onmc serve --mcp"
+command = "onmc"
+args = ["serve", "--mcp"]
 enabled = true
 ```
 
@@ -72,11 +73,23 @@ Codex MCP servers are loaded at startup; restart Codex after editing
 
 | Tool | Purpose |
 |---|---|
-| `search_memory` | Semantic search over repo decisions, invariants, hotspots |
+| `search_memory` | Ranked search over repo decisions, invariants, hotspots |
 | `guard_task` | Ranked list of recorded dead-ends for a task |
 | `get_brief` | Compile a task-focused brief on demand |
 
 ---
+
+## Adaptive working context (main)
+
+Install ONMC from Git `main` for this feature; it is ahead of PyPI `v0.113.0`.
+After `onmc working enable`, MCP clients can use `start_working_context`,
+`get_working_context`, and `record_working_note` with an explicit session ID.
+CLI commands provide the same access. Native automatic hook delivery currently
+supports Claude Code; enabling does not add equivalent Codex lifecycle hooks.
+
+See [working context](../working-context.md) for setup, source checks, session
+isolation, and advisory-instruction limits. Working notes remain local and are
+not included in `.agent-memory` exports.
 
 ## Fresh clone / cloud container
 

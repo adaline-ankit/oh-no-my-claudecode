@@ -11,19 +11,46 @@ It answers four questions:
 
 ## What ONMC Is
 
-`oh-no-my-claudecode` is a repo-native memory and context layer for coding agents.
+`oh-no-my-claudecode` combines adaptive working context, repository memory,
+and an execution harness for coding agents. This catalog describes code on
+`main`; adaptive working context is ahead of the latest PyPI release (`v0.113.0`).
 
-It is not just a prompt pack and it is not yet a generic multi-agent runtime.
-
-Today ONMC does four core things:
-
-- builds deterministic repo memory from docs, git history, and file structure
-- optionally uses an LLM to extract and rank higher-signal memory where heuristics are weak
-- stores durable task-scoped engineering memory in local SQLite state
-- compiles high-signal briefs and prompts for coding work
-- exposes that memory to agents through CLI commands, a Python API, Claude Code hooks, and an MCP server with tools and resources
+The default context path is local and deterministic. Optional model providers,
+verification layers, attestations, and multi-agent adapters have separate setup
+and do not all run on every invocation.
 
 ## What Is Implemented
+
+### Adaptive working context
+
+`onmc working enable` installs native Claude Code hooks and MCP registration.
+Each session retains its goal, explicit constraints, decisions, hypotheses, and
+next step. A budgeted compiler checks recalled memories against current source
+contents, withdraws stale evidence, handles explicit trusted relationship edges,
+and suppresses unchanged packets. Resume/compaction forces a current packet.
+
+CLI and MCP clients can start explicit sessions, inspect context, and record
+notes. Working state uses transactional local SQLite and remains separate from
+Git-exported repository memory. It requires no model call. Native child-agent
+working-state delivery and general semantic conflict detection are not implemented.
+Instructions are advisory; source identity establishes freshness, not truth.
+
+[Behavior, setup, and limits](working-context.md)
+· [Benchmarks and live pilot](benchmarks/working-context.md)
+
+### Canonical execution harness
+
+`onmc run "task"` previews a typed task plan without running an agent.
+`--execute` explicitly invokes a supported installed agent, configured verifier,
+durable run state, and proof graph. `--isolate` binds execution to a worktree.
+Policy denial, incomplete proof, or agent failure produce non-success outcomes.
+Mutation verification and full adjudication are separately configured paths.
+
+Runtime, delegation, and selective-swarm adapters exist in the codebase. Their
+presence does not establish a measured advantage over a single agent. Publication
+reports require independent evidence gates and currently remain blocked.
+
+[Execution guide](harness-run.md) · [Current evidence](evidence/sota-report.md)
 
 ### 0. Setup Wizard
 
@@ -84,7 +111,8 @@ What this updates:
 - matching file stats
 - related git-pattern memories for the touched paths
 
-It does not yet do stale-memory pruning.
+Incremental ingest is separate from working-context eligibility: the working
+compiler can exclude a stale claim without deleting its durable memory record.
 
 ### 3. Task Lifecycle
 
@@ -198,6 +226,8 @@ Supported providers:
 
 - Anthropic
 - OpenAI
+- Ollama for a configured local server
+- LiteLLM through the optional `litellm` extra
 - Mock provider for tests
 
 Secrets are read from environment variables, not stored in config.
@@ -317,7 +347,11 @@ ONMC can serve memory over MCP:
 onmc serve --mcp --repo .
 ```
 
-Exposed tools (the agent-facing action surface):
+Selected tools (the agent-facing action surface):
+
+- `start_working_context` — start an explicit session with goal and constraints
+- `get_working_context` — compile/refresh that session’s current packet
+- `record_working_note` — save a decision, hypothesis, or next step
 
 - `recall` — find matching past incidents, failures, and fixes
 - `search_memory` — relevance-ranked memory search by query, kind, and files
@@ -396,8 +430,10 @@ The loop uses real headless Claude Code, Codex, or OpenCode adapters. Each itera
 memory, injects known failed approaches, runs the agent, executes the verifier, and records the
 outcome. It stops on convergence, no progress, duplicate actions, repeated verifier errors, maximum
 iterations, token budget, cost budget, or wall time. Non-dry runs write a SHA-256 hash-chained receipt
-under `.agent-memory/receipts/`. A run is verified only when the loop converged and the final verifier
-passed. Receipts are tamper-evident, not signed.
+under `.agent-memory/receipts/`. Verification depends on convergence and the configured evidence requirements,
+including coverage checks where required; a passing command alone is insufficient.
+Default receipts are tamper-evident. Optional attestation is a separate workflow
+requiring the `attest` extra; it does not prove the code is correct.
 
 ### 18. No-Mistakes PR Gate
 
@@ -461,7 +497,7 @@ onmc bench
 `bench` remains a deterministic synthetic proof harness; its numbers are not presented as production
 LLM measurements.
 
-### 22. Public Python API
+### 23. Public Python API
 
 ONMC is now usable as a library:
 
@@ -494,10 +530,13 @@ The system is designed as a memory spine with multiple front doors:
 2. Task, attempt, and artifact commands add durable engineering memory.
 3. `brief` compiles repo-aware context from that stored memory.
 4. `solve` / `review` / `teach` compile prompts from the same memory spine and optionally call an LLM.
-5. `sync` makes that state portable across machines and cloud workspaces.
-6. `hooks` preserve short-term working context across Claude Code compaction.
+5. `sync` makes repository memory portable across machines and cloud workspaces;
+   adaptive session working state remains local.
+6. `working` compiles source-checked session packets through hooks and MCP;
+   legacy continuation snapshots remain a separate compatibility path.
 7. `serve --mcp` exposes the same state to MCP-compatible agents mid-session.
-8. `loop` executes one selected coding agent against memory and a real verifier.
+8. `run` compiles and executes the canonical contract; `loop` is the underlying
+   single-agent memory/verifier execution path.
 9. `nomistakes` wraps loop/autopilot with preflight gates and receipt-based approval.
 10. `trace`, `eval`, and `replay` make memory contribution inspectable and regression-testable.
 11. `import onmc` exposes the same capabilities programmatically.
@@ -506,9 +545,9 @@ The system is designed as a memory spine with multiple front doors:
 
 Important boundaries:
 
-- autonomous execution currently targets one Claude Code, Codex, or OpenCode CLI per loop, not a multi-agent swarm
+- each loop targets one selected agent; separate runtime/swarm adapters have their own contracts
 - loop adapters depend on installed, authenticated agent CLIs
-- receipts are hash-chained but not signed or remotely attested
+- default receipts are hash-chained; optional attestation requires separate dependencies and setup
 - MCP policy classifies recorded/stdin calls; it is not an inline transport proxy or sandbox
 - no hosted sync or remote collaboration
 - no hosted dashboard or account system
@@ -530,8 +569,8 @@ Do not treat it as:
 
 - a replacement for your coding agent
 - a cloud control plane
-- a multi-agent swarm runtime
-- a cryptographic attestation service
+- a guarantee that multi-agent execution improves task success
+- a correctness guarantee derived from a signature or receipt
 
 ## Best End-to-End Workflow
 

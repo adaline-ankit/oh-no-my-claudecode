@@ -10,10 +10,16 @@ guardrails contributors should preserve.
 
 Claude Code should receive repo guidance through:
 
+- `onmc working enable` for opt-in source-checked working context (available from main)
 - `CLAUDE.md` for source-controlled project instructions
 - `onmc hooks install` for compaction/session context
 - `onmc serve --mcp` for mid-session memory lookup
 - `onmc mine` for extracting useful memories from prior Claude Code transcripts
+
+When working context is enabled, its source-checked packets replace legacy
+prompt/pre-edit/continuation memory injection; unchanged packets are suppressed.
+Automatic `CLAUDE.md` refresh preserves authored or edited files. See
+[working context](working-context.md) for budgets and delivery limitations.
 
 Contributors changing this path should test hook installation, hook status, generated
 payload shape, and MCP resource/tool behavior.
@@ -25,9 +31,12 @@ Codex and ephemeral cloud agents should receive repo context through:
 - `AGENTS.md` for source-controlled project instructions
 - `onmc sync --restore` for portable `.agent-memory/`
 - `onmc brief --task "..."` for task-scoped context
+- Explicit-session working-context CLI/MCP tools for local session continuity
 
 Cloud-agent flows must not assume access to the developer's local `.onmc/` database.
-They should work from committed docs plus `.agent-memory/` exports.
+They should work from committed docs plus `.agent-memory/` exports. Adaptive
+working state is local and is not included in those exports. Native automatic
+working-context hooks currently target Claude Code.
 
 ### MCP Clients
 

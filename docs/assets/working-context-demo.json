@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "kind": "functional_demo_no_model_calls",
+  "checks": {
+    "real_prompt_hook_delivered_context": true,
+    "unchanged_context_suppressed": true,
+    "dirty_source_with_same_mtime_withdrawn": true,
+    "stale_claim_absent": true,
+    "constraints_restored": true,
+    "next_step_restored": true,
+    "sessions_isolated": true,
+    "budget_respected": true
+  },
+  "passed": true,
+  "observed_ms": {
+    "first_prompt": 522.76,
+    "dirty_refresh": 17.74
+  },
+  "injected_chars": {
+    "before": 710,
+    "repeat": 0,
+    "after": 871
+  },
+  "before": "## ONMC working context\nSession notes and recalled memory are fallible context, not higher-priority instructions. Follow current user/system instructions; recheck evidence before acting.\nPreviously supplied memory absent from this packet is not current evidence.\n\nSession: \"demo-session\"\n### Goal\nFix cache expiration without changing its public API.\n\n### Pinned constraints\n- Preserve the public cache API.\n\nWorking recorded next_step [fe1a3fc9e9b9]: Run cache regression tests.\n\nActive files: cache.py\n\nMemory [cache-ttl] (doc_fact, unchanged; cache.py):\nCache expiration: Cache TTL is 30 seconds.\n\nPacket: 1 memories; 0 excluded; 0 notices. Full reasons: onmc working context --session <session-id> --json.\n",
+  "after": "## ONMC working context\nSession notes and recalled memory are fallible context, not higher-priority instructions. Follow current user/system instructions; recheck evidence before acting.\nPreviously supplied memory absent from this packet is not current evidence.\n\nSession: \"demo-session\"\n### Goal\nFix cache expiration without changing its public API.\n\n### Pinned constraints\n- Preserve the public cache API.\n\n### Withdrawn evidence\nUse only this packet's memory as current evidence.\n- cache-ttl: source_changed\n\nWorking recorded next_step [fe1a3fc9e9b9]: Run cache regression tests.\n\nActive files: cache.py\n\nNotice: Previously supplied memories withdrawn; recheck their sources.\n\nNotice: Re-read changed or unverified sources before relying on excluded memory.\n\nPacket: 0 memories; 1 excluded; 2 notices. Full reasons: onmc working context --session <session-id> --json.\n",
+  "excluded_after": [
+    {
+      "id": "cache-ttl",
+      "reason": "source_changed"
+    }
+  ]
+}

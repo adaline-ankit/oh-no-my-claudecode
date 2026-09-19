@@ -36,6 +36,10 @@ python scripts/validate_benchmark_manifest.py \
 python scripts/generate_benchmark_report.py \
   datasets/experiment/reports/external_v3_stage1_2026-07-25.json \
   --manifest datasets/experiment/portfolio_external_v4.json \
+  --verifier-calibration docs/evidence/verifier_external_v2_report.json \
+  --product-smoke docs/evidence/product-smoke.json \
+  --runtime-delegation docs/evidence/runtime-delegation.json \
+  --work-plan-out docs/evidence/publication-work-plan.json \
   --json-out docs/evidence/sota-report.json \
   --markdown-out docs/evidence/sota-report.md \
   --artifact-index-out docs/evidence/raw-artifacts.json
@@ -43,6 +47,10 @@ python scripts/generate_benchmark_report.py \
 python scripts/gate_external_claim.py docs/evidence/sota-report.json \
   --claim "ONMC is state-of-the-art, better, and cheaper."
 ```
+
+Publication reports require a frozen verifier calibration artifact matching the
+current corpus and adjudicator. Artifact integrity and control coverage do not
+establish external coding accuracy or publication readiness.
 
 The claim gate exits `2` when strong language outruns the evidence. Report
 generation still exits successfully for incomplete runs so maintainers can

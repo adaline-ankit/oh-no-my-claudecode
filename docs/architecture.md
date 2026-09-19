@@ -1,5 +1,46 @@
 # Architecture
 
+## Current entry paths
+
+ONMC has three connected paths over the existing repository service and SQLite
+store. Optional integrations remain behind adapters.
+
+```text
+Claude hooks / explicit-session CLI or MCP
+  -> WorkingContext: goal + constraints + notes
+  -> ranked memory -> source-content checks -> whole-item budget
+  -> packet fingerprint -> fresh context or no repeat
+
+CLI / Python API / MCP
+  -> OnmcService -> ingest, recall, tasks, briefs, repository-memory sync
+
+onmc run
+  -> typed task plan + cited context + policy decisions
+  -> durable execution -> selected agent + configured verifier
+  -> proof graph + receipt
+
+experiment/report scripts
+  -> corpus + calibration + raw artifacts -> publication gates
+```
+
+`working_context/` stores session records transactionally in the existing local
+SQLite database. It hashes source contents, caches checks within a compilation,
+and records explicit eligibility reasons. Hooks and MCP consume packet delivery;
+CLI inspection does not. Resume/compaction forces refresh. Working notes are not
+included in repository-memory exports. See [working context](working-context.md)
+for trust, budget, concurrency, and best-effort delivery limits.
+
+`harness_run/`, `runtime/`, and `durable_runtime/` provide the canonical execution
+contract, backend/delegation interfaces, and durable events. `onmc run` previews
+by default and executes only with `--execute`. The existing loop remains the
+single-agent execution component. Optional swarm/runtime adapters do not replace
+the local memory layer or establish an empirical benefit by their existence.
+
+`experiment/` binds publication claims to corpus identity, calibration, raw
+artifacts, verifier evidence, product smoke, delegation, and routing evidence.
+Missing gates remain visible. A complete artifact does not itself establish
+better coding outcomes. See [the current report](evidence/sota-report.md).
+
 ## Goals
 
 P0 is intentionally narrow:
@@ -234,14 +275,14 @@ The system compiles repo-specific context into a brief that a coding agent can c
 
 ## Storage Model
 
-SQLite is used for P0 because it keeps the package dependency surface low while still supporting:
+SQLite is used because it keeps the package dependency surface low while still supporting:
 
 - idempotent local state
 - memory queries
 - repo file metadata
 - ingest bookkeeping
 
-P0 tables:
+Core tables include:
 
 - `memories`
 - `tasks`
@@ -253,7 +294,9 @@ P0 tables:
 - `file_stats`
 - `meta`
 
-Manual memory is reserved in the schema through `source_type = manual`, even though P0 does not yet expose a write command for it.
+Manual memories use `source_type = manual` and can be recorded through the CLI,
+Python API, and MCP `record_memory` tool. Working-context session records are
+versioned values in the existing `meta` store, separate from durable memories.
 
 LLM-extracted and transcript-mined memories share the same `memories` table; deterministic selection and storage remain centralized even when extraction is model-assisted.
 
@@ -278,9 +321,13 @@ Typed memory makes it easier to:
 - keep the brief compact
 - avoid pretending raw transcripts are reliable project knowledge
 
-### Why no embeddings in P0
+### Why lexical retrieval stays the default
 
-Embeddings add infrastructure, tuning overhead, and a false sense of intelligence. Token/path overlap plus git churn is a credible first slice for a repo-local tool.
+BM25 is the default. Optional dense and hybrid retrieval paths exist, including
+local embedding integrations. On the frozen internal 40-query code corpus,
+BM25 R@5 was 0.950 and hybrid 0.875. Those measurements justify the current default
+on that corpus, not a universal ranking claim. See the
+[retrieval results](benchmarks/results/2026-09-19-working-context/README.md).
 
 ## Current LLM Boundary
 
@@ -316,7 +363,7 @@ testable.
 
 `onmc nomistakes` is a higher-level gate over the same boundary. It does not add a hidden merge bot:
 it runs preflight checks, delegates code generation to one selected agent, runs the verifier, and
-approves only when the receipt proves the run converged.
+approves only when the configured gates and verifier-backed receipt pass.
 
 ## Public Surface
 

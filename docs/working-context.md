@@ -154,6 +154,14 @@ python scripts/demo-working-context.py --output /tmp/working-context-demo.json
 pytest tests/test_working_context.py tests/test_working_context_integration.py
 ```
 
+The [animated demo and static card](launch/adaptive-working-context.md#demo) render
+these actual results. To rebuild the assets (Pillow is isolated by `uv`):
+
+```bash
+uv run --no-project scripts/render-working-context-demo.py /tmp/working-context-demo.json \
+  --output-dir docs/assets
+```
+
 The demo uses real temporary Git files, SQLite, and the prompt hook dispatcher.
 It recalls a 30-second TTL, edits the source to 60 seconds while retaining the
 same file timestamp, then checks withdrawal, repeat suppression, constraint

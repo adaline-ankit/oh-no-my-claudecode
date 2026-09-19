@@ -21,6 +21,18 @@ All notable changes to this project are documented here.
   paired Codex pilot with matched information access, independent external
   graders, negative controls, usage capture, and retained failed attempts.
 
+- Publication reports bind verifier calibration to the current corpus and
+  adjudicator while retaining product, delegation, and routing evidence gates.
+- Shareable working-context GIF, static card, raw demo results, and launch copy;
+  README and documentation now distinguish current main from released features.
+
+### Changed
+
+- Refresh compatible dependency pins (anyio 4.14.2, aiohttp 3.14.3, h2 4.4.1,
+  cryptography 50.0.1) and allow Twine 7. MCP remains capped below 2 until migration.
+- Update checkout to 7.0.1, labeler to 7.0.0, and all CodeQL actions together to
+  4.37.3. Add a locked-dependency MCP/attestation smoke job alongside normal CI.
+
 ### Fixed
 
 - Working-context freshness now handles extensionless/dotfiles and mixed
@@ -34,7 +46,7 @@ All notable changes to this project are documented here.
   the contributor checkout's `CLAUDE.md` or `uv.lock`.
 - The standard dev quality gate now handles optional OpenTelemetry protobuf
   imports without requiring the `observe` extra. Wheel/sdist metadata stays at
-  version 2.4 for compatibility with the declared Twine 6 validation tool.
+  version 2.4 across build-tool upgrades; validated with Twine 7.
 
 
 

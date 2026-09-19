@@ -2,6 +2,17 @@
 
 <!-- Source: https://code.claude.com/docs/en/discover-plugins (verified 2026-06) -->
 
+## Adaptive working context (main)
+
+For the current goal/constraint and source-freshness workflow, install from Git
+`main`, initialize and ingest the repo, then run `onmc working enable`. This
+feature is ahead of PyPI `v0.113.0`. Start or resume Claude after enabling so it
+reloads hook settings. See the [working-context guide](../working-context.md).
+
+When enabled, adaptive packets replace legacy prompt/pre-edit/continuation memory
+injection. Changed source files withdraw recalled evidence; unchanged packets
+stay quiet. Resume/compaction forces a fresh packet. Instructions remain advisory.
+
 ## Option A — install via plugin marketplace (recommended)
 
 ONMC ships a spec-compliant `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
@@ -46,14 +57,14 @@ onmc plug claude-code
 
 This delegates to `onmc hooks install` and writes:
 
-- `.claude/settings.json` — four project-scoped hooks (idempotent merge, never clobbers
+- `.claude/settings.json` — project-scoped lifecycle and tool hooks (idempotent merge, never clobbers
   existing hooks from other tools).
 - `.mcp.json` — MCP server registration so Claude Code loads `onmc serve --mcp`
   automatically.
 - `.claude/settings.json.onmc-backup` — one-time backup of the pre-install settings.
 - `.claude/commands/onmc-*.md` — four project-scoped slash commands (see below).
 
-Re-running `onmc plug claude-code` is always safe.
+Re-running `onmc plug claude-code` updates its managed configuration idempotently.
 
 ---
 
@@ -91,6 +102,8 @@ or blocks a mission.
 | `PreCompact` | `onmc hooks pre-compact` | Snapshots task state before context is compacted |
 | `SessionStart` | `onmc hooks session-start` | Injects boot digest (startup) or continuation brief (post-compact) |
 | `UserPromptSubmit` | `onmc hooks prompt-recall` | Injects the most relevant memories for each prompt |
+| `PreToolUse` | `onmc hooks pre-tool-use` | Refreshes working context before supported read/edit/shell tools when enabled |
+| `PostToolUse` | `onmc hooks post-tool-use` | Rechecks working context after tool activity when enabled |
 | `SessionEnd` | `onmc hooks session-end` | Runs memory consolidation when the session ends |
 
 ### MCP server (`.mcp.json`)
