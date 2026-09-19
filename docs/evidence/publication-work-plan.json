@@ -56,10 +56,16 @@
     "product_surface_ready": true,
     "product_surface_unexpected_visible": [],
     "repositories_to_add": 0,
+    "routing_evidence_blockers": [
+      "routing evidence artifact was not provided"
+    ],
+    "routing_evidence_ready": false,
     "runtime_delegation_blockers": [],
     "runtime_delegation_ready": true,
     "seeds_to_register": 3,
-    "tasks_to_add": 22
+    "tasks_to_add": 22,
+    "verifier_evidence_blockers": [],
+    "verifier_evidence_ready": true
   },
   "next_actions": [
     "Keep the live product surface collapsed around `onmc run`, setup, Mission Control, and operator views; advanced diagnostics must stay behind `onmc commands --all`.",
@@ -68,6 +74,7 @@
     "Run a zero-cost structural validation and Harbor/Docker smoke before any model spend.",
     "Run `scripts/run_product_smoke.py` and include its JSON in the publication bundle so product claims are tied to a working canonical entrypoint.",
     "Run `scripts/run_runtime_delegation_audit.py` and include its JSON in the publication bundle so mission, wrap, and swarm claims are backed by canonical runtime contracts.",
+    "Include a shadow routing evaluation artifact with matched always-strong and oracle regret, complete cost coverage, and claim-ready uncertainty.",
     "Run a one-seed calibration slice, then regenerate the publication bundle and this work plan.",
     "Only request approval for the full paid matrix after cost telemetry and raw artifact paths are complete on the calibration slice."
   ],

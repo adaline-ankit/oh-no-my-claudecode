@@ -10,6 +10,9 @@ V4_MANIFEST = REPO_ROOT / "datasets" / "experiment" / "portfolio_external_v4.jso
 SATURATED_REPORT = REPO_ROOT / "datasets" / "experiment" / "reports" / (
     "external_v3_stage1_2026-07-25.json"
 )
+VERIFIER_CALIBRATION = REPO_ROOT / "docs" / "evidence" / (
+    "verifier_external_v2_report.json"
+)
 
 
 def _load_script(name: str) -> ModuleType:
@@ -142,6 +145,8 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
             str(runtime_delegation),
             "--routing-evidence",
             str(routing_evidence),
+            "--verifier-calibration",
+            str(VERIFIER_CALIBRATION),
             "--json-out",
             str(json_output),
             "--markdown-out",
@@ -169,11 +174,15 @@ def test_report_generator_writes_deterministic_publication_artifacts(tmp_path: P
     assert payload["routing_evidence"]["evaluated"] is True
     assert payload["routing_evidence"]["ready"] is False
     assert payload["routing_evidence"]["enforcement_enabled"] is False
+    assert payload["verifier_evidence"]["ready"] is True
+    assert payload["verifier_evidence"]["artifact_matches_live_calibration"] is True
     assert artifact_index["complete"] is False
     assert work_plan["publication_ready"] is False
     assert work_plan["deficits"]["product_surface_ready"] is True
     assert work_plan["deficits"]["product_smoke_ready"] is True
     assert work_plan["deficits"]["runtime_delegation_ready"] is True
+    assert work_plan["deficits"]["routing_evidence_ready"] is False
+    assert work_plan["deficits"]["verifier_evidence_ready"] is True
     assert work_plan["deficits"]["tasks_to_add"] == 22
     assert work_plan["spend_gate"]["paid_full_matrix_allowed"] is False
     assert "NOT PUBLICATION-READY" in markdown_output.read_text(encoding="utf-8")

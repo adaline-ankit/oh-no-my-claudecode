@@ -44,6 +44,16 @@ is valid but the U14 publication requirements are not met.
 Expected result today: both artifacts report `ready: true`, `model_calls: 0`,
 and `agent_execution_attempted: false`.
 
+Regenerate the frozen verifier calibration artifact as well:
+
+```bash
+.venv/bin/python scripts/calibrate_verifier_external.py \
+  --out /tmp/onmc-verifier-calibration.json
+```
+
+Its point checks pass, but `claim_ready` remains `false` because the confidence
+bounds do not meet the publication thresholds.
+
 ## 3. Regenerate the report and raw-artifact index
 
 ```bash
@@ -52,9 +62,11 @@ and `agent_execution_attempted: false`.
   --manifest datasets/experiment/portfolio_external_v4.json \
   --product-smoke /tmp/onmc-product-smoke.json \
   --runtime-delegation /tmp/onmc-runtime-delegation.json \
+  --verifier-calibration /tmp/onmc-verifier-calibration.json \
   --json-out /tmp/onmc-sota-report.json \
   --markdown-out /tmp/onmc-sota-report.md \
-  --artifact-index-out /tmp/onmc-raw-artifacts.json
+  --artifact-index-out /tmp/onmc-raw-artifacts.json \
+  --work-plan-out /tmp/onmc-publication-work-plan.json
 ```
 
 The JSON and Markdown are deterministic for fixed inputs. Compare them with the
@@ -64,11 +76,20 @@ committed artifacts:
 diff -u docs/evidence/sota-report.json /tmp/onmc-sota-report.json
 diff -u docs/evidence/sota-report.md /tmp/onmc-sota-report.md
 diff -u docs/evidence/raw-artifacts.json /tmp/onmc-raw-artifacts.json
+diff -u docs/evidence/verifier_external_v2_report.json /tmp/onmc-verifier-calibration.json
+diff -u docs/evidence/publication-work-plan.json /tmp/onmc-publication-work-plan.json
 ```
 
 The raw-artifact index is intentionally incomplete until every usable cell
 provides both `trajectory_path` and `verifier_path` under the declared artifact
 root. Paths that escape that root are rejected.
+
+The verifier calibration artifact is content-bound to the current frozen corpus
+and adjudicator. Missing, stale, tampered, prose-only, protected-suite weakening,
+or mutation-control evidence keeps the publication bundle fail-closed.
+Routing evidence remains a separate required input: supply `--routing-evidence`
+when a measured routing artifact is available. The committed report records that
+input as missing and keeps publication blocked.
 
 ## 4. Regenerate the R1-R19 readiness audit
 

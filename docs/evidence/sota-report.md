@@ -50,12 +50,22 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - indexed cells: `0/48`
 - missing entries: `96`
 
+## Verifier Evidence
+
+- status: `READY`
+- artifact matches live calibration: `true`
+- independent source repositories: `6`
+- protected-suite controls: `true`
+- mutation controls: `true`
+- prose-only completion rejected: `true`
+- true-fix controls: `true`
+
 ## Product Surface
 
 - status: `READY`
 - canonical entrypoint: `run`
-- visible primary commands: `14/14`
-- hidden advanced commands: `137`
+- visible primary commands: `12/14`
+- hidden advanced commands: `144`
 - unexpected visible commands: `0`
 
 ## Product Smoke
@@ -75,6 +85,17 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - views ready: `3/3`
 - model calls: `0`
 - agent execution attempted: `false`
+
+## Routing Evidence
+
+- status: `INCOMPLETE`
+- evaluated: `false`
+- tasks: `0`
+- cost coverage: `unknown`
+- quality non-inferior: `false`
+- observed cost gate: `false`
+- enforcement enabled: `false`
+- claim ready: `false`
 
 ## Publication Blockers
 
@@ -108,3 +129,4 @@ Cost claims remain blocked whenever either arm has missing telemetry.
 - report coverage missing environment_manifest: environment manifest is missing
 - sensitivity 95% confidence interval lower bound 0.758 below target 0.950
 - specificity 95% confidence interval lower bound 0.758 below target 0.980
+- routing evidence artifact was not provided

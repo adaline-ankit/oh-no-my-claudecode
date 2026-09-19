@@ -21,6 +21,9 @@ ONMC earned an external quality, cost, or state-of-the-art claim.
 
 - [ ] Every usable cell has a raw ATIF trajectory and verifier artifact.
 - [ ] Raw artifact index paths are local to the artifact root and hashes verify.
+- [ ] Frozen verifier calibration artifact matches the current corpus and
+  adjudicator, rejects prose-only completion and protected-suite weakening, and
+  catches mutation negative controls.
 - [ ] Pass rates, pass@k, paired deltas, confidence intervals, latency, tokens,
   and failure taxonomy are complete.
 - [ ] Cost coverage is symmetric and complete for every compared arm.
