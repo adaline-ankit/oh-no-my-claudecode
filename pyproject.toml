@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "oh-no-my-claudecode"
 version = "0.113.0"
-description = "Memory-grounded autonomous coding loops for Claude Code and Codex."
+description = "Adaptive working context, repository memory, and verifier-backed coding runs."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
@@ -113,14 +113,14 @@ dev = [
   "pytest-cov>=6.0,<8.0",
   "pytest>=8.3,<10.0",
   "ruff>=0.15,<1.0",
-  "twine>=5.1,<7.0",
+  "twine>=5.1,<8.0",
 ]
 
 [project.scripts]
 onmc = "oh_no_my_claudecode.cli:main"
 
-# Explicit metadata version keeps new Hatchling releases compatible with the
-# declared Twine 6 quality gate, which does not accept metadata 2.5.
+# Keep package metadata stable across Hatchling upgrades. Twine 7 accepts
+# metadata 2.4 as well as 2.5; widening its range does not require a format change.
 [tool.hatch.build.targets.sdist]
 core-metadata-version = "2.4"
 
