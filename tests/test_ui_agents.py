@@ -366,6 +366,8 @@ def test_existing_get_routes_unaffected(
 ) -> None:
     """Adding POST handler must not break /api/dashboard or /."""
     service = _ready_service(sample_repo, monkeypatch)
+    # Routing exercises real doctor/payload logic, not the host's CLI startup time.
+    monkeypatch.setattr("oh_no_my_claudecode.core.service._probe_path_onmc", lambda: (None, None))
     log: list[list[str]] = []
     server, thread, port = _start_server(service, log)
     try:
@@ -378,7 +380,11 @@ def test_existing_get_routes_unaffected(
         thread.join(timeout=5)
     assert api_status == 200
     assert api_ct.startswith("application/json")
-    assert json.loads(api_body)["repo"]["name"] == "sample-repo"
+    payload = json.loads(api_body)
+    assert payload["repo"]["name"] == "sample-repo"
+    assert payload["tasks"][0]["title"] == "test task"
+    assert payload["summary"]["attempts"] == 1
+    assert any("onmc not found on PATH" in warning for warning in payload["health"]["warnings"])
     assert page_status == 200
     assert "ONMC" in page_body
     assert missing_status == 404

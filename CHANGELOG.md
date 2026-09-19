@@ -35,6 +35,9 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Dashboard route tests isolate host CLI discovery; snapshot-export assertions
+  tolerate terminal wrapping while checking the full destination path.
+
 - Generated Codex MCP configuration separates the executable from its arguments;
   a regression test parses the emitted TOML and launches the configured command.
 

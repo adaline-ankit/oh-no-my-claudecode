@@ -275,6 +275,8 @@ def test_existing_routes_unaffected_by_live_endpoint(
 ) -> None:
     """Adding /api/live must not break /api/dashboard, /, or 404 for unknown paths."""
     service = _make_service(sample_repo, monkeypatch)
+    # Routing exercises real doctor/payload logic, not the host's CLI startup time.
+    monkeypatch.setattr("oh_no_my_claudecode.core.service._probe_path_onmc", lambda: (None, None))
     server, thread, port = _start_server(service)
     try:
         api_status, api_ct, api_body = _get(port, "/api/dashboard")
@@ -288,7 +290,11 @@ def test_existing_routes_unaffected_by_live_endpoint(
 
     assert api_status == 200
     assert api_ct.startswith("application/json")
-    assert json.loads(api_body)["repo"]["name"] == "sample-repo"
+    payload = json.loads(api_body)
+    assert payload["repo"]["name"] == "sample-repo"
+    assert payload["tasks"][0]["title"] == "live test task"
+    assert payload["summary"]["attempts"] == 1
+    assert any("onmc not found on PATH" in warning for warning in payload["health"]["warnings"])
     assert page_status == 200
     assert "ONMC" in page_body
     assert live_status == 200

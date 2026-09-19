@@ -6,6 +6,7 @@ from http.client import HTTPConnection
 from importlib.resources import files
 from pathlib import Path
 
+from rich.console import Console
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
@@ -723,12 +724,14 @@ def test_ui_cli_exports_without_starting_server(
 
     monkeypatch.setattr("oh_no_my_claudecode.cli.export_dashboard_snapshot", fake_export)
     monkeypatch.setattr("oh_no_my_claudecode.cli.serve_dashboard", fail_serve)
+    # Exercise Rich's path wrapping independently of the machine's terminal width.
+    monkeypatch.setattr("oh_no_my_claudecode.cli.console", Console(width=8))
 
     result = runner.invoke(app, ["ui", "--export", str(output), "--no-open"])
 
     assert result.exit_code == 0
     assert calls == [output]
-    assert output.name in result.output
+    assert str(output) in "".join(result.output.splitlines())
 
 
 def test_dashboard_html_contains_welcome_overlay_markup(
