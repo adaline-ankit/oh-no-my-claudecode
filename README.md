@@ -39,7 +39,7 @@ that an agent follows instructions. Source freshness is not semantic correctness
 ## Try it in your repo
 
 **Adaptive working context is on `main`; it is not in the latest PyPI release,
-`v0.113.0`.** Install from Git for this feature. Python 3.11+ and Git required.
+`v0.113.0`.** Install from Git for this feature. Python 3.11+, Git, and `uv` required.
 
 ```bash
 uv tool install --force 'git+https://github.com/adaline-ankit/oh-no-my-claudecode.git@main'

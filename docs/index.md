@@ -1,5 +1,6 @@
 ---
-title: Keep the task. Refresh the evidence.
+title: oh-no-my-claudecode
+description: Keep the task. Refresh the evidence.
 image: https://adaline-ankit.github.io/oh-no-my-claudecode/assets/working-context-demo.png
 ---
 

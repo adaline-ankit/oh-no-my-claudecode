@@ -35,6 +35,9 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Generated Codex MCP configuration separates the executable from its arguments;
+  a regression test parses the emitted TOML and launches the configured command.
+
 - Working-context freshness now handles extensionless/dotfiles and mixed
   provenance/file references. Active-file recall recognizes whitespace and `./`
   references without bypassing containment or source-hash checks.

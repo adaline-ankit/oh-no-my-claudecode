@@ -62,6 +62,12 @@ def frame(
         draw.text((94, 304 + i * 48), line, font=font(25), fill=color)
     draw.text((64, 589), badge, font=font(24), fill=GREEN)
     draw.text((64, 656), "Keep the task. Refresh the evidence.", font=font(20), fill=MUTED)
+    draw.text(
+        (64, 689),
+        "github.com/adaline-ankit/oh-no-my-claudecode",
+        font=font(14),
+        fill=MUTED,
+    )
     for i in range(4):
         draw.rounded_rectangle(
             (1040 + i * 45, 660, 1070 + i * 45, 666),
