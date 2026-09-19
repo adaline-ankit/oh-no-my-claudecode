@@ -11,6 +11,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from oh_no_my_claudecode.cli import app
@@ -84,7 +85,8 @@ def test_plug_codex_writes_agents_md(sample_repo: Path) -> None:
     assert str(agents_md) in result.files_written
 
 
-def test_plug_codex_mcp_config_launches_console_script(sample_repo: Path) -> None:
+@pytest.mark.parametrize("color", [False, True], ids=["plain", "color"])
+def test_plug_codex_mcp_config_launches_console_script(sample_repo: Path, color: bool) -> None:
     """The copy-paste TOML supplies an executable and separate MCP arguments."""
     plug_target("codex", repo_root=sample_repo)
     content = (sample_repo / "AGENTS.md").read_text(encoding="utf-8")
@@ -98,6 +100,12 @@ def test_plug_codex_mcp_config_launches_console_script(sample_repo: Path) -> Non
     assert config["enabled"] is True
 
     env = os.environ.copy()
+    for flag in (
+        "NO_COLOR", "FORCE_COLOR", "PY_COLORS", "GITHUB_ACTIONS", "_TYPER_FORCE_DISABLE_TERMINAL"
+    ):
+        env.pop(flag, None)
+    env["FORCE_COLOR" if color else "NO_COLOR"] = "1"
+    env["TERM"] = "xterm-256color"
     source_root = Path(__file__).resolve().parents[1] / "src"
     env["PYTHONPATH"] = os.pathsep.join((str(source_root), env.get("PYTHONPATH", "")))
     result = subprocess.run(
@@ -110,7 +118,8 @@ def test_plug_codex_mcp_config_launches_console_script(sample_repo: Path) -> Non
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert "--mcp" in result.stdout
+    assert ("\x1b[" in result.stdout) is color
+    assert "--mcp" in Text.from_ansi(result.stdout).plain
 
 
 def test_plug_codex_is_idempotent(sample_repo: Path) -> None:
