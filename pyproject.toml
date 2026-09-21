@@ -66,7 +66,7 @@ observe = [
   "opentelemetry-proto>=1.25",
 ]
 sqlitevec = [
-  "sqlite-vec>=0.1.0",
+  "sqlite-vec>=0.1.9",
 ]
 # Optional local ONNX embedder via fastembed (CPU, no API key, no network at
 # inference time).  Absent by default — the hash-ngram embedder is used instead.
