@@ -103,7 +103,7 @@ autogen = [
 # Optional LangChain document loaders.  Absent by default — the langchain
 # importer reports itself unavailable gracefully until this extra is installed.
 langchain = [
-  "langchain-community>=0.3",
+  "langchain-community>=0.4.2",
   "langchain-text-splitters>=0.3",
 ]
 dev = [
