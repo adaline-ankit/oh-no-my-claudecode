@@ -107,7 +107,7 @@ langchain = [
   "langchain-text-splitters>=0.3",
 ]
 dev = [
-  "build>=1.2.2",
+  "build>=1.6.1",
   "mypy>=1.11,<3.0",
   "pre-commit>=3.8,<5.0",
   "pytest-cov>=6.0,<8.0",
