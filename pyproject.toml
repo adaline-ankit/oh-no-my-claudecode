@@ -78,7 +78,7 @@ fastembed = [
 # Anthropic/OpenAI/Ollama providers work without it; the `litellm` provider
 # reports itself unavailable gracefully until this extra is installed.
 litellm = [
-  "litellm>=1.0",
+  "litellm>=1.90.7",
 ]
 # Optional external memory provider backends.  Absent by default — the
 # ``builtin`` adapter (onmc's own SQLite store) is always available without
